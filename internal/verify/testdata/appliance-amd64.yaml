@@ -1,0 +1,44 @@
+apiVersion: sneakers-pam/v1alpha1
+kind: Appliance
+metadata:
+  version: 0.2.0
+  channel: production
+spec:
+  kitMin: 0.2.0
+  release:
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  boot:
+    uki:
+      file: sneakers-0.2.0.efi
+      sha256: 2222222222222222222222222222222222222222222222222222222222222222
+      sbat: 1
+    loader:
+      file: systemd-bootx64.efi
+      sha256: 3333333333333333333333333333333333333333333333333333333333333333
+      systemd: "258.1"
+  root:
+    file: root-0.2.0.img
+    sha256: 4444444444444444444444444444444444444444444444444444444444444444
+    verity:
+      roothash: 00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
+      hashOffset: 1073741824
+      algorithm: sha256
+  secureBoot:
+    pk:
+      sha256Fingerprint: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    kek:
+      sha256Fingerprint: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+    db:
+      sha256Fingerprint: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+    files:
+      PK.auth: 5555555555555555555555555555555555555555555555555555555555555555
+      KEK.auth: 6666666666666666666666666666666666666666666666666666666666666666
+      db.auth: 7777777777777777777777777777777777777777777777777777777777777777
+      PK.esl: 8888888888888888888888888888888888888888888888888888888888888888
+      KEK.esl: 9999999999999999999999999999999999999999999999999999999999999999
+      db.esl: abababababababababababababababababababababababababababababababab
+      dbx.esl: cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd
+  upgradeFrom: 0.1.0
+  manualOnly: false
+  arch: amd64
+  protection: full

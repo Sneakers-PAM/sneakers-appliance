@@ -1,0 +1,58 @@
+# sneakers-kit
+
+`sneakers-kit` verifies an org-signed appliance release and builds install media from it. It never
+signs anything and holds no private key.
+
+## Pins
+
+Each kit is built with the keys it trusts stamped in through `-ldflags -X` on
+`github.com/Sneakers-PAM/sneakers-appliance/internal/release`:
+
+| Variable | Value |
+|---|---|
+| `Channel` | `production` or `lab` |
+| `ReleaseKey` | base64 of the cosign public key (PEM) |
+| `DBCert`, `PKCert`, `KEKCert` | base64 of the Secure Boot db, PK and KEK certificates (PEM) |
+| `Version` | the kit version |
+
+A kit with any pin missing or undecodable, or a channel other than `production` or `lab`, refuses
+to start with `KIT_PIN_MISSING`. A lab kit (built in pull-request CI with that run's throwaway keys)
+refuses a production release with `KIT_CHANNEL`, and a production kit refuses a lab release.
+
+## Commands
+
+```
+sneakers-kit version    # the kit version, its channel and the SHA-256 fingerprint of each pin
+```
+
+`verify` and `build` follow with the verification chain.
+
+## The appliance manifest
+
+Every release carries one `appliance.yaml` per architecture (spec 1, Section 4.1). The kit decodes
+it strictly: an unknown field, a missing Secure Boot file on amd64, a Secure Boot block on arm64, or
+`upgradeFrom` above `version` is refused with `KIT_MANIFEST_INVALID`. Then it checks:
+
+- `metadata.channel` equals the kit's channel (`KIT_CHANNEL`);
+- `spec.kitMin` is at most the kit's version, compared as semantic versions (`KIT_KIT_TOO_OLD`);
+- the PK, KEK and db fingerprints equal the kit's pins (`KIT_WRONG_SIGNER`).
+
+## Error codes
+
+The kit exits non-zero and prints `SYMBOL (code): sentence`.
+
+| Code | Symbol | Meaning |
+|---|---|---|
+| 1001 | `KIT_PIN_MISSING` | this kit was built without one of its pins, or with a channel other than production or lab |
+| 1002 | `KIT_SIG_MISSING` | the artifact or `release.yaml` has no signature |
+| 1003 | `KIT_WRONG_SIGNER` | signed, but not by the pinned key |
+| 1004 | `KIT_CHANNEL` | the manifest's channel isn't the kit's |
+| 1005 | `KIT_KIT_TOO_OLD` | `kitMin` is above this kit's version |
+| 1006 | `KIT_DIGEST_MISMATCH` | a layer's SHA-256 differs from `appliance.yaml` |
+| 1007 | `KIT_AUTHENTICODE` | the UKI or loader doesn't verify against the pinned db certificate |
+| 1008 | `KIT_VERITY_MISMATCH` | the root image doesn't match the UKI's root hash |
+| 1009 | `KIT_BUNDLE_MISMATCH` | the bundle and `release.yaml` differ, or k0s isn't the pinned binary |
+| 1010 | `KIT_IMAGE_UNSIGNED` | a bundled image lacks a valid org signature |
+| 1011 | `KIT_TOOL_MISSING` | a tool the format needs isn't available |
+| 1012 | `KIT_MANIFEST_INVALID` | `appliance.yaml` doesn't parse or breaks a structural rule |
+| 1013 | `KIT_SOURCE_UNREADABLE` | the artifact can't be resolved or read |
