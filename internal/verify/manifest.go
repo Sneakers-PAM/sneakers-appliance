@@ -158,13 +158,13 @@ func (m *Manifest) validate() error {
 			return fmt.Errorf("spec.upgradeFrom %s is above the version %s", s.UpgradeFrom, m.Metadata.Version)
 		}
 	}
-	if err := digest("spec.release.digest", strings.TrimPrefix(s.Release.Digest, "sha256:")); err != nil || !strings.HasPrefix(s.Release.Digest, "sha256:") {
+	if err := checkHex("spec.release.digest", strings.TrimPrefix(s.Release.Digest, "sha256:")); err != nil || !strings.HasPrefix(s.Release.Digest, "sha256:") {
 		return fmt.Errorf("spec.release.digest %q must be sha256:<64 hex>", s.Release.Digest)
 	}
 	if err := fileRef("spec.root", s.Root.File, s.Root.SHA256); err != nil {
 		return err
 	}
-	if err := digest("spec.root.verity.roothash", s.Root.Verity.RootHash); err != nil {
+	if err := checkHex("spec.root.verity.roothash", s.Root.Verity.RootHash); err != nil {
 		return err
 	}
 	if s.Root.Verity.Algorithm != "sha256" {
@@ -202,7 +202,7 @@ func (m *Manifest) validateAmd64() error {
 	}
 	sb := s.SecureBoot
 	for name, fp := range map[string]string{"pk": sb.PK.SHA256Fingerprint, "kek": sb.KEK.SHA256Fingerprint, "db": sb.DB.SHA256Fingerprint} {
-		if err := digest("spec.secureBoot."+name+".sha256Fingerprint", fp); err != nil {
+		if err := checkHex("spec.secureBoot."+name+".sha256Fingerprint", fp); err != nil {
 			return err
 		}
 	}
@@ -224,7 +224,7 @@ func (m *Manifest) validateArm64() error {
 		return fmt.Errorf("spec.boot.arm64.files lists no files")
 	}
 	for name, d := range s.Boot.Arm64.Files {
-		if err := digest("spec.boot.arm64.files."+name, d); err != nil {
+		if err := checkHex("spec.boot.arm64.files."+name, d); err != nil {
 			return err
 		}
 	}
@@ -240,7 +240,7 @@ func exactFiles(field string, got map[string]string, want []string) error {
 		if !ok {
 			return fmt.Errorf("%s must list exactly %s", field, strings.Join(want, ", "))
 		}
-		if err := digest(field+"."+name, d); err != nil {
+		if err := checkHex(field+"."+name, d); err != nil {
 			return err
 		}
 	}
@@ -251,10 +251,10 @@ func fileRef(field, file, sum string) error {
 	if file == "" || strings.ContainsAny(file, "/\\") || file == "." || file == ".." {
 		return fmt.Errorf("%s.file %q must be a plain file name", field, file)
 	}
-	return digest(field+".sha256", sum)
+	return checkHex(field+".sha256", sum)
 }
 
-func digest(field, d string) error {
+func checkHex(field, d string) error {
 	if !hex64.MatchString(d) {
 		return fmt.Errorf("%s %q must be 64 lowercase hex characters", field, d)
 	}

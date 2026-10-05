@@ -17,3 +17,8 @@ jobs:
   checks:
     if: github.event.pull_request.draft != true
     uses: Sneakers-PAM/.github/.github/workflows/scrub.yml@main
+    with:
+      # in-toto.io is the public in-toto statement type URI that cosign
+      # writes into its signatures; the test fixtures write the same.
+      allowed-domains: >-
+        in-toto.io
