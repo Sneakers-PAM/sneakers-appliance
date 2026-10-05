@@ -30,9 +30,15 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "gofmt needed on:"; echo "$unformatted"; exit 1
           fi
+      - name: Install veritysetup
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q cryptsetup-bin
       - name: Build
         run: go build ./...
       - name: Test
+        env:
+          SNEAKERS_REQUIRE_TOOLS: "1"
         run: go test ./... -cover
   lint:
     name: 🧹 GolangCI
@@ -57,7 +63,7 @@ jobs:
           install-mode: goinstall
           args: --timeout=3m
   lab-tools:
-    name: 🔑 Lab keys and cosign
+    name: 🔑 Lab keys and tool interop
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -71,8 +77,8 @@ jobs:
       - name: Install efitools and cosign
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q efitools
+          sudo apt-get install -y -q efitools sbsigntool squashfs-tools
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Lab keys and cosign interop
+      - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/

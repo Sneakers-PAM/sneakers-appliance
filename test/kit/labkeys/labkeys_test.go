@@ -9,6 +9,7 @@
 package labkeys
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/pem"
@@ -18,7 +19,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foxboron/go-uefi/authenticode"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/efiauth"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
+	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
 
 func labKeys(t *testing.T) string {
@@ -100,5 +105,119 @@ func TestCosignBlobBundleVerifies(t *testing.T) {
 	}
 	if strings.Contains(string(raw), "PRIVATE") {
 		t.Fatal("a bundle never carries key material")
+	}
+}
+
+func TestEfitoolsAuthFilesVerify(t *testing.T) {
+	out := labKeys(t)
+	cert := func(role string) *x509.Certificate {
+		b, err := os.ReadFile(filepath.Join(out, role+".crt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		blk, _ := pem.Decode(b)
+		c, err := x509.ParseCertificate(blk.Bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	for _, c := range []struct{ name, signer, rogue string }{
+		{"PK", "PK", "KEK"}, {"KEK", "PK", "KEK"}, {"db", "KEK", "PK"}, {"dbx", "KEK", "rogue-db"},
+	} {
+		raw, err := os.ReadFile(filepath.Join(out, c.name+".auth"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, err := efiauth.ParseAuth(raw)
+		if err != nil {
+			t.Fatalf("%s.auth: %v", c.name, err)
+		}
+		esl, _ := os.ReadFile(filepath.Join(out, c.name+".esl"))
+		if !bytes.Equal(a.Data, esl) {
+			t.Errorf("%s.auth doesn't carry %s.esl", c.name, c.name)
+		}
+		if err := a.Verify(c.name, cert(c.signer)); err != nil {
+			t.Errorf("%s.auth with %s: %v", c.name, c.signer, err)
+		}
+		if err := a.Verify(c.name, cert(c.rogue)); err == nil {
+			t.Errorf("%s.auth verified with %s", c.name, c.rogue)
+		}
+	}
+	for _, role := range []string{"PK", "KEK", "db"} {
+		esl, _ := os.ReadFile(filepath.Join(out, role+".esl"))
+		entries, err := efiauth.ParseSignatureLists(esl)
+		if err != nil || len(entries) != 1 || !bytes.Equal(entries[0].Data, cert(role).Raw) {
+			t.Errorf("%s.esl: %d entries, %v", role, len(entries), err)
+		}
+	}
+}
+
+func TestSbsignSignatureVerifiesWithTheKitsCheck(t *testing.T) {
+	out := labKeys(t)
+	dir := t.TempDir()
+	unsigned := filepath.Join(dir, "uki.efi")
+	if err := os.WriteFile(unsigned, fixtures.PE(t, fixtures.Section{Name: ".cmdline", Data: []byte("quiet")}, fixtures.Section{Name: ".linux", Data: []byte("kernel")}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	signed := filepath.Join(dir, "uki.signed.efi")
+	cmd := exec.Command("sbsign", "--key", filepath.Join(out, "db.key"), "--cert", filepath.Join(out, "db.crt"), "--output", signed, unsigned)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("sbsign: %v\n%s", err, b)
+	}
+	f, err := os.Open(signed) // #nosec G304 -- the test's own temp file
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	p, err := authenticode.Parse(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func(role string) *x509.Certificate {
+		b, _ := os.ReadFile(filepath.Join(out, role+".crt"))
+		blk, _ := pem.Decode(b)
+		c, err := x509.ParseCertificate(blk.Bytes)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	if ok, err := p.Verify(read("db")); err != nil || !ok {
+		t.Fatalf("sbsign's signature doesn't verify: %v", err)
+	}
+	if ok, _ := p.Verify(read("rogue-db")); ok {
+		t.Fatal("verified with the rogue db")
+	}
+}
+
+func TestFixtureSignatureVerifiesWithSbverify(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	dir := t.TempDir()
+	uki := filepath.Join(dir, "uki.efi")
+	if err := os.WriteFile(uki, fixtures.UKI(t, k.DB, "quiet"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	crt := filepath.Join(dir, "db.crt")
+	if err := os.WriteFile(crt, k.DB.PEM, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := exec.Command("sbverify", "--cert", crt, uki).CombinedOutput(); err != nil { // #nosec G204 -- test-only, fixed tool
+		t.Fatalf("sbverify: %v\n%s", err, b)
+	}
+}
+
+func TestFixtureSquashFSReadsWithUnsquashfs(t *testing.T) {
+	tree, _ := fixtures.RootTree(t, fixtures.LabKeys(t), "amd64", nil)
+	img := filepath.Join(t.TempDir(), "root.sqfs")
+	if err := os.WriteFile(img, fixtures.SquashFS(t, tree), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b, err := exec.Command("unsquashfs", "-l", img).CombinedOutput() // #nosec G204 -- test-only, fixed tool
+	if err != nil {
+		t.Fatalf("unsquashfs: %v\n%s", err, b)
+	}
+	if !strings.Contains(string(b), "usr/bin/k0s") {
+		t.Fatalf("listing:\n%s", b)
 	}
 }

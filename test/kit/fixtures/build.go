@@ -15,6 +15,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"testing/fstest"
 
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
@@ -66,13 +67,18 @@ func (k Keys) Pins() release.Pins {
 
 // Parts are the release files before they're laid out and signed.
 type Parts struct {
-	Keys     Keys
-	Files    map[string][]byte
-	Manifest *verify.Manifest
+	Keys       Keys
+	Arch       string
+	Files      map[string][]byte
+	RootHash   string
+	HashOffset int64
+	Manifest   *verify.Manifest
 }
 
 // Mutation breaks one thing about the fixture.
 type Mutation struct {
+	// Root edits the root tree before the root image is built.
+	Root func(m fstest.MapFS)
 	// Files edits the release files before appliance.yaml is written.
 	Files func(p *Parts)
 	// Manifest edits appliance.yaml after the digests are filled in.
@@ -99,11 +105,11 @@ func Build(t testing.TB, o Options) (string, release.Pins) {
 		o.Arch = "amd64"
 	}
 	k := LabKeys(t)
-	p := &Parts{Keys: k, Files: baseFiles(t, k, o.Arch)}
+	p := baseParts(t, k, o.Arch, o.Mutate.Root)
 	if o.Mutate.Files != nil {
 		o.Mutate.Files(p)
 	}
-	p.Manifest = manifestFor(k, o.Arch, p.Files)
+	p.Manifest = manifestFor(k, p)
 	if o.Mutate.Manifest != nil {
 		o.Mutate.Manifest(p.Manifest)
 	}
@@ -129,30 +135,12 @@ func Build(t testing.TB, o Options) (string, release.Pins) {
 	return dir, k.Pins()
 }
 
-func baseFiles(t testing.TB, k Keys, arch string) map[string][]byte {
-	rel := []byte("apiVersion: sneakers-pam/v1alpha1\nkind: Release\nmetadata:\n  version: " + Version + "\n")
-	files := map[string][]byte{
-		verify.FileRelease:    rel,
-		verify.FileReleaseSig: k.Cosign.BlobBundle(t, rel),
-		rootName():            random(t, 64<<10),
-	}
-	if arch == "amd64" {
-		files[ukiName()] = random(t, 16<<10)
-		files["systemd-bootx64.efi"] = random(t, 8<<10)
-		for _, name := range verify.SecureBootFiles {
-			files[verify.SecureBootKeyPrefix+name] = random(t, 512)
-		}
-	} else {
-		files[arm64Name()] = random(t, 16<<10)
-	}
-	return files
-}
-
 func ukiName() string   { return "sneakers-" + Version + ".efi" }
 func rootName() string  { return "root-" + Version + ".img" }
 func arm64Name() string { return "boot-arm64-" + Version + ".tar" }
 
-func manifestFor(k Keys, arch string, files map[string][]byte) *verify.Manifest {
+func manifestFor(k Keys, p *Parts) *verify.Manifest {
+	arch, files := p.Arch, p.Files
 	sum := func(name string) string {
 		s := sha256.Sum256(files[name])
 		return hex.EncodeToString(s[:])
@@ -165,7 +153,7 @@ func manifestFor(k Keys, arch string, files map[string][]byte) *verify.Manifest 
 			KitMin:  Version,
 			Release: verify.ReleaseRef{Digest: "sha256:" + sum(verify.FileRelease)},
 			Root: verify.Root{File: rootName(), SHA256: sum(rootName()), Verity: verify.Verity{
-				RootHash: hex.EncodeToString(make([]byte, 32)), HashOffset: 4096, Algorithm: "sha256",
+				RootHash: p.RootHash, HashOffset: p.HashOffset, Algorithm: "sha256",
 			}},
 			Arch: arch,
 		},
@@ -183,7 +171,7 @@ func manifestFor(k Keys, arch string, files map[string][]byte) *verify.Manifest 
 		m.Spec.SecureBoot = sb
 	} else {
 		m.Spec.Protection = "reduced"
-		m.Spec.Boot.Arm64 = &verify.Arm64Boot{File: arm64Name(), SHA256: sum(arm64Name()), Files: map[string]string{"Image": sum(arm64Name())}}
+		m.Spec.Boot.Arm64 = &verify.Arm64Boot{File: arm64Name(), SHA256: sum(arm64Name()), Files: tarDigests(files[arm64Name()])}
 	}
 	return m
 }
