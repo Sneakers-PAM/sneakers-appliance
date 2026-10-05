@@ -25,7 +25,7 @@ refuses a production release with `KIT_CHANNEL`, and a production kit refuses a 
 sneakers-kit version    # the kit version, its channel and the SHA-256 fingerprint of each pin
 ```
 
-`verify` and `build` follow with the verification chain.
+`verify` and `build` follow with the verification chain; [artifact.md](artifact.md) describes the artifact and the steps verified so far.
 
 ## The appliance manifest
 
