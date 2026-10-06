@@ -4,6 +4,44 @@ Every coded error carries a number and a stable symbol. The kit prints `SYMBOL (
 on the box the console and init's log show the same. 1xxx are the kit and the verification chain it
 shares with `Image.Stage`; 2xxx are boot.
 
+## First boot and access (3xxx)
+
+30xx are the access store, 31xx SSH enrolment, 32xx the :8443 sign-in, 33xx elevation, 34xx the
+network and 35xx the setup steps. The shell, the console and :8443 show the same sentence.
+
+| Code | Symbol | Meaning |
+|---|---|---|
+| 3001 | `ACCESS_KEY_TYPE` | the key isn't an OpenSSH public key of an accepted type (recovery keys: `ssh-ed25519` or `ssh-rsa` only, never `sk-`) |
+| 3002 | `ACCESS_KEY_WEAK` | the key is DSA or RSA shorter than 3072 bits |
+| 3003 | `ACCESS_KEY_DUPLICATE` | the key is already a login key of an admin or a recovery key |
+| 3004 | `ACCESS_NAME` | the admin name doesn't match `^[a-z][a-z0-9_-]{1,30}$`, is reserved, or is taken |
+| 3005 | `ACCESS_LAST_KEY` | the change would leave no owner with a key |
+| 3006 | `ACCESS_LAST_OWNER` | the change would leave no owner |
+| 3007 | `ACCESS_LAST_RECOVERY_KEY` | the last recovery key can't be removed; add its replacement first |
+| 3008 | `ACCESS_RECOVERY_KEY_LIMIT` | three recovery keys are already set |
+| 3009 | `ACCESS_FORBIDDEN` | the role or the origin doesn't allow it |
+| 3010 | `ACCESS_STEPUP_REQUIRED` | a sign-in no older than 5 minutes is needed |
+| 3011 | `ACCESS_NO_ADMIN_KEY` | sshd or osadmin was asked to start in admin mode with no owner key |
+| 3012 | `ACCESS_STORE_INVALID` | the access store doesn't parse |
+| 3101 | `ENROL_CODE` | wrong enrolment code (the attempts left are shown) |
+| 3102 | `ENROL_CLOSED` | the enrolment window is closed |
+| 3201 | `LOGIN_CODE` | unknown, used or expired sign-in code |
+| 3301 | `ELEV_SELF_APPROVAL` | with two or more owners, nobody approves their own request |
+| 3302 | `ELEV_HOLD` | the approver is under the 24-hour console-recovery hold |
+| 3303 | `ELEV_EXPIRED` | the request or certificate expired |
+| 3304 | `ELEV_USED` | the certificate was already used |
+| 3305 | `ELEV_MAINTENANCE` | an upgrade is in progress |
+| 3401 | `NET_INVALID` | a setting fails validation (the error names the field) |
+| 3402 | `NET_NO_ADDRESS` | the management interface has no usable address |
+| 3403 | `NET_DHCP_TIMEOUT` | no DHCP server answered in time |
+| 3404 | `NET_GATEWAY` | the gateway didn't answer ARP or neighbour discovery |
+| 3405 | `NET_DNS` | a DNS server didn't answer |
+| 3406 | `NET_NTP` | no NTP server gave a usable time |
+| 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
+| 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
+
+## Build kit and boot (1xxx and 2xxx)
+
 | Code | Symbol | Meaning |
 |---|---|---|
 | 1001 | `KIT_PIN_MISSING` | this kit was built without one of its pins, or with a channel other than production or lab |
