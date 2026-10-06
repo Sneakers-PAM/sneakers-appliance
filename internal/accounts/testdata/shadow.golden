@@ -1,0 +1,8 @@
+root:*:::::::
+maint:*:::::::
+sshd:*:::::::
+sshkeys:*:::::::
+osadmin:*:::::::
+nobody:*:::::::
+alice:*:::::::
+bob:*:::::::
