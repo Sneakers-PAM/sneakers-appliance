@@ -49,7 +49,9 @@ var (
 // Sealer is the TPM, as custody uses it.
 type Sealer interface {
 	SealToPCR(data []byte, pcrs []int) (private, public []byte, err error)
+	SealToPCRValues(data []byte, values map[int][]byte) (private, public []byte, err error)
 	UnsealWithPCR(private, public []byte, pcrs []int) ([]byte, error)
+	ReadPCRs(pcrs []int) (map[int][]byte, error)
 }
 
 // Volume is one LUKS2 device, as custody uses it.

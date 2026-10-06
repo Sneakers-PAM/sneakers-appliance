@@ -71,3 +71,6 @@ network and 35xx the setup steps. The shell, the console and :8443 show the same
 | 2304 | `KEYCUSTODY_LOCKED` | the state key can't be recovered: no sealed copy unseals, or the key file is missing |
 | 2305 | `KEYCUSTODY_NOT_FOUND` | there's no sealed item of that name |
 | 2306 | `KEYCUSTODY_RECIPIENTS` | the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys |
+| 2501 | `UPGRADE_DOWNGRADE` | the release isn't newer than the running one |
+| 2502 | `UPGRADE_UNPREDICTABLE` | the release's UKI isn't one whose PCR 11 the box can predict |
+| 2503 | `UPGRADE_NO_PREVIOUS` | there's no previous release to roll back to |
