@@ -24,3 +24,20 @@ The UKI's initrd holds `sneakers-switchroot` and a static `veritysetup`. It:
 
 Any failure panics PID 1; the kernel reboots after `panic=10`, and boot counting falls back to the
 previous release.
+
+## The UKI
+
+`build/uki/assemble.sh` builds the unsigned UKI with ukify (systemd-stub), reproducibly from
+`SOURCE_DATE_EPOCH`:
+
+| Section | Contents |
+|---|---|
+| `.linux` | the kernel |
+| `.initrd` | `sneakers-switchroot` as `/init` and a static `veritysetup`; no root filesystem |
+| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity` |
+| `.osrel`, `.uname` | the release's os-release and kernel release |
+| `.sbat` | the shim line and `sneakers-pam,1`, so a bad release can be revoked by generation |
+
+It then refuses the image unless it carries exactly those six payload sections: `internal/ukipcr`
+(ported from CryptOS-PKI) predicts PCR 11 only for them, and a box that can't predict PCR 11 for a
+staged release couldn't seal its state key to it. Signing happens later, in the release workflow.

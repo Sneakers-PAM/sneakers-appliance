@@ -102,7 +102,7 @@ jobs:
       - name: Install efitools and cosign
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q efitools sbsigntool squashfs-tools
+          sudo apt-get install -y -q efitools sbsigntool squashfs-tools cryptsetup-bin cpio systemd-ukify systemd-boot-efi python3-pefile
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
