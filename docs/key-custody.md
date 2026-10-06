@@ -37,6 +37,15 @@ security-key types are refused, because a restore mustn't need the hardware the 
 Each recovery key opens it on its own, with the stock `age -d -i <private key>`. A restore onto new
 hardware uses it; losing the TPM without the escrow loses the data.
 
+## Importing an escrow on new hardware
+
+A restore onto new hardware brings the old box's sealed items back with
+`KeyCustody.ImportEscrow`. It takes the escrow already decrypted with one recovery key and seals
+each item again under the new box's own state key; the old box's state key is never used. It runs
+only in `firstboot` and only while nothing is sealed on the new box yet; anything else is refused
+with `KEYCUSTODY_PHASE`. An escrow that doesn't parse, has an unknown version or names an invalid
+item is refused with `KEYCUSTODY_INVALID` and nothing is sealed.
+
 ## Turning Secure Boot off and on later
 
 - **Off** (`KeyCustody.SetSecureBoot(off)`): in TPM mode a copy sealed to PCR 4 and 11 is added

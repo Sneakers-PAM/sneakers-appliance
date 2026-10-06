@@ -25,6 +25,7 @@ refuses a production release with `KIT_CHANNEL`, and a production kit refuses a 
 sneakers-kit verify <ref> [--arch amd64|arm64] [--plain-http]
 sneakers-kit build  <ref> --format iso|ova|qcow2|rpi|raw [--arch amd64|arm64] [--disk-size 64G] [--out DIR] [--plain-http]
 sneakers-kit version
+sneakers-kit backup
 ```
 
 - `verify` runs the whole chain ([artifact.md](artifact.md)) on a private copy in a temporary
@@ -37,6 +38,8 @@ sneakers-kit version
   `sneakers-<version>-<arch>`, with `-LAB` for a lab release. Formats arrive with their writers;
   a kit refuses a format it doesn't carry.
 - `version` prints the kit version, its channel and the SHA-256 fingerprint of each pin.
+- `backup` is the group for working with exported backup sets off the box. It has no commands yet
+  and prints its usage.
 
 `<ref>` is one of:
 
