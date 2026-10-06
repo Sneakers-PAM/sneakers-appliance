@@ -1,0 +1,4 @@
+exec: /usr/sbin/sshd
+args: [-D, -e]
+phases: [firstboot, normal]
+start: on-demand

@@ -31,9 +31,13 @@ const (
 	KitSourceUnreadable = 1013
 )
 
-// The boot codes.
+// The boot and init codes.
 const (
-	RootNotFound = 2001
+	RootNotFound        = 2001
+	ServiceTableInvalid = 2101
+	ServiceUnknown      = 2102
+	ServiceNotOnDemand  = 2103
+	ServicePreStart     = 2104
 )
 
 // Entries describes every code, for the registry and the docs.
@@ -52,6 +56,10 @@ var Entries = []apperr.Entry{
 	{Code: KitManifestInvalid, Symbol: "KIT_MANIFEST_INVALID", Title: "verify", Cause: "appliance.yaml doesn't parse or breaks a structural rule"},
 	{Code: KitSourceUnreadable, Symbol: "KIT_SOURCE_UNREADABLE", Title: "verify", Cause: "the artifact can't be resolved or read"},
 	{Code: RootNotFound, Symbol: "ROOT_NOT_FOUND", Title: "boot", Cause: "no root slot matches the signed root hash, and no install medium holds the root image"},
+	{Code: ServiceTableInvalid, Symbol: "SERVICE_TABLE_INVALID", Title: "init", Cause: "a service table entry doesn't parse, names an unknown service, or loops through after:"},
+	{Code: ServiceUnknown, Symbol: "SERVICE_UNKNOWN", Title: "init", Cause: "the service table has no service of that name"},
+	{Code: ServiceNotOnDemand, Symbol: "SERVICE_NOT_ON_DEMAND", Title: "init", Cause: "only on-demand services are started and stopped through the Services API"},
+	{Code: ServicePreStart, Symbol: "SERVICE_PRE_START", Title: "init", Cause: "the service's pre-start hook failed, so it wasn't started"},
 }
 
 // Registry is the code table.

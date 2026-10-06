@@ -1,0 +1,3 @@
+exec: /usr/libexec/sneakers/console
+phases: [enrol, firstboot, normal]
+restart: always

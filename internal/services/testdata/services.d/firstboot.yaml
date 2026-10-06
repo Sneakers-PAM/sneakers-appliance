@@ -1,0 +1,4 @@
+exec: /usr/libexec/sneakers/firstboot
+phases: [firstboot]
+after: [console]
+restart: on-failure

@@ -1,0 +1,4 @@
+exec: /usr/libexec/sneakers/platformd
+phases: [firstboot, normal]
+readiness:
+  file: /run/sneakers/platformd.ready
