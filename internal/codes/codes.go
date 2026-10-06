@@ -47,6 +47,14 @@ const (
 	SBEnrolFailed  = 2203
 )
 
+// The key custody codes.
+const (
+	KeyCustodyNoTPM          = 2301
+	KeyCustodyInvalid        = 2302
+	KeyCustodyNotInitialized = 2303
+	KeyCustodyLocked         = 2304
+)
+
 // Entries describes every code, for the registry and the docs.
 var Entries = []apperr.Entry{
 	{Code: KitPinMissing, Symbol: "KIT_PIN_MISSING", Title: "kit", Cause: "this kit was built without one of its pins, or with a channel other than production or lab"},
@@ -70,6 +78,10 @@ var Entries = []apperr.Entry{
 	{Code: SBNoEfivarfs, Symbol: "SB_NO_EFIVARFS", Title: "secureboot", Cause: "efivarfs isn't mounted or can't be read, so the Secure Boot state is unknown"},
 	{Code: SBNotSetupMode, Symbol: "SB_NOT_SETUP_MODE", Title: "secureboot", Cause: "the firmware isn't in Setup Mode, so the org keys can't be enrolled; nothing was written"},
 	{Code: SBEnrolFailed, Symbol: "SB_ENROL_FAILED", Title: "secureboot", Cause: "writing a Secure Boot key variable failed or didn't read back"},
+	{Code: KeyCustodyNoTPM, Symbol: "KEYCUSTODY_NO_TPM", Title: "keycustody", Cause: "TPM mode was chosen on a box without a TPM"},
+	{Code: KeyCustodyInvalid, Symbol: "KEYCUSTODY_INVALID", Title: "keycustody", Cause: "an unknown mode or choice, a second Initialize, or a disk too small for first boot"},
+	{Code: KeyCustodyNotInitialized, Symbol: "KEYCUSTODY_NOT_INITIALIZED", Title: "keycustody", Cause: "the state volume has no custody header yet"},
+	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 }
 
 // Registry is the code table.

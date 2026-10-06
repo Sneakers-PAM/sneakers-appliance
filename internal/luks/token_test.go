@@ -123,7 +123,7 @@ func TestParseTPM2Token_Errors(t *testing.T) {
 	if _, err := ParseTPM2Token([]byte(`{"type":"systemd-tpm2","tpm-blob":"x"}`)); err == nil {
 		t.Error("ParseTPM2Token(wrong type) = nil, want error")
 	}
-	if _, err := ParseTPM2Token([]byte(`{"type":"cryptos-tpm2"}`)); err == nil {
+	if _, err := ParseTPM2Token([]byte(`{"type":"sneakers-tpm2"}`)); err == nil {
 		t.Error("ParseTPM2Token(empty blob) = nil, want error")
 	}
 }
@@ -148,7 +148,7 @@ func TestSealedBlobs_BadFraming(t *testing.T) {
 func TestImportToken_Args(t *testing.T) {
 	mock := &mockRunner{}
 	d := &Device{Path: "/dev/mapper/x", Runner: mock}
-	tokenJSON := []byte(`{"type":"cryptos-tpm2","tpm-blob":"AA"}`)
+	tokenJSON := []byte(`{"type":"sneakers-tpm2","tpm-blob":"AA"}`)
 	if err := d.ImportToken(context.Background(), 2, tokenJSON); err != nil {
 		t.Fatalf("ImportToken: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestImportToken_Args(t *testing.T) {
 }
 
 func TestExportToken_Args(t *testing.T) {
-	want := []byte(`{"type":"cryptos-tpm2","tpm-blob":"AA"}`)
+	want := []byte(`{"type":"sneakers-tpm2","tpm-blob":"AA"}`)
 	mock := &mockRunner{stdout: want}
 	d := &Device{Path: "/dev/sdb", Runner: mock}
 	got, err := d.ExportToken(context.Background(), 3)
@@ -192,7 +192,7 @@ func encodeBlob(raw []byte) string {
 }
 
 func TestTokens_ParsesTheHeaderDump(t *testing.T) {
-	dump := []byte(`{"keyslots":{"0":{"type":"luks2"}},"tokens":{"0":{"type":"cryptos-tpm2","tpm-blob":"AA"},"3":{"type":"other"}},"segments":{}}`)
+	dump := []byte(`{"keyslots":{"0":{"type":"luks2"}},"tokens":{"0":{"type":"sneakers-tpm2","tpm-blob":"AA"},"3":{"type":"other"}},"segments":{}}`)
 	mock := &mockRunner{stdout: dump}
 	d := &Device{Path: "/dev/sdb", Runner: mock}
 
@@ -203,7 +203,7 @@ func TestTokens_ParsesTheHeaderDump(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("Tokens returned %d tokens, want 2: %v", len(got), tokenStrings(got))
 	}
-	if !strings.Contains(string(got[0]), "cryptos-tpm2") || !strings.Contains(string(got[3]), "other") {
+	if !strings.Contains(string(got[0]), "sneakers-tpm2") || !strings.Contains(string(got[3]), "other") {
 		t.Errorf("Tokens = %v", tokenStrings(got))
 	}
 	wantArgs := []string{"luksDump", "--dump-json-metadata", "/dev/sdb"}
