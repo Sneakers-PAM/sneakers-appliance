@@ -299,7 +299,7 @@ jobs:
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
-          KEYS="$keys" OUT="$lab" DISK_SIZE=8G bash build/lab/build.sh
+          KEYS="$keys" OUT="$lab" bash build/lab/build.sh
           go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
           tool="$work/sneakers-artifact"
           "$tool" bin-pack --layout "$lab/artifact" --recipient "$keys/update.pub" \
