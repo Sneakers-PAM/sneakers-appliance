@@ -26,7 +26,13 @@ jobs:
       # module hosts. acme.com
       # and api.acme.com are the example hosts protoc-gen-connect-go writes
       # into every generated client's doc comment.
+      # kernel.org (cdn, git) and deb.debian.org are where the pinned kernel
+      # and static tool sources come from.
       allowed-domains: >-
+        kernel.org
+        cdn.kernel.org
+        git.kernel.org
+        deb.debian.org
         in-toto.io
         cloud.google.com
         dmitri.shuralyov.com
