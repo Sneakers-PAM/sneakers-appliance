@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/disk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/kitout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
@@ -53,4 +54,4 @@ func newRoot(pins release.Pins, stdout, stderr io.Writer) *cobra.Command {
 }
 
 // writers are the output formats this kit builds.
-func writers() kitout.Writers { return kitout.NewWriters() }
+func writers() kitout.Writers { return kitout.NewWriters(disk.Raw{}) }
