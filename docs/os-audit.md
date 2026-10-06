@@ -36,6 +36,19 @@ An elevated session is recorded in full, both directions, as asciicast v2 in
 chunk count. A session killed mid-way still leaves a prefix that verifies; a recording with more
 than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can view recordings.
 
+## Reboot and shutdown
+
+Reboot and shutdown are graceful by default on both the console and :8443: the stack drains before
+the box stops. A forced reboot or shutdown skips the drain and needs a second, explicit
+confirmation. Either way the entry records who asked, where from and how:
+
+| Field | Value |
+|---|---|
+| `action` | `power.reboot` or `power.shutdown` |
+| `actor`, `keyFp`, `source` | the admin, the key that signed in and the client address, or `console` |
+| `detail.surface` | `console` or `8443` |
+| `detail.mode` | `graceful`, or `forced` after the second confirmation |
+
 ## Retention
 
 The log keeps 400 days and recordings 90 days by default, both settable on the Logs and audit page.
