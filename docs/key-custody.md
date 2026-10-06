@@ -36,3 +36,18 @@ age to one to three SSH recovery keys (`ssh-ed25519` or `ssh-rsa`;
 security-key types are refused, because a restore mustn't need the hardware the key was made on).
 Each recovery key opens it on its own, with the stock `age -d -i <private key>`. A restore onto new
 hardware uses it; losing the TPM without the escrow loses the data.
+
+## Turning Secure Boot off and on later
+
+- **Off** (`KeyCustody.SetSecureBoot(off)`): in TPM mode a copy sealed to PCR 4 and 11 is added
+  first, then `off` is recorded. On the next boot with Secure Boot off in the firmware, the PCR 7
+  and 11 copies are dropped.
+- **On later**: `on` is recorded with enrolment pending, and the PCR 4 and 11 copy is kept, so the
+  boots before the org keys enforce still unlock. The next boot enters `enrol`. Once the firmware
+  enforces with only the org keys, init seals a copy to the new PCR 7 and 11, checks it unseals,
+  and only then drops the PCR 4 and 11 copy; protection becomes full. Key-file mode records the
+  choice only.
+- PCR 4 for a staged release (with Secure Boot off) is predicted by replaying the firmware's event
+  log (`tpm.ReplayPCR4`) with the new loader's, UKI's and kernel's Authenticode digests in place of
+  the running ones; a log that can't be read or has no EFI application events is refused rather
+  than guessed at.
