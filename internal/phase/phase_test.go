@@ -22,6 +22,7 @@ func TestDecidePhase(t *testing.T) {
 		{"off by choice", phase.Facts{SBSupported: true, SBChoice: phase.SBOff}, phase.Firstboot},
 		{"no Secure Boot firmware", phase.Facts{SBSupported: false}, phase.Firstboot},
 		{"enforcing org-only, set up", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SBEnforcing: true, SBEnforcingOrgOnly: true, SetupDone: true}, phase.Normal},
+		{"no choice, but already enforcing org-only", phase.Facts{SBSupported: true, SBEnforcing: true, SBEnforcingOrgOnly: true}, phase.Firstboot},
 		{"enforcing org-only, first boot", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBEnforcing: true, SBEnforcingOrgOnly: true}, phase.Firstboot},
 		{"off by choice, set up", phase.Facts{SBSupported: true, SBChoice: phase.SBOff, SBChoiceFixed: true, SetupDone: true}, phase.Normal},
 		{"mismatch: fixed on, firmware off", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SetupDone: true}, phase.Mismatch},

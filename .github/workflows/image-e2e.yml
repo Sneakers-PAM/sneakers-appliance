@@ -1,0 +1,87 @@
+name: Image E2E
+# Builds a whole lab release (kernel, static tools, root, UKI, enrolment
+# material, signed with keys made for this run only), builds its raw disk
+# with a kit pinned to those keys, and boots it in QEMU with OVMF Secure
+# Boot and swtpm. Only logs leave the run: nothing built here, and no key,
+# is uploaded.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  image:
+    name: 🖥️ Image suite (amd64)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the build and boot tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
+            ovmf qemu-system-x86 qemu-utils swtpm python3-virt-firmware \
+            efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
+            systemd-ukify systemd-boot-efi python3-pefile
+          bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Cache the kernel
+        id: kernel
+        uses: actions/cache@v4
+        with:
+          path: build/out/kernel/amd64
+          key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
+      - name: Build the kernel
+        if: steps.kernel.outputs.cache-hit != 'true'
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: bash build/kernel/build.sh amd64
+      - name: Cache the static tools
+        id: static
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/out/cryptsetup-amd64
+            build/out/veritysetup-amd64
+          key: static-crypt-amd64-${{ hashFiles('build/static/cryptsetup.sh', 'build/ci/versions.env') }}
+      - name: Build the static cryptsetup
+        if: steps.static.outputs.cache-hit != 'true'
+        run: bash build/static/cryptsetup.sh amd64
+      - name: Build the lab release and its raw disk
+        run: |
+          keys="$RUNNER_TEMP/labkeys"
+          mkdir -p "$keys"
+          sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
+          KERNEL=build/out/kernel/amd64/bzImage \
+          KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
+          VERITYSETUP=build/out/veritysetup-amd64 \
+          KEYS="$keys" OUT="$RUNNER_TEMP/lab" bash build/lab/build.sh
+          {
+            echo "### Lab release"
+            echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes"
+            echo "- raw disk: $(ls "$RUNNER_TEMP"/lab/disk)"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Image suite
+        env:
+          SNEAKERS_REQUIRE_TOOLS: "1"
+        run: |
+          export SNEAKERS_KEYS="$RUNNER_TEMP/labkeys"
+          SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
+          export SNEAKERS_IMAGE
+          go test -tags image -timeout 60m -v ./test/image/...
+      - name: Wipe the lab keys
+        if: always()
+        run: sudo umount "$RUNNER_TEMP/labkeys" || true

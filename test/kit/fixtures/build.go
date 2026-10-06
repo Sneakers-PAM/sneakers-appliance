@@ -17,10 +17,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	specs "github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/artifact"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/oci"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
@@ -109,14 +108,16 @@ func Build(t testing.TB, o Options) (string, release.Pins) {
 	if o.Mutate.Files != nil {
 		o.Mutate.Files(p)
 	}
-	p.Manifest = manifestFor(k, p)
-	if o.Mutate.Manifest != nil {
-		o.Mutate.Manifest(p.Manifest)
-	}
 	dir := t.TempDir()
-	l, err := oci.Create(dir)
+	indexDesc, err := artifact.Write(dir, p.input(), func(m *verify.Manifest) {
+		p.Manifest = m
+		if o.Mutate.Manifest != nil {
+			o.Mutate.Manifest(m)
+		}
+	})
 	must(t, err)
-	indexDesc := writeArtifact(t, l, o.Arch, p)
+	l, err := oci.Open(dir)
+	must(t, err)
 	if !o.Mutate.Unsigned {
 		var d [sha256.Size]byte
 		raw, _ := hex.DecodeString(indexDesc.Digest.Encoded())
@@ -127,7 +128,7 @@ func Build(t testing.TB, o Options) (string, release.Pins) {
 		} else {
 			bundle = k.Cosign.DSSEBundle(t, "sneakers-os", d)
 		}
-		AttachSignature(t, l, indexDesc, bundle)
+		must(t, artifact.AttachSignature(l, indexDesc, bundle))
 	}
 	if o.Mutate.After != nil {
 		o.Mutate.After(t, l)
@@ -135,112 +136,38 @@ func Build(t testing.TB, o Options) (string, release.Pins) {
 	return dir, k.Pins()
 }
 
+// input maps the parts onto the artifact's input; files it doesn't know
+// become extra layers.
+func (p *Parts) input() artifact.Input {
+	in := artifact.Input{Arch: p.Arch, Version: Version, Channel: release.ChannelLab, RootHash: p.RootHash, HashOffset: p.HashOffset,
+		Systemd: "lab", Fingerprints: p.Keys.Pins().Fingerprints(), Keys: map[string]artifact.File{}, Extra: map[string]artifact.File{}}
+	for name, b := range p.Files {
+		f := artifact.File{Data: b}
+		switch {
+		case name == verify.FileRelease:
+			in.Release = f
+		case name == verify.FileReleaseSig:
+			in.ReleaseSig = f
+		case name == rootName():
+			in.Root = f
+		case name == ukiName():
+			in.UKI = f
+		case name == "systemd-bootx64.efi":
+			in.Loader = f
+		case name == arm64Name():
+			in.BootTarball, in.BootFiles = f, tarDigests(b)
+		case len(name) > len(verify.SecureBootKeyPrefix) && name[:len(verify.SecureBootKeyPrefix)] == verify.SecureBootKeyPrefix:
+			in.Keys[name[len(verify.SecureBootKeyPrefix):]] = f
+		default:
+			in.Extra[name] = f
+		}
+	}
+	return in
+}
+
 func ukiName() string   { return "sneakers-" + Version + ".efi" }
 func rootName() string  { return "root-" + Version + ".img" }
 func arm64Name() string { return "boot-arm64-" + Version + ".tar" }
-
-func manifestFor(k Keys, p *Parts) *verify.Manifest {
-	arch, files := p.Arch, p.Files
-	sum := func(name string) string {
-		s := sha256.Sum256(files[name])
-		return hex.EncodeToString(s[:])
-	}
-	m := &verify.Manifest{
-		APIVersion: verify.APIVersion,
-		Kind:       verify.Kind,
-		Metadata:   verify.Metadata{Version: Version, Channel: release.ChannelLab},
-		Spec: verify.Spec{
-			KitMin:  Version,
-			Release: verify.ReleaseRef{Digest: "sha256:" + sum(verify.FileRelease)},
-			Root: verify.Root{File: rootName(), SHA256: sum(rootName()), Verity: verify.Verity{
-				RootHash: p.RootHash, HashOffset: p.HashOffset, Algorithm: "sha256",
-			}},
-			Arch: arch,
-		},
-	}
-	if arch == "amd64" {
-		fp := k.Pins().Fingerprints()
-		m.Spec.Protection = "full"
-		m.Spec.Boot.UKI = &verify.UKI{File: ukiName(), SHA256: sum(ukiName()), SBAT: 1}
-		m.Spec.Boot.Loader = &verify.Loader{File: "systemd-bootx64.efi", SHA256: sum("systemd-bootx64.efi"), Systemd: "lab"}
-		sb := &verify.SecureBoot{Files: map[string]string{}}
-		sb.PK.SHA256Fingerprint, sb.KEK.SHA256Fingerprint, sb.DB.SHA256Fingerprint = fp.PK, fp.KEK, fp.DB
-		for _, name := range verify.SecureBootFiles {
-			sb.Files[name] = sum(verify.SecureBootKeyPrefix + name)
-		}
-		m.Spec.SecureBoot = sb
-	} else {
-		m.Spec.Protection = "reduced"
-		m.Spec.Boot.Arm64 = &verify.Arm64Boot{File: arm64Name(), SHA256: sum(arm64Name()), Files: tarDigests(files[arm64Name()])}
-	}
-	return m
-}
-
-func writeArtifact(t testing.TB, l *oci.Layout, arch string, p *Parts) ocispec.Descriptor {
-	t.Helper()
-	appliance, err := yaml.Marshal(p.Manifest)
-	must(t, err)
-	layers := []ocispec.Descriptor{layer(t, l, verify.MediaTypeManifestFile, verify.FileAppliance, appliance)}
-	for _, name := range sortedNames(p.Files) {
-		layers = append(layers, layer(t, l, verify.MediaTypeFile, name, p.Files[name]))
-	}
-	cfg, err := l.WriteBlob(ocispec.MediaTypeEmptyJSON, ocispec.DescriptorEmptyJSON.Data)
-	must(t, err)
-	man, err := l.WriteJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
-		Versioned:    specs.Versioned{SchemaVersion: 2},
-		MediaType:    ocispec.MediaTypeImageManifest,
-		ArtifactType: verify.ArtifactType,
-		Config:       cfg,
-		Layers:       layers,
-	})
-	must(t, err)
-	man.Platform = &ocispec.Platform{OS: "linux", Architecture: arch}
-	idx, err := l.WriteJSON(ocispec.MediaTypeImageIndex, ocispec.Index{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispec.MediaTypeImageIndex,
-		Manifests: []ocispec.Descriptor{man},
-	})
-	must(t, err)
-	idx.Annotations = map[string]string{ocispec.AnnotationRefName: Version}
-	top, err := l.Index()
-	must(t, err)
-	top.Manifests = append(top.Manifests, idx)
-	must(t, l.WriteIndex(top))
-	return idx
-}
-
-// AttachSignature writes bundle as a Sigstore referrer of subject.
-func AttachSignature(t testing.TB, l *oci.Layout, subject ocispec.Descriptor, bundle []byte) {
-	t.Helper()
-	b, err := l.WriteBlob(verify.SignatureArtifactType, bundle)
-	must(t, err)
-	cfg, err := l.WriteBlob(ocispec.MediaTypeEmptyJSON, ocispec.DescriptorEmptyJSON.Data)
-	must(t, err)
-	subj := ocispec.Descriptor{MediaType: subject.MediaType, Digest: subject.Digest, Size: subject.Size}
-	sig, err := l.WriteJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
-		Versioned:    specs.Versioned{SchemaVersion: 2},
-		MediaType:    ocispec.MediaTypeImageManifest,
-		ArtifactType: verify.SignatureArtifactType,
-		Config:       cfg,
-		Layers:       []ocispec.Descriptor{b},
-		Subject:      &subj,
-	})
-	must(t, err)
-	// Listed in index.json too, as cosign and oras leave a referrer in a
-	// layout, so OCI tools copy it with the artifact.
-	sig.ArtifactType = verify.SignatureArtifactType
-	top, err := l.Index()
-	must(t, err)
-	top.Manifests = append(top.Manifests, sig)
-	must(t, l.WriteIndex(top))
-}
-
-func layer(t testing.TB, l *oci.Layout, mediaType, title string, b []byte) ocispec.Descriptor {
-	d, err := l.WriteBlob(mediaType, b)
-	must(t, err)
-	d.Annotations = map[string]string{verify.TitleAnnotation: title}
-	return d
-}
 
 // BlobOf returns the path of the blob holding the file named title in the
 // layout's one architecture manifest.
