@@ -71,14 +71,14 @@ func Decide(f Facts) Phase {
 	if !f.SBSupported {
 		return after
 	}
-	switch f.SBChoice {
-	case SBOff:
+	switch {
+	case f.SBChoice == SBOff:
 		return after
-	case SBOn:
-		if f.SBEnforcingOrgOnly {
-			return after
-		}
-		return Enrol
+	case f.SBEnforcingOrgOnly:
+		// Already enforcing with only the org keys (QEMU's pre-enrolled
+		// vars, or a box enrolled before): there's nothing to choose or
+		// enrol.
+		return after
 	default:
 		return Enrol
 	}
