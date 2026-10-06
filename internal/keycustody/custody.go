@@ -17,6 +17,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/disk"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 )
 
 // Mode is where the state key is kept.
@@ -95,6 +96,8 @@ type Deps struct {
 	ClearESPChoice func() error
 	// SealedDir overrides where sealed items are kept (tests).
 	SealedDir string
+	// Phase reports the boot phase; ImportEscrow runs only in firstboot.
+	Phase func() phase.Phase
 }
 
 // Custody is the KeyCustody service's state.

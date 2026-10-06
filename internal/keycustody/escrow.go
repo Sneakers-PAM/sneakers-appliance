@@ -15,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 
 	"filippo.io/age"
@@ -142,17 +141,10 @@ func (c *Custody) Escrow(recipients []string) ([]byte, error) {
 		return nil, codes.New(codes.KeyCustodyLocked, "the state isn't unlocked")
 	}
 	items := map[string][]byte{}
-	entries, err := os.ReadDir(c.sealedDir())
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	names, err := c.sealedNames()
+	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if itemNameRE.MatchString(e.Name()) {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
 	for _, n := range names {
 		v, err := c.Unseal(n)
 		if err != nil {

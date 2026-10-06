@@ -51,7 +51,7 @@ func newRoot(pins release.Pins, stdout, stderr io.Writer) *cobra.Command {
 	}
 	root.SetOut(stdout)
 	root.SetErr(stderr)
-	root.AddCommand(newVersionCmd(pins), newVerifyCmd(pins), newBuildCmd(pins, writers()))
+	root.AddCommand(newVersionCmd(pins), newVerifyCmd(pins), newBuildCmd(pins, writers()), newBackupCmd())
 	return root
 }
 
