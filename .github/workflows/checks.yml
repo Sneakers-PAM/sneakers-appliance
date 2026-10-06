@@ -22,7 +22,8 @@ jobs:
       # writes into its signatures; the test fixtures write the same.
       # cloud.google.com, dmitri.shuralyov.com, go.opencensus.io, honnef.co
       # and rsc.io are public module hosts in go.sum (indirect dependencies
-      # of go-uefi). oras.land and connectrpc.com are module hosts. acme.com
+      # of go-uefi). filippo.io, c2sp.org, oras.land and connectrpc.com are
+      # module hosts. acme.com
       # and api.acme.com are the example hosts protoc-gen-connect-go writes
       # into every generated client's doc comment.
       allowed-domains: >-
@@ -32,6 +33,8 @@ jobs:
         go.opencensus.io
         honnef.co
         rsc.io
+        filippo.io
+        c2sp.org
         oras.land
         connectrpc.com
         acme.com

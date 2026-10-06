@@ -4,6 +4,7 @@ go 1.26.6
 
 require (
 	connectrpc.com/connect v1.21.0
+	filippo.io/age v1.3.2
 	github.com/Bugs5382/go-apperr v1.2.0
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/diskfs/go-diskfs v1.9.4
@@ -14,6 +15,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/smallstep/pkcs7 v0.2.3
 	github.com/spf13/cobra v1.10.2
+	golang.org/x/crypto v0.57.0
 	golang.org/x/mod v0.41.0
 	golang.org/x/sys v0.48.0
 	google.golang.org/protobuf v1.36.11
@@ -22,6 +24,8 @@ require (
 )
 
 require (
+	filippo.io/edwards25519 v1.2.0 // indirect
+	filippo.io/hpke v0.4.0 // indirect
 	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
@@ -41,7 +45,6 @@ require (
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
-	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 )

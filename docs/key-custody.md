@@ -24,3 +24,15 @@ screen; the escrow bundle is the way back.
 | Secure Boot off by choice, or not enforcing org-only keys | reduced (`secure-boot-off`) |
 | key-file mode | reduced (`no-tpm`) |
 | otherwise | full |
+
+## Sealed items and the escrow
+
+`Seal(name, secret)` keeps a small secret (the vault root key first) under the state key: AES-256-GCM
+with a key derived from the state key (HKDF-SHA256), the item's name as associated data, one file
+per item under `/var/lib/sneakers/sealed/` on the state volume. `Unseal(name)` returns it.
+
+`Escrow(recipients)` returns the escrow bundle: the state key and every sealed item, encrypted with
+age to one to three SSH recovery keys (`ssh-ed25519` or `ssh-rsa`;
+security-key types are refused, because a restore mustn't need the hardware the key was made on).
+Each recovery key opens it on its own, with the stock `age -d -i <private key>`. A restore onto new
+hardware uses it; losing the TPM without the escrow loses the data.

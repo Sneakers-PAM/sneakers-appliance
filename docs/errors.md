@@ -31,3 +31,5 @@ shares with `Image.Stage`; 2xxx are boot.
 | 2302 | `KEYCUSTODY_INVALID` | an unknown mode or choice, a second Initialize, or a disk too small for first boot |
 | 2303 | `KEYCUSTODY_NOT_INITIALIZED` | the state volume has no custody header yet |
 | 2304 | `KEYCUSTODY_LOCKED` | the state key can't be recovered: no sealed copy unseals, or the key file is missing |
+| 2305 | `KEYCUSTODY_NOT_FOUND` | there's no sealed item of that name |
+| 2306 | `KEYCUSTODY_RECIPIENTS` | the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys |

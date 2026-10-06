@@ -91,6 +91,8 @@ type Deps struct {
 	// ClearESPChoice deletes the ESP's Secure Boot choice file once the
 	// header holds it.
 	ClearESPChoice func() error
+	// SealedDir overrides where sealed items are kept (tests).
+	SealedDir string
 }
 
 // Custody is the KeyCustody service's state.
