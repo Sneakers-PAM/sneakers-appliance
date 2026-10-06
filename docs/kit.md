@@ -22,10 +22,33 @@ refuses a production release with `KIT_CHANNEL`, and a production kit refuses a 
 ## Commands
 
 ```
-sneakers-kit version    # the kit version, its channel and the SHA-256 fingerprint of each pin
+sneakers-kit verify <ref> [--arch amd64|arm64] [--plain-http]
+sneakers-kit build  <ref> --format iso|ova|qcow2|rpi|raw [--arch amd64|arm64] [--disk-size 64G] [--out DIR] [--plain-http]
+sneakers-kit version
 ```
 
-`verify` and `build` follow with the verification chain; [artifact.md](artifact.md) describes the artifact and the steps verified so far.
+- `verify` runs the whole chain ([artifact.md](artifact.md)) on a private copy in a temporary
+  directory, prints `verified <version> <arch> (<channel>)` and removes the copy. It writes
+  nothing else.
+- `build` resolves `<ref>` to a digest once, fetches that digest (with its signature) into a
+  temporary directory inside `--out`, verifies the copy, and gives the same copy to the format's
+  writer. The output is moved into `--out` only when every step succeeded; a refused or failed
+  build leaves `--out` as it was. A tag moved after the resolve changes nothing. Outputs are named
+  `sneakers-<version>-<arch>`, with `-LAB` for a lab release. Formats arrive with their writers;
+  a kit refuses a format it doesn't carry.
+- `version` prints the kit version, its channel and the SHA-256 fingerprint of each pin.
+
+`<ref>` is one of:
+
+| Form | Meaning |
+|---|---|
+| a directory | an OCI layout, for offline sites |
+| `sneakers-os:<version>` | `ghcr.io/sneakers-pam/sneakers-os:<version>` |
+| `sha256:<hex>` | that digest in `ghcr.io/sneakers-pam/sneakers-os` |
+| `<registry>/<repository>:<tag>` or `@sha256:<hex>` | any registry |
+
+`--plain-http` talks HTTP instead of HTTPS, for a lab registry on loopback. Logs go to stderr
+(`LOG_LEVEL`, `LOG_FORMAT`; console and info by default); results go to stdout.
 
 ## The appliance manifest
 

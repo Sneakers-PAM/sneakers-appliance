@@ -213,16 +213,22 @@ func (l *Layout) ReadImageIndex(desc ocispec.Descriptor) (ocispec.Index, error) 
 	return idx, nil
 }
 
+// Referrer is a manifest whose subject is another node, with its own
+// descriptor.
+type Referrer struct {
+	Descriptor ocispec.Descriptor
+	Manifest   ocispec.Manifest
+}
+
 // Referrers returns the manifests in the layout whose subject is d and whose
-// artifactType is artifactType. It reads every manifest listed in
-// index.json, and every small blob, so a referrer copied in by any tool is
-// found whether or not it was listed.
-func (l *Layout) Referrers(d digest.Digest, artifactType string) ([]ocispec.Manifest, error) {
+// artifactType is artifactType. It reads every small blob, so a referrer
+// copied in by any tool is found whether or not index.json lists it.
+func (l *Layout) Referrers(d digest.Digest, artifactType string) ([]Referrer, error) {
 	entries, err := os.ReadDir(filepath.Join(l.dir, "blobs", "sha256"))
 	if err != nil {
 		return nil, err
 	}
-	var out []ocispec.Manifest
+	var out []Referrer
 	for _, e := range entries {
 		info, err := e.Info()
 		if err != nil || !info.Mode().IsRegular() || info.Size() > MaxManifestSize || info.Size() == 0 {
@@ -232,7 +238,8 @@ func (l *Layout) Referrers(d digest.Digest, artifactType string) ([]ocispec.Mani
 		if bd.Validate() != nil {
 			continue
 		}
-		b, err := l.ReadBlob(ocispec.Descriptor{Digest: bd, Size: info.Size()})
+		desc := ocispec.Descriptor{MediaType: ocispec.MediaTypeImageManifest, Digest: bd, Size: info.Size()}
+		b, err := l.ReadBlob(desc)
 		if err != nil || !strings.HasPrefix(strings.TrimSpace(string(b)), "{") {
 			continue
 		}
@@ -241,8 +248,111 @@ func (l *Layout) Referrers(d digest.Digest, artifactType string) ([]ocispec.Mani
 			continue
 		}
 		if m.Subject.Digest == d && m.ArtifactType == artifactType {
-			out = append(out, m)
+			desc.ArtifactType = artifactType
+			out = append(out, Referrer{Descriptor: desc, Manifest: m})
 		}
 	}
 	return out, nil
+}
+
+// CopyGraph copies root (an image index or manifest), everything it
+// references, and every manifest in src that names root as its subject with
+// one of the given artifact types, from src into dst, checking each blob
+// against its descriptor on the way. dst's index.json then lists root and
+// the referrers.
+func CopyGraph(src, dst *Layout, root ocispec.Descriptor, referrerTypes ...string) error {
+	if err := copyNode(src, dst, root); err != nil {
+		return err
+	}
+	listed := []ocispec.Descriptor{root}
+	for _, at := range referrerTypes {
+		refs, err := src.Referrers(root.Digest, at)
+		if err != nil {
+			return err
+		}
+		for _, r := range refs {
+			if err := copyNode(src, dst, r.Descriptor); err != nil {
+				return err
+			}
+			listed = append(listed, r.Descriptor)
+		}
+	}
+	idx, err := dst.Index()
+	if err != nil {
+		return err
+	}
+	idx.Manifests = append(idx.Manifests, listed...)
+	return dst.WriteIndex(idx)
+}
+
+func copyNode(src, dst *Layout, d ocispec.Descriptor) error {
+	switch d.MediaType {
+	case ocispec.MediaTypeImageIndex:
+		idx, err := src.ReadImageIndex(d)
+		if err != nil {
+			return err
+		}
+		for _, m := range idx.Manifests {
+			if err := copyNode(src, dst, m); err != nil {
+				return err
+			}
+		}
+	case ocispec.MediaTypeImageManifest:
+		m, err := src.ReadManifest(d)
+		if err != nil {
+			return err
+		}
+		for _, b := range append([]ocispec.Descriptor{m.Config}, m.Layers...) {
+			if err := copyBlob(src, dst, b); err != nil {
+				return err
+			}
+		}
+	}
+	return copyBlob(src, dst, d)
+}
+
+// copyBlob streams one blob, hashing as it goes, and renames it into place
+// only when it matches its descriptor.
+func copyBlob(src, dst *Layout, d ocispec.Descriptor) error {
+	to, err := dst.BlobPath(d.Digest)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(to); err == nil {
+		return nil
+	}
+	in, err := src.OpenBlob(d)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("%w: blob %s", ErrNotFound, d.Digest)
+		}
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	return dst.WriteBlobFrom(d, in)
+}
+
+// WriteBlobFrom stores the blob for d from r, checking its size and digest.
+func (l *Layout) WriteBlobFrom(d ocispec.Descriptor, r io.Reader) error {
+	to, err := l.BlobPath(d.Digest)
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(to), ".partial-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(tmp, h), r)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	if n != d.Size || hex.EncodeToString(h.Sum(nil)) != d.Digest.Encoded() {
+		return fmt.Errorf("%w: %s", ErrDigest, d.Digest)
+	}
+	return os.Rename(tmp.Name(), to)
 }

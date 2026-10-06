@@ -14,11 +14,31 @@ import (
 )
 
 // Source is where an artifact comes from. Resolve turns the reference into
-// one digest, once; Open gives the layout that holds that digest.
+// one digest, once. Open gives a layout that already holds that digest, for
+// sources that are layouts; Fetch copies the digest's whole graph and its
+// signature into a new layout at dir, checking every blob, so later steps
+// read only bytes that were fetched once.
 type Source interface {
 	Resolve(ctx context.Context) (digest.Digest, error)
 	Open(ctx context.Context, d digest.Digest) (*oci.Layout, error)
+	Fetch(ctx context.Context, d digest.Digest, dir string) (*oci.Layout, error)
 	String() string
+}
+
+// Pinned is a layout already fetched for digest d: Resolve returns d without
+// looking anything up again.
+func Pinned(l *oci.Layout, d digest.Digest) Source { return pinned{l: l, d: d} }
+
+type pinned struct {
+	l *oci.Layout
+	d digest.Digest
+}
+
+func (p pinned) String() string                                           { return "fetched:" + p.d.String() }
+func (p pinned) Resolve(context.Context) (digest.Digest, error)           { return p.d, nil }
+func (p pinned) Open(context.Context, digest.Digest) (*oci.Layout, error) { return p.l, nil }
+func (p pinned) Fetch(ctx context.Context, d digest.Digest, dir string) (*oci.Layout, error) {
+	return LocalLayout(p.l.Dir()).Fetch(ctx, d, dir)
 }
 
 // LocalLayout is an OCI layout directory, for offline sites. Its index.json
@@ -59,6 +79,25 @@ func (s localLayout) Open(_ context.Context, d digest.Digest) (*oci.Layout, erro
 		return nil, err
 	}
 	return l, nil
+}
+
+func (s localLayout) Fetch(ctx context.Context, d digest.Digest, dir string) (*oci.Layout, error) {
+	src, err := s.Open(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	desc, err := descriptorFor(src, d)
+	if err != nil {
+		return nil, err
+	}
+	dst, err := oci.Create(dir)
+	if err != nil {
+		return nil, codes.Wrap(codes.KitSourceUnreadable, err)
+	}
+	if err := oci.CopyGraph(src, dst, desc, SignatureArtifactType); err != nil {
+		return nil, digestOrUnreadable(err)
+	}
+	return dst, nil
 }
 
 // descriptorFor finds d in the layout's index.json.

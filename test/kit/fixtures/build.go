@@ -217,7 +217,7 @@ func AttachSignature(t testing.TB, l *oci.Layout, subject ocispec.Descriptor, bu
 	cfg, err := l.WriteBlob(ocispec.MediaTypeEmptyJSON, ocispec.DescriptorEmptyJSON.Data)
 	must(t, err)
 	subj := ocispec.Descriptor{MediaType: subject.MediaType, Digest: subject.Digest, Size: subject.Size}
-	_, err = l.WriteJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
+	sig, err := l.WriteJSON(ocispec.MediaTypeImageManifest, ocispec.Manifest{
 		Versioned:    specs.Versioned{SchemaVersion: 2},
 		MediaType:    ocispec.MediaTypeImageManifest,
 		ArtifactType: verify.SignatureArtifactType,
@@ -226,6 +226,13 @@ func AttachSignature(t testing.TB, l *oci.Layout, subject ocispec.Descriptor, bu
 		Subject:      &subj,
 	})
 	must(t, err)
+	// Listed in index.json too, as cosign and oras leave a referrer in a
+	// layout, so OCI tools copy it with the artifact.
+	sig.ArtifactType = verify.SignatureArtifactType
+	top, err := l.Index()
+	must(t, err)
+	top.Manifests = append(top.Manifests, sig)
+	must(t, l.WriteIndex(top))
 }
 
 func layer(t testing.TB, l *oci.Layout, mediaType, title string, b []byte) ocispec.Descriptor {
