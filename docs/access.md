@@ -61,3 +61,23 @@ Checked on every write. A write that breaks one is refused with its code and not
 
 Writes are serialized, and each one runs on the state the previous one left, so two sessions
 removing the last two keys at once can't both succeed.
+
+## Unix accounts
+
+`/etc` is read-only in the root image, so `/etc/passwd`, `/etc/group` and `/etc/shadow` are symlinks
+(`os/rootfs/etc/`) into `/run/sneakers/accounts/`. accessd renders the three files from the store at
+start and after every change, each through a tmp file and a rename.
+
+| Account | uid | Shell | Notes |
+|---|---|---|---|
+| `root` | 0 | `/usr/sbin/nologin` | no login: no keys, no password |
+| `maint` | 0 | `/usr/libexec/sneakers-elevated` | the elevation account; only a short-lived certificate reaches it |
+| `sshd` | 100 | `/usr/sbin/nologin` | OpenSSH privilege separation |
+| `sshkeys` | 101 | `/usr/sbin/nologin` | runs the enrolment keys command |
+| `osadmin` | 102 | `/usr/sbin/nologin` | the unprivileged :8443 server |
+| `enrol` | 103 | `/usr/libexec/sneakers-enrol` | rendered only while an enrolment window is open |
+| `nobody` | 65534 | `/usr/sbin/nologin` | |
+| each admin | 20000 and up | `/usr/bin/sneakers-shell` | home `/run/sneakers/home/<name>`, empty and root-owned |
+
+Every account's shell is its forced command, so sshd never passes a line to `/bin/sh`. Every
+`/etc/shadow` entry is `*`: no account has a password, so none can be set or guessed.
