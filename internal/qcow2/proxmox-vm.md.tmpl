@@ -1,0 +1,23 @@
+# Proxmox VE: {{.Name}}
+
+Import the disk and make a VM for it. Replace `<vmid>` and `<storage>` with yours.
+
+```sh
+qm create <vmid> --name {{.Name}} --machine q35 --bios ovmf --ostype l26 \
+  --cores 4 --memory 16384 --scsihw virtio-scsi-single \
+  --net0 virtio,bridge=vmbr0 --agent enabled=1
+qm set <vmid> --efidisk0 <storage>:1,efitype=4m,pre-enrolled-keys=0
+qm set <vmid> --tpmstate0 <storage>:1,version=v2.0
+qm disk import <vmid> {{.Disk}} <storage>
+qm set <vmid> --scsi0 <storage>:vm-<vmid>-disk-2 --boot order=scsi0
+qm start <vmid>
+```
+
+- The EFI disk is created **without** pre-enrolled keys (`pre-enrolled-keys=0`), so OVMF starts in
+  Setup Mode: on the first boot the appliance enrols the org keys by itself, restarts, and from then
+  on Secure Boot enforces with the org keys only. Proxmox's pre-enrolled keys would add the Microsoft
+  keys, which the appliance never trusts.
+- The TPM state disk (`version=v2.0`) gives the box TPM custody: full protection.
+- The guest agent answers Proxmox's shutdown and address queries only.
+- Grow the disk before the first boot if you want more than {{.SizeGiB}} GiB; first boot gives the
+  extra space to the state and backup volumes.

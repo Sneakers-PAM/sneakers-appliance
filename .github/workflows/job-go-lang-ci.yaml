@@ -58,7 +58,7 @@ jobs:
       - name: Install veritysetup and sgdisk
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q cryptsetup-bin gdisk
+          sudo apt-get install -y -q cryptsetup-bin gdisk qemu-utils
       - name: Build
         run: go build ./...
       - name: Test

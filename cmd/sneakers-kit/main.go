@@ -15,6 +15,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/disk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/kitout"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ova"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/qcow2"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
 
@@ -54,4 +56,6 @@ func newRoot(pins release.Pins, stdout, stderr io.Writer) *cobra.Command {
 }
 
 // writers are the output formats this kit builds.
-func writers() kitout.Writers { return kitout.NewWriters(disk.Raw{}) }
+func writers() kitout.Writers {
+	return kitout.NewWriters(disk.Raw{}, ova.OVA{}, qcow2.QCOW2{})
+}
