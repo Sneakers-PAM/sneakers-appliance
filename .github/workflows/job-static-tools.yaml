@@ -1,0 +1,61 @@
+name: Static tools
+# The static OpenSSH and busybox the root image carries, built from the pins
+# in build/openssh/versions.env on a native runner per architecture. The
+# outputs are cached by the hash of their inputs, so a PR that doesn't touch
+# them restores the cache instead of rebuilding. Pull requests only, and not
+# while the PR is a draft.
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+permissions:
+  contents: read
+jobs:
+  static-tools:
+    name: 🔧 Static OpenSSH and busybox (${{ matrix.arch }})
+    if: github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Restore the outputs
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: out/static
+          key: static-tools-${{ matrix.arch }}-${{ hashFiles('build/openssh/**', 'build/busybox/**') }}
+      - name: Build busybox
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash build/busybox/build.sh out/static
+      - name: Build OpenSSH
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash build/openssh/build.sh out/static
+      - name: Check the outputs
+        run: bash build/openssh/test.sh out/static
+      - name: Report the digests
+        run: |
+          {
+            echo "### Static tools (${{ matrix.arch }})"
+            echo
+            echo '| Binary | SHA-256 |'
+            echo '|---|---|'
+            for b in sshd sshd-session sshd-auth ssh-keygen busybox; do
+              echo "| \`$b\` | \`$(sha256sum "out/static/$b" | cut -d' ' -f1)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-tools-${{ matrix.arch }}
+          path: out/static
+          retention-days: 7

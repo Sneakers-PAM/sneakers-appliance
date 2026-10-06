@@ -29,6 +29,8 @@ jobs:
       # kernel.org (cdn, git) and deb.debian.org are where the pinned kernel
       # and static tool sources come from. schemas.dmtf.org, www.vmware.com
       # and www.w3.org are the XML namespaces of the OVF descriptor.
+      # cdn.openbsd.org and busybox.net are the source hosts of the pinned
+      # static OpenSSH and busybox tarballs (build/openssh, build/busybox).
       allowed-domains: >-
         kernel.org
         cdn.kernel.org
@@ -49,3 +51,5 @@ jobs:
         connectrpc.com
         acme.com
         api.acme.com
+        cdn.openbsd.org
+        busybox.net
