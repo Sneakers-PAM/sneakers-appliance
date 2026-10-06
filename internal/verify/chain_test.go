@@ -48,6 +48,17 @@ func TestChainRefusals(t *testing.T) {
 		{"release.yaml wrong signer", fixtures.ResignRelease, codes.KitWrongSigner},
 		{"manifest digest edited before signing", fixtures.LayerDigestEdit, codes.KitDigestMismatch},
 		{"extra file", fixtures.ExtraFile, codes.KitDigestMismatch},
+		{"uki re-signed with a rogue db", fixtures.ResignUKIWithRogueDB, codes.KitAuthenticode},
+		{"loader re-signed with a rogue db", fixtures.ResignLoaderWithRogueDB, codes.KitAuthenticode},
+		{"unsigned uki", fixtures.UnsignedUKI, codes.KitAuthenticode},
+		{"one root byte", fixtures.FlipRootByte, codes.KitVerityMismatch},
+		{"cmdline names another root", fixtures.CmdlineOtherRootHash, codes.KitVerityMismatch},
+		{"extra image", fixtures.Mutation{Root: fixtures.AddUnlistedImage}, codes.KitBundleMismatch},
+		{"missing image", fixtures.Mutation{Root: fixtures.RemoveListedImage}, codes.KitBundleMismatch},
+		{"unsigned image", fixtures.Mutation{Root: fixtures.DropImageSignature}, codes.KitImageUnsigned},
+		{"wrong k0s", fixtures.Mutation{Root: fixtures.SwapK0sBinary}, codes.KitBundleMismatch},
+		{"extra certificate in db.esl", fixtures.AppendCertToDBESL, codes.KitWrongSigner},
+		{"db.auth signed by PK", fixtures.DBAuthSignedByPK, codes.KitWrongSigner},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -71,5 +82,25 @@ func TestChainRefusesMissingArchitecture(t *testing.T) {
 	_, err := verify.Chain(context.Background(), verify.LocalLayout(dir), pins, verify.Options{Arch: "arm64", KitVersion: fixtures.Version})
 	if !codes.Is(err, codes.KitSourceUnreadable) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestChainArm64Refusals(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate fixtures.Mutation
+		code   int
+	}{
+		{"boot file not listed", fixtures.Arm64ExtraBootFile, codes.KitDigestMismatch},
+		{"cmdline.txt names another root", fixtures.Arm64CmdlineOtherRootHash, codes.KitVerityMismatch},
+		{"one root byte", fixtures.FlipRootByte, codes.KitVerityMismatch},
+		{"wrong k0s", fixtures.Mutation{Root: fixtures.SwapK0sBinary}, codes.KitBundleMismatch},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := chain(t, fixtures.Options{Arch: "arm64", Mutate: c.mutate}); !codes.Is(err, c.code) {
+				t.Fatalf("want %s, got %v", codes.Symbol(c.code), err)
+			}
+		})
 	}
 }

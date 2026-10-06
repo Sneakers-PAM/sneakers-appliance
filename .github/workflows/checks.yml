@@ -20,5 +20,13 @@ jobs:
     with:
       # in-toto.io is the public in-toto statement type URI that cosign
       # writes into its signatures; the test fixtures write the same.
+      # cloud.google.com, dmitri.shuralyov.com, go.opencensus.io, honnef.co
+      # and rsc.io are public module hosts in go.sum (indirect dependencies
+      # of go-uefi).
       allowed-domains: >-
         in-toto.io
+        cloud.google.com
+        dmitri.shuralyov.com
+        go.opencensus.io
+        honnef.co
+        rsc.io

@@ -44,7 +44,7 @@ A bundle with a message signature must name the artifact's SHA-256 and verify ov
 with a DSSE envelope must verify over the envelope's pre-authentication encoding and carry an
 in-toto statement with the artifact's digest as a subject.
 
-## Verification, steps 1 to 5
+## Verification
 
 The first failure stops the run with its code and writes nothing.
 
@@ -59,6 +59,35 @@ The first failure stops the run with its code and writes nothing.
    (`KIT_DIGEST_MISMATCH`).
 5. **File digests:** the artifact carries exactly the files `appliance.yaml` lists, and each one's
    SHA-256 is the one listed (`KIT_DIGEST_MISMATCH`).
+6. **Authenticode (amd64):** the UKI and systemd-boot verify against the pinned db certificate, so a
+   file the firmware would refuse is caught before an image is built (`KIT_AUTHENTICODE`). On
+   arm64 this step instead requires the boot tarball to hold exactly the files `appliance.yaml`
+   lists under `boot.arm64.files`, each with its SHA-256 (`KIT_DIGEST_MISMATCH`).
+7. **Root integrity:** `sneakers.roothash` and `sneakers.hashoffset` are read from the signed
+   command line (the UKI's `.cmdline` section on amd64, `cmdline.txt` in the boot tarball on
+   arm64) and must equal `spec.root.verity`. The dm-verity tree is recomputed in Go over the whole
+   root image; the stored tree must match it byte for byte and give that root hash
+   (`KIT_VERITY_MISMATCH`). The tree format is `veritysetup format`'s default: format 1, SHA-256,
+   4096-byte blocks, the superblock at the hash offset, then the levels, top first.
+8. **Bundle:** the root is opened read-only as SquashFS. `/usr/bin/k0s` must have the SHA-256
+   `release.yaml` pins for the architecture, `/usr/share/sneakers/release/release.yaml` must be the
+   verified `release.yaml`, and the airgap bundle must hold exactly the images `release.yaml` pins
+   (`KIT_BUNDLE_MISMATCH`), each signed by the release key (`KIT_IMAGE_UNSIGNED`).
+9. **Enrolment material (amd64):** `keys/PK.esl`, `KEK.esl` and `db.esl` each hold exactly the
+   pinned certificate; `PK.auth` and `KEK.auth` verify against PK and `db.auth` against KEK, each
+   carrying its `.esl`; `dbx.esl` is a valid (at v0.1.0, empty) signature list
+   (`KIT_WRONG_SIGNER`). The signature check covers the variable name, vendor GUID, attributes,
+   timestamp and data, as the firmware's does, and trusts only the pinned certificate, whatever
+   the file embeds.
+
+## The airgap bundle in the root
+
+`/usr/share/sneakers/images/` holds one OCI image archive per pinned image, named
+`<sha256 hex of the pinned digest>.tar`, whose `index.json` lists that digest, and beside it
+`<hex>.tar.sigstore.json`, the release-key signature of that digest. Nothing else may be in the
+directory. The images pinned are those under `spec.services`, `spec.thirdParty`, `spec.platform`
+and `spec.kubernetes.k0s.images` of `release.yaml`; `spec.tools` (the helm test pod) isn't
+bundled. A placeholder digest (`sha256:TBD-at-release`) is refused.
 
 ## Lab keys
 
@@ -69,5 +98,9 @@ into the directory it's given, and nothing it makes is stored, published or uplo
 `openssl`, `efitools` and `cosign`; `build/ci/install-cosign.sh` installs the pinned cosign.
 
 The unit tests build their fixture artifacts in Go with keys made once per test binary
-(`test/kit/fixtures`), so they need no tools. The `🔑 Lab keys and cosign` CI job runs the script
-with the real tools and checks that a bundle written by cosign verifies with the kit's verifier.
+(`test/kit/fixtures`): stub UKIs and loaders signed with Authenticode, a SquashFS root with its
+verity tree and a signed bundle, and signed `.auth` files. Only the verity cross-check needs a tool
+(`veritysetup`, installed in CI). The `🔑 Lab keys and tool interop` CI job runs the script with the
+real tools and checks each against the kit: cosign's bundles, efitools' `.auth` and `.esl` files and
+sbsign's signatures verify with the kit's checks, and `sbverify` and `unsquashfs` accept what the
+fixtures write.

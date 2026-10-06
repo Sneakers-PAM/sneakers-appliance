@@ -1,0 +1,255 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// Package bundle checks the airgap image bundle and the k0s binary in a root
+// tree against the pinned release (sneakers-release manifest/release.yaml).
+//
+// The bundle lives at usr/share/sneakers/images/ in the root: one OCI image
+// archive per image, named <sha256 hex of the pinned digest>.tar, with the
+// org release-key signature of that digest beside it as
+// <hex>.tar.sigstore.json. Nothing else may be in the directory.
+package bundle
+
+import (
+	"archive/tar"
+	"bytes"
+	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"path"
+	"regexp"
+	"sort"
+	"strings"
+
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"gopkg.in/yaml.v3"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
+)
+
+// Paths inside the root tree.
+const (
+	ImagesDir   = "usr/share/sneakers/images"
+	K0sPath     = "usr/bin/k0s"
+	ReleasePath = "usr/share/sneakers/release/release.yaml"
+	SigSuffix   = ".sigstore.json"
+)
+
+// Release is the part of release.yaml the bundle check reads. The file is
+// owned by sneakers-release; unknown fields are ignored.
+type Release struct {
+	APIVersion string `yaml:"apiVersion"`
+	Kind       string `yaml:"kind"`
+	Metadata   struct {
+		Version string `yaml:"version"`
+	} `yaml:"metadata"`
+	Spec struct {
+		Services   map[string]Image `yaml:"services"`
+		ThirdParty map[string]Image `yaml:"thirdParty"`
+		Platform   map[string]Image `yaml:"platform"`
+		Kubernetes struct {
+			K0s struct {
+				Version string            `yaml:"version"`
+				SHA256  map[string]string `yaml:"sha256"`
+				Images  []Image           `yaml:"images"`
+			} `yaml:"k0s"`
+		} `yaml:"kubernetes"`
+	} `yaml:"spec"`
+}
+
+// Image is one pinned image.
+type Image struct {
+	Image  string `yaml:"image"`
+	Digest string `yaml:"digest"`
+}
+
+var digestRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+
+// ParseRelease reads release.yaml.
+func ParseRelease(b []byte) (*Release, error) {
+	var r Release
+	if err := yaml.Unmarshal(b, &r); err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "release.yaml doesn't parse: %v", err)
+	}
+	if r.APIVersion != "sneakers-pam/v1alpha1" || r.Kind != "Release" {
+		return nil, codes.New(codes.KitBundleMismatch, "release.yaml is %s %s, not a sneakers-pam/v1alpha1 Release", r.APIVersion, r.Kind)
+	}
+	return &r, nil
+}
+
+// Images returns every image the bundle must hold, keyed by the hex of its
+// digest, valued by a name for messages. The helm test tools in
+// spec.tools are not bundled.
+func (r *Release) Images() (map[string]string, error) {
+	out := map[string]string{}
+	add := func(group string, m map[string]Image) error {
+		for name, im := range m {
+			if !digestRE.MatchString(im.Digest) {
+				return codes.New(codes.KitBundleMismatch, "release.yaml pins %s.%s at %q, not a sha256 digest", group, name, im.Digest)
+			}
+			out[strings.TrimPrefix(im.Digest, "sha256:")] = im.Image
+		}
+		return nil
+	}
+	for group, m := range map[string]map[string]Image{"services": r.Spec.Services, "thirdParty": r.Spec.ThirdParty, "platform": r.Spec.Platform} {
+		if err := add(group, m); err != nil {
+			return nil, err
+		}
+	}
+	k0s := map[string]Image{}
+	for i, im := range r.Spec.Kubernetes.K0s.Images {
+		k0s[fmt.Sprint(i)] = im
+	}
+	if err := add("kubernetes.k0s.images", k0s); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// K0sSHA256 is the pinned k0s binary's digest for arch.
+func (r *Release) K0sSHA256(arch string) (string, error) {
+	s := r.Spec.Kubernetes.K0s.SHA256[arch]
+	if len(s) != 64 {
+		return "", codes.New(codes.KitBundleMismatch, "release.yaml pins no k0s binary for %s", arch)
+	}
+	return s, nil
+}
+
+// CheckImages checks the images directory of fsys (relative to it) against
+// rel in both directions, and each image's signature with key.
+func CheckImages(fsys fs.FS, dir string, rel *Release, key *ecdsa.PublicKey) error {
+	want, err := rel.Images()
+	if err != nil {
+		return err
+	}
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "the bundle directory %s can't be read: %v", dir, err)
+	}
+	have := map[string]bool{}
+	for _, e := range entries {
+		name := e.Name()
+		switch {
+		case strings.HasSuffix(name, ".tar"+SigSuffix):
+			continue
+		case strings.HasSuffix(name, ".tar"):
+			hexd := strings.TrimSuffix(name, ".tar")
+			if _, ok := want[hexd]; !ok {
+				return codes.New(codes.KitBundleMismatch, "the bundle holds %s, which release.yaml doesn't pin", name)
+			}
+			have[hexd] = true
+		default:
+			return codes.New(codes.KitBundleMismatch, "the bundle holds %s, which isn't an image archive", name)
+		}
+	}
+	missing := []string{}
+	for hexd, image := range want {
+		if !have[hexd] {
+			missing = append(missing, image+"@sha256:"+hexd)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return codes.New(codes.KitBundleMismatch, "the bundle lacks %s", strings.Join(missing, ", "))
+	}
+	for hexd := range have {
+		if err := checkArchive(fsys, path.Join(dir, hexd+".tar"), hexd); err != nil {
+			return err
+		}
+		if err := checkImageSignature(fsys, path.Join(dir, hexd+".tar"+SigSuffix), hexd, key); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkArchive requires the archive's index.json to list the pinned digest.
+func checkArchive(fsys fs.FS, name, hexd string) error {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "%s can't be opened: %v", name, err)
+	}
+	defer func() { _ = f.Close() }()
+	tr := tar.NewReader(f)
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return codes.New(codes.KitBundleMismatch, "%s has no index.json", name)
+		}
+		if err != nil {
+			return codes.New(codes.KitBundleMismatch, "%s isn't a readable archive: %v", name, err)
+		}
+		if path.Clean(h.Name) != "index.json" {
+			continue
+		}
+		b, err := io.ReadAll(io.LimitReader(tr, 4<<20))
+		if err != nil {
+			return codes.New(codes.KitBundleMismatch, "%s: %v", name, err)
+		}
+		var idx ocispec.Index
+		if err := json.Unmarshal(b, &idx); err != nil {
+			return codes.New(codes.KitBundleMismatch, "%s has an unreadable index.json: %v", name, err)
+		}
+		for _, d := range idx.Manifests {
+			if d.Digest.String() == "sha256:"+hexd {
+				return nil
+			}
+		}
+		return codes.New(codes.KitBundleMismatch, "%s doesn't hold the pinned image sha256:%s", name, hexd)
+	}
+}
+
+func checkImageSignature(fsys fs.FS, name, hexd string, key *ecdsa.PublicKey) error {
+	b, err := fs.ReadFile(fsys, name)
+	if err != nil {
+		return codes.New(codes.KitImageUnsigned, "image sha256:%s has no signature", hexd)
+	}
+	bd, err := sigbundle.Parse(b)
+	if err != nil {
+		return codes.New(codes.KitImageUnsigned, "image sha256:%s has no readable signature", hexd)
+	}
+	var d [sha256.Size]byte
+	raw, _ := hex.DecodeString(hexd)
+	copy(d[:], raw)
+	if err := bd.Verify(key, d); err != nil {
+		return codes.New(codes.KitImageUnsigned, "image sha256:%s isn't signed by the pinned release key", hexd)
+	}
+	return nil
+}
+
+// CheckRoot checks a root tree: the k0s binary is the pinned one for arch,
+// release.yaml in the root is relYAML, and the bundle matches.
+func CheckRoot(fsys fs.FS, relYAML []byte, arch string, key *ecdsa.PublicKey) error {
+	rel, err := ParseRelease(relYAML)
+	if err != nil {
+		return err
+	}
+	wantK0s, err := rel.K0sSHA256(arch)
+	if err != nil {
+		return err
+	}
+	f, err := fsys.Open(K0sPath)
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "the root has no /%s", K0sPath)
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	_ = f.Close()
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "/%s can't be read: %v", K0sPath, err)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != wantK0s {
+		return codes.New(codes.KitBundleMismatch, "/%s has SHA-256 %s; release.yaml pins %s", K0sPath, got, wantK0s)
+	}
+	inRoot, err := fs.ReadFile(fsys, ReleasePath)
+	if err != nil || !bytes.Equal(inRoot, relYAML) {
+		return codes.New(codes.KitBundleMismatch, "/%s isn't the verified release.yaml", ReleasePath)
+	}
+	return CheckImages(fsys, ImagesDir, rel, key)
+}

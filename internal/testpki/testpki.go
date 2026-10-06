@@ -6,6 +6,7 @@
 package testpki
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -13,7 +14,9 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
@@ -21,6 +24,10 @@ import (
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/smallstep/pkcs7"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/efiauth"
 )
 
 // Cert is a self-signed certificate with its key.
@@ -128,4 +135,51 @@ func mustJSON(t testing.TB, v any) []byte {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// AuthFile signs data as the new value of the Secure Boot variable name with
+// c, the way sign-efi-sig-list does, and returns the .auth file.
+func (c Cert) AuthFile(t testing.TB, name string, data []byte) []byte {
+	t.Helper()
+	vendor, err := efiauth.VendorFor(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ts [16]byte
+	now := time.Now().UTC()
+	binary.LittleEndian.PutUint16(ts[0:], uint16(now.Year())) // #nosec G115 -- a calendar year
+	for i, v := range []int{int(now.Month()), now.Day(), now.Hour(), now.Minute(), now.Second()} {
+		ts[2+i] = byte(v & 0xff) // #nosec G115 G602 -- five calendar fields below 256 fill bytes 2 to 6
+	}
+	sd, err := pkcs7.NewSignedData(efiauth.SignedBytes(name, vendor, efiauth.Attributes, ts, data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sd.SetDigestAlgorithm(pkcs7.OIDDigestAlgorithmSHA256)
+	if err := sd.AddSigner(c.Cert, c.Key, pkcs7.SignerInfoConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	sd.Detach()
+	ci, err := sd.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wrapper struct {
+		ContentType asn1.ObjectIdentifier
+		Content     asn1.RawValue `asn1:"explicit,tag:0"`
+	}
+	if _, err := asn1.Unmarshal(ci, &wrapper); err != nil {
+		t.Fatal(err)
+	}
+	signed := wrapper.Content.Bytes
+	var b bytes.Buffer
+	b.Write(ts[:])
+	_ = binary.Write(&b, binary.LittleEndian, uint32(24+len(signed))) // #nosec G115 -- a signature is small
+	_ = binary.Write(&b, binary.LittleEndian, uint16(0x0200))
+	_ = binary.Write(&b, binary.LittleEndian, uint16(0x0ef1))
+	pkcs7GUID, _ := efiauth.ParseGUID("4aafd29d-68df-49ee-8aa9-347d375665a7")
+	b.Write(pkcs7GUID[:])
+	b.Write(signed)
+	b.Write(data)
+	return b.Bytes()
 }

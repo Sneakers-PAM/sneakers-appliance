@@ -58,6 +58,11 @@ var Steps = []Step{
 	{"appliance manifest", stepManifest},
 	{"release manifest", stepRelease},
 	{"file digests", stepDigests},
+	{"authenticode", stepAuthenticode},
+	{"arm64 boot files", stepArm64Boot},
+	{"root verity", stepVerity},
+	{"bundle", stepBundle},
+	{"enrolment material", stepEnrolment},
 }
 
 // Chain verifies the artifact src points at against the pinned keys and
