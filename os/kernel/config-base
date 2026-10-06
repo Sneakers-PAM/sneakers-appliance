@@ -200,6 +200,9 @@ CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG=n
 CONFIG_ISO9660_FS=y
 CONFIG_EFIVAR_FS=y
 
+# More than one CPU (tinyconfig turns SMP off).
+CONFIG_SMP=y
+
 # k0s: cgroup v2 and namespaces.
 CONFIG_CGROUPS=y
 CONFIG_CGROUP_SCHED=y
