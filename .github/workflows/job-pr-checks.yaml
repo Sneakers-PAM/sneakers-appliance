@@ -85,9 +85,10 @@ jobs:
               .github/*|*.md|NOTES.txt|*/NOTES.txt) : ;;
               *) e="$(gov_find_emoji < "$f")"; [ -n "$e" ] && { echo "emoji not allowed in $f:"; echo "$e"; fail=1; } ;;
             esac
-            # AI-tells blocked except in files that document the rule.
+            # AI-tells blocked except in files that document the rule, and in
+            # generated code (gen/go), whose comments come from the generator.
             case "$f" in
-              CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*|.github/workflows/*|*forbidden-text.txt) : ;;
+              CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*|.github/workflows/*|*forbidden-text.txt|gen/go/*) : ;;
               *) t="$(gov_find_file_tells "$f")"; [ -n "$t" ] && { echo "AI-tell not allowed in $f:"; echo "$t"; fail=1; } ;;
             esac
           done < <(git diff --name-only --diff-filter=ACM "$BASE" "$HEAD")

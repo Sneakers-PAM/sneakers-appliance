@@ -82,11 +82,13 @@ func (f *fakeSystem) Partitions() ([]Partition, error) { return f.parts, f.rec("
 func (f *fakeSystem) AttachLoop(p string) (string, error) {
 	return "/dev/loop0", f.rec("loop " + p)
 }
-func (f *fakeSystem) Run(argv []string) error            { return f.rec("run " + strings.Join(argv, " ")) }
-func (f *fakeSystem) Chdir(d string) error               { return f.rec("chdir " + d) }
-func (f *fakeSystem) Chroot(d string) error              { return f.rec("chroot " + d) }
-func (f *fakeSystem) Logf(string, ...any)                {}
-func (f *fakeSystem) Exec(p string, _, _ []string) error { return f.rec("exec " + p) }
+func (f *fakeSystem) Run(argv []string) error { return f.rec("run " + strings.Join(argv, " ")) }
+func (f *fakeSystem) Chdir(d string) error    { return f.rec("chdir " + d) }
+func (f *fakeSystem) Chroot(d string) error   { return f.rec("chroot " + d) }
+func (f *fakeSystem) Logf(string, ...any)     {}
+func (f *fakeSystem) Exec(p string, _, env []string) error {
+	return f.rec("exec " + p + " " + strings.Join(env, " "))
+}
 
 func TestRunOpensTheSlotWithVerity(t *testing.T) {
 	f := &fakeSystem{parts: []Partition{{Device: "/dev/vda3", Label: LabelRootB, PartUUID: "00112233-4455-6677-8899-aabbccddeeff"}}}
@@ -101,7 +103,7 @@ func TestRunOpensTheSlotWithVerity(t *testing.T) {
 		"mount /dev/mapper/sneakers-root /sysroot squashfs",
 		"mount /dev /sysroot/dev ",
 		"chroot .",
-		"exec /sbin/init",
+		"exec /sbin/init SNEAKERS_ROOT_SOURCE=sneakers-root-b",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in\n%s", want, got)
@@ -120,6 +122,7 @@ func TestRunInstallModeUsesALoopDevice(t *testing.T) {
 		"mount /dev/sr0 /run/sneakers-install iso9660",
 		"loop /run/sneakers-install/root-0.1.0.img",
 		"run /usr/sbin/veritysetup open /dev/loop0 sneakers-root /dev/loop0 " + hash,
+		"SNEAKERS_ROOT_SOURCE=install",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in\n%s", want, got)

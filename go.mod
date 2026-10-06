@@ -3,7 +3,8 @@ module github.com/Sneakers-PAM/sneakers-appliance
 go 1.26.6
 
 require (
-	github.com/Bugs5382/go-apperr v1.2.1
+	connectrpc.com/connect v1.21.0
+	github.com/Bugs5382/go-apperr v1.2.0
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/diskfs/go-diskfs v1.9.4
 	github.com/foxboron/go-uefi v0.0.0-20261004203234-c7f1f57bdc6e
@@ -15,6 +16,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/mod v0.41.0
 	golang.org/x/sys v0.48.0
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 	oras.land/oras-go/v2 v2.6.2
 )
