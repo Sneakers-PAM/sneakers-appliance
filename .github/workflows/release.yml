@@ -1,0 +1,329 @@
+name: Release
+# The production release, on an owner-created v tag only, and a lab dry run
+# by hand. The update package is one signed and encrypted .bin per
+# architecture (docs/release.md).
+#
+# Production (push of a v tag): guard -> build (no keys, no environment) ->
+# sign (the production environment, the only job that reads its secrets) ->
+# publish (verify, push sneakers-os to GHCR by digest, attach the .bin to the
+# GitHub Release the owner created).
+#
+# Lab (workflow_dispatch): one job with keys made for that run only, never
+# the production environment, and nothing published or uploaded.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The lab version to build (a lab dry run; nothing is published)
+        required: true
+        default: 0.0.1
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  guard:
+    name: 🛡️ Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.guard.outputs.version }}
+      channel: ${{ steps.guard.outputs.channel }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check the tag, its commit and the pins
+        id: guard
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: bash build/release/guard.sh
+
+  build:
+    name: 🏗️ Build (unsigned, amd64)
+    needs: guard
+    if: needs.guard.outputs.channel == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
+            squashfs-tools cryptsetup-bin cpio systemd-ukify systemd-boot-efi python3-pefile
+      - name: Build the kernel
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: bash build/kernel/build.sh amd64
+      - name: Build the static cryptsetup
+        run: bash build/static/cryptsetup.sh amd64
+      - name: Build the release, unsigned
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          KERNEL=build/out/kernel/amd64/bzImage \
+          KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
+          VERITYSETUP=build/out/veritysetup-amd64 \
+          OUT="$RUNNER_TEMP/unsigned" bash build/release/build.sh
+          {
+            echo "### Unsigned build ${VERSION} (amd64)"
+            echo '```'
+            cat "$RUNNER_TEMP/unsigned/SHA256SUMS"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the unsigned build
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-amd64
+          path: ${{ runner.temp }}/unsigned
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    name: 🔏 Sign (production)
+    needs: [guard, build]
+    if: needs.guard.outputs.channel == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download the unsigned build
+        uses: actions/download-artifact@v4
+        with:
+          name: unsigned-amd64
+          path: ${{ runner.temp }}/unsigned
+      - name: Install the pinned signers
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q sbsigntool
+          bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check the digests and the production public keys
+        run: |
+          (cd "$RUNNER_TEMP/unsigned" && sha256sum -c --quiet SHA256SUMS)
+          bash build/release/check-fingerprints.sh keys/production keys/production/fingerprints.txt
+      # The release tool is built here from the tagged commit, not taken from
+      # the build job. It never reads a key: each key is written to tmpfs only
+      # inside the step that signs with it, and removed in that step.
+      - name: Build the release tool and mount the key tmpfs
+        run: |
+          CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/sneakers-artifact" ./cmd/sneakers-artifact
+          mkdir -p "$RUNNER_TEMP/keys" "$RUNNER_TEMP/work" "$RUNNER_TEMP/signed"
+          sudo mount -t tmpfs -o size=1m,mode=0700,uid="$(id -u)" tmpfs "$RUNNER_TEMP/keys"
+      - name: Sign the UKI and systemd-boot (db key)
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          SB_DB_KEY: ${{ secrets.SB_DB_KEY }}
+        run: |
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work"
+          umask 077
+          printf '%s\n' "$SB_DB_KEY" > "$keys/db.key"
+          trap 'rm -f "$keys/db.key"' EXIT
+          have="$(openssl pkey -in "$keys/db.key" -pubout -outform DER | sha256sum | cut -d' ' -f1)"
+          want="$(openssl x509 -in keys/production/db.crt -noout -pubkey | openssl pkey -pubin -outform DER | sha256sum | cut -d' ' -f1)"
+          [ "$have" = "$want" ] || { echo "SB_DB_KEY doesn't belong to keys/production/db.crt" >&2; exit 1; }
+          sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/sneakers-$VERSION.efi" "$in/sneakers-$VERSION.efi"
+          sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/systemd-bootx64.efi" "$in/systemd-bootx64.efi"
+      - name: Assemble the artifact
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work"
+          "$RUNNER_TEMP/sneakers-artifact" assemble --arch amd64 --version "$VERSION" --channel production \
+            --systemd "$(cat "$in/systemd-version")" \
+            --release "$in/release.yaml" --release-sig "$in/release.yaml.sigstore.json" \
+            --root "$in/root-$VERSION.img" --verity-json "$in/verity.json" \
+            --uki "$work/sneakers-$VERSION.efi" --loader "$work/systemd-bootx64.efi" --keys keys/production \
+            --pk-cert keys/production/PK.crt --kek-cert keys/production/KEK.crt --db-cert keys/production/db.crt \
+            --out "$RUNNER_TEMP/signed/artifact"
+          "$RUNNER_TEMP/sneakers-artifact" index-blob --layout "$RUNNER_TEMP/signed/artifact" > "$work/index-blob"
+      - name: Sign the artifact (release key)
+        env:
+          RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
+        run: |
+          keys="$RUNNER_TEMP/keys" work="$RUNNER_TEMP/work"
+          umask 077
+          printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
+          trap 'rm -f "$keys/cosign.key"' EXIT
+          have="$(cosign public-key --key "$keys/cosign.key" | openssl pkey -pubin -outform DER | sha256sum | cut -d' ' -f1)"
+          want="$(openssl pkey -pubin -in keys/production/cosign.pub -outform DER | sha256sum | cut -d' ' -f1)"
+          [ "$have" = "$want" ] || { echo "RELEASE_COSIGN_KEY doesn't belong to keys/production/cosign.pub" >&2; exit 1; }
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/artifact.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$(cat "$work/index-blob")" >/dev/null
+      - name: Attach the signature and pack the .bin
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          work="$RUNNER_TEMP/work"
+          "$RUNNER_TEMP/sneakers-artifact" attach --layout "$RUNNER_TEMP/signed/artifact" --bundle "$work/artifact.sigstore.json"
+          "$RUNNER_TEMP/sneakers-artifact" bin-pack --layout "$RUNNER_TEMP/signed/artifact" \
+            --recipient keys/production/update.pub --version "$VERSION" --arch amd64 --channel production --out "$work/bin"
+      - name: Sign the .bin header (release key)
+        env:
+          RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
+        run: |
+          keys="$RUNNER_TEMP/keys" work="$RUNNER_TEMP/work"
+          umask 077
+          printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
+          trap 'rm -f "$keys/cosign.key"' EXIT
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/bin/header.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$work/bin/header.json" >/dev/null
+      - name: Seal and verify the .bin
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          work="$RUNNER_TEMP/work" out="$RUNNER_TEMP/signed"
+          "$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$out"
+          "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
+            "$out/sneakers-appliance-$VERSION-amd64.bin"
+      - name: Wipe the keys
+        if: always()
+        run: |
+          sudo umount "$RUNNER_TEMP/keys" || true
+          rm -rf "$RUNNER_TEMP/work"
+      - name: Upload the signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-amd64
+          path: ${{ runner.temp }}/signed
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: 📦 Publish
+    needs: [guard, sign]
+    if: needs.guard.outputs.channel == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Download the builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-amd64'
+          path: ${{ runner.temp }}
+      - name: Verify, push and attach
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USERNAME: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          in="$RUNNER_TEMP/unsigned-amd64" signed="$RUNNER_TEMP/signed-amd64"
+          (cd "$in" && sha256sum -c --quiet SHA256SUMS)
+          chmod +x "$in/sneakers-artifact" "$in/sneakers-kit"
+          bin="$signed/sneakers-appliance-$VERSION-amd64.bin"
+          "$in/sneakers-kit" verify "$signed/artifact"
+          "$in/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production "$bin"
+          digest="$("$in/sneakers-artifact" push --layout "$signed/artifact" --repo ghcr.io/sneakers-pam/sneakers-os --tag "$VERSION")"
+          "$in/sneakers-kit" verify "ghcr.io/sneakers-pam/sneakers-os@$digest"
+          (cd "$signed" && sha256sum "$(basename "$bin")" > "$(basename "$bin").sha256")
+          gh release upload "$TAG" "$bin" "$bin.sha256" --repo "$GITHUB_REPOSITORY"
+          {
+            echo "### Published $VERSION"
+            echo "- sneakers-os: ghcr.io/sneakers-pam/sneakers-os@$digest"
+            echo "- update package: $(basename "$bin") ($(cut -d' ' -f1 < "$bin.sha256"))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lab:
+    name: 🧪 Lab dry run (never published)
+    needs: guard
+    if: needs.guard.outputs.channel == 'lab'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install the build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
+            efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
+            systemd-ukify systemd-boot-efi python3-pefile
+          bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Build the kernel
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: bash build/kernel/build.sh amd64
+      - name: Build the static cryptsetup
+        run: bash build/static/cryptsetup.sh amd64
+      - name: Build a lab release and its .bin
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          COSIGN_PASSWORD: ""
+        run: |
+          keys="$RUNNER_TEMP/labkeys" lab="$RUNNER_TEMP/lab" work="$RUNNER_TEMP/work"
+          mkdir -p "$keys" "$work"
+          sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
+          KERNEL=build/out/kernel/amd64/bzImage \
+          KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
+          VERITYSETUP=build/out/veritysetup-amd64 \
+          KEYS="$keys" OUT="$lab" DISK_SIZE=8G bash build/lab/build.sh
+          go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
+          tool="$work/sneakers-artifact"
+          "$tool" bin-pack --layout "$lab/artifact" --recipient "$keys/update.pub" \
+            --version "$VERSION" --arch amd64 --channel lab --out "$work/bin"
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/bin/header.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$work/bin/header.json" >/dev/null
+          "$tool" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$work/out"
+          bin="$work/out/sneakers-appliance-$VERSION-amd64-LAB.bin"
+          # The box's path: verify, decrypt, unpack, then the kit chain on what came out.
+          "$tool" bin-verify --release-key "$keys/cosign.pub" --channel lab \
+            --identity "$keys/update.key" --extract "$work/unpacked" "$bin"
+          "$lab/sneakers-kit" verify "$work/unpacked"
+          # Lab and production never cross.
+          if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$bin"; then
+            echo "a lab .bin verified as production" >&2; exit 1
+          fi
+          if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
+            echo "the lab keys passed the production fingerprint check" >&2; exit 1
+          fi
+          {
+            echo "### Lab dry run ${VERSION}"
+            echo "- $(basename "$bin"): $(stat -c %s "$bin") bytes, verified, decrypted and checked by the lab kit"
+            echo "- nothing was published or uploaded"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Wipe the lab keys
+        if: always()
+        run: sudo umount "$RUNNER_TEMP/labkeys" || true

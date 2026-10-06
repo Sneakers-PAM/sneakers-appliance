@@ -27,3 +27,7 @@ Read only by the tag release job's `sign` step. The owner is its required review
 deployment rule allows `v*` tags only. Its secrets (`SB_PK_KEY`, `SB_KEK_KEY`, `SB_DB_KEY`,
 `RELEASE_COSIGN_KEY`, `RELEASE_COSIGN_PASSWORD`) are set by the owner from the production keys
 runbook; pull requests and tests never read them and use throwaway lab keys instead.
+
+The `sign` job reads only `SB_DB_KEY`, `RELEASE_COSIGN_KEY` and `RELEASE_COSIGN_PASSWORD`; the PK and
+KEK keys sign the committed enrolment files once, by hand. The `.bin` is encrypted to the committed
+`keys/production/update.pub`, so no secret holds the update key ([release.md](release.md)).

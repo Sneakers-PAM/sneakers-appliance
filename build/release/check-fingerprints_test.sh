@@ -14,6 +14,7 @@ record() { # dir out
     printf '%s %s\n' "$role" "$(openssl x509 -in "$1/$role.crt" -outform DER | sha256sum | cut -d' ' -f1)"
   done > "$2"
   printf 'release-cosign %s\n' "$(openssl pkey -pubin -in "$1/cosign.pub" -outform DER | sha256sum | cut -d' ' -f1)" >> "$2"
+  printf 'update-recipient %s\n' "$(grep -v '^#' "$1/update.pub" | tr -d '\n' | sha256sum | cut -d' ' -f1)" >> "$2"
 }
 bash "$root/build/keys/lab-keys.sh" "$work/a" >/dev/null
 bash "$root/build/keys/lab-keys.sh" "$work/b" >/dev/null
@@ -23,4 +24,12 @@ if out="$(bash "$here/check-fingerprints.sh" "$work/b" "$work/a.txt" 2>&1)"; the
   echo "FAIL: another key set passed" >&2; exit 1
 fi
 grep -q "not the production fingerprint" <<<"$out" || { echo "FAIL: wrong message: $out" >&2; exit 1; }
+# The same signing keys with another update key: the .bin would be encrypted
+# to a key production boxes don't hold.
+cp -r "$work/a" "$work/c"
+cp "$work/a/rogue-update.pub" "$work/c/update.pub"
+if out="$(bash "$here/check-fingerprints.sh" "$work/c" "$work/a.txt" 2>&1)"; then
+  echo "FAIL: another update key passed" >&2; exit 1
+fi
+grep -q "update.pub is not the production fingerprint" <<<"$out" || { echo "FAIL: wrong message: $out" >&2; exit 1; }
 echo "PASS: check-fingerprints"

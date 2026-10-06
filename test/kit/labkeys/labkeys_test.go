@@ -19,11 +19,13 @@ import (
 	"strings"
 	"testing"
 
+	"filippo.io/age"
 	"github.com/foxboron/go-uefi/authenticode"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/efiauth"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukipcr"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
 
@@ -51,6 +53,7 @@ func TestLabKeysWritesTheWholeSet(t *testing.T) {
 		"PK.key", "PK.crt", "KEK.key", "KEK.crt", "db.key", "db.crt", "rogue-db.key", "rogue-db.crt",
 		"PK.esl", "KEK.esl", "db.esl", "dbx.esl", "PK.auth", "KEK.auth", "db.auth", "dbx.auth",
 		"cosign.key", "cosign.pub", "rogue-cosign.key", "rogue-cosign.pub",
+		"update.key", "update.pub", "rogue-update.key", "rogue-update.pub",
 	} {
 		if _, err := os.Stat(filepath.Join(out, f)); err != nil {
 			t.Error(err)
@@ -283,5 +286,80 @@ func TestAssembleUKI(t *testing.T) {
 	}
 	if !bytes.Contains(pf, []byte("sneakers.roothash="+root+" sneakers.hashoffset=8192 sneakers.version=0.1.0 quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity")) {
 		t.Fatal("the command line isn't the spec's")
+	}
+}
+
+// TestCosignSignedUpdatePackageVerifies makes a lab .bin the way the release
+// workflow does, with the real cosign over the header, and reads it back with
+// the box's own reader: the lab keys verify and decrypt it, the rogue ones
+// don't.
+func TestCosignSignedUpdatePackageVerifies(t *testing.T) {
+	out := labKeys(t)
+	for _, f := range []string{"update.key", "update.pub"} {
+		b, err := os.ReadFile(filepath.Join(out, f))
+		if err != nil || !strings.Contains(string(b), "LAB ephemeral NOT FOR PRODUCTION") {
+			t.Fatalf("%s isn't labelled lab: %v", f, err)
+		}
+	}
+	recipient := func(name string) *age.X25519Recipient {
+		b, _ := os.ReadFile(filepath.Join(out, name))
+		rs, err := age.ParseRecipients(bytes.NewReader(b))
+		if err != nil || len(rs) != 1 {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return rs[0].(*age.X25519Recipient)
+	}
+	identity := func(name string) age.Identity {
+		b, _ := os.ReadFile(filepath.Join(out, name))
+		ids, err := age.ParseIdentities(bytes.NewReader(b))
+		if err != nil || len(ids) != 1 {
+			t.Fatalf("%s: %v", name, err)
+		}
+		return ids[0]
+	}
+	payload := []byte("a signed artifact layout")
+	var ct bytes.Buffer
+	h, err := updatepkg.Encrypt(bytes.NewReader(payload), updatepkg.Header{Version: "0.0.1", Arch: "amd64", Kind: updatepkg.KindFull, Channel: "lab"}, recipient("update.pub"), &ct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, _ := h.Marshal()
+	hdrPath := filepath.Join(t.TempDir(), "header.json")
+	if err := os.WriteFile(hdrPath, hdr, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("cosign", "sign-blob", "--yes", "--key", filepath.Join(out, "cosign.key"),
+		"--bundle", hdrPath+".sigstore.json", "--tlog-upload=false", "--use-signing-config=false", hdrPath)
+	cmd.Env = append(os.Environ(), "COSIGN_PASSWORD=")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("cosign sign-blob: %v\n%s", err, b)
+	}
+	bundle, _ := os.ReadFile(hdrPath + ".sigstore.json")
+	var bin bytes.Buffer
+	if err := updatepkg.Seal(&bin, hdr, bundle, &ct); err != nil {
+		t.Fatal(err)
+	}
+	read := func() *updatepkg.Package {
+		p, err := updatepkg.Read(bytes.NewReader(bin.Bytes()), int64(bin.Len()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	rogue, _ := os.ReadFile(filepath.Join(out, "rogue-cosign.pub"))
+	if err := read().Verify(rogue, "lab"); err == nil {
+		t.Fatal("the rogue release key verified the package")
+	}
+	pub, _ := os.ReadFile(filepath.Join(out, "cosign.pub"))
+	p := read()
+	if err := p.Verify(pub, "lab"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Decrypt(identity("rogue-update.key"), &bytes.Buffer{}); err == nil {
+		t.Fatal("the rogue update key decrypted the package")
+	}
+	var got bytes.Buffer
+	if err := p.Decrypt(identity("update.key"), &got); err != nil || !bytes.Equal(got.Bytes(), payload) {
+		t.Fatalf("decrypt: %q, %v", got.String(), err)
 	}
 }

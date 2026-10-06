@@ -11,17 +11,22 @@
 #                                         PK and KEK signed by PK, db and dbx by KEK
 #   cosign.key cosign.pub, rogue-cosign.key rogue-cosign.pub
 #                                         cosign key pairs (empty password)
+#   update.key update.pub, rogue-update.key rogue-update.pub
+#                                         age update keys: the .bin is
+#                                         encrypted to update.pub
 #
 # Every subject says "LAB ephemeral NOT FOR PRODUCTION". These keys are never
 # stored, published or uploaded; CI passes a fresh tmpfs directory each run.
-# Needs openssl, efitools (cert-to-efi-sig-list, sign-efi-sig-list) and cosign.
+# Needs openssl, efitools (cert-to-efi-sig-list, sign-efi-sig-list), cosign and go.
 set -euo pipefail
 
 out="${1:?usage: lab-keys.sh <outdir>}"
-for tool in openssl cert-to-efi-sig-list sign-efi-sig-list cosign; do
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+for tool in openssl cert-to-efi-sig-list sign-efi-sig-list cosign go; do
   command -v "$tool" >/dev/null || { echo "lab-keys.sh: $tool is not installed" >&2; exit 3; }
 done
 mkdir -p "$out"
+out="$(cd "$out" && pwd)"
 chmod 700 "$out"
 umask 077
 cd "$out"
@@ -49,6 +54,10 @@ sign-efi-sig-list -t "$stamp" -k KEK.key -c KEK.crt dbx dbx.esl dbx.auth >/dev/n
 
 for name in cosign rogue-cosign; do
   COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix "$name" >/dev/null 2>&1
+done
+
+for name in update rogue-update; do
+  (cd "$root" && go run ./cmd/sneakers-artifact lab-update-key --name "$name" --out "$out") >/dev/null
 done
 
 echo "lab-keys.sh: wrote a lab key set to $out"

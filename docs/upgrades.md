@@ -1,5 +1,9 @@
 # Image slots and boot counting
 
+A release reaches the box as one signed and encrypted update package, the `.bin`, downloaded from
+the GitHub Release or uploaded by hand ([release.md](release.md)). The box verifies the signature
+and the channel before it decrypts anything; a lab package never installs on a production box.
+
 A box holds at most two releases: the one it runs and one more (the next, or the previous).
 
 - `Image.Stage` fetches a release, runs the whole verification chain against the keys compiled
