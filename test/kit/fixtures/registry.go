@@ -30,11 +30,17 @@ func StartRegistry(t testing.TB) *LabRegistry {
 	if _, err := exec.LookPath("docker"); err != nil {
 		requireOrSkip(t, "docker isn't installed")
 	}
-	out, err := exec.Command("docker", "run", "-d", "--rm", "-p", "127.0.0.1::5000", "registry:2").CombinedOutput()
+	// stdout only: on a fresh host docker prints its pull progress on
+	// stderr, and stdout's last line is the container ID.
+	cmd := exec.Command("docker", "run", "-d", "--rm", "-p", "127.0.0.1::5000", "registry:2")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		requireOrSkip(t, "can't start registry:2: "+strings.TrimSpace(string(out)))
+		requireOrSkip(t, "can't start registry:2: "+strings.TrimSpace(stderr.String()))
 	}
-	id := strings.TrimSpace(string(out))
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	id := strings.TrimSpace(lines[len(lines)-1])
 	t.Cleanup(func() { _ = exec.Command("docker", "rm", "-f", id).Run() }) // #nosec G204 -- the container this test started
 	port, err := exec.Command("docker", "port", id, "5000/tcp").Output()   // #nosec G204 -- as above
 	must(t, err)
