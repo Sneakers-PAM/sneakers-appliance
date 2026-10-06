@@ -1,0 +1,163 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The local API of sneakers-netd on /run/sneakers/netd.sock, served with
+// Connect. Only root on the box may connect (SO_PEERCRED); osadmin and the
+// closed shell reach it through accessd, which checks the admin's role.
+syntax = "proto3";
+
+package sneakers.appliance.netd.v1;
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1;netdv1";
+
+// NetworkService owns the box's addresses, DNS, NTP and the management
+// firewall.
+service NetworkService {
+  // Get returns the applied settings.
+  rpc Get(GetRequest) returns (GetResponse);
+  // Set validates and applies settings, then undoes them unless Confirm
+  // comes within 120 seconds (NET_REVERTED).
+  rpc Set(SetRequest) returns (SetResponse);
+  // Confirm keeps the pending change.
+  rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
+  // Checks runs the connectivity checks: link, address, gateway, DNS, NTP.
+  rpc Checks(ChecksRequest) returns (ChecksResponse);
+  // SetServicePorts sets the product's port rules on the service
+  // interface (spec 3 defines them; netd only carries them).
+  rpc SetServicePorts(SetServicePortsRequest) returns (SetServicePortsResponse);
+  // Status returns the live addresses and the clock's sync state.
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+// Ipv4Mode is how an interface gets its IPv4 address.
+enum Ipv4Mode {
+  IPV4_MODE_UNSPECIFIED = 0;
+  IPV4_MODE_DHCP = 1;
+  IPV4_MODE_STATIC = 2;
+  IPV4_MODE_OFF = 3;
+}
+
+// Ipv6Mode is how an interface gets its IPv6 address.
+enum Ipv6Mode {
+  IPV6_MODE_UNSPECIFIED = 0;
+  IPV6_MODE_SLAAC = 1;
+  IPV6_MODE_DHCPV6 = 2;
+  IPV6_MODE_STATIC = 3;
+  IPV6_MODE_OFF = 4;
+}
+
+message Ipv4 {
+  Ipv4Mode mode = 1;
+  // address is a prefix such as 192.0.2.10/24, in static mode only.
+  string address = 2;
+  string gateway = 3;
+}
+
+message Ipv6 {
+  Ipv6Mode mode = 1;
+  // address is a prefix such as 2001:db8::10/64, in static mode only.
+  string address = 2;
+  string gateway = 3;
+}
+
+message Interface {
+  string name = 1;
+  Ipv4 ipv4 = 2;
+  Ipv6 ipv6 = 3;
+}
+
+message ClusterRanges {
+  string pods = 1;
+  string services = 2;
+}
+
+// Settings mirrors the netd settings model. Empty hostname, dns and ntp
+// mean whatever DHCP and router advertisements offer.
+message Settings {
+  Interface management = 1;
+  // service is absent when one NIC carries both roles.
+  Interface service = 2;
+  string hostname = 3;
+  repeated string dns = 4;
+  repeated string search = 5;
+  repeated string ntp = 6;
+  repeated string allow_list = 7;
+  string time_zone = 8;
+  string https_proxy = 9;
+  ClusterRanges cluster = 10;
+}
+
+message GetRequest {}
+
+message GetResponse {
+  Settings settings = 1;
+  // pending is true while a change waits for Confirm.
+  bool pending = 2;
+}
+
+message SetRequest {
+  Settings settings = 1;
+}
+
+message SetResponse {
+  // token is what Confirm takes.
+  string token = 1;
+  // revert_after_seconds is how long the change waits for Confirm.
+  int32 revert_after_seconds = 2;
+}
+
+message ConfirmRequest {
+  string token = 1;
+}
+
+message ConfirmResponse {}
+
+// CheckState is a check's result.
+enum CheckState {
+  CHECK_STATE_UNSPECIFIED = 0;
+  CHECK_STATE_OK = 1;
+  CHECK_STATE_WARN = 2;
+  CHECK_STATE_FAILED = 3;
+}
+
+message Check {
+  // name is link, address, gateway, dns or ntp.
+  string name = 1;
+  CheckState state = 2;
+  // code is the NET_* symbol when the check isn't ok.
+  string code = 3;
+  string detail = 4;
+  // skippable is false for the checks setup can't continue past (no
+  // address on the management interface).
+  bool skippable = 5;
+}
+
+message ChecksRequest {}
+
+message ChecksResponse {
+  repeated Check checks = 1;
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  repeated string management_addresses = 1;
+  repeated string service_addresses = 2;
+  string hostname = 3;
+  bool ntp_synced = 4;
+  // ntp_offset_ms is the last measured offset.
+  int64 ntp_offset_ms = 5;
+}
+
+message PortRule {
+  // protocol is tcp or udp.
+  string protocol = 1;
+  uint32 port = 2;
+  repeated string allow = 3;
+}
+
+message SetServicePortsRequest {
+  repeated PortRule rules = 1;
+}
+
+message SetServicePortsResponse {}
