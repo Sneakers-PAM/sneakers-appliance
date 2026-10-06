@@ -1,0 +1,36 @@
+# Rendered by accessd from the access store; changes here are overwritten.
+ListenAddress 192.0.2.10:22
+ListenAddress [2001:db8::10]:22
+HostKey /var/lib/sneakers/ssh/ssh_host_ed25519_key
+HostKey /var/lib/sneakers/ssh/ssh_host_rsa_key
+AuthenticationMethods publickey
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+DisableForwarding yes
+PermitTunnel no
+PermitUserRC no
+PermitUserEnvironment no
+StrictModes yes
+AuthorizedKeysFile /run/sneakers/ssh/authorized_keys/%u
+RevokedKeys /var/lib/sneakers/ssh/revoked.krl
+ExposeAuthInfo yes
+ForceCommand /usr/bin/sneakers-shell
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 60
+ClientAliveCountMax 3
+LogLevel VERBOSE
+PidFile /run/sneakers/sshd.pid
+AllowUsers alice bob maint
+# No Subsystem lines: no sftp, no scp.
+
+Match User maint
+    PermitRootLogin forced-commands-only
+    AuthorizedKeysFile none
+    TrustedUserCAKeys /var/lib/sneakers/ssh/user_ca.pub
+    AuthorizedPrincipalsFile /run/sneakers/ssh/principals/maint
+    ForceCommand /usr/libexec/sneakers-elevated
+    MaxSessions 1
