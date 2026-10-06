@@ -27,12 +27,16 @@ jobs:
       # and api.acme.com are the example hosts protoc-gen-connect-go writes
       # into every generated client's doc comment.
       # kernel.org (cdn, git) and deb.debian.org are where the pinned kernel
-      # and static tool sources come from.
+      # and static tool sources come from. schemas.dmtf.org, www.vmware.com
+      # and www.w3.org are the XML namespaces of the OVF descriptor.
       allowed-domains: >-
         kernel.org
         cdn.kernel.org
         git.kernel.org
         deb.debian.org
+        schemas.dmtf.org
+        www.vmware.com
+        www.w3.org
         in-toto.io
         cloud.google.com
         dmitri.shuralyov.com
