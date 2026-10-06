@@ -9,11 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 )
 
-// privateMarkers are what a PEM or cosign private key carries.
-var privateMarkers = regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|ENCRYPTED SIGSTORE PRIVATE KEY|ENCRYPTED COSIGN PRIVATE KEY|"kdf"\s*:`)
+// privateMarkers are what a PEM, cosign or age private key carries.
+var privateMarkers = regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|ENCRYPTED SIGSTORE PRIVATE KEY|ENCRYPTED COSIGN PRIVATE KEY|"kdf"\s*:|AGE-SECRET-KEY-`)
 
 func TestProductionKeysArePublic(t *testing.T) {
 	checkPublic(t, "../../keys/production")
@@ -36,6 +37,18 @@ func TestTheCheckCatchesAPrivateKey(t *testing.T) {
 	checkPublicWith(inner, dir)
 	if !inner.failed {
 		t.Fatal("a PEM private key wasn't caught")
+	}
+}
+
+func TestTheCheckCatchesAnAgeIdentity(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "update.key"), []byte("# created: now\n"+"AGE-SECRET-"+"KEY-1"+strings.Repeat("Q", 58)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inner := &recorder{}
+	checkPublicWith(inner, dir)
+	if !inner.failed {
+		t.Fatal("an age identity (the update key's private half) wasn't caught")
 	}
 }
 
