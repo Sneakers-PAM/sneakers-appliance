@@ -40,6 +40,13 @@ const (
 	ServicePreStart     = 2104
 )
 
+// The Secure Boot codes.
+const (
+	SBNoEfivarfs   = 2201
+	SBNotSetupMode = 2202
+	SBEnrolFailed  = 2203
+)
+
 // Entries describes every code, for the registry and the docs.
 var Entries = []apperr.Entry{
 	{Code: KitPinMissing, Symbol: "KIT_PIN_MISSING", Title: "kit", Cause: "this kit was built without one of its pins, or with a channel other than production or lab"},
@@ -60,6 +67,9 @@ var Entries = []apperr.Entry{
 	{Code: ServiceUnknown, Symbol: "SERVICE_UNKNOWN", Title: "init", Cause: "the service table has no service of that name"},
 	{Code: ServiceNotOnDemand, Symbol: "SERVICE_NOT_ON_DEMAND", Title: "init", Cause: "only on-demand services are started and stopped through the Services API"},
 	{Code: ServicePreStart, Symbol: "SERVICE_PRE_START", Title: "init", Cause: "the service's pre-start hook failed, so it wasn't started"},
+	{Code: SBNoEfivarfs, Symbol: "SB_NO_EFIVARFS", Title: "secureboot", Cause: "efivarfs isn't mounted or can't be read, so the Secure Boot state is unknown"},
+	{Code: SBNotSetupMode, Symbol: "SB_NOT_SETUP_MODE", Title: "secureboot", Cause: "the firmware isn't in Setup Mode, so the org keys can't be enrolled; nothing was written"},
+	{Code: SBEnrolFailed, Symbol: "SB_ENROL_FAILED", Title: "secureboot", Cause: "writing a Secure Boot key variable failed or didn't read back"},
 }
 
 // Registry is the code table.
