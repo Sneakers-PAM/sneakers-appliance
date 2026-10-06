@@ -7,6 +7,8 @@ require (
 	github.com/Bugs5382/go-log v1.3.0
 	github.com/diskfs/go-diskfs v1.9.4
 	github.com/foxboron/go-uefi v0.0.0-20261004203234-c7f1f57bdc6e
+	github.com/google/go-tpm v0.9.8
+	github.com/google/go-tpm-tools v0.4.8
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/smallstep/pkcs7 v0.2.3
