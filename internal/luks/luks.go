@@ -58,17 +58,21 @@ func (e *ExecRunner) Run(ctx context.Context, stdin io.Reader, args ...string) (
 // hold the master key beyond a single call.
 type Device struct {
 	// Path is the underlying block device path (e.g. /dev/nvme0n1p2 or
-	// /dev/disk/by-partlabel/cryptos-state). Required.
+	// /dev/disk/by-partlabel/sneakers-state). Required.
 	Path string
 
 	// Runner executes cryptsetup. Required.
 	Runner Runner
+
+	// PBKDFArgs, when set, replace the default Argon2id cost on Format
+	// (tests use a cheap cost; the box keeps cryptsetup's benchmark).
+	PBKDFArgs []string
 }
 
 // Volume is an opened LUKS volume.
 type Volume struct {
 	// Path is the dm-crypt block device exposed by cryptsetup
-	// (e.g. /dev/mapper/cryptos-state).
+	// (e.g. /dev/mapper/sneakers-state).
 	Path string
 
 	// Name is the mapped name (suffix of /dev/mapper/<name>).
@@ -120,8 +124,8 @@ func (d *Device) Format(ctx context.Context, masterKey []byte) error {
 		"--pbkdf", "argon2id",
 		"--batch-mode", // no interactive confirmation prompts
 		"--key-file", "-",
-		d.Path,
 	}
+	args = append(append(args, d.PBKDFArgs...), d.Path)
 	_, stderr, err := d.Runner.Run(ctx, bytes.NewReader(masterKey), args...)
 	if err != nil {
 		return fmt.Errorf("luks: Format: cryptsetup failed: %w (stderr: %s)", err, string(bytes.TrimSpace(stderr)))
@@ -189,5 +193,15 @@ func (v *Volume) Close(ctx context.Context) error {
 		return fmt.Errorf("luks: Close: cryptsetup failed: %w (stderr: %s)", err, string(bytes.TrimSpace(stderr)))
 	}
 	v.device = nil
+	return nil
+}
+
+// TestKey reports whether key opens the volume, without opening it
+// (`cryptsetup open --test-passphrase`).
+func (d *Device) TestKey(ctx context.Context, key []byte) error {
+	_, stderr, err := d.Runner.Run(ctx, bytes.NewReader(key), "open", "--test-passphrase", "--key-file", "-", d.Path)
+	if err != nil {
+		return fmt.Errorf("luks: the key doesn't open %s: %w (stderr: %s)", d.Path, err, string(bytes.TrimSpace(stderr)))
+	}
 	return nil
 }

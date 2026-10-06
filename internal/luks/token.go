@@ -17,11 +17,11 @@ import (
 )
 
 // TPM2TokenType is the LUKS2 token type string for the CryptOS-native
-// TPM-sealed-key token. CryptOS writes and reads this token with its own
+// TPM-sealed-key token. The appliance writes and reads this token with its own
 // TPM unseal path (internal/tpm) and never invokes systemd-cryptsetup, so
 // it deliberately does NOT claim the systemd-tpm2 type — see the design
 // notes. byte-level systemd interop can be added later if needed.
-const TPM2TokenType = "cryptos-tpm2" // #nosec G101 -- a LUKS2 token type name, not a credential
+const TPM2TokenType = "sneakers-tpm2" // #nosec G101 -- a LUKS2 token type name, not a credential
 
 // PCRBankSHA256 is the only PCR bank Phase 1 uses.
 const PCRBankSHA256 = "sha256"
@@ -48,7 +48,7 @@ type TPM2Token struct {
 	// sealed to, set when an in-place upgrade seals a copy per bootable
 	// image. The token written at install time carries none. It is for logs
 	// and ordering only; the TPM policy is what enforces the binding.
-	ImageSHA256 string `json:"cryptos-image-sha256,omitempty"`
+	ImageSHA256 string `json:"sneakers-image-sha256,omitempty"`
 }
 
 // BuildTPM2Token assembles a token from the sealed blobs produced by

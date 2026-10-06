@@ -27,3 +27,7 @@ shares with `Image.Stage`; 2xxx are boot.
 | 2201 | `SB_NO_EFIVARFS` | efivarfs isn't mounted or can't be read, so the Secure Boot state is unknown |
 | 2202 | `SB_NOT_SETUP_MODE` | the firmware isn't in Setup Mode, so the org keys can't be enrolled; nothing was written |
 | 2203 | `SB_ENROL_FAILED` | writing a Secure Boot key variable failed or didn't read back |
+| 2301 | `KEYCUSTODY_NO_TPM` | TPM mode was chosen on a box without a TPM |
+| 2302 | `KEYCUSTODY_INVALID` | an unknown mode or choice, a second Initialize, or a disk too small for first boot |
+| 2303 | `KEYCUSTODY_NOT_INITIALIZED` | the state volume has no custody header yet |
+| 2304 | `KEYCUSTODY_LOCKED` | the state key can't be recovered: no sealed copy unseals, or the key file is missing |
