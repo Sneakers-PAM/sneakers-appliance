@@ -7,7 +7,8 @@ package disk
 
 import (
 	"fmt"
-	"strings"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/bootcmd"
 )
 
 // Sizes and alignment.
@@ -131,13 +132,6 @@ func FirstBootPlan(diskSize, used int64, arch string, keyfile bool) ([]Partition
 	return out, nil
 }
 
-// SlotGUID is the PARTUUID a root slot gets: the first 128 bits of the
-// release's verity root hash, in GUID text form. One signed UKI finds its
-// root in either slot this way.
-func SlotGUID(rootHash string) (string, error) {
-	if len(rootHash) < 32 {
-		return "", fmt.Errorf("disk: root hash %q is too short", rootHash)
-	}
-	h := strings.ToLower(rootHash[:32])
-	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32], nil
-}
+// SlotGUID is the PARTUUID a root slot gets; see bootcmd.SlotGUID, which
+// switchroot uses to find it again.
+func SlotGUID(rootHash string) (string, error) { return bootcmd.SlotGUID(rootHash) }

@@ -56,3 +56,14 @@ func Parse(cmdline string) (Params, error) {
 	}
 	return p, nil
 }
+
+// SlotGUID is the PARTUUID of the root slot holding the release with root
+// hash rootHash: its first 128 bits in GUID text form. One signed UKI finds
+// its root in either slot this way.
+func SlotGUID(rootHash string) (string, error) {
+	if !hex64.MatchString(rootHash) {
+		return "", fmt.Errorf("bootcmd: root hash %q isn't 64 lowercase hex", rootHash)
+	}
+	h := rootHash[:32]
+	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32], nil
+}

@@ -4,3 +4,8 @@ Copyright 2026 The Sneakers-PAM Authors
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
 
 Originally written by @Bugs5382 (https://github.com/Bugs5382).
+
+This product includes software ported from CryptOS-PKI cryptos-node
+(https://github.com/CryptOS-PKI/cryptos-node), Copyright The CryptOS Authors,
+licensed under the Apache License, Version 2.0. Ported files keep that
+copyright line under their own header; they are listed in docs/ports.md.

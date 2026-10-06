@@ -35,3 +35,13 @@ func TestParseRefusals(t *testing.T) {
 		}
 	}
 }
+
+func TestSlotGUID(t *testing.T) {
+	g, err := bootcmd.SlotGUID("00112233445566778899aabbccddeeff" + strings.Repeat("0", 32))
+	if err != nil || g != "00112233-4455-6677-8899-aabbccddeeff" {
+		t.Fatalf("%s %v", g, err)
+	}
+	if _, err := bootcmd.SlotGUID("abc"); err == nil {
+		t.Fatal("short hash accepted")
+	}
+}
