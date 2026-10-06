@@ -30,10 +30,10 @@ jobs:
           if [ -n "$unformatted" ]; then
             echo "gofmt needed on:"; echo "$unformatted"; exit 1
           fi
-      - name: Install veritysetup
+      - name: Install veritysetup and sgdisk
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q cryptsetup-bin
+          sudo apt-get install -y -q cryptsetup-bin gdisk
       - name: Build
         run: go build ./...
       - name: Test
