@@ -75,3 +75,8 @@ network and 35xx the setup steps. The shell, the console and :8443 show the same
 | 2501 | `UPGRADE_DOWNGRADE` | the release isn't newer than the running one |
 | 2502 | `UPGRADE_UNPREDICTABLE` | the release's UKI isn't one whose PCR 11 the box can predict |
 | 2503 | `UPGRADE_NO_PREVIOUS` | there's no previous release to roll back to |
+| 2504 | `UPGRADE_FORMAT` | the file isn't a sneakers-appliance update package, or its header breaks the format's rules |
+| 2505 | `UPGRADE_SIGNATURE` | the update package isn't signed by this box's release key, or it changed after it was signed |
+| 2506 | `UPGRADE_DECRYPT` | the update package doesn't decrypt with this box's update key |
+| 2507 | `UPGRADE_CHANNEL` | a lab package never installs on a production box, and a production package never on a lab box |
+| 2508 | `UPGRADE_PATCH_BASE` | the patch is for other base versions than the one this box runs |
