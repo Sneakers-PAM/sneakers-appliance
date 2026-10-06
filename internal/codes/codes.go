@@ -62,6 +62,7 @@ const (
 	KeyCustodyLocked         = 2304
 	KeyCustodyNotFound       = 2305
 	KeyCustodyRecipients     = 2306
+	KeyCustodyPhase          = 2307
 )
 
 // Entries describes every code, for the registry and the docs.
@@ -96,6 +97,7 @@ var Entries = []apperr.Entry{
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},
 	{Code: KeyCustodyRecipients, Symbol: "KEYCUSTODY_RECIPIENTS", Title: "keycustody", Cause: "the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys"},
+	{Code: KeyCustodyPhase, Symbol: "KEYCUSTODY_PHASE", Title: "keycustody", Cause: "an escrow is imported only in firstboot, before any root secret is sealed"},
 }
 
 // Registry is the code table.
