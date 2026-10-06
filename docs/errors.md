@@ -20,3 +20,7 @@ shares with `Image.Stage`; 2xxx are boot.
 | 1012 | `KIT_MANIFEST_INVALID` | `appliance.yaml` doesn't parse or breaks a structural rule |
 | 1013 | `KIT_SOURCE_UNREADABLE` | the artifact can't be resolved or read |
 | 2001 | `ROOT_NOT_FOUND` | no root slot matches the signed root hash, and no install medium holds the root image |
+| 2101 | `SERVICE_TABLE_INVALID` | a service table entry doesn't parse, names an unknown service, or loops through `after:` |
+| 2102 | `SERVICE_UNKNOWN` | the service table has no service of that name |
+| 2103 | `SERVICE_NOT_ON_DEMAND` | only on-demand services are started and stopped through the Services API |
+| 2104 | `SERVICE_PRE_START` | the service's pre-start hook failed, so it wasn't started |
