@@ -33,7 +33,7 @@ func stepArtifactSignature(_ context.Context, s *State) error {
 	copy(want[:], raw)
 	parsed := 0
 	for _, ref := range refs {
-		for _, layer := range ref.Layers {
+		for _, layer := range ref.Manifest.Layers {
 			b, err := s.Layout.ReadBlob(layer)
 			if err != nil {
 				continue

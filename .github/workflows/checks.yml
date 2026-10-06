@@ -22,7 +22,7 @@ jobs:
       # writes into its signatures; the test fixtures write the same.
       # cloud.google.com, dmitri.shuralyov.com, go.opencensus.io, honnef.co
       # and rsc.io are public module hosts in go.sum (indirect dependencies
-      # of go-uefi).
+      # of go-uefi). oras.land is the oras-go module host.
       allowed-domains: >-
         in-toto.io
         cloud.google.com
@@ -30,3 +30,4 @@ jobs:
         go.opencensus.io
         honnef.co
         rsc.io
+        oras.land
