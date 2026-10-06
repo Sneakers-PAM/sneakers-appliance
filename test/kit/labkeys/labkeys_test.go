@@ -23,6 +23,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/efiauth"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukipcr"
 	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
 
@@ -219,5 +220,68 @@ func TestFixtureSquashFSReadsWithUnsquashfs(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "usr/bin/k0s") {
 		t.Fatalf("listing:\n%s", b)
+	}
+}
+
+// TestAssembleUKI builds a UKI with the real ukify, checks it carries
+// exactly the six sections and the signed command line, and that sbsign's
+// signature on it verifies with the kit's Authenticode check.
+func TestAssembleUKI(t *testing.T) {
+	out := labKeys(t)
+	dir := t.TempDir()
+	kernel := filepath.Join(dir, "bzImage")
+	if err := os.WriteFile(kernel, bytes.Repeat([]byte{0x90}, 64<<10), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vj := filepath.Join(dir, "verity.json")
+	root := strings.Repeat("cd", 32)
+	if err := os.WriteFile(vj, []byte(`{"roothash":"`+root+`","hashOffset":8192}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	vs, err := exec.LookPath("veritysetup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script, _ := filepath.Abs("../../../build/uki/assemble.sh")
+	cmd := exec.Command("bash", script) // #nosec G204 -- the repo's own script
+	cmd.Env = append(os.Environ(), "KERNEL="+kernel, "VERITYSETUP="+vs, "VERITY_JSON="+vj, "VERSION=0.1.0",
+		"OUT="+filepath.Join(dir, "out"), "UNAME=6.12.0-sneakers", "SOURCE_DATE_EPOCH=1700000000")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("assemble.sh: %v\n%s", err, b)
+	}
+	uki := filepath.Join(dir, "out", "sneakers-0.1.0.efi")
+	b, err := os.ReadFile(uki) // #nosec G304 -- the test's own output
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := ukipcr.Predict(b)
+	if err != nil || strings.Join(p.Sections, " ") != ".linux .osrel .cmdline .initrd .uname .sbat" {
+		t.Fatalf("sections %v %v", p.Sections, err)
+	}
+	signed := uki + ".signed"
+	if b, err := exec.Command("sbsign", "--key", filepath.Join(out, "db.key"), "--cert", filepath.Join(out, "db.crt"), "--output", signed, uki).CombinedOutput(); err != nil { // #nosec G204 -- test-only, fixed tool
+		t.Fatalf("sbsign: %v\n%s", err, b)
+	}
+	f, err := os.Open(signed) // #nosec G304 -- as above
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	pe, err := authenticode.Parse(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crt, _ := os.ReadFile(filepath.Join(out, "db.crt"))
+	blk, _ := pem.Decode(crt)
+	c, _ := x509.ParseCertificate(blk.Bytes)
+	if ok, err := pe.Verify(c); err != nil || !ok {
+		t.Fatalf("the signed UKI doesn't verify: %v", err)
+	}
+	pf, err := os.ReadFile(signed) // #nosec G304 -- as above
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(pf, []byte("sneakers.roothash="+root+" sneakers.hashoffset=8192 sneakers.version=0.1.0 quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity")) {
+		t.Fatal("the command line isn't the spec's")
 	}
 }
