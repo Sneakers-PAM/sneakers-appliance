@@ -1,0 +1,80 @@
+name: Image Build
+# Builds the kernel and the static tools from their pinned sources when a PR
+# touches what they're built from, and checks the kernel config. Each build
+# is cached by the hash of its inputs, so an unchanged kernel isn't rebuilt.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - os/kernel/**
+      - build/kernel/**
+      - build/static/**
+      - build/ci/versions.env
+      - .github/workflows/job-image-build.yaml
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  kernel:
+    name: 🐧 Kernel (amd64)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install the kernel build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev
+      - name: Cache the kernel
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: build/out/kernel/amd64
+          key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
+      - name: Build the kernel
+        if: steps.cache.outputs.cache-hit != 'true'
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: bash build/kernel/build.sh amd64
+      - name: Check the config and record the digest
+        run: |
+          bash build/kernel/check-config.sh build/out/kernel/amd64/.config os/kernel/required.txt
+          {
+            echo "### Kernel"
+            echo "- release: $(cat build/out/kernel/amd64/kernelrelease)"
+            echo "- bzImage SHA-256: $(sha256sum build/out/kernel/amd64/bzImage | cut -d' ' -f1)"
+            echo "- size: $(stat -c %s build/out/kernel/amd64/bzImage) bytes"
+          } >> "$GITHUB_STEP_SUMMARY"
+  static-tools:
+    name: 🧰 Static tools (amd64)
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Cache the tools
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: build/out
+          key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env') }}
+      - name: Build cryptsetup, veritysetup, mke2fs and sgdisk
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          bash build/static/cryptsetup.sh amd64
+          bash build/static/e2fsprogs.sh amd64
+          bash build/static/gptfdisk.sh amd64
+      - name: Record the digests
+        run: |
+          {
+            echo "### Static tools"
+            for f in build/out/*-amd64; do echo "- $(basename "$f"): $(sha256sum "$f" | cut -d' ' -f1)"; done
+          } >> "$GITHUB_STEP_SUMMARY"
