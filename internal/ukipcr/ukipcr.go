@@ -54,11 +54,13 @@ var allowedSections = map[string]bool{
 }
 
 // ignoredSections are sections the stub does not measure: its own code and
-// data, and .pcrsig, which signs the measurement and so cannot be part of it.
+// data, .pcrsig, which signs the measurement and so cannot be part of it, and
+// .updkey, the update key the sign job adds (internal/ukikey), which isn't one
+// of the stub's unified sections.
 var ignoredSections = map[string]bool{
 	".text": true, ".rodata": true, ".rdata": true, ".data": true, ".bss": true,
 	".reloc": true, ".sdmagic": true, ".pdata": true, ".xdata": true,
-	".pcrsig": true,
+	".pcrsig": true, ".updkey": true,
 }
 
 // ErrUnpredictable is wrapped by every refusal to predict, so a caller can
