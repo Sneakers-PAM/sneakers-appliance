@@ -95,6 +95,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # The release guard's test checks a commit on main and one that isn't.
+          fetch-depth: 0
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
@@ -107,3 +110,7 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/
+      - name: Release guard and production fingerprint check
+        run: |
+          bash build/release/guard_test.sh
+          bash build/release/check-fingerprints_test.sh

@@ -52,6 +52,11 @@ const (
 	UpgradeDowngrade     = 2501
 	UpgradeUnpredictable = 2502
 	UpgradeNoPrevious    = 2503
+	UpgradeFormat        = 2504
+	UpgradeSignature     = 2505
+	UpgradeDecrypt       = 2506
+	UpgradeChannel       = 2507
+	UpgradePatchBase     = 2508
 )
 
 // The key custody codes.
@@ -94,6 +99,11 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeDowngrade, Symbol: "UPGRADE_DOWNGRADE", Title: "upgrade", Cause: "the release isn't newer than the running one"},
 	{Code: UpgradeUnpredictable, Symbol: "UPGRADE_UNPREDICTABLE", Title: "upgrade", Cause: "the release's UKI isn't one whose PCR 11 the box can predict"},
 	{Code: UpgradeNoPrevious, Symbol: "UPGRADE_NO_PREVIOUS", Title: "upgrade", Cause: "there's no previous release to roll back to"},
+	{Code: UpgradeFormat, Symbol: "UPGRADE_FORMAT", Title: "upgrade", Cause: "the file isn't a sneakers-appliance update package, or its header breaks the format's rules"},
+	{Code: UpgradeSignature, Symbol: "UPGRADE_SIGNATURE", Title: "upgrade", Cause: "the update package isn't signed by this box's release key, or it changed after it was signed"},
+	{Code: UpgradeDecrypt, Symbol: "UPGRADE_DECRYPT", Title: "upgrade", Cause: "the update package doesn't decrypt with this box's update key"},
+	{Code: UpgradeChannel, Symbol: "UPGRADE_CHANNEL", Title: "upgrade", Cause: "a lab package never installs on a production box, and a production package never on a lab box"},
+	{Code: UpgradePatchBase, Symbol: "UPGRADE_PATCH_BASE", Title: "upgrade", Cause: "the patch is for other base versions than the one this box runs"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},
 	{Code: KeyCustodyRecipients, Symbol: "KEYCUSTODY_RECIPIENTS", Title: "keycustody", Cause: "the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys"},

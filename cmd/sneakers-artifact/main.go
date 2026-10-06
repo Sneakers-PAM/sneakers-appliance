@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command sneakers-artifact assembles the sneakers-os artifact from built
-// release files, and attaches a signature made elsewhere. It holds no key:
-// the release workflow's sign job (or a lab build, with its throwaway key)
-// signs the index blob with `cosign sign-blob --bundle` and hands the bundle
-// back to `attach`.
+// release files, attaches a signature made elsewhere, and packs the signed
+// artifact into the encrypted update package (the .bin). It holds no signing
+// key: the release workflow's sign job (or a lab build, with its throwaway
+// key) signs the index blob and the .bin header with `cosign sign-blob
+// --bundle` and hands the bundles back to `attach` and `bin-seal`. The only
+// key it makes is a throwaway lab update key.
 package main
 
 import (
@@ -31,8 +33,8 @@ func main() {
 }
 
 func root() *cobra.Command {
-	r := &cobra.Command{Use: "sneakers-artifact", Short: "Assemble the sneakers-os artifact and attach its signature", SilenceUsage: true}
-	r.AddCommand(assembleCmd(), indexBlobCmd(), attachCmd())
+	r := &cobra.Command{Use: "sneakers-artifact", Short: "Assemble the sneakers-os artifact, attach its signature and pack the update package", SilenceUsage: true}
+	r.AddCommand(assembleCmd(), indexBlobCmd(), attachCmd(), labUpdateKeyCmd(), binPackCmd(), binSealCmd(), binVerifyCmd(), pushCmd())
 	return r
 }
 
