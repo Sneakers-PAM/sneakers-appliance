@@ -46,3 +46,23 @@ pre-start: [/usr/libexec/sneakers/platformd, prepare]
   sends SIGTERM, then SIGKILL after 10 seconds.
 - An entry that doesn't parse, an unknown `after:` name or a loop is `SERVICE_TABLE_INVALID`, and
   the table isn't used.
+
+## init.sock
+
+Init serves its local API (Connect, which also speaks the gRPC protocol) on `/run/sneakers/init.sock` (proto
+`proto/sneakers/appliance/init/v1/init.proto`, generated into `gen/go` by
+`scripts/proto-generate.sh`). The socket is mode 0600, and every connection's peer is read with
+`SO_PEERCRED`: anyone but root is refused before a request is read. The services are
+`KeyCustodyService`, `PlatformService`, `ImageService`, `PowerService` and `ServicesService`; the
+ones whose bodies later work adds answer `Unimplemented` until then. `ServicesService` starts,
+stops and reports the table's on-demand services.
+
+## PID 1
+
+Init mounts `/proc`, `/sys`, `/dev`, `/run`, `/tmp` and efivarfs, and mounts the ESP at
+`/run/sneakers/esp`. One loop reaps every child (init inherits every orphan) and hands each exit
+status to whatever started it, so services run without `os/exec`'s own waiting. On the console it
+prints `sneakers-init: phase=<phase> protection=<level>`. In `enrol` it runs the Secure Boot screens
+([secure-boot.md](secure-boot.md)): on QEMU and Proxmox it reboots by itself after enrolling; on
+VMware and bare metal it waits for the admin's power cycle. In `mismatch` it shows the mismatch
+screen and starts nothing. SIGTERM stops every service and syncs the disks.

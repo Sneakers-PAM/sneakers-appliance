@@ -34,6 +34,13 @@ const (
 	mntDETACH            = 2
 )
 
+// SourceEnv tells init where its root came from: SourceInstall for the
+// install medium, else the slot's GPT label.
+const (
+	SourceEnv     = "SNEAKERS_ROOT_SOURCE"
+	SourceInstall = "install"
+)
+
 // System is the set of OS operations the pivot needs, injected so the
 // sequence tests without touching real mounts.
 type System interface {
@@ -149,6 +156,11 @@ func Run(sys System, env []string) error {
 	if err := sys.Chdir("/"); err != nil {
 		return fmt.Errorf("switchroot: chdir /: %w", err)
 	}
+	source := root.Label
+	if root.Install() {
+		source = SourceInstall
+	}
+	env = append(append([]string(nil), env...), SourceEnv+"="+source)
 	if err := sys.Exec(InitPath, []string{InitPath}, env); err != nil {
 		return fmt.Errorf("switchroot: exec %s: %w", InitPath, err)
 	}

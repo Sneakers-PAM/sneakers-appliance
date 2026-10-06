@@ -1,0 +1,201 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The local API of sneakers-init (PID 1) on /run/sneakers/init.sock, served
+// with Connect (which also speaks the gRPC protocol). Only root on the box
+// may connect. Spec 1 owns the package and these services;
+// later specs add RPCs by extending them.
+syntax = "proto3";
+
+package sneakers.appliance.init.v1;
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1;initv1";
+
+// KeyCustody holds the state key and small secrets sealed under it.
+service KeyCustodyService {
+  // Initialize formats the state with the chosen custody, once, in firstboot.
+  rpc Initialize(InitializeRequest) returns (InitializeResponse);
+  // Mode returns the custody mode fixed by Initialize.
+  rpc Mode(ModeRequest) returns (ModeResponse);
+  // Protection returns full or reduced, with the reason.
+  rpc Protection(ProtectionRequest) returns (ProtectionResponse);
+  // SetSecureBoot records the Secure Boot setting and reseals.
+  rpc SetSecureBoot(SetSecureBootRequest) returns (SetSecureBootResponse);
+  // Seal stores a small secret under the state key's protector.
+  rpc Seal(SealRequest) returns (SealResponse);
+  // Unseal returns a sealed secret.
+  rpc Unseal(UnsealRequest) returns (UnsealResponse);
+  // Escrow returns the escrow bundle encrypted to the recovery keys.
+  rpc Escrow(EscrowRequest) returns (EscrowResponse);
+}
+
+// CustodyMode is where the state key is kept.
+enum CustodyMode {
+  CUSTODY_MODE_UNSPECIFIED = 0;
+  CUSTODY_MODE_TPM = 1;
+  CUSTODY_MODE_KEYFILE = 2;
+}
+
+// SecureBootSetting is the admin's Secure Boot choice.
+enum SecureBootSetting {
+  SECURE_BOOT_SETTING_UNSPECIFIED = 0;
+  SECURE_BOOT_SETTING_ON = 1;
+  SECURE_BOOT_SETTING_OFF = 2;
+}
+
+// ProtectionLevel is what the box reports on the console and Status.
+enum ProtectionLevel {
+  PROTECTION_LEVEL_UNSPECIFIED = 0;
+  PROTECTION_LEVEL_FULL = 1;
+  PROTECTION_LEVEL_REDUCED = 2;
+}
+
+message InitializeRequest {
+  CustodyMode mode = 1;
+  SecureBootSetting secure_boot = 2;
+}
+
+message InitializeResponse {}
+
+message ModeRequest {}
+
+message ModeResponse {
+  CustodyMode mode = 1;
+}
+
+message ProtectionRequest {}
+
+message ProtectionResponse {
+  ProtectionLevel level = 1;
+  // reason is empty for full, else no-secure-boot-firmware, secure-boot-off
+  // or no-tpm.
+  string reason = 2;
+}
+
+message SetSecureBootRequest {
+  bool on = 1;
+}
+
+message SetSecureBootResponse {}
+
+message SealRequest {
+  string name = 1;
+  bytes secret = 2;
+}
+
+message SealResponse {}
+
+message UnsealRequest {
+  string name = 1;
+}
+
+message UnsealResponse {
+  bytes secret = 1;
+}
+
+message EscrowRequest {
+  // recipients are one to three ssh-ed25519 or ssh-rsa public keys.
+  repeated string recipients = 1;
+}
+
+message EscrowResponse {
+  bytes bundle = 1;
+}
+
+// Platform starts and stops k0s.
+service PlatformService {
+  rpc StartPlatform(StartPlatformRequest) returns (StartPlatformResponse);
+  rpc StopPlatform(StopPlatformRequest) returns (StopPlatformResponse);
+}
+
+message StartPlatformRequest {}
+
+message StartPlatformResponse {}
+
+message StopPlatformRequest {}
+
+message StopPlatformResponse {}
+
+// Image stages releases into the inactive slot and moves between them.
+service ImageService {
+  rpc Stage(StageRequest) returns (StageResponse);
+  rpc Activate(ActivateRequest) returns (ActivateResponse);
+  rpc MarkGood(MarkGoodRequest) returns (MarkGoodResponse);
+  rpc Rollback(RollbackRequest) returns (RollbackResponse);
+  rpc Status(ImageServiceStatusRequest) returns (ImageServiceStatusResponse);
+}
+
+message StageRequest {
+  // reference is a registry reference or a path to an OCI layout archive.
+  string reference = 1;
+}
+
+message StageResponse {
+  string version = 1;
+}
+
+message ActivateRequest {}
+
+message ActivateResponse {}
+
+message MarkGoodRequest {}
+
+message MarkGoodResponse {}
+
+message RollbackRequest {}
+
+message RollbackResponse {}
+
+message ImageServiceStatusRequest {}
+
+message ImageServiceStatusResponse {
+  string running_version = 1;
+  string staged_version = 2;
+  // failed_version is a release that didn't reach MarkGood and was rolled
+  // back by boot counting.
+  string failed_version = 3;
+}
+
+// Power reboots or powers off the box.
+service PowerService {
+  rpc Reboot(RebootRequest) returns (RebootResponse);
+  rpc PowerOff(PowerOffRequest) returns (PowerOffResponse);
+}
+
+message RebootRequest {}
+
+message RebootResponse {}
+
+message PowerOffRequest {}
+
+message PowerOffResponse {}
+
+// Services starts and stops the table's on-demand services.
+service ServicesService {
+  rpc Start(StartRequest) returns (StartResponse);
+  rpc Stop(StopRequest) returns (StopResponse);
+  rpc Status(StatusRequest) returns (StatusResponse);
+}
+
+message StartRequest {
+  string name = 1;
+}
+
+message StartResponse {}
+
+message StopRequest {
+  string name = 1;
+}
+
+message StopResponse {}
+
+message StatusRequest {
+  string name = 1;
+}
+
+message StatusResponse {
+  bool running = 1;
+  bool ready = 2;
+  int32 restarts = 3;
+  string last_error = 4;
+}
