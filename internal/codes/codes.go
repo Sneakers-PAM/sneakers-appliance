@@ -53,6 +53,8 @@ const (
 	KeyCustodyInvalid        = 2302
 	KeyCustodyNotInitialized = 2303
 	KeyCustodyLocked         = 2304
+	KeyCustodyNotFound       = 2305
+	KeyCustodyRecipients     = 2306
 )
 
 // Entries describes every code, for the registry and the docs.
@@ -82,6 +84,8 @@ var Entries = []apperr.Entry{
 	{Code: KeyCustodyInvalid, Symbol: "KEYCUSTODY_INVALID", Title: "keycustody", Cause: "an unknown mode or choice, a second Initialize, or a disk too small for first boot"},
 	{Code: KeyCustodyNotInitialized, Symbol: "KEYCUSTODY_NOT_INITIALIZED", Title: "keycustody", Cause: "the state volume has no custody header yet"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
+	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},
+	{Code: KeyCustodyRecipients, Symbol: "KEYCUSTODY_RECIPIENTS", Title: "keycustody", Cause: "the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys"},
 }
 
 // Registry is the code table.
