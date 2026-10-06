@@ -38,14 +38,14 @@ func TestDescribe(t *testing.T) {
 }
 
 func TestEveryCodeIsDocumented(t *testing.T) {
-	doc, err := os.ReadFile("../../docs/kit.md")
+	doc, err := os.ReadFile("../../docs/errors.md")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, e := range codes.Entries {
 		row := fmt.Sprintf("| %d | `%s` |", e.Code, e.Symbol)
 		if !strings.Contains(string(doc), row) {
-			t.Errorf("docs/kit.md has no row for %s", row)
+			t.Errorf("docs/errors.md has no row for %s", row)
 		}
 	}
 }

@@ -4,7 +4,7 @@
 // Package codes holds the appliance's error codes. A code rides the error
 // chain (go-apperr); the symbol is the stable name the docs and the console
 // use. 1xxx: the build kit and the verification chain it shares with
-// Image.Stage.
+// Image.Stage. 2xxx: boot (switchroot and init).
 package codes
 
 import (
@@ -31,6 +31,11 @@ const (
 	KitSourceUnreadable = 1013
 )
 
+// The boot codes.
+const (
+	RootNotFound = 2001
+)
+
 // Entries describes every code, for the registry and the docs.
 var Entries = []apperr.Entry{
 	{Code: KitPinMissing, Symbol: "KIT_PIN_MISSING", Title: "kit", Cause: "this kit was built without one of its pins, or with a channel other than production or lab"},
@@ -46,6 +51,7 @@ var Entries = []apperr.Entry{
 	{Code: KitToolMissing, Symbol: "KIT_TOOL_MISSING", Title: "kit", Cause: "a tool the format needs isn't available"},
 	{Code: KitManifestInvalid, Symbol: "KIT_MANIFEST_INVALID", Title: "verify", Cause: "appliance.yaml doesn't parse or breaks a structural rule"},
 	{Code: KitSourceUnreadable, Symbol: "KIT_SOURCE_UNREADABLE", Title: "verify", Cause: "the artifact can't be resolved or read"},
+	{Code: RootNotFound, Symbol: "ROOT_NOT_FOUND", Title: "boot", Cause: "no root slot matches the signed root hash, and no install medium holds the root image"},
 }
 
 // Registry is the code table.
