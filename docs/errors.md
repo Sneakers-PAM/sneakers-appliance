@@ -24,3 +24,6 @@ shares with `Image.Stage`; 2xxx are boot.
 | 2102 | `SERVICE_UNKNOWN` | the service table has no service of that name |
 | 2103 | `SERVICE_NOT_ON_DEMAND` | only on-demand services are started and stopped through the Services API |
 | 2104 | `SERVICE_PRE_START` | the service's pre-start hook failed, so it wasn't started |
+| 2201 | `SB_NO_EFIVARFS` | efivarfs isn't mounted or can't be read, so the Secure Boot state is unknown |
+| 2202 | `SB_NOT_SETUP_MODE` | the firmware isn't in Setup Mode, so the org keys can't be enrolled; nothing was written |
+| 2203 | `SB_ENROL_FAILED` | writing a Secure Boot key variable failed or didn't read back |
