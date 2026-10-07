@@ -1,15 +1,12 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 // Package switchroot is the initrd shim the UKI starts: it finds the root
 // the signed command line names, opens it with dm-verity, mounts it
 // read-only and switch_roots into /sbin/init.
 //
-// Ported from CryptOS-PKI's internal/switchroot (Apache-2.0). There the root
-// rides inside the initrd; here it's a verity-protected partition, or on the
-// install medium a root image file opened through a loop device the same
-// way.
+// The root is a verity-protected partition, or on the install medium a root
+// image file opened through a loop device the same way.
 package switchroot
 
 import (

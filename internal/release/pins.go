@@ -6,9 +6,8 @@
 //
 // The pins are link-time variables, not configuration: whoever could edit
 // a config file could then authorise their own image, so the anchor for what
-// the kit and the box accept is fixed by whoever built them. The pattern
-// follows CryptOS-PKI's internal/release; here every pin is mandatory, and a
-// build missing any of them refuses to start.
+// the kit and the box accept is fixed by whoever built them. Every pin is
+// mandatory, and a build missing any of them refuses to start.
 //
 //	go build -ldflags "\
 //	  -X github.com/Sneakers-PAM/sneakers-appliance/internal/release.Channel=lab \

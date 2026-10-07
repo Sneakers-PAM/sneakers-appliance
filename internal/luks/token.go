@@ -1,6 +1,5 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 package luks
 
@@ -16,7 +15,7 @@ import (
 	"strconv"
 )
 
-// TPM2TokenType is the LUKS2 token type string for the CryptOS-native
+// TPM2TokenType is the LUKS2 token type string for the appliance's own
 // TPM-sealed-key token. The appliance writes and reads this token with its own
 // TPM unseal path (internal/tpm) and never invokes systemd-cryptsetup, so
 // it deliberately does NOT claim the systemd-tpm2 type — see the design

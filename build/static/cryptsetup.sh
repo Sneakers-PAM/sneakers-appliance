@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
-# Copyright The CryptOS Authors.
 #
 # Build a fully static cryptsetup from pinned source inside a pinned Alpine
 # (musl) container. A musl-static binary is self-contained — no shared libs,

@@ -1,6 +1,5 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 // Package luks opens and (on first boot) formats the encrypted state
 // partition. The LUKS2 master key is sealed to TPM PCRs {7, 11} using

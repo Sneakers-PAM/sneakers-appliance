@@ -3,8 +3,8 @@
 
 // Package harness boots appliance disk images in QEMU (q35, OVMF with
 // Secure Boot, swtpm) for the image suite, and reads their serial console.
-// It shapes CryptOS-PKI's test/image/run.sh as Go: a missing tool skips with
-// its name (failing instead when SNEAKERS_REQUIRE_TOOLS is set, as CI does).
+// A missing tool skips with its name (failing instead when
+// SNEAKERS_REQUIRE_TOOLS is set, as CI does).
 package harness
 
 import (
