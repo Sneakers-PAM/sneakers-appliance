@@ -30,7 +30,7 @@ hashoffset="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["h
 [[ "$hashoffset" =~ ^[0-9]+$ ]] || { echo "uki: bad hashOffset in $VERITY_JSON" >&2; exit 1; }
 
 # The command line of spec 1 Section 3.3. Only the signed UKI carries it.
-cmdline="sneakers.roothash=$roothash sneakers.hashoffset=$hashoffset sneakers.version=$VERSION quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity dummy.numdummies=0"
+cmdline="sneakers.roothash=$roothash sneakers.hashoffset=$hashoffset sneakers.version=$VERSION quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity"
 
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH

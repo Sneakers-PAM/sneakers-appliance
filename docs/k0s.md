@@ -20,9 +20,6 @@ renders the config and deploys the real platform; the hello stack goes then.
 | containerd config | `/etc/k0s/containerd.toml` (`os/k0s/containerd.toml`) | what k0s would write, with the sandbox (pause) image pinned by digest. It isn't marked `k0s_managed`, so k0s uses it as it is instead of writing into the read-only `/etc`. Drop-ins: `/etc/k0s/containerd.d/` (empty). |
 | Host paths in the root | the root | `/etc/cni -> /var/lib/cni-conf` and `/opt -> /var/lib/opt` (kube-router installs the CNI config and plugins there), `/var/run -> /run` (containerd's NRI socket), `/var/log -> /var/lib/log` (pod logs), `/etc/machine-id -> /var/lib/sneakers/machine-id`, `/etc/hosts` (localhost), `/bin/mount` and `/bin/umount` (busybox; the kubelet mounts tmpfs volumes with them), `/lib/modules` (empty: the kernel has no loadable modules), `/usr/libexec/k0s/kubelet-plugins/volume/exec` (empty) |
 
-The kernel command line carries `dummy.numdummies=0`, so the built-in dummy driver makes no
-`dummy0` that netd would take for the first NIC.
-
 k0s runs etcd, the API server and the scheduler as root here: the box has no `etcd`,
 `kube-apiserver` or `kube-scheduler` accounts, and k0s falls back to root when it can't find them.
 
