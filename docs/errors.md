@@ -7,7 +7,7 @@ shares with `Image.Stage`; 2xxx are boot.
 ## First boot and access (3xxx)
 
 30xx are the access store, 31xx SSH enrolment, 32xx the :8443 sign-in, 33xx elevation, 34xx the
-network and 35xx the setup steps. The shell, the console and :8443 show the same sentence.
+network, 35xx the setup steps and 36xx the closed shell. The shell, the console and :8443 show the same sentence.
 
 | Code | Symbol | Meaning |
 |---|---|---|
@@ -39,6 +39,9 @@ network and 35xx the setup steps. The shell, the console and :8443 show the same
 | 3406 | `NET_NTP` | no NTP server gave a usable time |
 | 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
 | 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
+| 3601 | `SHELL_PARSE` | the command line doesn't parse: an open quote, a control character, or longer than 64 KiB |
+| 3602 | `SHELL_UNKNOWN` | there is no such command; `help` lists them |
+| 3603 | `NOT_AVAILABLE` | not available in this release, or its service isn't running |
 
 ## Build kit and boot (1xxx and 2xxx)
 
