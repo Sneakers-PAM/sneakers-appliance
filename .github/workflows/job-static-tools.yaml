@@ -42,6 +42,17 @@ jobs:
         run: bash build/openssh/build.sh out/static
       - name: Check the outputs
         run: bash build/openssh/test.sh out/static
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check the rendered sshd_config with sshd -t
+        # sshd -t needs its privilege separation user and directory, as on
+        # the box.
+        run: |
+          id sshd >/dev/null 2>&1 || sudo useradd --system --no-create-home --shell /usr/sbin/nologin sshd
+          sudo mkdir -p /run/sneakers/sshd-empty
+          SNEAKERS_TEST_SSHD="$PWD/out/static/sshd" SNEAKERS_REQUIRE_SSHD=1 go test -count=1 -run 'Sshd|Check' ./internal/sshconfig/
       - name: Report the digests
         run: |
           {
