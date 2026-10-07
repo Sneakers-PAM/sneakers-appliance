@@ -53,10 +53,8 @@ func TestChainRefusals(t *testing.T) {
 		{"unsigned uki", fixtures.UnsignedUKI, codes.KitAuthenticode},
 		{"one root byte", fixtures.FlipRootByte, codes.KitVerityMismatch},
 		{"cmdline names another root", fixtures.CmdlineOtherRootHash, codes.KitVerityMismatch},
-		{"extra image", fixtures.Mutation{Root: fixtures.AddUnlistedImage}, codes.KitBundleMismatch},
-		{"missing image", fixtures.Mutation{Root: fixtures.RemoveListedImage}, codes.KitBundleMismatch},
-		{"unsigned image", fixtures.Mutation{Root: fixtures.DropImageSignature}, codes.KitImageUnsigned},
-		{"wrong k0s", fixtures.Mutation{Root: fixtures.SwapK0sBinary}, codes.KitBundleMismatch},
+		{"k0s in the base root", fixtures.Mutation{Root: fixtures.AddK0sToRoot}, codes.KitBundleMismatch},
+		{"an image in the base root", fixtures.Mutation{Root: fixtures.AddImageToRoot}, codes.KitBundleMismatch},
 		{"extra certificate in db.esl", fixtures.AppendCertToDBESL, codes.KitWrongSigner},
 		{"db.auth signed by PK", fixtures.DBAuthSignedByPK, codes.KitWrongSigner},
 	}
@@ -94,7 +92,7 @@ func TestChainArm64Refusals(t *testing.T) {
 		{"boot file not listed", fixtures.Arm64ExtraBootFile, codes.KitDigestMismatch},
 		{"cmdline.txt names another root", fixtures.Arm64CmdlineOtherRootHash, codes.KitVerityMismatch},
 		{"one root byte", fixtures.FlipRootByte, codes.KitVerityMismatch},
-		{"wrong k0s", fixtures.Mutation{Root: fixtures.SwapK0sBinary}, codes.KitBundleMismatch},
+		{"k0s in the base root", fixtures.Mutation{Root: fixtures.AddK0sToRoot}, codes.KitBundleMismatch},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

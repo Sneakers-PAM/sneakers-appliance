@@ -221,7 +221,7 @@ func TestFixtureSquashFSReadsWithUnsquashfs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unsquashfs: %v\n%s", err, b)
 	}
-	if !strings.Contains(string(b), "usr/bin/k0s") {
+	if !strings.Contains(string(b), "usr/share/sneakers/release/release.yaml") {
 		t.Fatalf("listing:\n%s", b)
 	}
 }
