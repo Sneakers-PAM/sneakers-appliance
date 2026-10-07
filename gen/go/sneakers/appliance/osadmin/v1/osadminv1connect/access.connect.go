@@ -53,6 +53,9 @@ const (
 	AccessServiceAddKeyProcedure = "/sneakers.appliance.osadmin.v1.AccessService/AddKey"
 	// AccessServiceRemoveKeyProcedure is the fully-qualified name of the AccessService's RemoveKey RPC.
 	AccessServiceRemoveKeyProcedure = "/sneakers.appliance.osadmin.v1.AccessService/RemoveKey"
+	// AccessServiceUnrevokeKeyProcedure is the fully-qualified name of the AccessService's UnrevokeKey
+	// RPC.
+	AccessServiceUnrevokeKeyProcedure = "/sneakers.appliance.osadmin.v1.AccessService/UnrevokeKey"
 	// AccessServiceSetElevationPolicyProcedure is the fully-qualified name of the AccessService's
 	// SetElevationPolicy RPC.
 	AccessServiceSetElevationPolicyProcedure = "/sneakers.appliance.osadmin.v1.AccessService/SetElevationPolicy"
@@ -72,6 +75,9 @@ type AccessServiceClient interface {
 	// RemoveKey ends every session the key signed in; an admin only their
 	// own keys.
 	RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error)
+	// UnrevokeKey takes a removed login key off sshd's revocation list, so it
+	// can be added to an admin again.
+	UnrevokeKey(context.Context, *connect.Request[v1.UnrevokeKeyRequest]) (*connect.Response[v1.UnrevokeKeyResponse], error)
 	SetElevationPolicy(context.Context, *connect.Request[v1.SetElevationPolicyRequest]) (*connect.Response[v1.SetElevationPolicyResponse], error)
 	// SetQuorum sets the factory-reset roster (N members) and how many of
 	// them must approve (M).
@@ -126,6 +132,12 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("RemoveKey")),
 			connect.WithClientOptions(opts...),
 		),
+		unrevokeKey: connect.NewClient[v1.UnrevokeKeyRequest, v1.UnrevokeKeyResponse](
+			httpClient,
+			baseURL+AccessServiceUnrevokeKeyProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("UnrevokeKey")),
+			connect.WithClientOptions(opts...),
+		),
 		setElevationPolicy: connect.NewClient[v1.SetElevationPolicyRequest, v1.SetElevationPolicyResponse](
 			httpClient,
 			baseURL+AccessServiceSetElevationPolicyProcedure,
@@ -149,6 +161,7 @@ type accessServiceClient struct {
 	setRole            *connect.Client[v1.SetRoleRequest, v1.SetRoleResponse]
 	addKey             *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
 	removeKey          *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
+	unrevokeKey        *connect.Client[v1.UnrevokeKeyRequest, v1.UnrevokeKeyResponse]
 	setElevationPolicy *connect.Client[v1.SetElevationPolicyRequest, v1.SetElevationPolicyResponse]
 	setQuorum          *connect.Client[v1.SetQuorumRequest, v1.SetQuorumResponse]
 }
@@ -183,6 +196,11 @@ func (c *accessServiceClient) RemoveKey(ctx context.Context, req *connect.Reques
 	return c.removeKey.CallUnary(ctx, req)
 }
 
+// UnrevokeKey calls sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey.
+func (c *accessServiceClient) UnrevokeKey(ctx context.Context, req *connect.Request[v1.UnrevokeKeyRequest]) (*connect.Response[v1.UnrevokeKeyResponse], error) {
+	return c.unrevokeKey.CallUnary(ctx, req)
+}
+
 // SetElevationPolicy calls sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy.
 func (c *accessServiceClient) SetElevationPolicy(ctx context.Context, req *connect.Request[v1.SetElevationPolicyRequest]) (*connect.Response[v1.SetElevationPolicyResponse], error) {
 	return c.setElevationPolicy.CallUnary(ctx, req)
@@ -206,6 +224,9 @@ type AccessServiceHandler interface {
 	// RemoveKey ends every session the key signed in; an admin only their
 	// own keys.
 	RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error)
+	// UnrevokeKey takes a removed login key off sshd's revocation list, so it
+	// can be added to an admin again.
+	UnrevokeKey(context.Context, *connect.Request[v1.UnrevokeKeyRequest]) (*connect.Response[v1.UnrevokeKeyResponse], error)
 	SetElevationPolicy(context.Context, *connect.Request[v1.SetElevationPolicyRequest]) (*connect.Response[v1.SetElevationPolicyResponse], error)
 	// SetQuorum sets the factory-reset roster (N members) and how many of
 	// them must approve (M).
@@ -256,6 +277,12 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("RemoveKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceUnrevokeKeyHandler := connect.NewUnaryHandler(
+		AccessServiceUnrevokeKeyProcedure,
+		svc.UnrevokeKey,
+		connect.WithSchema(accessServiceMethods.ByName("UnrevokeKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	accessServiceSetElevationPolicyHandler := connect.NewUnaryHandler(
 		AccessServiceSetElevationPolicyProcedure,
 		svc.SetElevationPolicy,
@@ -282,6 +309,8 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceAddKeyHandler.ServeHTTP(w, r)
 		case AccessServiceRemoveKeyProcedure:
 			accessServiceRemoveKeyHandler.ServeHTTP(w, r)
+		case AccessServiceUnrevokeKeyProcedure:
+			accessServiceUnrevokeKeyHandler.ServeHTTP(w, r)
 		case AccessServiceSetElevationPolicyProcedure:
 			accessServiceSetElevationPolicyHandler.ServeHTTP(w, r)
 		case AccessServiceSetQuorumProcedure:
@@ -317,6 +346,10 @@ func (UnimplementedAccessServiceHandler) AddKey(context.Context, *connect.Reques
 
 func (UnimplementedAccessServiceHandler) RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.AccessService.RemoveKey is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) UnrevokeKey(context.Context, *connect.Request[v1.UnrevokeKeyRequest]) (*connect.Response[v1.UnrevokeKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey is not implemented"))
 }
 
 func (UnimplementedAccessServiceHandler) SetElevationPolicy(context.Context, *connect.Request[v1.SetElevationPolicyRequest]) (*connect.Response[v1.SetElevationPolicyResponse], error) {

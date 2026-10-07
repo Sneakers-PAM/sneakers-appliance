@@ -32,6 +32,8 @@ type State struct {
 	// Quorum is the factory-reset roster; nil means every admin, two
 	// approvals.
 	Quorum *QuorumRoster `json:"quorum,omitempty"`
+	// RevokedKeys are removed login keys, on sshd's revocation list.
+	RevokedKeys []RevokedKey `json:"revokedKeys,omitempty"`
 }
 
 // Clone returns a deep copy of s.
@@ -54,6 +56,7 @@ func (s State) Clone() State {
 	}
 	c.RecoveryKeys = slices.Clone(s.RecoveryKeys)
 	c.Quorum = s.Quorum.clone()
+	c.RevokedKeys = slices.Clone(s.RevokedKeys)
 	return c
 }
 
@@ -113,6 +116,11 @@ type Options struct {
 	// OnChange, when set, gets every version Update writes, after the
 	// write and outside the store's lock.
 	OnChange func(State)
+	// Revoke, when set, writes sshd's revocation list from a version about
+	// to be written, inside the store's lock: an error refuses the change,
+	// so a removed key is never out of the store and still accepted. Open
+	// calls it with the stored version.
+	Revoke func(State) error
 }
 
 // Open opens (or starts) the store in dir.
@@ -135,6 +143,11 @@ func Open(dir string, o Options) (*Store, error) {
 	cur, err := s.load()
 	if err != nil {
 		return nil, err
+	}
+	if o.Revoke != nil {
+		if err := o.Revoke(cur.Clone()); err != nil {
+			return nil, fmt.Errorf("access store: revocation list: %w", err)
+		}
 	}
 	s.cur = cur
 	return s, nil
@@ -170,15 +183,31 @@ func (s *Store) update(fn func(*State) error) (State, error) {
 	if err := fn(&next); err != nil {
 		return State{}, err
 	}
+	revokeRemoved(cur, &next, time.Now())
 	adminDone, recoveryDone := s.o.Stage()
 	if err := Check(next, adminDone, recoveryDone); err != nil {
 		s.o.Logger.Warn("access: change refused", log.F("version", cur.Version), log.F("error", codes.Describe(err)))
 		return State{}, err
 	}
 	next.Version = cur.Version + 1
+	if s.o.Revoke != nil {
+		if err := s.o.Revoke(next.Clone()); err != nil {
+			s.o.Logger.Error(err, "access: revocation list not written; change refused", log.F("version", next.Version))
+			return State{}, fmt.Errorf("access store: revocation list: %w", err)
+		}
+	}
 	if err := s.write(next); err != nil {
 		s.o.Logger.Error(err, "access: store write failed", log.F("version", next.Version))
+		if s.o.Revoke != nil {
+			// Back to the list of the version still on disk.
+			if rerr := s.o.Revoke(cur.Clone()); rerr != nil {
+				s.o.Logger.Error(rerr, "access: revocation list not restored", log.F("version", cur.Version))
+			}
+		}
 		return State{}, err
+	}
+	if n := len(next.RevokedKeys) - len(cur.RevokedKeys); n > 0 {
+		s.o.Logger.Info("access: login keys revoked", log.F("version", next.Version), log.F("keys", n))
 	}
 	s.cur = next
 	s.o.Logger.Info("access: store updated", log.F("version", next.Version), log.F("admins", len(next.Admins)), log.F("recoveryKeys", len(next.RecoveryKeys)))

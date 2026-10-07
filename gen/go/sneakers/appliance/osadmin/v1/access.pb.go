@@ -214,6 +214,77 @@ func (x *Admin) GetApprovalHoldUntil() *timestamppb.Timestamp {
 	return nil
 }
 
+// RevokedKey is a removed login key, on sshd's revocation list until an
+// owner un-revokes it.
+type RevokedKey struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Fingerprint string                 `protobuf:"bytes,1,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Type        string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// admin is who the key belonged to.
+	Admin         string                 `protobuf:"bytes,3,opt,name=admin,proto3" json:"admin,omitempty"`
+	Revoked       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokedKey) Reset() {
+	*x = RevokedKey{}
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokedKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokedKey) ProtoMessage() {}
+
+func (x *RevokedKey) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokedKey.ProtoReflect.Descriptor instead.
+func (*RevokedKey) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RevokedKey) GetFingerprint() string {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return ""
+}
+
+func (x *RevokedKey) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *RevokedKey) GetAdmin() string {
+	if x != nil {
+		return x.Admin
+	}
+	return ""
+}
+
+func (x *RevokedKey) GetRevoked() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Revoked
+	}
+	return nil
+}
+
 type HostKey struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -224,7 +295,7 @@ type HostKey struct {
 
 func (x *HostKey) Reset() {
 	*x = HostKey{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -236,7 +307,7 @@ func (x *HostKey) String() string {
 func (*HostKey) ProtoMessage() {}
 
 func (x *HostKey) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -249,7 +320,7 @@ func (x *HostKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostKey.ProtoReflect.Descriptor instead.
 func (*HostKey) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{2}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *HostKey) GetType() string {
@@ -277,7 +348,7 @@ type ElevationPolicy struct {
 
 func (x *ElevationPolicy) Reset() {
 	*x = ElevationPolicy{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -289,7 +360,7 @@ func (x *ElevationPolicy) String() string {
 func (*ElevationPolicy) ProtoMessage() {}
 
 func (x *ElevationPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -302,7 +373,7 @@ func (x *ElevationPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ElevationPolicy.ProtoReflect.Descriptor instead.
 func (*ElevationPolicy) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{3}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ElevationPolicy) GetMaxMinutes() int32 {
@@ -342,7 +413,7 @@ type Quorum struct {
 
 func (x *Quorum) Reset() {
 	*x = Quorum{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -354,7 +425,7 @@ func (x *Quorum) String() string {
 func (*Quorum) ProtoMessage() {}
 
 func (x *Quorum) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -367,7 +438,7 @@ func (x *Quorum) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Quorum.ProtoReflect.Descriptor instead.
 func (*Quorum) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{4}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Quorum) GetMembers() []string {
@@ -399,7 +470,7 @@ type ListAdminsRequest struct {
 
 func (x *ListAdminsRequest) Reset() {
 	*x = ListAdminsRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -411,7 +482,7 @@ func (x *ListAdminsRequest) String() string {
 func (*ListAdminsRequest) ProtoMessage() {}
 
 func (x *ListAdminsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -424,7 +495,7 @@ func (x *ListAdminsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAdminsRequest.ProtoReflect.Descriptor instead.
 func (*ListAdminsRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{5}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{6}
 }
 
 type ListAdminsResponse struct {
@@ -433,13 +504,14 @@ type ListAdminsResponse struct {
 	HostKeys        []*HostKey             `protobuf:"bytes,2,rep,name=host_keys,json=hostKeys,proto3" json:"host_keys,omitempty"`
 	ElevationPolicy *ElevationPolicy       `protobuf:"bytes,3,opt,name=elevation_policy,json=elevationPolicy,proto3" json:"elevation_policy,omitempty"`
 	Quorum          *Quorum                `protobuf:"bytes,4,opt,name=quorum,proto3" json:"quorum,omitempty"`
+	RevokedKeys     []*RevokedKey          `protobuf:"bytes,5,rep,name=revoked_keys,json=revokedKeys,proto3" json:"revoked_keys,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListAdminsResponse) Reset() {
 	*x = ListAdminsResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +523,7 @@ func (x *ListAdminsResponse) String() string {
 func (*ListAdminsResponse) ProtoMessage() {}
 
 func (x *ListAdminsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +536,7 @@ func (x *ListAdminsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAdminsResponse.ProtoReflect.Descriptor instead.
 func (*ListAdminsResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{6}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListAdminsResponse) GetAdmins() []*Admin {
@@ -495,6 +567,13 @@ func (x *ListAdminsResponse) GetQuorum() *Quorum {
 	return nil
 }
 
+func (x *ListAdminsResponse) GetRevokedKeys() []*RevokedKey {
+	if x != nil {
+		return x.RevokedKeys
+	}
+	return nil
+}
+
 type AddAdminRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -507,7 +586,7 @@ type AddAdminRequest struct {
 
 func (x *AddAdminRequest) Reset() {
 	*x = AddAdminRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -519,7 +598,7 @@ func (x *AddAdminRequest) String() string {
 func (*AddAdminRequest) ProtoMessage() {}
 
 func (x *AddAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -532,7 +611,7 @@ func (x *AddAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAdminRequest.ProtoReflect.Descriptor instead.
 func (*AddAdminRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{7}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AddAdminRequest) GetName() string {
@@ -565,7 +644,7 @@ type AddAdminResponse struct {
 
 func (x *AddAdminResponse) Reset() {
 	*x = AddAdminResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -577,7 +656,7 @@ func (x *AddAdminResponse) String() string {
 func (*AddAdminResponse) ProtoMessage() {}
 
 func (x *AddAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -590,7 +669,7 @@ func (x *AddAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddAdminResponse.ProtoReflect.Descriptor instead.
 func (*AddAdminResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{8}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *AddAdminResponse) GetAdmin() *Admin {
@@ -609,7 +688,7 @@ type RemoveAdminRequest struct {
 
 func (x *RemoveAdminRequest) Reset() {
 	*x = RemoveAdminRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -621,7 +700,7 @@ func (x *RemoveAdminRequest) String() string {
 func (*RemoveAdminRequest) ProtoMessage() {}
 
 func (x *RemoveAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -634,7 +713,7 @@ func (x *RemoveAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAdminRequest.ProtoReflect.Descriptor instead.
 func (*RemoveAdminRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{9}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RemoveAdminRequest) GetName() string {
@@ -652,7 +731,7 @@ type RemoveAdminResponse struct {
 
 func (x *RemoveAdminResponse) Reset() {
 	*x = RemoveAdminResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -664,7 +743,7 @@ func (x *RemoveAdminResponse) String() string {
 func (*RemoveAdminResponse) ProtoMessage() {}
 
 func (x *RemoveAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -677,7 +756,7 @@ func (x *RemoveAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveAdminResponse.ProtoReflect.Descriptor instead.
 func (*RemoveAdminResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{10}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{11}
 }
 
 type SetRoleRequest struct {
@@ -690,7 +769,7 @@ type SetRoleRequest struct {
 
 func (x *SetRoleRequest) Reset() {
 	*x = SetRoleRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -702,7 +781,7 @@ func (x *SetRoleRequest) String() string {
 func (*SetRoleRequest) ProtoMessage() {}
 
 func (x *SetRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -715,7 +794,7 @@ func (x *SetRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoleRequest.ProtoReflect.Descriptor instead.
 func (*SetRoleRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{11}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SetRoleRequest) GetName() string {
@@ -740,7 +819,7 @@ type SetRoleResponse struct {
 
 func (x *SetRoleResponse) Reset() {
 	*x = SetRoleResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -752,7 +831,7 @@ func (x *SetRoleResponse) String() string {
 func (*SetRoleResponse) ProtoMessage() {}
 
 func (x *SetRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -765,7 +844,7 @@ func (x *SetRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRoleResponse.ProtoReflect.Descriptor instead.
 func (*SetRoleResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{12}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{13}
 }
 
 type AddKeyRequest struct {
@@ -778,7 +857,7 @@ type AddKeyRequest struct {
 
 func (x *AddKeyRequest) Reset() {
 	*x = AddKeyRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -790,7 +869,7 @@ func (x *AddKeyRequest) String() string {
 func (*AddKeyRequest) ProtoMessage() {}
 
 func (x *AddKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -803,7 +882,7 @@ func (x *AddKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddKeyRequest.ProtoReflect.Descriptor instead.
 func (*AddKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{13}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AddKeyRequest) GetAdmin() string {
@@ -829,7 +908,7 @@ type AddKeyResponse struct {
 
 func (x *AddKeyResponse) Reset() {
 	*x = AddKeyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -841,7 +920,7 @@ func (x *AddKeyResponse) String() string {
 func (*AddKeyResponse) ProtoMessage() {}
 
 func (x *AddKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -854,7 +933,7 @@ func (x *AddKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddKeyResponse.ProtoReflect.Descriptor instead.
 func (*AddKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{14}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *AddKeyResponse) GetKey() *Key {
@@ -874,7 +953,7 @@ type RemoveKeyRequest struct {
 
 func (x *RemoveKeyRequest) Reset() {
 	*x = RemoveKeyRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -886,7 +965,7 @@ func (x *RemoveKeyRequest) String() string {
 func (*RemoveKeyRequest) ProtoMessage() {}
 
 func (x *RemoveKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +978,7 @@ func (x *RemoveKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveKeyRequest.ProtoReflect.Descriptor instead.
 func (*RemoveKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{15}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RemoveKeyRequest) GetAdmin() string {
@@ -924,7 +1003,7 @@ type RemoveKeyResponse struct {
 
 func (x *RemoveKeyResponse) Reset() {
 	*x = RemoveKeyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -936,7 +1015,7 @@ func (x *RemoveKeyResponse) String() string {
 func (*RemoveKeyResponse) ProtoMessage() {}
 
 func (x *RemoveKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -949,7 +1028,87 @@ func (x *RemoveKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveKeyResponse.ProtoReflect.Descriptor instead.
 func (*RemoveKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{16}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{17}
+}
+
+type UnrevokeKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fingerprint   string                 `protobuf:"bytes,1,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnrevokeKeyRequest) Reset() {
+	*x = UnrevokeKeyRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnrevokeKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnrevokeKeyRequest) ProtoMessage() {}
+
+func (x *UnrevokeKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnrevokeKeyRequest.ProtoReflect.Descriptor instead.
+func (*UnrevokeKeyRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *UnrevokeKeyRequest) GetFingerprint() string {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return ""
+}
+
+type UnrevokeKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnrevokeKeyResponse) Reset() {
+	*x = UnrevokeKeyResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnrevokeKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnrevokeKeyResponse) ProtoMessage() {}
+
+func (x *UnrevokeKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnrevokeKeyResponse.ProtoReflect.Descriptor instead.
+func (*UnrevokeKeyResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{19}
 }
 
 type SetElevationPolicyRequest struct {
@@ -961,7 +1120,7 @@ type SetElevationPolicyRequest struct {
 
 func (x *SetElevationPolicyRequest) Reset() {
 	*x = SetElevationPolicyRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -973,7 +1132,7 @@ func (x *SetElevationPolicyRequest) String() string {
 func (*SetElevationPolicyRequest) ProtoMessage() {}
 
 func (x *SetElevationPolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -986,7 +1145,7 @@ func (x *SetElevationPolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetElevationPolicyRequest.ProtoReflect.Descriptor instead.
 func (*SetElevationPolicyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{17}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetElevationPolicyRequest) GetPolicy() *ElevationPolicy {
@@ -1004,7 +1163,7 @@ type SetElevationPolicyResponse struct {
 
 func (x *SetElevationPolicyResponse) Reset() {
 	*x = SetElevationPolicyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1016,7 +1175,7 @@ func (x *SetElevationPolicyResponse) String() string {
 func (*SetElevationPolicyResponse) ProtoMessage() {}
 
 func (x *SetElevationPolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1029,7 +1188,7 @@ func (x *SetElevationPolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetElevationPolicyResponse.ProtoReflect.Descriptor instead.
 func (*SetElevationPolicyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{18}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{21}
 }
 
 type SetQuorumRequest struct {
@@ -1042,7 +1201,7 @@ type SetQuorumRequest struct {
 
 func (x *SetQuorumRequest) Reset() {
 	*x = SetQuorumRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1054,7 +1213,7 @@ func (x *SetQuorumRequest) String() string {
 func (*SetQuorumRequest) ProtoMessage() {}
 
 func (x *SetQuorumRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1067,7 +1226,7 @@ func (x *SetQuorumRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetQuorumRequest.ProtoReflect.Descriptor instead.
 func (*SetQuorumRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{19}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SetQuorumRequest) GetMembers() []string {
@@ -1092,7 +1251,7 @@ type SetQuorumResponse struct {
 
 func (x *SetQuorumResponse) Reset() {
 	*x = SetQuorumResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1104,7 +1263,7 @@ func (x *SetQuorumResponse) String() string {
 func (*SetQuorumResponse) ProtoMessage() {}
 
 func (x *SetQuorumResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_access_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1117,7 +1276,7 @@ func (x *SetQuorumResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetQuorumResponse.ProtoReflect.Descriptor instead.
 func (*SetQuorumResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{20}
+	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP(), []int{23}
 }
 
 var File_sneakers_appliance_osadmin_v1_access_proto protoreflect.FileDescriptor
@@ -1141,7 +1300,13 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x126\n" +
 	"\x04keys\x18\x06 \x03(\v2\".sneakers.appliance.osadmin.v1.KeyR\x04keys\x12J\n" +
-	"\x13approval_hold_until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11approvalHoldUntil\"?\n" +
+	"\x13approval_hold_until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11approvalHoldUntil\"\x8e\x01\n" +
+	"\n" +
+	"RevokedKey\x12 \n" +
+	"\vfingerprint\x18\x01 \x01(\tR\vfingerprint\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
+	"\x05admin\x18\x03 \x01(\tR\x05admin\x124\n" +
+	"\arevoked\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\arevoked\"?\n" +
 	"\aHostKey\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12 \n" +
 	"\vfingerprint\x18\x02 \x01(\tR\vfingerprint\"\xa1\x01\n" +
@@ -1156,12 +1321,13 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\n" +
 	"configured\x18\x03 \x01(\bR\n" +
 	"configured\"\x13\n" +
-	"\x11ListAdminsRequest\"\xb1\x02\n" +
+	"\x11ListAdminsRequest\"\xff\x02\n" +
 	"\x12ListAdminsResponse\x12<\n" +
 	"\x06admins\x18\x01 \x03(\v2$.sneakers.appliance.osadmin.v1.AdminR\x06admins\x12C\n" +
 	"\thost_keys\x18\x02 \x03(\v2&.sneakers.appliance.osadmin.v1.HostKeyR\bhostKeys\x12Y\n" +
 	"\x10elevation_policy\x18\x03 \x01(\v2..sneakers.appliance.osadmin.v1.ElevationPolicyR\x0felevationPolicy\x12=\n" +
-	"\x06quorum\x18\x04 \x01(\v2%.sneakers.appliance.osadmin.v1.QuorumR\x06quorum\"}\n" +
+	"\x06quorum\x18\x04 \x01(\v2%.sneakers.appliance.osadmin.v1.QuorumR\x06quorum\x12L\n" +
+	"\frevoked_keys\x18\x05 \x03(\v2).sneakers.appliance.osadmin.v1.RevokedKeyR\vrevokedKeys\"}\n" +
 	"\x0fAddAdminRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
 	"\x04role\x18\x02 \x01(\x0e2#.sneakers.appliance.osadmin.v1.RoleR\x04role\x12\x1d\n" +
@@ -1185,14 +1351,18 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x10RemoveKeyRequest\x12\x14\n" +
 	"\x05admin\x18\x01 \x01(\tR\x05admin\x12 \n" +
 	"\vfingerprint\x18\x02 \x01(\tR\vfingerprint\"\x13\n" +
-	"\x11RemoveKeyResponse\"c\n" +
+	"\x11RemoveKeyResponse\"6\n" +
+	"\x12UnrevokeKeyRequest\x12 \n" +
+	"\vfingerprint\x18\x01 \x01(\tR\vfingerprint\"\x15\n" +
+	"\x13UnrevokeKeyResponse\"c\n" +
 	"\x19SetElevationPolicyRequest\x12F\n" +
 	"\x06policy\x18\x01 \x01(\v2..sneakers.appliance.osadmin.v1.ElevationPolicyR\x06policy\"\x1c\n" +
 	"\x1aSetElevationPolicyResponse\"H\n" +
 	"\x10SetQuorumRequest\x12\x18\n" +
 	"\amembers\x18\x01 \x03(\tR\amembers\x12\x1a\n" +
 	"\brequired\x18\x02 \x01(\x05R\brequired\"\x13\n" +
-	"\x11SetQuorumResponse2\x85\t\n" +
+	"\x11SetQuorumResponse2\x9b\n" +
+	"\n" +
 	"\rAccessService\x12|\n" +
 	"\n" +
 	"ListAdmins\x120.sneakers.appliance.osadmin.v1.ListAdminsRequest\x1a1.sneakers.appliance.osadmin.v1.ListAdminsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x87\x01\n" +
@@ -1200,7 +1370,8 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\vRemoveAdmin\x121.sneakers.appliance.osadmin.v1.RemoveAdminRequest\x1a2.sneakers.appliance.osadmin.v1.RemoveAdminResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13access.admin.remove\x12\x85\x01\n" +
 	"\aSetRole\x12-.sneakers.appliance.osadmin.v1.SetRoleRequest\x1a..sneakers.appliance.osadmin.v1.SetRoleResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11access.admin.role\x12\x7f\n" +
 	"\x06AddKey\x12,.sneakers.appliance.osadmin.v1.AddKeyRequest\x1a-.sneakers.appliance.osadmin.v1.AddKeyResponse\"\x18\xc2\xf3\x18\x14\x10\x01\x18\x01\"\x0eaccess.key.add\x12\x8b\x01\n" +
-	"\tRemoveKey\x12/.sneakers.appliance.osadmin.v1.RemoveKeyRequest\x1a0.sneakers.appliance.osadmin.v1.RemoveKeyResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11access.key.remove\x12\xb0\x01\n" +
+	"\tRemoveKey\x12/.sneakers.appliance.osadmin.v1.RemoveKeyRequest\x1a0.sneakers.appliance.osadmin.v1.RemoveKeyResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11access.key.remove\x12\x93\x01\n" +
+	"\vUnrevokeKey\x121.sneakers.appliance.osadmin.v1.UnrevokeKeyRequest\x1a2.sneakers.appliance.osadmin.v1.UnrevokeKeyResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13access.key.unrevoke\x12\xb0\x01\n" +
 	"\x12SetElevationPolicy\x128.sneakers.appliance.osadmin.v1.SetElevationPolicyRequest\x1a9.sneakers.appliance.osadmin.v1.SetElevationPolicyResponse\"%\xc2\xf3\x18!\x10\x02\x18\x01\"\x1baccess.elevation-policy.set\x12\x8b\x01\n" +
 	"\tSetQuorum\x12/.sneakers.appliance.osadmin.v1.SetQuorumRequest\x1a0.sneakers.appliance.osadmin.v1.SetQuorumResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11access.quorum.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
@@ -1216,69 +1387,76 @@ func file_sneakers_appliance_osadmin_v1_access_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_access_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_sneakers_appliance_osadmin_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_sneakers_appliance_osadmin_v1_access_proto_goTypes = []any{
 	(*Key)(nil),                        // 0: sneakers.appliance.osadmin.v1.Key
 	(*Admin)(nil),                      // 1: sneakers.appliance.osadmin.v1.Admin
-	(*HostKey)(nil),                    // 2: sneakers.appliance.osadmin.v1.HostKey
-	(*ElevationPolicy)(nil),            // 3: sneakers.appliance.osadmin.v1.ElevationPolicy
-	(*Quorum)(nil),                     // 4: sneakers.appliance.osadmin.v1.Quorum
-	(*ListAdminsRequest)(nil),          // 5: sneakers.appliance.osadmin.v1.ListAdminsRequest
-	(*ListAdminsResponse)(nil),         // 6: sneakers.appliance.osadmin.v1.ListAdminsResponse
-	(*AddAdminRequest)(nil),            // 7: sneakers.appliance.osadmin.v1.AddAdminRequest
-	(*AddAdminResponse)(nil),           // 8: sneakers.appliance.osadmin.v1.AddAdminResponse
-	(*RemoveAdminRequest)(nil),         // 9: sneakers.appliance.osadmin.v1.RemoveAdminRequest
-	(*RemoveAdminResponse)(nil),        // 10: sneakers.appliance.osadmin.v1.RemoveAdminResponse
-	(*SetRoleRequest)(nil),             // 11: sneakers.appliance.osadmin.v1.SetRoleRequest
-	(*SetRoleResponse)(nil),            // 12: sneakers.appliance.osadmin.v1.SetRoleResponse
-	(*AddKeyRequest)(nil),              // 13: sneakers.appliance.osadmin.v1.AddKeyRequest
-	(*AddKeyResponse)(nil),             // 14: sneakers.appliance.osadmin.v1.AddKeyResponse
-	(*RemoveKeyRequest)(nil),           // 15: sneakers.appliance.osadmin.v1.RemoveKeyRequest
-	(*RemoveKeyResponse)(nil),          // 16: sneakers.appliance.osadmin.v1.RemoveKeyResponse
-	(*SetElevationPolicyRequest)(nil),  // 17: sneakers.appliance.osadmin.v1.SetElevationPolicyRequest
-	(*SetElevationPolicyResponse)(nil), // 18: sneakers.appliance.osadmin.v1.SetElevationPolicyResponse
-	(*SetQuorumRequest)(nil),           // 19: sneakers.appliance.osadmin.v1.SetQuorumRequest
-	(*SetQuorumResponse)(nil),          // 20: sneakers.appliance.osadmin.v1.SetQuorumResponse
-	(*timestamppb.Timestamp)(nil),      // 21: google.protobuf.Timestamp
-	(Role)(0),                          // 22: sneakers.appliance.osadmin.v1.Role
+	(*RevokedKey)(nil),                 // 2: sneakers.appliance.osadmin.v1.RevokedKey
+	(*HostKey)(nil),                    // 3: sneakers.appliance.osadmin.v1.HostKey
+	(*ElevationPolicy)(nil),            // 4: sneakers.appliance.osadmin.v1.ElevationPolicy
+	(*Quorum)(nil),                     // 5: sneakers.appliance.osadmin.v1.Quorum
+	(*ListAdminsRequest)(nil),          // 6: sneakers.appliance.osadmin.v1.ListAdminsRequest
+	(*ListAdminsResponse)(nil),         // 7: sneakers.appliance.osadmin.v1.ListAdminsResponse
+	(*AddAdminRequest)(nil),            // 8: sneakers.appliance.osadmin.v1.AddAdminRequest
+	(*AddAdminResponse)(nil),           // 9: sneakers.appliance.osadmin.v1.AddAdminResponse
+	(*RemoveAdminRequest)(nil),         // 10: sneakers.appliance.osadmin.v1.RemoveAdminRequest
+	(*RemoveAdminResponse)(nil),        // 11: sneakers.appliance.osadmin.v1.RemoveAdminResponse
+	(*SetRoleRequest)(nil),             // 12: sneakers.appliance.osadmin.v1.SetRoleRequest
+	(*SetRoleResponse)(nil),            // 13: sneakers.appliance.osadmin.v1.SetRoleResponse
+	(*AddKeyRequest)(nil),              // 14: sneakers.appliance.osadmin.v1.AddKeyRequest
+	(*AddKeyResponse)(nil),             // 15: sneakers.appliance.osadmin.v1.AddKeyResponse
+	(*RemoveKeyRequest)(nil),           // 16: sneakers.appliance.osadmin.v1.RemoveKeyRequest
+	(*RemoveKeyResponse)(nil),          // 17: sneakers.appliance.osadmin.v1.RemoveKeyResponse
+	(*UnrevokeKeyRequest)(nil),         // 18: sneakers.appliance.osadmin.v1.UnrevokeKeyRequest
+	(*UnrevokeKeyResponse)(nil),        // 19: sneakers.appliance.osadmin.v1.UnrevokeKeyResponse
+	(*SetElevationPolicyRequest)(nil),  // 20: sneakers.appliance.osadmin.v1.SetElevationPolicyRequest
+	(*SetElevationPolicyResponse)(nil), // 21: sneakers.appliance.osadmin.v1.SetElevationPolicyResponse
+	(*SetQuorumRequest)(nil),           // 22: sneakers.appliance.osadmin.v1.SetQuorumRequest
+	(*SetQuorumResponse)(nil),          // 23: sneakers.appliance.osadmin.v1.SetQuorumResponse
+	(*timestamppb.Timestamp)(nil),      // 24: google.protobuf.Timestamp
+	(Role)(0),                          // 25: sneakers.appliance.osadmin.v1.Role
 }
 var file_sneakers_appliance_osadmin_v1_access_proto_depIdxs = []int32{
-	21, // 0: sneakers.appliance.osadmin.v1.Key.added:type_name -> google.protobuf.Timestamp
-	21, // 1: sneakers.appliance.osadmin.v1.Key.last_used:type_name -> google.protobuf.Timestamp
-	22, // 2: sneakers.appliance.osadmin.v1.Admin.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	21, // 3: sneakers.appliance.osadmin.v1.Admin.created:type_name -> google.protobuf.Timestamp
+	24, // 0: sneakers.appliance.osadmin.v1.Key.added:type_name -> google.protobuf.Timestamp
+	24, // 1: sneakers.appliance.osadmin.v1.Key.last_used:type_name -> google.protobuf.Timestamp
+	25, // 2: sneakers.appliance.osadmin.v1.Admin.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	24, // 3: sneakers.appliance.osadmin.v1.Admin.created:type_name -> google.protobuf.Timestamp
 	0,  // 4: sneakers.appliance.osadmin.v1.Admin.keys:type_name -> sneakers.appliance.osadmin.v1.Key
-	21, // 5: sneakers.appliance.osadmin.v1.Admin.approval_hold_until:type_name -> google.protobuf.Timestamp
-	1,  // 6: sneakers.appliance.osadmin.v1.ListAdminsResponse.admins:type_name -> sneakers.appliance.osadmin.v1.Admin
-	2,  // 7: sneakers.appliance.osadmin.v1.ListAdminsResponse.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
-	3,  // 8: sneakers.appliance.osadmin.v1.ListAdminsResponse.elevation_policy:type_name -> sneakers.appliance.osadmin.v1.ElevationPolicy
-	4,  // 9: sneakers.appliance.osadmin.v1.ListAdminsResponse.quorum:type_name -> sneakers.appliance.osadmin.v1.Quorum
-	22, // 10: sneakers.appliance.osadmin.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	1,  // 11: sneakers.appliance.osadmin.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
-	22, // 12: sneakers.appliance.osadmin.v1.SetRoleRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	0,  // 13: sneakers.appliance.osadmin.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
-	3,  // 14: sneakers.appliance.osadmin.v1.SetElevationPolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.ElevationPolicy
-	5,  // 15: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.osadmin.v1.ListAdminsRequest
-	7,  // 16: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.osadmin.v1.AddAdminRequest
-	9,  // 17: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:input_type -> sneakers.appliance.osadmin.v1.RemoveAdminRequest
-	11, // 18: sneakers.appliance.osadmin.v1.AccessService.SetRole:input_type -> sneakers.appliance.osadmin.v1.SetRoleRequest
-	13, // 19: sneakers.appliance.osadmin.v1.AccessService.AddKey:input_type -> sneakers.appliance.osadmin.v1.AddKeyRequest
-	15, // 20: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:input_type -> sneakers.appliance.osadmin.v1.RemoveKeyRequest
-	17, // 21: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:input_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyRequest
-	19, // 22: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:input_type -> sneakers.appliance.osadmin.v1.SetQuorumRequest
-	6,  // 23: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.osadmin.v1.ListAdminsResponse
-	8,  // 24: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.osadmin.v1.AddAdminResponse
-	10, // 25: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.osadmin.v1.RemoveAdminResponse
-	12, // 26: sneakers.appliance.osadmin.v1.AccessService.SetRole:output_type -> sneakers.appliance.osadmin.v1.SetRoleResponse
-	14, // 27: sneakers.appliance.osadmin.v1.AccessService.AddKey:output_type -> sneakers.appliance.osadmin.v1.AddKeyResponse
-	16, // 28: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.osadmin.v1.RemoveKeyResponse
-	18, // 29: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:output_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyResponse
-	20, // 30: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:output_type -> sneakers.appliance.osadmin.v1.SetQuorumResponse
-	23, // [23:31] is the sub-list for method output_type
-	15, // [15:23] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	24, // 5: sneakers.appliance.osadmin.v1.Admin.approval_hold_until:type_name -> google.protobuf.Timestamp
+	24, // 6: sneakers.appliance.osadmin.v1.RevokedKey.revoked:type_name -> google.protobuf.Timestamp
+	1,  // 7: sneakers.appliance.osadmin.v1.ListAdminsResponse.admins:type_name -> sneakers.appliance.osadmin.v1.Admin
+	3,  // 8: sneakers.appliance.osadmin.v1.ListAdminsResponse.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
+	4,  // 9: sneakers.appliance.osadmin.v1.ListAdminsResponse.elevation_policy:type_name -> sneakers.appliance.osadmin.v1.ElevationPolicy
+	5,  // 10: sneakers.appliance.osadmin.v1.ListAdminsResponse.quorum:type_name -> sneakers.appliance.osadmin.v1.Quorum
+	2,  // 11: sneakers.appliance.osadmin.v1.ListAdminsResponse.revoked_keys:type_name -> sneakers.appliance.osadmin.v1.RevokedKey
+	25, // 12: sneakers.appliance.osadmin.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	1,  // 13: sneakers.appliance.osadmin.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
+	25, // 14: sneakers.appliance.osadmin.v1.SetRoleRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	0,  // 15: sneakers.appliance.osadmin.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	4,  // 16: sneakers.appliance.osadmin.v1.SetElevationPolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.ElevationPolicy
+	6,  // 17: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.osadmin.v1.ListAdminsRequest
+	8,  // 18: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.osadmin.v1.AddAdminRequest
+	10, // 19: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:input_type -> sneakers.appliance.osadmin.v1.RemoveAdminRequest
+	12, // 20: sneakers.appliance.osadmin.v1.AccessService.SetRole:input_type -> sneakers.appliance.osadmin.v1.SetRoleRequest
+	14, // 21: sneakers.appliance.osadmin.v1.AccessService.AddKey:input_type -> sneakers.appliance.osadmin.v1.AddKeyRequest
+	16, // 22: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:input_type -> sneakers.appliance.osadmin.v1.RemoveKeyRequest
+	18, // 23: sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey:input_type -> sneakers.appliance.osadmin.v1.UnrevokeKeyRequest
+	20, // 24: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:input_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyRequest
+	22, // 25: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:input_type -> sneakers.appliance.osadmin.v1.SetQuorumRequest
+	7,  // 26: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.osadmin.v1.ListAdminsResponse
+	9,  // 27: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.osadmin.v1.AddAdminResponse
+	11, // 28: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.osadmin.v1.RemoveAdminResponse
+	13, // 29: sneakers.appliance.osadmin.v1.AccessService.SetRole:output_type -> sneakers.appliance.osadmin.v1.SetRoleResponse
+	15, // 30: sneakers.appliance.osadmin.v1.AccessService.AddKey:output_type -> sneakers.appliance.osadmin.v1.AddKeyResponse
+	17, // 31: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.osadmin.v1.RemoveKeyResponse
+	19, // 32: sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey:output_type -> sneakers.appliance.osadmin.v1.UnrevokeKeyResponse
+	21, // 33: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:output_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyResponse
+	23, // 34: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:output_type -> sneakers.appliance.osadmin.v1.SetQuorumResponse
+	26, // [26:35] is the sub-list for method output_type
+	17, // [17:26] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_access_proto_init() }
@@ -1293,7 +1471,7 @@ func file_sneakers_appliance_osadmin_v1_access_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_access_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_access_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

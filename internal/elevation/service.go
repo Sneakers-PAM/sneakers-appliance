@@ -134,7 +134,10 @@ type Options struct {
 	// OnChange is called after the open principals or the revocation list
 	// changed, outside the service's lock.
 	OnChange func()
-	Logger   log.Logger
+	// RevokedKeys are the login keys already revoked when the service
+	// opens (the access store's), so the first list written has them.
+	RevokedKeys []ssh.PublicKey
+	Logger      log.Logger
 }
 
 type file struct {
@@ -148,6 +151,8 @@ type Service struct {
 
 	mu  sync.Mutex
 	cur file
+	// revokedKeys are the removed login keys, also on the revocation list.
+	revokedKeys []ssh.PublicKey
 }
 
 // Open loads the requests and the user CA, making the CA, the serial
@@ -166,7 +171,7 @@ func Open(o Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{o: o, ca: ca}
+	s := &Service{o: o, ca: ca, revokedKeys: slices.Clone(o.RevokedKeys)}
 	b, err := os.ReadFile(o.StateFile)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -699,11 +704,32 @@ func (s *Service) save(next file) error {
 	return s.writeKRL()
 }
 
-// writeKRL writes the revocation list from the current requests. Caller
-// holds mu (or is Open).
+// RevokeLoginKeys writes the revocation list with st's revoked login keys:
+// the access store's Revoke, run inside its write.
+func (s *Service) RevokeLoginKeys(st access.State) error {
+	keys, err := st.RevokedPublicKeys()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.revokedKeys
+	s.revokedKeys = keys
+	if err := s.writeKRL(); err != nil {
+		s.revokedKeys = prev
+		return err
+	}
+	if len(keys) != len(prev) {
+		s.o.Logger.Info("elevation: revocation list written", log.F("loginKeys", len(keys)), log.F("serials", len(s.revoked())))
+	}
+	return nil
+}
+
+// writeKRL writes the revocation list from the current requests and the
+// revoked login keys. Caller holds mu (or is Open).
 func (s *Service) writeKRL() error {
 	revoked := s.revoked()
-	krl := MarshalKRL(s.ca.PublicKey(), revoked, uint64(len(revoked)), s.now())
+	krl := MarshalKRL(s.ca.PublicKey(), revoked, s.revokedKeys, uint64(len(revoked)+len(s.revokedKeys)), s.now())
 	if err := writeFile(filepath.Join(s.o.SSHDir, RevokedFile), krl, 0o644); err != nil {
 		return fmt.Errorf("elevation: revocation list: %w", err)
 	}

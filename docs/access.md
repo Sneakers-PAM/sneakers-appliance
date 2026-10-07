@@ -29,7 +29,10 @@ discarded when the store opens.
     { "fingerprint": "SHA256:...", "type": "ssh-ed25519", "publicKey": "ssh-ed25519 AAAA...",
       "label": "offline safe", "set": "...", "setBy": "alice" }
   ],
-  "elevationPolicy": { "maxMinutes": 240, "defaultMinutes": 60, "selfApprovalWhenSingleOwner": true }
+  "elevationPolicy": { "maxMinutes": 240, "defaultMinutes": 60, "selfApprovalWhenSingleOwner": true },
+  "revokedKeys": [
+    { "fingerprint": "SHA256:...", "publicKey": "ssh-ed25519 AAAA...", "admin": "bob", "revoked": "..." }
+  ]
 }
 ```
 
@@ -61,6 +64,24 @@ Checked on every write. A write that breaks one is refused with its code and not
 
 Writes are serialized, and each one runs on the state the previous one left, so two sessions
 removing the last two keys at once can't both succeed.
+
+## Removed keys are revoked
+
+A login key that leaves the store, removed on its own or with its admin, by any surface (the page,
+the closed shell, the console), goes on `revokedKeys` in the same write, with its admin and the
+time. While it's there:
+
+- it is on sshd's revocation list, `/var/lib/sneakers/ssh/revoked.krl`, as an explicit key, so sshd
+  refuses it (and any certificate for it) even if a stale `authorized_keys` file still lists it.
+  The list is written inside the store's write, before the store file is replaced: when the list
+  can't be written the change is refused and the key stays, so a key is never out of the store and
+  still accepted. accessd writes the list from the store again when it starts;
+- adding it to any admin is refused (`ACCESS_KEY_REVOKED`);
+- the :8443 sessions it signed in end, and so does an elevated shell it opened (an approved,
+  unused elevation certificate for it is revoked).
+
+An owner takes a key off the list with `AccessService.UnrevokeKey` (step-up, audited as
+`access.key.unrevoke`); `ListAdmins` returns the revoked keys. Only then can the key be added again.
 
 ## Unix accounts
 

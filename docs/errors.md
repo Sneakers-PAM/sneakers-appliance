@@ -26,6 +26,7 @@ shell, the console and :8443 show the same sentence.
 | 3012 | `ACCESS_STORE_INVALID` | the access store doesn't parse |
 | 3013 | `ACCESS_SESSION` | no :8443 session: signed out, idle for 15 minutes, past 8 hours, or its key or admin was removed |
 | 3014 | `ACCESS_CONFIRM` | the typed confirmation (the host name) doesn't match |
+| 3015 | `ACCESS_KEY_REVOKED` | the key was removed and is on the revocation list; an owner un-revokes it first |
 | 3101 | `ENROL_CODE` | wrong enrolment code (the attempts left are shown) |
 | 3102 | `ENROL_CLOSED` | the enrolment window is closed |
 | 3103 | `ENROL_UNKNOWN` | no key with that id is waiting in the enrolment window |

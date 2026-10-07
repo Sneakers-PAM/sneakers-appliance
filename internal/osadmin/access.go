@@ -21,6 +21,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
 
@@ -43,6 +44,10 @@ func (h *accessSvc) ListAdmins(context.Context, *connect.Request[osadminv1.ListA
 	}
 	q := st.EffectiveQuorum()
 	out.Quorum = &osadminv1.Quorum{Members: q.Members, Required: int32(min(q.Required, 1<<30)), Configured: q.Configured} // #nosec G115 -- clamped
+	for _, r := range st.RevokedKeys {
+		keyType, _, _ := strings.Cut(r.PublicKey, " ")
+		out.RevokedKeys = append(out.RevokedKeys, &osadminv1.RevokedKey{Fingerprint: r.Fingerprint, Type: keyType, Admin: r.Admin, Revoked: timestamppb.New(r.Revoked)})
+	}
 	return connect.NewResponse(out), nil
 }
 
@@ -142,7 +147,8 @@ func (h *accessSvc) RemoveAdmin(ctx context.Context, r *connect.Request[osadminv
 		return nil, err
 	}
 	n := h.s.sessions.EndWhere(func(s weblogin.Session) bool { return s.Admin == name })
-	h.s.o.Logger.Info("osadmin: admin removed", log.F("admin", name), log.F("sessionsEnded", n), log.F("by", c.session.Admin))
+	e := h.s.endElevations(c.session.Admin, func(r elevation.Request) bool { return r.Admin == name })
+	h.s.o.Logger.Info("osadmin: admin removed", log.F("admin", name), log.F("sessionsEnded", n), log.F("elevationsEnded", e), log.F("by", c.session.Admin))
 	return connect.NewResponse(&osadminv1.RemoveAdminResponse{}), nil
 }
 
@@ -226,8 +232,49 @@ func (h *accessSvc) RemoveKey(ctx context.Context, r *connect.Request[osadminv1.
 		return nil, err
 	}
 	n := h.s.sessions.EndWhere(func(s weblogin.Session) bool { return s.Admin == admin && s.KeyFP == fp })
-	h.s.o.Logger.Info("osadmin: key removed", log.F("admin", admin), log.F("key", fp), log.F("sessionsEnded", n), log.F("by", c.session.Admin))
+	e := h.s.endElevations(c.session.Admin, func(r elevation.Request) bool { return r.KeyFP == fp })
+	h.s.o.Logger.Info("osadmin: key removed and revoked", log.F("admin", admin), log.F("key", fp), log.F("sessionsEnded", n), log.F("elevationsEnded", e), log.F("by", c.session.Admin))
 	return connect.NewResponse(&osadminv1.RemoveKeyResponse{}), nil
+}
+
+// endElevations ends the elevated shells, and revokes the unused
+// certificates, of the requests match picks: those a removed key or admin
+// signed in. It returns how many it ended.
+func (s *Server) endElevations(by string, match func(elevation.Request) bool) int {
+	if s.o.Elevation == nil {
+		return 0
+	}
+	n := 0
+	for _, r := range s.o.Elevation.List() {
+		if (r.State != elevation.Active && r.State != elevation.Approved) || !match(r) {
+			continue
+		}
+		if _, err := s.o.Elevation.Terminate(r.ID, by); err != nil {
+			s.o.Logger.Warn("osadmin: an elevation of a removed key didn't end", log.F("id", r.ID), log.F("error", describe(err)))
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// UnrevokeKey takes a removed login key off the revocation list, so it can
+// be added again.
+func (h *accessSvc) UnrevokeKey(ctx context.Context, r *connect.Request[osadminv1.UnrevokeKeyRequest]) (*connect.Response[osadminv1.UnrevokeKeyResponse], error) {
+	c := callFrom(ctx)
+	fp := r.Msg.GetFingerprint()
+	c.note(fp)
+	err := h.s.o.Access.Update(func(st *access.State) error {
+		if !st.Unrevoke(fp) {
+			return codes.New(codes.AccessKeyType, "key %s isn't revoked", fp)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("osadmin: key un-revoked", log.F("key", fp), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.UnrevokeKeyResponse{}), nil
 }
 
 func (h *accessSvc) SetElevationPolicy(ctx context.Context, r *connect.Request[osadminv1.SetElevationPolicyRequest]) (*connect.Response[osadminv1.SetElevationPolicyResponse], error) {

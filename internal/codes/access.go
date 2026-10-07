@@ -23,6 +23,7 @@ const (
 	AccessStoreInvalid     = 3012
 	AccessSession          = 3013
 	AccessConfirm          = 3014
+	AccessKeyRevoked       = 3015
 	EnrolCode              = 3101
 	EnrolClosed            = 3102
 	EnrolUnknown           = 3103
@@ -72,6 +73,7 @@ var accessEntries = []apperr.Entry{
 	{Code: AccessStoreInvalid, Symbol: "ACCESS_STORE_INVALID", Title: "access", Cause: "the access store doesn't parse"},
 	{Code: AccessSession, Symbol: "ACCESS_SESSION", Title: "access", Cause: "no session: signed out, idle for 15 minutes, past 8 hours, or its key or admin was removed"},
 	{Code: AccessConfirm, Symbol: "ACCESS_CONFIRM", Title: "access", Cause: "the typed confirmation doesn't match"},
+	{Code: AccessKeyRevoked, Symbol: "ACCESS_KEY_REVOKED", Title: "access", Cause: "the key was removed and is on the revocation list; an owner un-revokes it first"},
 	{Code: EnrolCode, Symbol: "ENROL_CODE", Title: "enrol", Cause: "wrong enrolment code"},
 	{Code: EnrolClosed, Symbol: "ENROL_CLOSED", Title: "enrol", Cause: "the enrolment window is closed"},
 	{Code: EnrolUnknown, Symbol: "ENROL_UNKNOWN", Title: "enrol", Cause: "no key with that id is waiting in the enrolment window"},

@@ -23,7 +23,8 @@ The global settings:
   `Subsystem` line, so there is no sftp or scp.
 - `ForceCommand /usr/bin/sneakers-shell` and `ExposeAuthInfo yes`, so the closed shell learns which
   key signed in.
-- `RevokedKeys /var/lib/sneakers/ssh/revoked.krl` for removed keys and used elevation certificates.
+- `RevokedKeys /var/lib/sneakers/ssh/revoked.krl` for removed login keys and used elevation
+  certificates.
 - `AllowUsers` lists the admins and `maint` (and `enrol` while an enrolment window is open); in the
   first-boot enrolment step it lists only `enrol`.
 - The algorithms are the modern set only: ed25519, ECDSA P-256 and P-384, the FIDO forms of ed25519
@@ -183,7 +184,7 @@ check is wired to the upgrade daemon, which isn't on the box yet, so it never bl
 |---|---|
 | `user_ca`, `user_ca.pub` | the ed25519 user CA accessd makes at first start; sshd trusts `user_ca.pub` for `maint` only |
 | `serial` | the last certificate serial issued, written before each certificate is signed |
-| `revoked.krl` | an OpenSSH key revocation list of every serial used, expired or revoked, rewritten on each change; sshd reads it as `RevokedKeys` |
+| `revoked.krl` | an OpenSSH key revocation list of every serial used, expired or revoked and every removed login key not un-revoked ([access.md](access.md#removed-keys-are-revoked)), rewritten on each change; sshd reads it as `RevokedKeys` |
 | `/var/lib/sneakers/access/elevation.json` | the requests and what became of them: the history the page shows |
 
 The CA signs only elevation certificates, in process (`golang.org/x/crypto/ssh`), and is trusted
