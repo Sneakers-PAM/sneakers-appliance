@@ -39,6 +39,7 @@ func TestInvariants(t *testing.T) {
 			s.Admins[0].Keys[0].PublicKey = readFixture(t, "testdata/rsa2048.pub")
 		}, "ACCESS_KEY_WEAK"},
 		{"reserved name", func(s *access.State) { s.Admins[0].Name = "maint" }, "ACCESS_NAME"},
+		{"reserved name console", func(s *access.State) { s.Admins[0].Name = "console" }, "ACCESS_NAME"},
 		{"invalid name", func(s *access.State) { s.Admins[0].Name = "Alice" }, "ACCESS_NAME"},
 		{"same name twice", func(s *access.State) {
 			s.AddAdmin("alice", access.RoleAdmin, "alice", t0)
