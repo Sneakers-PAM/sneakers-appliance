@@ -46,10 +46,13 @@ import (
 // Magic opens every update package.
 const Magic = "SNKRBIN\x01"
 
-// Name and Format are fixed header fields.
+// Name and Format are fixed header fields. NameProduct names a product
+// bundle: the same format, carrying k0s, its images and the product
+// instead of the base image.
 const (
-	Name   = "sneakers-appliance"
-	Format = 1
+	Name        = "sneakers-appliance"
+	NameProduct = "sneakers-product"
+	Format      = 1
 )
 
 // maxSection caps the header and the bundle, so a hostile length can't make
@@ -59,10 +62,11 @@ const maxSection = 64 << 10
 // Kind is a full version or a patch.
 type Kind string
 
-// The kinds.
+// The kinds. A product bundle is always KindProduct, under NameProduct.
 const (
-	KindFull  Kind = "full"
-	KindPatch Kind = "patch"
+	KindFull    Kind = "full"
+	KindPatch   Kind = "patch"
+	KindProduct Kind = "product"
 )
 
 // Header is the signed description of a package.
@@ -72,8 +76,8 @@ type Header struct {
 	Version string `json:"version"`
 	Arch    string `json:"arch"`
 	Kind    Kind   `json:"kind"`
-	// Bases are the exact versions a patch applies to; a full version has
-	// none.
+	// Bases are the exact versions a patch applies to, or the base
+	// versions a product bundle fits; a full version has none.
 	Bases   []string `json:"bases,omitempty"`
 	Channel string   `json:"channel"`
 	// Recipient is the hex SHA-256 of the age recipient the payload is
@@ -101,14 +105,17 @@ func (h Header) check() error {
 	if h.Channel != release.ChannelProduction && h.Channel != release.ChannelLab {
 		return codes.New(codes.UpgradeFormat, "the channel %q isn't %s or %s", h.Channel, release.ChannelProduction, release.ChannelLab)
 	}
+	if (h.Name == NameProduct) != (h.Kind == KindProduct) {
+		return codes.New(codes.UpgradeFormat, "a %s header can't be of kind %s", h.Name, h.Kind)
+	}
 	switch h.Kind {
 	case KindFull:
 		if len(h.Bases) > 0 {
 			return codes.New(codes.UpgradeFormat, "a full version names no base versions")
 		}
-	case KindPatch:
+	case KindPatch, KindProduct:
 		if len(h.Bases) == 0 {
-			return codes.New(codes.UpgradeFormat, "a patch names the base versions it applies to")
+			return codes.New(codes.UpgradeFormat, "a %s names the base versions it applies to", h.Kind)
 		}
 		for _, b := range h.Bases {
 			if !versionRE.MatchString(b) {
@@ -116,7 +123,7 @@ func (h Header) check() error {
 			}
 		}
 	default:
-		return codes.New(codes.UpgradeFormat, "the kind %q isn't full or patch", h.Kind)
+		return codes.New(codes.UpgradeFormat, "the kind %q isn't full, patch or product", h.Kind)
 	}
 	return nil
 }
@@ -130,24 +137,40 @@ func (h Header) Marshal() ([]byte, error) {
 	return b, nil
 }
 
+// IsProduct reports whether the header is a product bundle's.
+func (h Header) IsProduct() bool { return h.Kind == KindProduct }
+
 // AppliesTo reports whether the package can be applied on a box running
-// version running. A full version always can, subject to the upgrade path
-// rules elsewhere; a patch only on one of its exact base versions.
+// base version running. A full version always can, subject to the upgrade
+// path rules elsewhere; a patch only on one of its exact base versions,
+// and a product bundle only on a base it names.
 func (h Header) AppliesTo(running string) error {
-	if h.Kind == KindPatch && !slices.Contains(h.Bases, running) {
+	switch {
+	case h.Kind == KindPatch && !slices.Contains(h.Bases, running):
 		return codes.New(codes.UpgradePatchBase, "the patch %s is for %v; this box runs %s", h.Version, h.Bases, running)
+	case h.Kind == KindProduct && !slices.Contains(h.Bases, running):
+		return codes.New(codes.UpgradeProductBase, "the product bundle %s fits the base versions %v; this box runs %s", h.Version, h.Bases, running)
 	}
 	return nil
 }
 
+// NameFor is the header name a package of kind k carries.
+func NameFor(k Kind) string {
+	if k == KindProduct {
+		return NameProduct
+	}
+	return Name
+}
+
 // FileName is the package's published name: sneakers-appliance-<version>-<arch>.bin,
-// with -LAB before the extension for a lab package.
+// or sneakers-product-... for a product bundle, with -LAB before the
+// extension for a lab package.
 func FileName(h Header) string {
 	suffix := ""
 	if h.Channel == release.ChannelLab {
 		suffix = "-LAB"
 	}
-	return fmt.Sprintf("%s-%s-%s%s.bin", Name, h.Version, h.Arch, suffix)
+	return fmt.Sprintf("%s-%s-%s%s.bin", NameFor(h.Kind), h.Version, h.Arch, suffix)
 }
 
 // RecipientID is the fingerprint the header records for an age recipient.
@@ -163,7 +186,7 @@ func (c *counter) Write(p []byte) (int, error) { c.n += int64(len(p)); return le
 // Encrypt encrypts payload to r into ciphertext and returns h completed with
 // the fixed fields, the recipient and the ciphertext digest, ready to sign.
 func Encrypt(payload io.Reader, h Header, r *age.X25519Recipient, ciphertext io.Writer) (Header, error) {
-	h.Format, h.Name = Format, Name
+	h.Format, h.Name = Format, NameFor(h.Kind)
 	if err := h.check(); err != nil {
 		return Header{}, err
 	}
@@ -280,8 +303,8 @@ func (p *Package) Verify(releaseKeyPEM []byte, channel string) error {
 	if p.Header.Channel != channel {
 		return codes.New(codes.UpgradeChannel, "this is a %s package; this box is %s", p.Header.Channel, channel)
 	}
-	if p.Header.Format != Format || p.Header.Name != Name {
-		return codes.New(codes.UpgradeFormat, "the package is %s format %d; this box reads %s format %d", p.Header.Name, p.Header.Format, Name, Format)
+	if p.Header.Format != Format || (p.Header.Name != Name && p.Header.Name != NameProduct) {
+		return codes.New(codes.UpgradeFormat, "the package is %s format %d; this box reads %s or %s format %d", p.Header.Name, p.Header.Format, Name, NameProduct, Format)
 	}
 	if err := p.Header.check(); err != nil {
 		return err
