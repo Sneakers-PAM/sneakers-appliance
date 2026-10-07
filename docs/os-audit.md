@@ -51,6 +51,12 @@ confirmation. Either way the entry records who asked, where from and how:
 | `detail.surface` | `console` or `8443` |
 | `detail.mode` | `graceful`, or `forced` after the second confirmation |
 
+Init writes its own entries for the same request with `detail.surface` `init`: the caller
+(`detail.caller` `osadmin` or `shell`, its `uid` and `pid`), `outcome` `accepted` when it takes the
+request, then `ok` (or `drain-failed`) before it syncs and acts, or `refused` with the code. The
+factory reset adds `power.factory-reset.arm`, `.cancel` and `.run` from init
+([factory-reset.md](factory-reset.md)).
+
 ## Retention
 
 The log keeps 400 days and recordings 90 days by default, both settable on the Logs and audit page.
