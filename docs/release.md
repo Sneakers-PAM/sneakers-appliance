@@ -92,7 +92,8 @@ artifact, install media or a box's ESP) can read the update key out of its UKI. 
 authenticity comes from its signature, never from the encryption: a box installs only what the
 release key signed for its channel, whoever could decrypt it.
 
-A lab `.bin` is named `-LAB.bin`, signed with the lab key and encrypted to the lab update key, so a
+A lab `.bin` is named `-LAB.bin`, after a version that carries its build number (`-g<short
+commit>`, [testing.md](testing.md#the-lab-release)), signed with the lab key and encrypted to the lab update key, so a
 production box refuses it, and the reverse. The sign job runs `check-fingerprints.sh` and refuses
 any certificate or key that isn't the recorded production one.
 

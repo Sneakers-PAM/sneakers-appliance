@@ -19,12 +19,15 @@
 #                the state volumes
 #   KEYS         an empty directory for the lab keys (CI passes a tmpfs one)
 #   OUT          the output directory
-#   VERSION      the lab version (default 0.0.1)
+#   VERSION      the lab version (default 0.0.1); the build number,
+#                g<the short commit>, is appended to it, git-describe style,
+#                unless it already ends with it
 #   K0S          the k0s binary for the root (default: a stand-in, pinned in
 #                the lab release.yaml, for boots that don't start k0s)
 #   DISK_SIZE    the raw disk's size (default 64G)
 #
-# Output: $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
+# Output: $OUT/version (the version with the build number, which every
+# file name below carries), $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
 # signed OCI layout), $OUT/sneakers-kit (a kit pinned to this run's keys).
 # The signed UKI, $OUT/work/sneakers-<version>.efi, carries the lab update
 # key (internal/ukikey).
@@ -34,9 +37,17 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 : "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${KEYS:?}" "${OUT:?}"
 version="${VERSION:-0.0.1}"
+# Every lab artifact's name carries the commit it was built from.
+build="g$(git -C "$root" rev-parse --short=7 HEAD)"
+case "$version" in
+  *-"$build") ;;
+  *) version="$version-$build" ;;
+esac
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH COSIGN_PASSWORD=""
 mkdir -p "$OUT"
+printf '%s\n' "$version" > "$OUT/version"
+echo "lab: version $version"
 work="$OUT/work"
 mkdir -p "$work"
 
