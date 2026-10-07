@@ -69,6 +69,9 @@ type Options struct {
 	// NoVGA boots without a display adapter: a headless box, where the
 	// serial line is the only console.
 	NoVGA bool
+	// HostFwd forwards host ports to the guest through QEMU's user network,
+	// as hostfwd rules such as tcp:127.0.0.1:2222-:22.
+	HostFwd []string
 }
 
 // Paths of the pinned firmware (Ubuntu's ovmf package in CI).
@@ -196,7 +199,7 @@ func Boot(t testing.TB, o Options) *VM {
 		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + code,
 		"-drive", "if=pflash,format=raw,unit=1,file=" + vars,
 		"-monitor", "none", "-qmp", "unix:" + qmpSock + ",server=on,wait=off",
-		"-netdev", "user,id=n0,restrict=on", "-device", "virtio-net-pci,netdev=n0",
+		"-netdev", netdev(o.HostFwd), "-device", "virtio-net-pci,netdev=n0",
 	}
 	if o.NoSerial {
 		args = append(args, "-serial", "none")
@@ -288,6 +291,16 @@ func Boot(t testing.TB, o Options) *VM {
 		}
 	})
 	return vm
+}
+
+// netdev is the user network: no way out for the guest (restrict=on), and
+// only the forwarded ports in.
+func netdev(fwd []string) string {
+	n := "user,id=n0,restrict=on"
+	for _, f := range fwd {
+		n += ",hostfwd=" + f
+	}
+	return n
 }
 
 // Type sends s on the serial line, as typed at the console.

@@ -262,8 +262,9 @@ On start and after every change to the store, accessd writes:
   window is open), `authorized_keys/<admin>` and `principals/maint` (the `elev-<id>` principal of
   each approved, unused elevation certificate). It renders into a new directory, has the pinned sshd check it (`sshd -t`), and
   swaps it in whole; a config sshd refuses is never swapped in. When `sshd_config` changed (a new or
-  removed admin, new addresses) it sends sshd a `SIGHUP`; a key change needs none, since sshd reads
-  the key files at each login.
+  removed admin, new addresses) it sends `sneakers-sshd-run` (the pid in `/run/sneakers/sshd.pid`) a
+  `SIGHUP`, and sshd-run checks again before it tells sshd; a key change needs none, since sshd
+  reads the key files at each login. See [sneakers-sshd-run](ssh-and-elevation.md#sneakers-sshd-run).
 
 It renders again whenever an elevation is approved, used, revoked or expires, and when an enrolment
 window opens or closes. It also creates `/var/lib/sneakers/osadmin/` owned by `osadmin` (the :8443 certificate) and the

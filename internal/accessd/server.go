@@ -61,7 +61,8 @@ func (p Paths) HomesDir() string { return filepath.Join(p.Run, "home") }
 // SSHDir is sshd's rendered configuration.
 func (p Paths) SSHDir() string { return filepath.Join(p.Run, "ssh") }
 
-// SSHDPidFile is where sshd writes its pid.
+// SSHDPidFile is where sneakers-sshd-run, sshd's supervisor, writes its
+// pid.
 func (p Paths) SSHDPidFile() string { return filepath.Join(p.Run, "sshd.pid") }
 
 // Options wire accessd.

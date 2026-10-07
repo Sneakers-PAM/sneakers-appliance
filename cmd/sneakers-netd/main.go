@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -85,6 +86,15 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	}
 	defer func() { _ = os.Remove(ready) }()
 	lg.Info("netd: ready", log.F("socket", c.socket))
+	// One plain line per change on the console, whatever the log level: the
+	// address is what an admin at the console needs first.
+	addrs, stopWatch := d.Watch()
+	defer stopWatch()
+	go func() {
+		for a := range addrs {
+			_, _ = fmt.Fprintf(os.Stderr, "sneakers-netd: management addresses %s\n", strings.Join(a.Management, " "))
+		}
+	}()
 	<-ctx.Done()
 	lg.Info("netd: stopped")
 	return nil

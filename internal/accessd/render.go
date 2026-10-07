@@ -4,13 +4,11 @@
 package accessd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"net/netip"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -50,13 +48,13 @@ func (s *Server) Changed(st access.State) {
 func (s *Server) sshPaths() sshconfig.Paths {
 	sp := sshconfig.DefaultPaths()
 	sp.ConfigDir = s.o.Paths.SSHDir()
-	sp.PidFile = s.o.Paths.SSHDPidFile()
 	return sp
 }
 
-// renderSSH renders into a new directory, has the pinned sshd check it,
-// then swaps it in whole; sshd gets a SIGHUP when sshd_config changed (a
-// key file is read at each login, so a key change needs none).
+// renderSSH renders sshd's files from st, has the pinned sshd check them
+// and swaps them in (sshconfig.Install); sneakers-sshd-run gets a SIGHUP
+// when sshd_config changed (a key file is read at each login, so a key
+// change needs none), and renders and checks again before it tells sshd.
 func (s *Server) renderSSH(st access.State, enrolOpen bool) error {
 	if s.o.Network == nil {
 		return errors.New("no netd client")
@@ -75,45 +73,18 @@ func (s *Server) renderSSH(st access.State, enrolOpen bool) error {
 	if ownerKey(st) {
 		mode = sshconfig.AdminMode
 	}
-	dir := s.o.Paths.SSHDir()
-	next, old := dir+".next", dir+".old"
-	for _, d := range []string{next, old} {
-		if err := os.RemoveAll(d); err != nil {
-			return err
-		}
-	}
-	if err := os.MkdirAll(next, 0o755); err != nil { // #nosec G301 -- sshd reads the key files as the logging-in user
-		return err
-	}
 	in := sshconfig.Input{ListenAddrs: listen, Mode: mode, EnrolOpen: enrolOpen, State: st, Paths: s.sshPaths()}
 	if s.o.Elevation != nil {
 		in.Principals = s.o.Elevation.Principals()
 	}
-	if err := sshconfig.Render(in, next); err != nil {
-		return err
-	}
+	var check func(string) error
 	if s.o.Paths.SSHD != "" {
-		if err := sshconfig.Check(s.o.Paths.SSHD, next); err != nil {
-			return err
-		}
+		check = func(dir string) error { return sshconfig.Check(s.o.Paths.SSHD, dir) }
 	}
-	cfg, err := os.ReadFile(filepath.Join(next, "sshd_config")) // #nosec G304 -- the file just rendered
+	changed, err := sshconfig.Install(in, check)
 	if err != nil {
 		return err
 	}
-	prev, perr := os.ReadFile(filepath.Join(dir, "sshd_config")) // #nosec G304 -- the live file accessd rendered
-	if _, err := os.Stat(dir); err == nil {
-		if err := os.Rename(dir, old); err != nil {
-			return err
-		}
-	}
-	if err := os.Rename(next, dir); err != nil {
-		return err
-	}
-	if err := os.RemoveAll(old); err != nil {
-		s.o.Logger.Warn("accessd: the previous sshd files weren't removed", log.F("error", err.Error()))
-	}
-	changed := perr == nil && !bytes.Equal(cfg, prev)
 	s.o.Logger.Debug("accessd: sshd files rendered", log.F("mode", string(mode)), log.F("enrolOpen", enrolOpen), log.F("principals", len(in.Principals)), log.F("listen", len(listen)), log.F("configChanged", changed))
 	if changed {
 		s.reloadSSHD()
@@ -130,8 +101,9 @@ func ownerKey(st access.State) bool {
 	return false
 }
 
-// reloadSSHD sends sshd a SIGHUP, which has it re-read its config; with no
-// pid file sshd isn't running and picks the config up when it starts.
+// reloadSSHD sends sneakers-sshd-run a SIGHUP, which has it render and
+// check again and then tell sshd; with no pid file sshd isn't running and
+// picks the config up when it starts.
 func (s *Server) reloadSSHD() {
 	b, err := os.ReadFile(s.o.Paths.SSHDPidFile())
 	if err != nil {

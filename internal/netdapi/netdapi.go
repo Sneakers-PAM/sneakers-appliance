@@ -9,6 +9,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 )
@@ -26,4 +27,25 @@ func NewClient(sock string) netdv1connect.NetworkServiceClient {
 		},
 	}}
 	return netdv1connect.NewNetworkServiceClient(hc, "http://netd.sock")
+}
+
+// Bindable turns netd's management addresses (with or without a prefix
+// length) into the addresses a listener binds, leaving out link-local
+// ones.
+func Bindable(mgmt []string) []netip.Addr {
+	var out []netip.Addr
+	for _, m := range mgmt {
+		a, err := netip.ParseAddr(m)
+		if err != nil {
+			p, perr := netip.ParsePrefix(m)
+			if perr != nil {
+				continue
+			}
+			a = p.Addr()
+		}
+		if !a.IsLinkLocalUnicast() {
+			out = append(out, a)
+		}
+	}
+	return out
 }

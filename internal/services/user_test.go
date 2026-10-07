@@ -181,3 +181,22 @@ func TestTheRootImageTableRunsNetd(t *testing.T) {
 		t.Fatalf("accessd starts before netd: %+v", tbl["accessd"].After)
 	}
 }
+
+// sshd runs through sneakers-sshd-run in auto mode: on demand in first
+// boot (the SSH key step starts it), always in normal operation, after
+// netd and accessd.
+func TestTheRootImageTableRunsSshd(t *testing.T) {
+	tbl, err := services.Load(os.DirFS("../../os/rootfs"), "services.d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, ok := tbl["sshd"]
+	if !ok {
+		t.Fatal("no sshd")
+	}
+	if s.Exec != "/usr/bin/sneakers-sshd-run" || !slices.Equal(s.Args, []string{"--mode", "auto"}) || s.User != "" || s.Restart != services.RestartAlways ||
+		!s.OnDemand(phase.Firstboot) || s.OnDemand(phase.Normal) || !s.In(phase.Normal) ||
+		!slices.Contains(s.After, "netd") || !slices.Contains(s.After, "accessd") {
+		t.Fatalf("sshd: %+v", s)
+	}
+}

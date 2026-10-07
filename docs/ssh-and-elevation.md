@@ -5,9 +5,10 @@ shell access is a one-time elevation through a short-lived certificate for the `
 
 ## sshd's configuration
 
-accessd renders sshd's files from the access store into a staging directory; `sneakers-sshd-run`
-checks them with the pinned `sshd -t` and swaps them into `/run/sneakers/ssh/` only when sshd
-accepts them. A config that fails the check is never used, and the previous one stays.
+accessd and `sneakers-sshd-run` render sshd's files from the access store into a staging directory,
+check them with the pinned `sshd -t` and swap them into `/run/sneakers/ssh/` only when sshd accepts
+them (`sshconfig.Install`, under an flock on `/run/sneakers/ssh.lock`). A config that fails the check
+is never used, and the previous one stays.
 
 | File | Contents |
 |---|---|
@@ -39,6 +40,37 @@ The global settings:
 
 The tests render every mode and run the pinned static sshd's `sshd -t` on each; the Static tools
 workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary it built.
+
+## sneakers-sshd-run
+
+sshd runs under `sneakers-sshd-run --mode admin|enrol|auto --config-dir /run/sneakers/ssh`
+(`os/rootfs/services.d/sshd.yaml`: `--mode auto`, started on demand in first boot by the SSH key step,
+always in normal operation, after netd and accessd, restarted whenever it stops). It:
+
+1. reads the access store; `admin` without an owner holding a key exits with `ACCESS_NO_ADMIN_KEY`.
+   `auto` is enrol mode until an owner has a key and admin mode after; once
+   `/var/lib/sneakers/setup/done` exists it refuses rather than fall back to enrolment;
+2. waits until netd reports a management address, then renders (the `enrol` block too while
+   accessd's `passwd` holds the enrol account, and the open elevation principals from
+   `elevation.json`), checks with `sshd -t` and swaps the files in;
+3. writes its pid to `/run/sneakers/sshd.pid` and runs `sshd -D -e -f /run/sneakers/ssh/sshd_config`
+   as its child (sshd's own `PidFile` is `none`). It stays the parent instead of exec'ing sshd so that
+   every reload passes `sshd -t` first;
+4. on a `SIGHUP` (accessd sends one when `sshd_config` changed) or a new address list on netd's
+   `Watch` stream, renders and checks again, and sends sshd a `SIGHUP` only when the check passed and
+   the installed config differs from the one sshd runs. A render sshd refuses is logged and written
+   to the OS audit log (`sshd.config`, outcome `refused`, the sshd error in the detail); sshd keeps
+   the config it has;
+5. on `SIGTERM` stops sshd (`SIGTERM`, then `SIGKILL` after 10 seconds); when sshd exits on its own
+   sshd-run exits with it and init restarts both.
+
+Flags: `--mode` (`auto`), `--config-dir`, `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`),
+`--sshd` (`/usr/sbin/sshd`), `--netd-socket` and `--pid-file` (`/run/sneakers/sshd.pid`).
+
+The unit tests run sshd-run against a fake sshd; `TestRealSshdStartsReloadsAndRefuses` runs it
+against the pinned static sshd (the Static tools workflow sets `SNEAKERS_TEST_SSHD`): sshd serves
+on the installed config, keeps serving across a reload, and a render `sshd -t` refuses never reaches
+it.
 
 ## The closed shell
 

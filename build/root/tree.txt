@@ -24,6 +24,7 @@ drwxr-xr-x 0/0 /usr/bin
 -rwxr-xr-x 0/0 /usr/bin/sneakers-netd
 -rwxr-xr-x 0/0 /usr/bin/sneakers-osadmin
 -rwxr-xr-x 0/0 /usr/bin/sneakers-shell
+-rwxr-xr-x 0/0 /usr/bin/sneakers-sshd-run
 -rwxr-xr-x 0/0 /usr/bin/ssh-keygen
 drwxr-xr-x 0/0 /usr/lib
 drwxr-xr-x 0/0 /usr/lib/sneakers
@@ -31,6 +32,7 @@ drwxr-xr-x 0/0 /usr/lib/sneakers/services.d
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/accessd.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/netd.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/osadmin.yaml
+-rw-r--r-- 0/0 /usr/lib/sneakers/services.d/sshd.yaml
 drwxr-xr-x 0/0 /usr/libexec
 drwxr-xr-x 0/0 /usr/libexec/openssh
 -rwxr-xr-x 0/0 /usr/libexec/openssh/sshd-auth
