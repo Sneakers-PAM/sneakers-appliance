@@ -51,7 +51,7 @@ holds only the type and the key.
 Checked on every write. A write that breaks one is refused with its code and nothing changes.
 
 - Admin names match `^[a-z][a-z0-9_-]{1,30}$`, are unique, and aren't a system account: `root`,
-  `maint`, `enrol`, `sshd`, `sshkeys`, `nobody`, `osadmin` (`ACCESS_NAME`).
+  `maint`, `enrol`, `sshd`, `sshkeys`, `nobody`, `osadmin`, `console` (`ACCESS_NAME`).
 - A key belongs to one admin; no login key equals a recovery key; no two recovery keys are equal
   (`ACCESS_KEY_DUPLICATE`).
 - At most three recovery keys (`ACCESS_RECOVERY_KEY_LIMIT`).

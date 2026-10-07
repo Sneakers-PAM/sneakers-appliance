@@ -61,7 +61,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list", "keys.add", "keys.remove",
-			"admins.list", "admins.add", "admins.remove", "recovery.add", "setup.recovery", "elevation.request", "elevation.status", "elevation.cert":
+			"admins.list", "admins.add", "admins.remove", "recovery.add", "setup.recovery", "elevation.request", "elevation.status", "elevation.cert", "elevation.withdraw":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -117,7 +117,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		if err == nil {
 			res = Result{Text: "Recovery key " + out.Msg.GetRecoveryKey().GetFingerprint() + " set; a new escrow file was written."}
 		}
-	case "elevation.request", "elevation.status", "elevation.cert":
+	case "elevation.request", "elevation.status", "elevation.cert", "elevation.withdraw":
 		res, err = s.elevation(ctx, r)
 	default:
 		return Result{}, false, nil
@@ -157,6 +157,11 @@ func (s *Services) elevation(ctx context.Context, r Request) (Result, error) {
 			data = append(data, map[string]string{"id": e.GetId(), "state": e.GetState(), "admin": e.GetAdmin()})
 		}
 		return Result{Text: b.String(), Data: data}, nil
+	case "elevation.withdraw":
+		if _, err := s.Elevation.WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: r.Args[0]})); err != nil {
+			return Result{}, err
+		}
+		return Result{Text: fmt.Sprintf("%s withdrawn.", r.Args[0]), Data: map[string]string{"id": r.Args[0], "state": "withdrawn"}}, nil
 	}
 	out, err := s.Elevation.GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: r.Args[0]}))
 	if err != nil {

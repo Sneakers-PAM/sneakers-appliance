@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -279,6 +280,9 @@ func (b *sequenceBackend) Call(ctx context.Context, r shell.Request) (shell.Resu
 	case "elevation.cert":
 		b.calls = append(b.calls, r)
 		return shell.Result{Text: "the-elevation-certificate"}, nil
+	case "elevation.withdraw":
+		b.calls = append(b.calls, r)
+		return shell.Result{Text: fmt.Sprintf("%s withdrawn.", r.Args[0]), Data: map[string]string{"id": r.Args[0], "state": "withdrawn"}}, nil
 	}
 	return b.recordingBackend.Call(ctx, r)
 }
@@ -307,7 +311,9 @@ func TestShellStopsWaitingOnADenial(t *testing.T) {
 	assertCode(t, err, "ELEV_USED")
 }
 
-func TestShellLeavesTheRequestPendingOnCtrlC(t *testing.T) {
+// Ctrl-C ends the wait (modelled here as the session's context being
+// done): the pending request is withdrawn, not left dangling.
+func TestShellWithdrawsOnCtrlC(t *testing.T) {
 	b := &sequenceBackend{states: []string{"pending"}}
 	var out bytes.Buffer
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -316,7 +322,10 @@ func TestShellLeavesTheRequestPendingOnCtrlC(t *testing.T) {
 	if err := shell.Run(ctx, e, `shell --minutes 30 --reason "kubelet"`); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "still pending") {
+	if !strings.Contains(out.String(), "withdrawn") {
 		t.Fatalf("%q", out.String())
+	}
+	if got := b.actions(); got[len(got)-1] != "elevation.withdraw" || b.calls[len(b.calls)-1].Args[0] != "E-7K2Q" {
+		t.Fatalf("%v", got)
 	}
 }

@@ -39,7 +39,9 @@ const FirstUID = 20000
 var namePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,30}$`)
 
 // ReservedNames are the system accounts an admin can't be named after.
-var ReservedNames = []string{"root", "maint", "enrol", "sshd", "sshkeys", "nobody", "osadmin"}
+// console is the OS audit log's actor name for the console; an admin by that
+// name would make audit entries ambiguous.
+var ReservedNames = []string{"root", "maint", "enrol", "sshd", "sshkeys", "nobody", "osadmin", "console"}
 
 // ValidName reports whether name may be an admin's name.
 func ValidName(name string) bool {

@@ -107,6 +107,9 @@ const (
 	// ElevationServiceGetElevationCertificateProcedure is the fully-qualified name of the
 	// ElevationService's GetElevationCertificate RPC.
 	ElevationServiceGetElevationCertificateProcedure = "/sneakers.appliance.access.v1.ElevationService/GetElevationCertificate"
+	// ElevationServiceWithdrawElevationProcedure is the fully-qualified name of the ElevationService's
+	// WithdrawElevation RPC.
+	ElevationServiceWithdrawElevationProcedure = "/sneakers.appliance.access.v1.ElevationService/WithdrawElevation"
 	// ElevationServiceApproveElevationProcedure is the fully-qualified name of the ElevationService's
 	// ApproveElevation RPC.
 	ElevationServiceApproveElevationProcedure = "/sneakers.appliance.access.v1.ElevationService/ApproveElevation"
@@ -710,6 +713,10 @@ type ElevationServiceClient interface {
 	// GetElevationCertificate returns the certificate of an approved
 	// request, for its requester.
 	GetElevationCertificate(context.Context, *connect.Request[v1.GetElevationCertificateRequest]) (*connect.Response[v1.GetElevationCertificateResponse], error)
+	// WithdrawElevation withdraws the caller's own pending request (the
+	// closed shell's Ctrl-C while it waits); a withdrawn request can't be
+	// approved afterwards.
+	WithdrawElevation(context.Context, *connect.Request[v1.WithdrawElevationRequest]) (*connect.Response[v1.WithdrawElevationResponse], error)
 	// ApproveElevation is the console's (root only); owners approve on :8443.
 	ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error)
 	// DenyElevation is the console's (root only); owners deny on :8443.
@@ -759,6 +766,12 @@ func NewElevationServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		withdrawElevation: connect.NewClient[v1.WithdrawElevationRequest, v1.WithdrawElevationResponse](
+			httpClient,
+			baseURL+ElevationServiceWithdrawElevationProcedure,
+			connect.WithSchema(elevationServiceMethods.ByName("WithdrawElevation")),
+			connect.WithClientOptions(opts...),
+		),
 		approveElevation: connect.NewClient[v1.ApproveElevationRequest, v1.ApproveElevationResponse](
 			httpClient,
 			baseURL+ElevationServiceApproveElevationProcedure,
@@ -797,6 +810,7 @@ type elevationServiceClient struct {
 	requestElevation        *connect.Client[v1.RequestElevationRequest, v1.RequestElevationResponse]
 	listElevations          *connect.Client[v1.ListElevationsRequest, v1.ListElevationsResponse]
 	getElevationCertificate *connect.Client[v1.GetElevationCertificateRequest, v1.GetElevationCertificateResponse]
+	withdrawElevation       *connect.Client[v1.WithdrawElevationRequest, v1.WithdrawElevationResponse]
 	approveElevation        *connect.Client[v1.ApproveElevationRequest, v1.ApproveElevationResponse]
 	denyElevation           *connect.Client[v1.DenyElevationRequest, v1.DenyElevationResponse]
 	terminateElevation      *connect.Client[v1.TerminateElevationRequest, v1.TerminateElevationResponse]
@@ -818,6 +832,11 @@ func (c *elevationServiceClient) ListElevations(ctx context.Context, req *connec
 // sneakers.appliance.access.v1.ElevationService.GetElevationCertificate.
 func (c *elevationServiceClient) GetElevationCertificate(ctx context.Context, req *connect.Request[v1.GetElevationCertificateRequest]) (*connect.Response[v1.GetElevationCertificateResponse], error) {
 	return c.getElevationCertificate.CallUnary(ctx, req)
+}
+
+// WithdrawElevation calls sneakers.appliance.access.v1.ElevationService.WithdrawElevation.
+func (c *elevationServiceClient) WithdrawElevation(ctx context.Context, req *connect.Request[v1.WithdrawElevationRequest]) (*connect.Response[v1.WithdrawElevationResponse], error) {
+	return c.withdrawElevation.CallUnary(ctx, req)
 }
 
 // ApproveElevation calls sneakers.appliance.access.v1.ElevationService.ApproveElevation.
@@ -855,6 +874,10 @@ type ElevationServiceHandler interface {
 	// GetElevationCertificate returns the certificate of an approved
 	// request, for its requester.
 	GetElevationCertificate(context.Context, *connect.Request[v1.GetElevationCertificateRequest]) (*connect.Response[v1.GetElevationCertificateResponse], error)
+	// WithdrawElevation withdraws the caller's own pending request (the
+	// closed shell's Ctrl-C while it waits); a withdrawn request can't be
+	// approved afterwards.
+	WithdrawElevation(context.Context, *connect.Request[v1.WithdrawElevationRequest]) (*connect.Response[v1.WithdrawElevationResponse], error)
 	// ApproveElevation is the console's (root only); owners approve on :8443.
 	ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error)
 	// DenyElevation is the console's (root only); owners deny on :8443.
@@ -899,6 +922,12 @@ func NewElevationServiceHandler(svc ElevationServiceHandler, opts ...connect.Han
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	elevationServiceWithdrawElevationHandler := connect.NewUnaryHandler(
+		ElevationServiceWithdrawElevationProcedure,
+		svc.WithdrawElevation,
+		connect.WithSchema(elevationServiceMethods.ByName("WithdrawElevation")),
+		connect.WithHandlerOptions(opts...),
+	)
 	elevationServiceApproveElevationHandler := connect.NewUnaryHandler(
 		ElevationServiceApproveElevationProcedure,
 		svc.ApproveElevation,
@@ -937,6 +966,8 @@ func NewElevationServiceHandler(svc ElevationServiceHandler, opts ...connect.Han
 			elevationServiceListElevationsHandler.ServeHTTP(w, r)
 		case ElevationServiceGetElevationCertificateProcedure:
 			elevationServiceGetElevationCertificateHandler.ServeHTTP(w, r)
+		case ElevationServiceWithdrawElevationProcedure:
+			elevationServiceWithdrawElevationHandler.ServeHTTP(w, r)
 		case ElevationServiceApproveElevationProcedure:
 			elevationServiceApproveElevationHandler.ServeHTTP(w, r)
 		case ElevationServiceDenyElevationProcedure:
@@ -966,6 +997,10 @@ func (UnimplementedElevationServiceHandler) ListElevations(context.Context, *con
 
 func (UnimplementedElevationServiceHandler) GetElevationCertificate(context.Context, *connect.Request[v1.GetElevationCertificateRequest]) (*connect.Response[v1.GetElevationCertificateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.ElevationService.GetElevationCertificate is not implemented"))
+}
+
+func (UnimplementedElevationServiceHandler) WithdrawElevation(context.Context, *connect.Request[v1.WithdrawElevationRequest]) (*connect.Response[v1.WithdrawElevationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.ElevationService.WithdrawElevation is not implemented"))
 }
 
 func (UnimplementedElevationServiceHandler) ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error) {

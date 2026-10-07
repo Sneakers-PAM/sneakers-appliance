@@ -139,6 +139,37 @@ func TestElevationEndToEnd(t *testing.T) {
 	}
 }
 
+// A requester withdraws their own pending request; it's audited, and the
+// console can no longer approve it. Someone else's request isn't theirs
+// to withdraw.
+func TestWithdrawElevation(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	bob := b.shellElevation("bob")
+	req, err := bob.RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "x"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := req.Msg.GetElevation().GetId()
+
+	_, err = b.shellElevation("alice").WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: id}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_UNKNOWN")
+
+	if _, err := bob.WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: id})); err != nil {
+		t.Fatal(err)
+	}
+	if en := lastEntry(t, b.log, "elevation.withdraw"); en.Actor != "bob" || en.Outcome != "ok" || en.Target != id {
+		t.Fatalf("%+v", en)
+	}
+
+	console := b.elevationAs(0, "")
+	_, err = console.ApproveElevation(ctx, connect.NewRequest(&accessv1.ApproveElevationRequest{Id: id}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_USED")
+
+	_, err = bob.WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: id}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_USED")
+}
+
 // The console has no key to sign, so it can't ask for elevation.
 func TestTheConsoleCantRequestElevation(t *testing.T) {
 	b := newBox(t)

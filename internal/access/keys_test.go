@@ -74,7 +74,7 @@ func TestParseRecoveryKey(t *testing.T) {
 func TestValidName(t *testing.T) {
 	for name, want := range map[string]bool{
 		"alice": true, "bob-2": true, "c_d": true, "a": false, "Alice": false, "1bob": false,
-		"root": false, "maint": false, "enrol": false, "sshd": false, "sshkeys": false, "nobody": false, "osadmin": false,
+		"root": false, "maint": false, "enrol": false, "sshd": false, "sshkeys": false, "nobody": false, "osadmin": false, "console": false,
 		strings.Repeat("a", 31): true, strings.Repeat("a", 32): false,
 	} {
 		if got := access.ValidName(name); got != want {
