@@ -5,6 +5,7 @@ package osadmin_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -218,5 +219,61 @@ func TestForcedPowerNeedsTheSecondConfirmation(t *testing.T) {
 	}
 	if b.init.forced {
 		t.Fatal("graceful stays the default")
+	}
+}
+
+func TestTheQuorumArmsInitAndACancelReachesIt(t *testing.T) {
+	b := newBox(t, true)
+	alice, bob := b.browser(), b.browser()
+	alice.signIn("alice")
+	bob.signIn("bob")
+	fr := start(t, alice)
+	if len(b.init.arms) != 0 {
+		t.Fatal("init is armed before the quorum approves")
+	}
+	if err := approve(bob, fr.GetId()); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.init.arms) != 1 || b.init.arms[0].GetId() != fr.GetId() || b.init.arms[0].GetStartedBy() != "alice" || len(b.init.arms[0].GetApprovals()) != 2 {
+		t.Fatalf("init is armed with the quorum: %v", b.init.arms)
+	}
+	if _, err := bob.power().CancelFactoryReset(context.Background(), connect.NewRequest(&osadminv1.CancelFactoryResetRequest{Id: fr.GetId()})); err != nil {
+		t.Fatal(err)
+	}
+	if len(b.init.cancels) != 1 || b.init.cancels[0] != fr.GetId() {
+		t.Fatalf("the cancel reaches init: %v", b.init.cancels)
+	}
+}
+
+func TestTheRunNamesTheArmedRequest(t *testing.T) {
+	b := newBox(t, true)
+	alice, bob := b.browser(), b.browser()
+	alice.signIn("alice")
+	bob.signIn("bob")
+	fr := start(t, alice)
+	if err := approve(bob, fr.GetId()); err != nil {
+		t.Fatal(err)
+	}
+	b.clk.Advance(osadmin.ResetDelay)
+	if len(b.init.resets) != 1 || b.init.resets[0].GetId() != fr.GetId() {
+		t.Fatalf("%v", b.init.resets)
+	}
+}
+
+func TestNoCountdownWhenInitRefusesToArm(t *testing.T) {
+	b := newBox(t, true)
+	b.init.armErr = connect.NewError(connect.CodeFailedPrecondition, errors.New("RESET_QUORUM (3606): \"bob\" isn't on the quorum roster"))
+	alice, bob := b.browser(), b.browser()
+	alice.signIn("alice")
+	bob.signIn("bob")
+	fr := start(t, alice)
+	symbolIn(t, approve(bob, fr.GetId()), connect.CodeFailedPrecondition, "RESET_QUORUM")
+	got := b.srv.FactoryReset()
+	if got.GetState() != osadminv1.FactoryResetState_FACTORY_RESET_STATE_PENDING || len(got.GetApprovals()) != 1 {
+		t.Fatalf("a refused arm leaves the request as it was: %v", got)
+	}
+	b.clk.Advance(osadmin.ResetDelay)
+	if len(b.init.resets) != 0 {
+		t.Fatal("a reset init refused to arm ran")
 	}
 }

@@ -113,6 +113,18 @@ func (s *Server) approveReset(id, actor string) (*osadminv1.FactoryReset, error)
 	if !r.runsAt.IsZero() {
 		return nil, codes.New(codes.ResetApproved, "the quorum has already approved; the reset is counting down")
 	}
+	if len(r.approvals)+1 >= r.required {
+		// Init checks the quorum against the roster itself and counts its
+		// own delay; without its arming the countdown doesn't start.
+		approvals := append(slices.Clone(r.approvals), actor)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		_, err := s.o.Power.ArmFactoryReset(ctx, connect.NewRequest(&initv1.ArmFactoryResetRequest{Id: r.id, StartedBy: r.startedBy, Approvals: approvals}))
+		cancel()
+		if err != nil {
+			s.o.Logger.Error(err, "osadmin: init refused to arm the factory reset", log.F("id", r.id))
+			return nil, err
+		}
+	}
 	r.approvals = append(r.approvals, actor)
 	if len(r.approvals) >= r.required {
 		r.timer.Stop()
@@ -134,7 +146,21 @@ func (s *Server) cancelReset(id string) error {
 	r.timer.Stop()
 	s.resets.cur = nil
 	s.o.Logger.Warn("osadmin: factory reset cancelled", log.F("id", r.id))
+	if !r.runsAt.IsZero() {
+		s.disarm(r.id)
+	}
 	return nil
+}
+
+// disarm tells init to forget an armed reset. osadmin has already dropped
+// it, so it never asks init to run it; init forgets it on its own when it
+// expires.
+func (s *Server) disarm(id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if _, err := s.o.Power.CancelFactoryReset(ctx, connect.NewRequest(&initv1.CancelFactoryResetRequest{Id: id})); err != nil {
+		s.o.Logger.Error(err, "osadmin: init didn't take the cancel; it forgets the reset when it expires", log.F("id", id))
+	}
 }
 
 func (s *Server) expireReset(r *resetRequest) {
@@ -159,7 +185,7 @@ func (s *Server) runReset(r *resetRequest) {
 	s.o.Logger.Warn("osadmin: factory reset running", log.F("id", r.id), log.F("startedBy", r.startedBy), log.F("approvals", strings.Join(r.approvals, ",")))
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_, err := s.o.Power.FactoryReset(ctx, connect.NewRequest(&initv1.FactoryResetRequest{StartedBy: r.startedBy, Approvals: r.approvals}))
+	_, err := s.o.Power.FactoryReset(ctx, connect.NewRequest(&initv1.FactoryResetRequest{Id: r.id, StartedBy: r.startedBy, Approvals: r.approvals}))
 	s.write(osaudit.Entry{Actor: r.startedBy, Action: "power.factory-reset.run", Target: r.id, Detail: map[string]string{"approvals": strings.Join(r.approvals, ",")}}, err)
 	if err != nil {
 		s.o.Logger.Error(err, "osadmin: factory reset failed", log.F("id", r.id))
