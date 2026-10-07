@@ -7,6 +7,8 @@ package reaper_test
 
 import (
 	"context"
+	"io"
+	"os"
 	"strings"
 	"syscall"
 	"testing"
@@ -60,5 +62,23 @@ func TestOutputFeedsStdinAndCollectsTheOutput(t *testing.T) {
 	defer cancel()
 	if _, _, err := r.Output(ctx, nil, []string{"/bin/sleep", "30"}); err == nil {
 		t.Fatal("the context must end the run")
+	}
+}
+
+// A console service writes to its own claim on the consoles.
+func TestStartConsoleWritesToTheGivenOutput(t *testing.T) {
+	r := reaper.NewReaper()
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.StartConsole([]string{"/bin/echo", "dashboard"}, pw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = pw.Close()
+	got, _ := io.ReadAll(pr)
+	if err := p.Wait(); err != nil || string(got) != "dashboard\n" {
+		t.Fatalf("output %q, %v", got, err)
 	}
 }

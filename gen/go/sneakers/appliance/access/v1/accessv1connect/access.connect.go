@@ -140,6 +140,9 @@ const (
 	// EnrolmentServiceCloseEnrolmentProcedure is the fully-qualified name of the EnrolmentService's
 	// CloseEnrolment RPC.
 	EnrolmentServiceCloseEnrolmentProcedure = "/sneakers.appliance.access.v1.EnrolmentService/CloseEnrolment"
+	// EnrolmentServiceOfferEnrolmentKeyProcedure is the fully-qualified name of the EnrolmentService's
+	// OfferEnrolmentKey RPC.
+	EnrolmentServiceOfferEnrolmentKeyProcedure = "/sneakers.appliance.access.v1.EnrolmentService/OfferEnrolmentKey"
 	// EnrolmentServiceSubmitEnrolmentCodeProcedure is the fully-qualified name of the
 	// EnrolmentService's SubmitEnrolmentCode RPC.
 	EnrolmentServiceSubmitEnrolmentCodeProcedure = "/sneakers.appliance.access.v1.EnrolmentService/SubmitEnrolmentCode"
@@ -1037,6 +1040,10 @@ type EnrolmentServiceClient interface {
 	RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error)
 	// CloseEnrolment closes the window (root only): Done on the console.
 	CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error)
+	// OfferEnrolmentKey puts a key typed or fetched on the console into the
+	// open window (root only). It waits for the typed yes like a key that
+	// gave the code over SSH.
+	OfferEnrolmentKey(context.Context, *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error)
 	// SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
 	// code the admin typed and the key sshd authenticated.
 	SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error)
@@ -1088,6 +1095,12 @@ func NewEnrolmentServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(enrolmentServiceMethods.ByName("CloseEnrolment")),
 			connect.WithClientOptions(opts...),
 		),
+		offerEnrolmentKey: connect.NewClient[v1.OfferEnrolmentKeyRequest, v1.OfferEnrolmentKeyResponse](
+			httpClient,
+			baseURL+EnrolmentServiceOfferEnrolmentKeyProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("OfferEnrolmentKey")),
+			connect.WithClientOptions(opts...),
+		),
 		submitEnrolmentCode: connect.NewClient[v1.SubmitEnrolmentCodeRequest, v1.SubmitEnrolmentCodeResponse](
 			httpClient,
 			baseURL+EnrolmentServiceSubmitEnrolmentCodeProcedure,
@@ -1111,6 +1124,7 @@ type enrolmentServiceClient struct {
 	acceptEnrolmentKey  *connect.Client[v1.AcceptEnrolmentKeyRequest, v1.AcceptEnrolmentKeyResponse]
 	rejectEnrolmentKey  *connect.Client[v1.RejectEnrolmentKeyRequest, v1.RejectEnrolmentKeyResponse]
 	closeEnrolment      *connect.Client[v1.CloseEnrolmentRequest, v1.CloseEnrolmentResponse]
+	offerEnrolmentKey   *connect.Client[v1.OfferEnrolmentKeyRequest, v1.OfferEnrolmentKeyResponse]
 	submitEnrolmentCode *connect.Client[v1.SubmitEnrolmentCodeRequest, v1.SubmitEnrolmentCodeResponse]
 	getEnrolmentKey     *connect.Client[v1.GetEnrolmentKeyRequest, v1.GetEnrolmentKeyResponse]
 }
@@ -1140,6 +1154,11 @@ func (c *enrolmentServiceClient) CloseEnrolment(ctx context.Context, req *connec
 	return c.closeEnrolment.CallUnary(ctx, req)
 }
 
+// OfferEnrolmentKey calls sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey.
+func (c *enrolmentServiceClient) OfferEnrolmentKey(ctx context.Context, req *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error) {
+	return c.offerEnrolmentKey.CallUnary(ctx, req)
+}
+
 // SubmitEnrolmentCode calls sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode.
 func (c *enrolmentServiceClient) SubmitEnrolmentCode(ctx context.Context, req *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error) {
 	return c.submitEnrolmentCode.CallUnary(ctx, req)
@@ -1165,6 +1184,10 @@ type EnrolmentServiceHandler interface {
 	RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error)
 	// CloseEnrolment closes the window (root only): Done on the console.
 	CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error)
+	// OfferEnrolmentKey puts a key typed or fetched on the console into the
+	// open window (root only). It waits for the typed yes like a key that
+	// gave the code over SSH.
+	OfferEnrolmentKey(context.Context, *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error)
 	// SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
 	// code the admin typed and the key sshd authenticated.
 	SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error)
@@ -1211,6 +1234,12 @@ func NewEnrolmentServiceHandler(svc EnrolmentServiceHandler, opts ...connect.Han
 		connect.WithSchema(enrolmentServiceMethods.ByName("CloseEnrolment")),
 		connect.WithHandlerOptions(opts...),
 	)
+	enrolmentServiceOfferEnrolmentKeyHandler := connect.NewUnaryHandler(
+		EnrolmentServiceOfferEnrolmentKeyProcedure,
+		svc.OfferEnrolmentKey,
+		connect.WithSchema(enrolmentServiceMethods.ByName("OfferEnrolmentKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	enrolmentServiceSubmitEnrolmentCodeHandler := connect.NewUnaryHandler(
 		EnrolmentServiceSubmitEnrolmentCodeProcedure,
 		svc.SubmitEnrolmentCode,
@@ -1236,6 +1265,8 @@ func NewEnrolmentServiceHandler(svc EnrolmentServiceHandler, opts ...connect.Han
 			enrolmentServiceRejectEnrolmentKeyHandler.ServeHTTP(w, r)
 		case EnrolmentServiceCloseEnrolmentProcedure:
 			enrolmentServiceCloseEnrolmentHandler.ServeHTTP(w, r)
+		case EnrolmentServiceOfferEnrolmentKeyProcedure:
+			enrolmentServiceOfferEnrolmentKeyHandler.ServeHTTP(w, r)
 		case EnrolmentServiceSubmitEnrolmentCodeProcedure:
 			enrolmentServiceSubmitEnrolmentCodeHandler.ServeHTTP(w, r)
 		case EnrolmentServiceGetEnrolmentKeyProcedure:
@@ -1267,6 +1298,10 @@ func (UnimplementedEnrolmentServiceHandler) RejectEnrolmentKey(context.Context, 
 
 func (UnimplementedEnrolmentServiceHandler) CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) OfferEnrolmentKey(context.Context, *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey is not implemented"))
 }
 
 func (UnimplementedEnrolmentServiceHandler) SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error) {

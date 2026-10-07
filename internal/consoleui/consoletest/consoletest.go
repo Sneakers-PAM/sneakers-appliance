@@ -1,0 +1,353 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// Package consoletest is a box for the console's tests: accessd's
+// enrolment window, admins and setup state over the real enrolment window
+// and access store, and fakes of init's services and netd.
+package consoletest
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"errors"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect"
+	"golang.org/x/crypto/ssh"
+
+	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
+)
+
+// Box is the access side of a box: the store and the enrolment window,
+// served as accessd serves them to the console.
+type Box struct {
+	Store *access.Store
+	Enrol *enrol.Service
+	Clock *clock.Fake
+
+	mu       sync.Mutex
+	recovery []*osadminv1.RecoveryKey
+	done     bool
+}
+
+// NewBox is a box with the named owners, none of them with a key yet.
+func NewBox(t *testing.T, owners ...string) *Box {
+	t.Helper()
+	st, err := access.Open(filepath.Join(t.TempDir(), "access"), access.Options{Stage: func() (bool, bool) { return false, false }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clk := clock.NewFake()
+	if err := st.Update(func(s *access.State) error {
+		for _, o := range owners {
+			s.AddAdmin(o, access.RoleOwner, "console", clk.Now())
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return &Box{Store: st, Enrol: enrol.New(enrol.Options{Store: st, Clock: clk}), Clock: clk}
+}
+
+// SetRecovery sets the recovery keys GetSetup reports.
+func (b *Box) SetRecovery(keys ...*osadminv1.RecoveryKey) {
+	b.mu.Lock()
+	b.recovery = keys
+	b.mu.Unlock()
+}
+
+// Finish marks setup done, as :8443 does after the first sign-in.
+func (b *Box) Finish() {
+	b.mu.Lock()
+	b.done = true
+	b.mu.Unlock()
+}
+
+// Key makes an ed25519 key line and its fingerprint.
+func Key(t *testing.T, comment string) (string, string) {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pk))) + " " + comment, ssh.FingerprintSHA256(pk)
+}
+
+func coded(err error) error {
+	if err == nil {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, errors.New(codes.Describe(err)))
+}
+
+// Window is accessd's EnrolmentService.
+func (b *Box) Window() accessv1connect.EnrolmentServiceClient { return window{b: b} }
+
+type window struct {
+	accessv1connect.UnimplementedEnrolmentServiceHandler
+	b *Box
+}
+
+func wire(v enrol.View) *accessv1.Enrolment {
+	e := &accessv1.Enrolment{Open: v.Open, Admin: v.Admin, Code: v.Code, AttemptsLeft: int32(v.AttemptsLeft), Enrolled: int32(v.Enrolled), ClosedReason: v.ClosedReason, Recovery: v.Recovery} // #nosec G115 -- small counts
+	for _, k := range v.Keys {
+		e.Keys = append(e.Keys, &accessv1.EnrolmentKey{Id: k.ID, Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment, SourceAddress: k.Source, State: string(k.State), Via: k.Via})
+	}
+	return e
+}
+
+func (w window) OpenEnrolment(_ context.Context, r *connect.Request[accessv1.OpenEnrolmentRequest]) (*connect.Response[accessv1.OpenEnrolmentResponse], error) {
+	v, err := w.b.Enrol.OpenWith(r.Msg.GetAdmin(), enrol.OpenOptions{Recovery: r.Msg.GetRecovery()})
+	if err != nil {
+		return nil, coded(err)
+	}
+	return connect.NewResponse(&accessv1.OpenEnrolmentResponse{Enrolment: wire(v)}), nil
+}
+
+func (w window) GetEnrolment(context.Context, *connect.Request[accessv1.GetEnrolmentRequest]) (*connect.Response[accessv1.GetEnrolmentResponse], error) {
+	return connect.NewResponse(&accessv1.GetEnrolmentResponse{Enrolment: wire(w.b.Enrol.Get())}), nil
+}
+
+func (w window) AcceptEnrolmentKey(_ context.Context, r *connect.Request[accessv1.AcceptEnrolmentKeyRequest]) (*connect.Response[accessv1.AcceptEnrolmentKeyResponse], error) {
+	if _, err := w.b.Enrol.Accept(r.Msg.GetId(), r.Msg.GetConfirm()); err != nil {
+		return nil, coded(err)
+	}
+	return connect.NewResponse(&accessv1.AcceptEnrolmentKeyResponse{}), nil
+}
+
+func (w window) RejectEnrolmentKey(_ context.Context, r *connect.Request[accessv1.RejectEnrolmentKeyRequest]) (*connect.Response[accessv1.RejectEnrolmentKeyResponse], error) {
+	if err := w.b.Enrol.Reject(r.Msg.GetId()); err != nil {
+		return nil, coded(err)
+	}
+	return connect.NewResponse(&accessv1.RejectEnrolmentKeyResponse{}), nil
+}
+
+func (w window) CloseEnrolment(context.Context, *connect.Request[accessv1.CloseEnrolmentRequest]) (*connect.Response[accessv1.CloseEnrolmentResponse], error) {
+	w.b.Enrol.Close(enrol.ReasonDone)
+	return connect.NewResponse(&accessv1.CloseEnrolmentResponse{}), nil
+}
+
+func (w window) OfferEnrolmentKey(_ context.Context, r *connect.Request[accessv1.OfferEnrolmentKeyRequest]) (*connect.Response[accessv1.OfferEnrolmentKeyResponse], error) {
+	k, err := w.b.Enrol.Offer(r.Msg.GetPublicKey(), r.Msg.GetVia(), r.Msg.GetFrom())
+	if err != nil {
+		return nil, coded(err)
+	}
+	return connect.NewResponse(&accessv1.OfferEnrolmentKeyResponse{Key: &accessv1.EnrolmentKey{Id: k.ID, Fingerprint: k.Fingerprint, State: string(k.State), Via: k.Via}}), nil
+}
+
+// Access is accessd's AccessService: the admins.
+func (b *Box) Access() accessv1connect.AccessServiceClient { return accessSvc{b: b} }
+
+type accessSvc struct {
+	accessv1connect.UnimplementedAccessServiceHandler
+	b *Box
+}
+
+var roles = map[access.Role]osadminv1.Role{access.RoleOwner: osadminv1.Role_ROLE_OWNER, access.RoleAdmin: osadminv1.Role_ROLE_ADMIN}
+
+func (a accessSvc) ListAdmins(context.Context, *connect.Request[accessv1.ListAdminsRequest]) (*connect.Response[accessv1.ListAdminsResponse], error) {
+	var out []*osadminv1.Admin
+	for _, ad := range a.b.Store.Read().Admins {
+		w := &osadminv1.Admin{Name: ad.Name, Role: roles[ad.Role]}
+		for _, k := range ad.Keys {
+			w.Keys = append(w.Keys, &osadminv1.Key{Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment})
+		}
+		out = append(out, w)
+	}
+	return connect.NewResponse(&accessv1.ListAdminsResponse{Admins: out}), nil
+}
+
+func (a accessSvc) AddAdmin(_ context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
+	role := access.RoleAdmin
+	if r.Msg.GetRole() == osadminv1.Role_ROLE_OWNER {
+		role = access.RoleOwner
+	}
+	err := a.b.Store.Update(func(st *access.State) error {
+		if _, taken := st.Admin(r.Msg.GetName()); taken {
+			return codes.New(codes.AccessName, "there is already an admin named %q", r.Msg.GetName())
+		}
+		st.AddAdmin(r.Msg.GetName(), role, "console", a.b.Clock.Now())
+		return nil
+	})
+	if err != nil {
+		return nil, coded(err)
+	}
+	return connect.NewResponse(&accessv1.AddAdminResponse{Admin: &osadminv1.Admin{Name: r.Msg.GetName(), Role: r.Msg.GetRole()}}), nil
+}
+
+// Setup is accessd's SetupService.
+func (b *Box) Setup() accessv1connect.SetupServiceClient { return setupSvc{b: b} }
+
+type setupSvc struct {
+	accessv1connect.UnimplementedSetupServiceHandler
+	b *Box
+}
+
+func (s setupSvc) GetSetup(context.Context, *connect.Request[accessv1.GetSetupRequest]) (*connect.Response[accessv1.GetSetupResponse], error) {
+	s.b.mu.Lock()
+	defer s.b.mu.Unlock()
+	return connect.NewResponse(&accessv1.GetSetupResponse{Setup: &osadminv1.GetSetupResponse{
+		Done: s.b.done, RecoveryKeys: s.b.recovery, MaxRecoveryKeys: int32(access.MaxRecoveryKeys), ProductSetupUrl: "https://sneakers.example.org/setup",
+	}}), nil
+}
+
+// Services is init's on-demand services: it records each start.
+type Services struct {
+	mu      sync.Mutex
+	Started []string
+	// Missing are services the table doesn't have.
+	Missing map[string]bool
+}
+
+// Start starts name.
+func (s *Services) Start(_ context.Context, name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Missing[name] {
+		return sources.NotInstalled{What: "The " + map[string]string{"sshd": "SSH service", "netd": "network service"}[name]}
+	}
+	s.Started = append(s.Started, name)
+	return nil
+}
+
+// Running reports whether name was started.
+func (s *Services) Running(_ context.Context, name string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Missing[name] {
+		return false, sources.NotInstalled{What: "The service"}
+	}
+	for _, n := range s.Started {
+		if n == name {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Starts is what was started so far.
+func (s *Services) Starts() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.Started...)
+}
+
+// Network is netd for the wizard: two NICs, and checks that report what
+// Results says.
+type Network struct {
+	mu       sync.Mutex
+	Applied  []network.Settings
+	Kept     []string
+	Results  []sources.Check
+	Addrs    []string
+	NoNetd   bool
+	NICs     []sources.NIC
+	checkRun int
+}
+
+// Installed reports whether this netd is installed.
+func (n *Network) Installed() bool { return !n.NoNetd }
+
+var errNoNetd = sources.NotInstalled{What: "The network service"}
+
+// Interfaces lists the NICs.
+func (n *Network) Interfaces(context.Context) ([]sources.NIC, error) {
+	if n.NICs != nil {
+		return n.NICs, nil
+	}
+	return []sources.NIC{{Name: "ens192", MAC: "00:50:56:00:00:01", Driver: "vmxnet3", Up: true, Link: true}, {Name: "ens224", MAC: "00:50:56:00:00:02", Driver: "vmxnet3", Up: true}}, nil
+}
+
+// Get has no settings yet.
+func (n *Network) Get(context.Context) (network.Settings, error) {
+	if n.NoNetd {
+		return network.Settings{}, errNoNetd
+	}
+	return network.Settings{}, nil
+}
+
+// Set records s.
+func (n *Network) Set(_ context.Context, s network.Settings) (string, int, error) {
+	if n.NoNetd {
+		return "", 0, errNoNetd
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.Applied = append(n.Applied, s)
+	n.checkRun = 0
+	return "T1", 120, nil
+}
+
+// Confirm records the kept token.
+func (n *Network) Confirm(_ context.Context, token string) error {
+	if n.NoNetd {
+		return errNoNetd
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.Kept = append(n.Kept, token)
+	return nil
+}
+
+// Checks reports running once, then Results.
+func (n *Network) Checks(context.Context) ([]sources.Check, error) {
+	if n.NoNetd {
+		return nil, errNoNetd
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.checkRun++
+	if n.checkRun == 1 {
+		return []sources.Check{{Name: "link", State: sources.CheckRunning}}, nil
+	}
+	return n.Results, nil
+}
+
+// Status has the addresses.
+func (n *Network) Status(context.Context) (sources.Addresses, error) {
+	if n.NoNetd {
+		return sources.Addresses{}, errNoNetd
+	}
+	return sources.Addresses{Management: n.Addrs, Hostname: "sneakers.example.org", NTPSynced: true}, nil
+}
+
+// Settle is a short wait for a background change to land.
+func Settle() { time.Sleep(20 * time.Millisecond) }
+
+// Settings are the settings applied so far.
+func (n *Network) Settings() []network.Settings {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]network.Settings(nil), n.Applied...)
+}
+
+// Tokens are the tokens kept so far.
+func (n *Network) Tokens() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.Kept...)
+}
+
+// SetResults changes what the checks report.
+func (n *Network) SetResults(cs []sources.Check) {
+	n.mu.Lock()
+	n.Results = cs
+	n.mu.Unlock()
+}

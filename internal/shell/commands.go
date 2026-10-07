@@ -184,6 +184,40 @@ func Names(o Origin) []string {
 	return out
 }
 
+// Info describes a command, for the console's menu.
+type Info struct {
+	Path, Use, Short string
+	// Args: it takes positional arguments; Flags are its flag names.
+	Args  bool
+	Flags []string
+	// Stdin: it reads a key from standard input.
+	Stdin bool
+	// Confirm is the word typed to confirm it.
+	Confirm string
+	// Later: its backend isn't in this release.
+	Later bool
+}
+
+// Commands describes the commands offered in origin o, in the table's
+// order.
+func Commands(o Origin) []Info {
+	var out []Info
+	for _, s := range specs {
+		if !slices.Contains(s.origins, o) {
+			continue
+		}
+		i := Info{Path: s.path, Use: s.use, Short: s.short, Args: s.nargs[1] != 0, Stdin: s.stdin, Confirm: s.confirm, Later: s.later}
+		if i.Use == "" {
+			i.Use = s.path[strings.LastIndex(s.path, " ")+1:]
+		}
+		for _, f := range s.flags {
+			i.Flags = append(i.Flags, f.name)
+		}
+		out = append(out, i)
+	}
+	return out
+}
+
 // Run executes one command line and reports errors on e.Err (or as JSON on
 // e.Out with -o json). It returns the error for the exit status.
 func Run(ctx context.Context, e *Env, line string) error {

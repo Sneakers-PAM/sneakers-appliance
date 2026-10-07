@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -147,5 +149,79 @@ func TestNamesReadsTheActiveList(t *testing.T) {
 	}
 	if got := console.Names("\n"); len(got) != 0 {
 		t.Fatalf("Names of an empty list = %q", got)
+	}
+}
+
+// While a program owns the console (the dashboard, the setup wizard), what
+// everyone else writes goes aside instead of over its screen; when the
+// owner's output ends, the consoles get the shared output again.
+func TestAnOwnerHasTheConsolesToItself(t *testing.T) {
+	vga, serial := newTTY(), newTTY()
+	out, outW := io.Pipe()
+	m := console.Join(out, io.Discard, []console.Console{{Name: "tty0", RW: vga}, {Name: "ttyS0", RW: serial}}, t.Logf)
+	var aside syncBuf
+	m.SetAside(&aside)
+	owner, ownerW := io.Pipe()
+	m.Attach(owner)
+	if _, err := io.WriteString(outW, "services: started service=accessd\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(ownerW, "\x1b[H\x1b[2JSneakers-PAM appliance"); err != nil {
+		t.Fatal(err)
+	}
+	for name, c := range map[string]*tty{"tty0": vga, "ttyS0": serial} {
+		waitShows(t, name, c, "\x1b[H\x1b[2JSneakers-PAM appliance")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for aside.String() != "services: started service=accessd\n" {
+		if time.Now().After(deadline) {
+			t.Fatalf("aside holds %q", aside.String())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	_ = ownerW.Close()
+	deadline = time.Now().Add(5 * time.Second)
+	for m.Owned() {
+		if time.Now().After(deadline) {
+			t.Fatal("still owned after the owner's output ended")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := io.WriteString(outW, "back\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitShows(t, "tty0", vga, "\x1b[H\x1b[2JSneakers-PAM appliance\x1b[0m\r\nback\n")
+}
+
+type syncBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// The aside log keeps the newest output and a size bound.
+func TestLogFileRollsOver(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "console.log")
+	l := &console.LogFile{Path: p, Max: 16}
+	for _, s := range []string{"0123456789\n", "abcdefghij\n", "klm\n"} {
+		if _, err := io.WriteString(l, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cur, _ := os.ReadFile(p)
+	old, _ := os.ReadFile(p + ".1")
+	if string(cur) != "abcdefghij\nklm\n" || string(old) != "0123456789\n" {
+		t.Fatalf("current %q, previous %q", cur, old)
 	}
 }

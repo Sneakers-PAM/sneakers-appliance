@@ -59,12 +59,16 @@ the entry goes when its cause is fixed. Today there are none.
 | `harness.TestHarnessBootsToSerialBanner` | Secure Boot enforcing (lab keys), swtpm | `phase=firstboot` |
 | `harness.TestFirstBootStaysUp` | as above | Enter at the protection step keeps the TPM; the state is formatted and mounted, protection is full, accessd is ready, and nothing crash-loops |
 | `reduced.TestNoSecureBootNoTPMBootsReduced` | no swtpm; an empty vars store, and keys enrolled with Secure Boot off | the Secure Boot choice (no default outside Setup Mode: Enter alone re-prompts), the typed `no secure boot`, then the key file at the protection step and first boot; after a kill, the next boot is `protection=reduced (Secure Boot off)` without asking either again |
-| `console.TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer` | no serial port, VGA, keys enrolled with Secure Boot off, no swtpm (a VMware VM) | the banner and the Secure Boot choice on the screen, `no secure boot` typed on its keyboard, then Enter at the protection step (key file) and first boot |
+| `console.TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer` | no serial port, VGA, keys enrolled with Secure Boot off, no swtpm (a VMware VM) | the banner and the Secure Boot choice on the screen, `no secure boot` typed on its keyboard, then Enter at the protection step (key file); then the setup wizard owns the screen: the reduced-protection banner, the NIC list, a NIC and Enter typed on the keyboard, and "The network service isn't installed in this build yet" |
 | `console.TestTheSerialLineAloneShowsTheChoiceAndTakesTheAnswer` | no display adapter, as above otherwise (a headless box) | the same on the serial line |
 | `console.TestBothConsolesShowTheChoiceAndTheScreenCanAnswer` | serial and VGA | the choice on both; the answer typed on the screen's keyboard is taken while the serial line shows it |
 | `reset.TestAResetFinishesAtBootThenFirstBootIsFresh` | Secure Boot enforcing, swtpm; the disk laid out as after first boot, with a begun reset record on the ESP | `phase=reset` finishes the reset and reboots without starting services; the key file, state and backup are out of the GPT and the record is `done`; the next boot is first boot (the protection step again), with no reset |
 | `custody.TestKeyFileCustodyWithoutSecureBootOrTPM` | firmware without Secure Boot, no swtpm (the first lab target) | first boot keeps the key in the key file, formats and mounts the state, accessd is ready and nothing crash-loops; the next boot reads the mode back from the LUKS2 header and asks nothing; with the key file wiped, the boot stops at "State locked" with `KEYCUSTODY_LOCKED` and starts no service |
 | `network.TestFirstBootGetsADHCPAddressAndKeepsSSHClosed` | no display adapter, keys enrolled with Secure Boot off, no swtpm; host port forwarded to the guest's 22 | netd takes QEMU's DHCP lease with no setting made (its `management addresses` line on the console), SSH gives no banner before the first-boot SSH step, and nothing crash-loops |
+
+Once the setup wizard owns the consoles, the services' own lines go to `/run/sneakers/console.log`
+instead of the serial line, so the suite's crash-loop check (`Stable`) sees only what's printed
+before the wizard starts and the wizard's own restarts.
 
 Not in the suite yet, because the image can't do it: an elevation through the real sshd (request,
 approval, certificate login, the time box, revocation) and the SSH key enrolment window. Both need

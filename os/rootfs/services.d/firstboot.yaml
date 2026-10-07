@@ -1,0 +1,10 @@
+# First boot on the console: the network, the protection chosen at boot,
+# the first admin and the SSH key enrolment, then :8443. It owns the
+# consoles while it runs, and starts sshd and osadmin at their steps.
+# Root; init restarts it whenever it stops, and it resumes at the first
+# step not done.
+exec: /usr/bin/sneakers-firstboot
+phases: [firstboot]
+after: [accessd]
+console: true
+restart: always

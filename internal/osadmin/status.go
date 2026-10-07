@@ -22,7 +22,9 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	netmodel "github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
@@ -72,13 +74,6 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	prot, err := s.o.KeyCustody.Protection(ctx, connect.NewRequest(&initv1.ProtectionRequest{}))
 	health("init", err)
 	if err == nil {
-		switch prot.Msg.GetLevel() {
-		case initv1.ProtectionLevel_PROTECTION_LEVEL_FULL:
-			out.Protection = osadminv1.Protection_PROTECTION_FULL
-		case initv1.ProtectionLevel_PROTECTION_LEVEL_REDUCED:
-			out.Protection = osadminv1.Protection_PROTECTION_REDUCED
-			add(osadminv1.WarningKind_WARNING_KIND_REDUCED_PROTECTION, "Reduced protection: "+prot.Msg.GetReason()+".")
-		}
 		out.ProtectionReason = prot.Msg.GetReason()
 		if m, merr := s.o.KeyCustody.Mode(ctx, connect.NewRequest(&initv1.ModeRequest{})); merr == nil {
 			switch m.Msg.GetMode() {
@@ -87,6 +82,14 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 			case initv1.CustodyMode_CUSTODY_MODE_KEYFILE:
 				out.CustodyMode = "keyfile"
 			}
+		}
+		switch prot.Msg.GetLevel() {
+		case initv1.ProtectionLevel_PROTECTION_LEVEL_FULL:
+			out.Protection = osadminv1.Protection_PROTECTION_FULL
+		case initv1.ProtectionLevel_PROTECTION_LEVEL_REDUCED:
+			out.Protection = osadminv1.Protection_PROTECTION_REDUCED
+			p := keycustody.Reduced(keycustody.Reason(prot.Msg.GetReason()))
+			add(osadminv1.WarningKind_WARNING_KIND_REDUCED_PROTECTION, screens.ProtectionText(p, keycustody.Mode(out.CustodyMode))+" "+screens.RaiseText(p))
 		}
 	}
 	if img, ierr := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); ierr == nil {

@@ -159,8 +159,16 @@ SSH while the console watches:
    code, a key or an answer, or after three wrong codes. The `enrol` account and its sshd block go
    away with it, so outside a window `ssh enrol@` is refused at authentication.
 
-Every step is in the OS audit log (`enrol.open`, `enrol.code`, `enrol.submit`, `enrol.accept`,
-`enrol.reject`, `enrol.close`).
+A key can also reach the window from the console itself: typed, or fetched from an https URL
+(`OfferEnrolmentKey`, root only, `via` `typed` or `url`). It waits for the same typed `yes`, uses
+none of the code's attempts, and is stored with its `via`.
+
+The console's Recover access opens the window with `recovery` set (owners only). Each key it stores
+is `via` `console-recovery`, sets the admin's `approvalHoldUntil` 24 hours ahead (no elevation
+approvals until then), and is audited as `access.console-recovery` instead of `enrol.accept`.
+
+Every step is in the OS audit log (`enrol.open`, `enrol.code`, `enrol.submit`, `enrol.offer`,
+`enrol.accept` or `access.console-recovery`, `enrol.reject`, `enrol.close`).
 
 ## One-time elevation
 

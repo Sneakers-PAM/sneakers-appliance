@@ -4,6 +4,7 @@
 package screens_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
@@ -26,5 +27,29 @@ func TestProtectionText(t *testing.T) {
 		if got := screens.ProtectionText(c.p, c.mode); got != c.want {
 			t.Errorf("%+v %s:\n got %q\nwant %q", c.p, c.mode, got, c.want)
 		}
+	}
+}
+
+// How to raise a reduced level is said with the level, on the console and
+// on :8443 Status alike.
+func TestRaiseText(t *testing.T) {
+	cases := []struct {
+		p    keycustody.Protection
+		want []string
+	}{
+		{keycustody.Reduced(keycustody.ReasonSecureBootOff), []string{":8443 Status page", "no reinstall"}},
+		{keycustody.Reduced(keycustody.ReasonNoSecureBootFirmware), []string{"no Secure Boot", "firmware that has it"}},
+		{keycustody.Reduced(keycustody.ReasonNoTPM), []string{"fixed until a reinstall", "TPM"}},
+	}
+	for _, c := range cases {
+		got := screens.RaiseText(c.p)
+		for _, w := range c.want {
+			if !strings.Contains(got, w) {
+				t.Errorf("%s: %q lacks %q", c.p.Reason, got, w)
+			}
+		}
+	}
+	if got := screens.RaiseText(keycustody.Full()); got != "" {
+		t.Errorf("full protection: %q", got)
 	}
 }

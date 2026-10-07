@@ -175,8 +175,9 @@ On first boot, after the first admin's key is enrolled, the Setup page finishes 
 
 - **Status:** the version and slots, the protection level and custody mode, the management
   addresses, the state volume's use and daily growth, the :8443 certificate, and the warnings:
-  exposure (a public management address with an allow-list open to any source), reduced protection,
-  the self-signed certificate, an unsynced clock, and a key added with the console's Recover access.
+  exposure (a public management address with an allow-list open to any source), reduced protection
+  (its reason and how to raise it, in the console's words), the self-signed certificate, an
+  unsynced clock, and a key added with the console's Recover access.
   The Secure Boot setting is changed here (owner, step-up, the host name typed to confirm).
 - **Network:** reads and changes netd's settings. A change is undone unless `ConfirmNetwork` comes
   within 120 seconds from a session that still works.
@@ -240,7 +241,8 @@ uid is refused before a byte is read.
 
 - The console-only methods (`AddRecoveryKey`, `ResetAllowList`, `Complete`, `ApproveElevation`,
   `DenyElevation`, `TerminateElevation`, `BeginElevatedSession`, `EndElevatedSession` and the
-  console's enrolment methods) refuse an admin uid with `ACCESS_FORBIDDEN`, even an owner's.
+  console's enrolment methods, `OfferEnrolmentKey` and the Recover access window among them) refuse
+  an admin uid with `ACCESS_FORBIDDEN`, even an owner's.
 - A uid in the admin range with no admin behind it is refused (`ACCESS_FORBIDDEN`).
 - A closed-shell login sends the fingerprint of the key sshd says signed it in
   (`Sneakers-Key-Fingerprint`) and its SSH client address (`Sneakers-Source`), for the audit entry.

@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Status                           sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
+    can change this box's software and read its data.
+    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
+
+ Version      0.1.0 (stable channel), slot A
+ Secure Boot  off, by choice                   At rest   key file
+ Platform     running                          Upgrades  none staged
+ Management   198.51.100.7/24
+ :8443        https://198.51.100.7:8443/  (self-signed: check the fingerprint)
+              3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
+              3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
+ SSH host     ssh-ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw
+              ssh-rsa      SHA256:ZE49MXHIq3Pj+N4nEUoUfua0dqGgtmXYcekpDgbLqbw
+
+ ! The management interface has a public address and the allow-list lets any
+   source reach ports 22 and 8443.
+ ! The clock isn't synchronised with an NTP server.
+ ! A key for carol was added on the console with Recover access.
+ ------------------------------------------------------------------------------
+ Enter: menu, or type a console command such as "keys list"
+ >
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced

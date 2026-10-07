@@ -15,6 +15,7 @@ owner.
 |---|---|
 | `/sbin/init` | `sneakers-init` |
 | `/usr/bin/sneakers-accessd`, `/usr/bin/sneakers-osadmin` | the access service and the :8443 front (services) |
+| `/usr/bin/sneakers-firstboot`, `/usr/bin/sneakers-console` | the setup wizard and the normal-phase console, which own the console in turn ([console.md](console.md)) |
 | `/usr/bin/sneakers-shell` | every admin's login shell and sshd's `ForceCommand` |
 | `/usr/libexec/sneakers-elevated`, `sneakers-enrol`, `sneakers-enrol-keys` | sshd's forced commands for `maint` and `enrol`, and the enrolment `AuthorizedKeysCommand`; root's, as sshd requires |
 | `/usr/sbin/sshd`, `/usr/libexec/openssh/{sshd-session,sshd-auth}`, `/usr/bin/ssh-keygen` | static OpenSSH ([static-tools.md](static-tools.md)) |

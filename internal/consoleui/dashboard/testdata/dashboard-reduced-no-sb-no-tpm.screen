@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Status                           sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (no Secure Boot, no TPM). Someone with the disk or SD
+    card can change this box's software and read its data.
+    Only firmware with Secure Boot can raise it, from the :8443 Status page.
+
+ Version      0.1.0 (stable channel), slot A
+ Secure Boot  not in this firmware             At rest   key file
+ Platform     running                          Upgrades  none staged
+ Management   192.0.2.10/24  2001:db8::10/64
+ :8443        https://192.0.2.10:8443/  (self-signed: check the fingerprint)
+              3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
+              3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
+ SSH host     ssh-ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw
+              ssh-rsa      SHA256:ZE49MXHIq3Pj+N4nEUoUfua0dqGgtmXYcekpDgbLqbw
+
+
+
+
+
+ ------------------------------------------------------------------------------
+ Enter: menu, or type a console command such as "keys list"
+ >
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced

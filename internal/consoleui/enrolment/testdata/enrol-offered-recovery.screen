@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Recover access                   sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
+    can change this box's software and read its data.
+    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
+
+ This key wants to be a key of admin alice:
+   SHA256:3q2+7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+   ssh-ed25519, comment "alice@laptop", from 192.0.2.50
+
+ Check the fingerprint with the admin. Accept it? Type yes to store it, or no.
+
+ Recover access is recorded in the OS audit log, every other owner sees a
+ banner on :8443, and the key can't approve elevations for 24 hours (another
+ owner can lift that).
+
+
+
+
+
+ ------------------------------------------------------------------------------
+ yes: store the key   no: refuse it
+ >
+ Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP synced

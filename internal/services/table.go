@@ -71,6 +71,11 @@ type Service struct {
 	// service starts only through Services.Start (osadmin waits for its
 	// first-boot step).
 	OnDemandIn []phase.Phase `yaml:"on-demand-in"`
+	// Console marks the program that owns the consoles in its phases (the
+	// dashboard, the setup wizard): its standard output goes to every
+	// console and everyone else's goes aside. At most one per phase; it
+	// runs as root.
+	Console bool `yaml:"console"`
 }
 
 // Readiness is one probe: a file that appears, or a command that exits 0.
@@ -148,6 +153,8 @@ func parse(name string, b []byte) (*Service, error) {
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: pre-start %q must be an absolute path", name, s.PreStart[0])
 	case len(s.OnDemandIn) > 0 && s.Start != StartAlways:
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: on-demand-in needs start: always", name)
+	case s.Console && s.User != "":
+		return nil, codes.New(codes.ServiceTableInvalid, "%s: a console service runs as root", name)
 	}
 	if s.User != "" {
 		if _, ok := accounts.ServiceUser(s.User); !ok {
@@ -169,8 +176,20 @@ func parse(name string, b []byte) (*Service, error) {
 	return &s, nil
 }
 
-// check refuses unknown or cyclic After references.
+// check refuses unknown or cyclic After references, and two console
+// services in one phase.
 func (t Table) check() error {
+	owner := map[phase.Phase]string{}
+	for _, n := range t.Names() {
+		if s := t[n]; s.Console {
+			for _, p := range s.Phases {
+				if o, taken := owner[p]; taken {
+					return codes.New(codes.ServiceTableInvalid, "%s and %s both own the console in phase %s", o, n, p)
+				}
+				owner[p] = n
+			}
+		}
+	}
 	for _, s := range t {
 		for _, a := range s.After {
 			if _, ok := t[a]; !ok {

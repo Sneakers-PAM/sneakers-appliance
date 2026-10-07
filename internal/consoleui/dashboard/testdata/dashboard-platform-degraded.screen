@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Status                           sneakers.example.org
+ ------------------------------------------------------------------------------
+ Version      0.1.0 (stable channel), slot A
+ Secure Boot  enforcing, org keys only         At rest   TPM
+ Platform     not answering                    Upgrades  none staged
+ Management   192.0.2.10/24  2001:db8::10/64
+ :8443        https://192.0.2.10:8443/  (self-signed: check the fingerprint)
+              3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
+              3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
+ SSH host     ssh-ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw
+              ssh-rsa      SHA256:ZE49MXHIq3Pj+N4nEUoUfua0dqGgtmXYcekpDgbLqbw
+
+ ! netd isn't answering: dial unix /run/sneakers/netd.sock: connect:
+   connection refused
+
+
+
+
+
+
+ ------------------------------------------------------------------------------
+ Enter: menu, or type a console command such as "keys list"
+ >
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced
