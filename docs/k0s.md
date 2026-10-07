@@ -107,5 +107,5 @@ three minutes of waiting it prints, once, the pods, kube-router's and kube-proxy
 routes, the addresses and kube-proxy's NAT rules for the `kubernetes` Service. The test checks those
 lines, fetches the NodePort from the host through QEMU's port forward, and checks that k0s doesn't
 crash-loop; it skips the general crash-loop check, since services that need the skipped first-boot
-steps (sshd with no owner key) keep failing there. It needs KVM: under software emulation k0s
-takes many minutes to get its API up.
+steps (sshd with no owner key) keep failing there. It runs without KVM too: under software
+emulation (TCG) the whole test takes about eight minutes.
