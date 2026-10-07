@@ -3,9 +3,14 @@
 
 // The Updates page. A .bin is uploaded with POST /upload (the session
 // cookie and the X-CSRF-Token header, the file as the body), which answers
-// {"uploadId": "..."}; or fetched from the configured mirror. Either way
-// its signature, channel and hash are verified before anything is
-// unpacked.
+// {"uploadId": "..."}; or fetched from the configured mirror, then the
+// release source. Either way its signature, channel and hash are verified
+// before anything is unpacked.
+//
+// The same flow carries both targets: the base image (the OS, its slots
+// and a reboot) and the product bundle (k0s, its images and the product,
+// in their own slots on the state volume, with no reboot). The first
+// product install is the same flow with no previous slot.
 syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
@@ -22,8 +27,9 @@ service UpgradeService {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {role: ROLE_ADMIN};
   }
-  // FetchUpdate downloads a .bin from the mirror. Refused when no mirror
-  // is configured (air-gap: upload only).
+  // FetchUpdate downloads a .bin, a base update or a product bundle, from
+  // the mirror, then the release source when the policy allows direct
+  // fetches. Refused when neither is set (air-gap: upload only).
   rpc FetchUpdate(FetchUpdateRequest) returns (FetchUpdateResponse) {
     option (rule) = {
       role: ROLE_ADMIN
@@ -31,7 +37,8 @@ service UpgradeService {
     };
   }
   // StageUpdate verifies an uploaded or fetched .bin, then decrypts,
-  // unpacks and stages it into the inactive slot.
+  // unpacks and stages it into the inactive slot: the base image's, or for
+  // a product bundle, which must fit the running base, the product's.
   rpc StageUpdate(StageUpdateRequest) returns (StageUpdateResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -39,7 +46,9 @@ service UpgradeService {
       audit: "upgrade.stage"
     };
   }
-  // ApplyUpdate boots the staged release. While an elevated shell is open
+  // ApplyUpdate boots the staged release, or for target product switches
+  // to the staged product slot and restarts the product services (no
+  // reboot). While an elevated shell is open
   // it is refused with UPGRADE_ELEVATED, unless the request carries an
   // owner's elevation_override for that shell.
   rpc ApplyUpdate(ApplyUpdateRequest) returns (ApplyUpdateResponse) {
@@ -49,7 +58,8 @@ service UpgradeService {
       audit: "upgrade.apply"
     };
   }
-  // RevertUpdate goes back to the previous release. An open elevated
+  // RevertUpdate goes back to the previous release, or for target product
+  // to the previous product slot. An open elevated
   // shell holds it back the same way as ApplyUpdate.
   rpc RevertUpdate(RevertUpdateRequest) returns (RevertUpdateResponse) {
     option (rule) = {
@@ -57,6 +67,15 @@ service UpgradeService {
       step_up: true
       audit: "upgrade.revert"
     };
+  }
+  // ListProductVersions lists the product bundles this box may install:
+  // stable versions for its architecture and channel that fit the running
+  // base, newer than the installed product. It reads the index from the
+  // mirror, then the release source when the policy allows direct
+  // fetches; refused with UPGRADE_AIR_GAPPED when neither is set.
+  rpc ListProductVersions(ListProductVersionsRequest) returns (ListProductVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
   }
   rpc SetUpgradePolicy(SetUpgradePolicyRequest) returns (SetUpgradePolicyResponse) {
     option (rule) = {
@@ -74,9 +93,51 @@ message UpgradePolicy {
   // window_start is HH:MM local; window_minutes its length.
   string window_start = 2;
   int32 window_minutes = 3;
-  // mirror_url is the HTTPS base the .bin files are fetched from. Empty
-  // means air-gapped: the box never fetches.
+  // mirror_url is the HTTPS base the .bin files are fetched from. Empty,
+  // with direct off, means air-gapped: the box never fetches.
   string mirror_url = 4;
+  // direct fetches from the release source (the GitHub Release) when no
+  // mirror is set or the mirror fails. Off by default.
+  bool direct = 5;
+}
+
+// UpdateTarget is what an update changes. Unspecified is the base image,
+// as before product bundles.
+enum UpdateTarget {
+  UPDATE_TARGET_UNSPECIFIED = 0;
+  // UPDATE_TARGET_BASE is the base image: the OS slots and a reboot.
+  UPDATE_TARGET_BASE = 1;
+  // UPDATE_TARGET_PRODUCT is the product bundle: k0s, its images and the
+  // product, in their own slots on the state volume.
+  UPDATE_TARGET_PRODUCT = 2;
+}
+
+// ProductSlots are the product bundle's slots on the state volume.
+message ProductSlots {
+  // installed_version is the product running from the current slot; empty
+  // before the first install.
+  string installed_version = 1;
+  string staged_version = 2;
+  // previous_version is the slot a revert goes back to; empty when there
+  // is none.
+  string previous_version = 3;
+  // running is true while the product services (k0s) run.
+  bool running = 4;
+}
+
+// ProductVersion is one product bundle a source offers.
+message ProductVersion {
+  string version = 1;
+  string arch = 2;
+  string channel = 3;
+  // bases are the base versions the bundle fits.
+  repeated string bases = 4;
+  // file_name is what FetchUpdate takes, such as
+  // sneakers-product-0.2.0-amd64.bin.
+  string file_name = 5;
+  int64 size = 6;
+  // source is mirror or direct: where the index came from.
+  string source = 7;
 }
 
 // UpdatePackage is a verified .bin's signed header.
@@ -90,6 +151,7 @@ message UpdatePackage {
   string channel = 6;
   string sha256 = 7;
   int64 size = 8;
+  UpdateTarget target = 9;
 }
 
 message UpgradeEvent {
@@ -102,6 +164,7 @@ message UpgradeEvent {
   string outcome = 5;
   string code = 6;
   string detail = 7;
+  UpdateTarget target = 8;
 }
 
 message GetUpgradesRequest {}
@@ -116,16 +179,24 @@ message GetUpgradesResponse {
   // active_elevations are the elevated shells open now; while there is
   // one, Apply and Revert are refused unless an owner overrides it.
   repeated Elevation active_elevations = 7;
+  // product is the product bundle's slots.
+  ProductSlots product = 8;
+  // direct_available is true when this build has a release source to
+  // fetch from directly (production builds).
+  bool direct_available = 9;
 }
 
 message FetchUpdateRequest {
-  // file_name is the .bin's name on the mirror, such as
-  // sneakers-appliance-0.2.0-amd64.bin.
+  // file_name is the .bin's name, such as
+  // sneakers-appliance-0.2.0-amd64.bin, or a product bundle's from
+  // ListProductVersions, such as sneakers-product-0.2.0-amd64.bin.
   string file_name = 1;
 }
 
 message FetchUpdateResponse {
   string upload_id = 1;
+  // source is mirror or direct.
+  string source = 2;
 }
 
 message StageUpdateRequest {
@@ -151,12 +222,23 @@ message ElevationOverride {
 
 message ApplyUpdateRequest {
   ElevationOverride elevation_override = 1;
+  UpdateTarget target = 2;
 }
 
 message ApplyUpdateResponse {}
 
 message RevertUpdateRequest {
   ElevationOverride elevation_override = 1;
+  UpdateTarget target = 2;
+}
+
+message ListProductVersionsRequest {}
+
+message ListProductVersionsResponse {
+  // versions are newest first.
+  repeated ProductVersion versions = 1;
+  // base_version is the running base they were matched against.
+  string base_version = 2;
 }
 
 message RevertUpdateResponse {}
