@@ -66,7 +66,14 @@ type UpgradeOptions struct {
 	// HTTPClient fetches from the mirror; nil uses a client with the
 	// environment's proxy.
 	HTTPClient *http.Client
+	// ElevationEndWait bounds how long an owner's override waits for the
+	// elevated session it terminated to end; 0 is DefaultElevationEndWait.
+	ElevationEndWait time.Duration
 }
+
+// DefaultElevationEndWait is how long an override waits for a terminated
+// elevated session's recording to close and its end to be reported.
+const DefaultElevationEndWait = 30 * time.Second
 
 // Policy is the update policy as stored.
 type Policy struct {
@@ -114,24 +121,91 @@ func (s *Server) Maintenance() bool {
 }
 
 // beginMaintenance sets maintenance, then refuses when an elevated shell
-// is already active, naming it: the owner ends it, or waits for it, first.
-// Setting maintenance before the check means none can start in between.
-func (s *Server) beginMaintenance(what string) error {
+// is already active, naming it: the owner ends it, waits for it, or
+// overrides. An override o names one active session, confirmed by typing
+// its admin and id; that session is terminated, audited with the reason,
+// and waited for before maintenance goes ahead. Any other active session
+// still refuses. Setting maintenance before the check means none can start
+// in between. It returns the id of the session the override ended.
+func (s *Server) beginMaintenance(ctx context.Context, what string, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, error) {
 	s.upgrades.mu.Lock()
 	s.upgrades.maintUntil = s.o.Clock.Now().Add(MaintenanceBound)
 	s.upgrades.mu.Unlock()
 	if s.o.Elevation == nil {
-		return nil
+		return "", nil
 	}
+	var held *elevation.Request
 	for _, r := range s.o.Elevation.List() {
-		if r.State == elevation.Active {
+		if r.State != elevation.Active {
+			continue
+		}
+		if o != nil && r.ID == o.GetElevationId() {
+			held = &r
+			continue
+		}
+		s.endMaintenance()
+		s.o.Logger.Warn("osadmin: an update waits for an elevated shell", log.F("what", what), log.F("elevation", r.ID), log.F("admin", r.Admin))
+		return "", codes.New(codes.UpgradeElevated, "%s has an elevated shell open (%s); it must end, or an owner ends it with an override, before the %s", r.Admin, r.ID, what)
+	}
+	if held != nil {
+		if err := s.overrideElevation(ctx, *held, by, o); err != nil {
 			s.endMaintenance()
-			s.o.Logger.Warn("osadmin: an update waits for an elevated shell", log.F("what", what), log.F("elevation", r.ID), log.F("admin", r.Admin))
-			return codes.New(codes.UpgradeElevated, "%s has an elevated shell open (%s); it must end, or an owner terminates it, before the %s", r.Admin, r.ID, what)
+			return "", err
 		}
 	}
 	s.o.Logger.Info("osadmin: maintenance on", log.F("what", what))
-	return nil
+	if held == nil {
+		return "", nil
+	}
+	return held.ID, nil
+}
+
+// overrideElevation checks the owner's typed confirmation and reason, ends
+// r and waits until its end is reported, so nothing is applied under it.
+func (s *Server) overrideElevation(ctx context.Context, r elevation.Request, by osaudit.Entry, o *osadminv1.ElevationOverride) error {
+	want := r.Admin + " " + r.ID
+	if strings.TrimSpace(o.GetConfirm()) != want {
+		s.o.Logger.Warn("osadmin: an elevation override's confirmation doesn't match", log.F("elevation", r.ID), log.F("by", by.Actor))
+		return codes.New(codes.AccessConfirm, "type %q to confirm ending %s's elevated shell", want, r.Admin)
+	}
+	reason := strings.TrimSpace(o.GetReason())
+	if reason == "" || len(reason) > 500 {
+		return codes.New(codes.AccessConfirm, "say why %s's elevated shell is ended, in at most 500 characters", r.Admin)
+	}
+	_, err := s.o.Elevation.Terminate(r.ID, by.Actor)
+	e := by
+	e.Action, e.Target = "elevation.terminate", r.ID
+	e.Detail = map[string]string{"admin": r.Admin, "reason": reason, "for": by.Action}
+	if surface := by.Detail["surface"]; surface != "" {
+		e.Detail["surface"] = surface
+	}
+	s.write(e, err)
+	if err != nil {
+		return err
+	}
+	s.o.Logger.Info("osadmin: an owner override ends an elevated shell", log.F("elevation", r.ID), log.F("admin", r.Admin), log.F("by", by.Actor), log.F("for", by.Action))
+	wait := s.o.Upgrade.ElevationEndWait
+	if wait <= 0 {
+		wait = DefaultElevationEndWait
+	}
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if got, ok := s.o.Elevation.Get(r.ID); !ok || got.State != elevation.Active {
+			s.o.Logger.Info("osadmin: the overridden elevated shell ended", log.F("elevation", r.ID))
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			s.o.Logger.Warn("osadmin: the overridden elevated shell hasn't ended", log.F("elevation", r.ID), log.F("waited", wait.String()))
+			return codes.New(codes.UpgradeElevated, "%s's elevated shell (%s) was told to end but is still open after %s; try again once it has ended", r.Admin, r.ID, wait)
+		case <-tick.C:
+		}
+	}
 }
 
 func (s *Server) endMaintenance() {
@@ -292,6 +366,17 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "", History: h.s.readHistory(100)}
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
+	}
+	if h.s.o.Elevation != nil {
+		auditDir := ""
+		if h.s.o.Audit != nil {
+			auditDir = h.s.o.Audit.Dir()
+		}
+		for _, r := range h.s.o.Elevation.List() {
+			if r.State == elevation.Active {
+				out.ActiveElevations = append(out.ActiveElevations, ElevationToWire(r, auditDir))
+			}
+		}
 	}
 	return connect.NewResponse(out), nil
 }
@@ -470,28 +555,39 @@ func (s *Server) reject(path string, err error) {
 	}
 }
 
-func (h *upgradeSvc) ApplyUpdate(ctx context.Context, _ *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {
+// by is who an update action is for, as the start of an audit entry.
+func (c *call) by(action string) osaudit.Entry {
+	return osaudit.Entry{Actor: c.session.Admin, KeyFP: c.session.KeyFP, Source: c.source, Action: action, Detail: c.detail}
+}
+
+func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {
 	c := callFrom(ctx)
-	v, err := h.s.apply(ctx, c.session.Admin)
+	v, overrode, err := h.s.apply(ctx, c.by("upgrade.apply"), r.Msg.GetElevationOverride())
 	c.note("box", "version", v)
+	if overrode != "" {
+		c.note("box", "overrode", overrode)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&osadminv1.ApplyUpdateResponse{}), nil
 }
 
-// apply boots the staged release: init activates it and reboots.
-func (s *Server) apply(ctx context.Context, actor string) (string, error) {
+// apply boots the staged release: init activates it and reboots. o is an
+// owner's override of an open elevated shell, or nil.
+func (s *Server) apply(ctx context.Context, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, string, error) {
+	actor := by.Actor
 	st, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	v := st.Msg.GetStagedVersion()
 	if v == "" {
 		err = codes.New(codes.UpgradeNotStaged, "no release is staged; upload or fetch one and stage it first")
 	}
+	overrode := ""
 	if err == nil {
-		err = s.beginMaintenance("update applies")
+		overrode, err = s.beginMaintenance(ctx, "update applies", by, o)
 	}
 	if err == nil {
 		_, err = s.o.Image.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{}))
@@ -502,15 +598,25 @@ func (s *Server) apply(ctx context.Context, actor string) (string, error) {
 	if err != nil {
 		s.endMaintenance()
 	}
-	s.history("apply", v, actor, err, "")
+	s.history("apply", v, actor, err, overrideDetail(overrode))
 	s.o.Logger.Info("osadmin: apply", log.F("version", v), log.F("by", actor), log.F("ok", err == nil))
-	return v, err
+	return v, overrode, err
 }
 
-func (h *upgradeSvc) RevertUpdate(ctx context.Context, _ *connect.Request[osadminv1.RevertUpdateRequest]) (*connect.Response[osadminv1.RevertUpdateResponse], error) {
+func overrideDetail(id string) string {
+	if id == "" {
+		return ""
+	}
+	return "ended elevated shell " + id
+}
+
+func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadminv1.RevertUpdateRequest]) (*connect.Response[osadminv1.RevertUpdateResponse], error) {
 	c := callFrom(ctx)
 	c.note("box")
-	err := h.s.beginMaintenance("update reverts")
+	overrode, err := h.s.beginMaintenance(ctx, "update reverts", c.by("upgrade.revert"), r.Msg.GetElevationOverride())
+	if overrode != "" {
+		c.note("box", "overrode", overrode)
+	}
 	if err == nil {
 		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{}))
 	}
@@ -520,7 +626,7 @@ func (h *upgradeSvc) RevertUpdate(ctx context.Context, _ *connect.Request[osadmi
 	if err != nil {
 		h.s.endMaintenance()
 	}
-	h.s.history("revert", "", c.session.Admin, err, "")
+	h.s.history("revert", "", c.session.Admin, err, overrideDetail(overrode))
 	if err != nil {
 		return nil, err
 	}
@@ -562,6 +668,6 @@ func (s *Server) UpgradeWindowTick(ctx context.Context) {
 	s.upgrades.mu.Lock()
 	s.upgrades.lastWindow = day
 	s.upgrades.mu.Unlock()
-	v, err := s.apply(ctx, "window")
+	v, _, err := s.apply(ctx, osaudit.Entry{Actor: "window", Action: "upgrade.apply"}, nil)
 	s.write(osaudit.Entry{Actor: "window", Action: "upgrade.apply", Target: "box", Detail: map[string]string{"version": v, "surface": "window"}}, err)
 }

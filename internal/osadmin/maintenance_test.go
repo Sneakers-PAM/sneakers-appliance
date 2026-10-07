@@ -173,3 +173,162 @@ func TestTheWindowWaitsForAnElevatedShell(t *testing.T) {
 		t.Fatalf("applied %d times", b.init.activated)
 	}
 }
+
+// endsOnSignal makes a signalled session end itself, as its
+// sneakers-elevated does on SIGTERM.
+func (b *box) endsOnSignal() {
+	b.onSignal = func(pid int) {
+		for _, r := range b.elev.List() {
+			if r.State == elevation.Active && r.PID == pid {
+				_ = b.elev.End(r.ID, elevation.ReasonTerminated, "")
+			}
+		}
+	}
+}
+
+func override(r elevation.Request, confirm string) *osadminv1.ElevationOverride {
+	return &osadminv1.ElevationOverride{ElevationId: r.ID, Confirm: confirm, Reason: "the security fix can't wait"}
+}
+
+// The owner's override ends the elevated shell, audited with the reason,
+// and only then applies.
+func TestAnOwnerOverrideEndsTheShellThenApplies(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.staged(alice)
+	b.endsOnSignal()
+	r := b.elevated()
+	var stateAtActivate elevation.State
+	b.init.duringActivate = func() {
+		got, _ := b.elev.Get(r.ID)
+		stateAtActivate = got.State
+	}
+	req := &osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(req)); err != nil {
+		t.Fatal(err)
+	}
+	if stateAtActivate != elevation.Ended {
+		t.Fatalf("the release activated with the session %q", stateAtActivate)
+	}
+	if b.init.activated != 1 || b.init.reboots != 1 {
+		t.Fatalf("activated %d, rebooted %d", b.init.activated, b.init.reboots)
+	}
+	e := lastEntry(t, b.log, "elevation.terminate")
+	if e.Outcome != "ok" || e.Target != r.ID || e.Actor != "alice" || e.Detail["reason"] != "the security fix can't wait" || e.Detail["admin"] != "bob" || e.Detail["for"] != "upgrade.apply" {
+		t.Fatalf("%+v", e)
+	}
+	if e := lastEntry(t, b.log, "upgrade.apply"); e.Outcome != "ok" || e.Detail["overrode"] != r.ID {
+		t.Fatalf("%+v", e)
+	}
+}
+
+func TestAnOwnerOverrideEndsTheShellThenReverts(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.endsOnSignal()
+	r := b.elevated()
+	req := &osadminv1.RevertUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}
+	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(req)); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := b.elev.Get(r.ID); got.State != elevation.Ended {
+		t.Fatalf("the session is %s", got.State)
+	}
+	if b.init.rollbacks != 1 {
+		t.Fatalf("rolled back %d times", b.init.rollbacks)
+	}
+}
+
+// A wrong confirmation, a missing reason or an override naming another
+// request is refused, and the shell stays open.
+func TestAWrongOverrideIsRefused(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.staged(alice)
+	b.endsOnSignal()
+	r := b.elevated()
+	ctx := context.Background()
+	noReason := override(r, "bob "+r.ID)
+	noReason.Reason = " "
+	other := override(r, "bob E-ZZZZ")
+	other.ElevationId = "E-ZZZZ"
+	for name, o := range map[string]*osadminv1.ElevationOverride{
+		"wrong admin":    override(r, "alice "+r.ID),
+		"wrong request":  override(r, "bob E-ZZZZ"),
+		"empty":          override(r, ""),
+		"no reason":      noReason,
+		"another id":     other,
+		"case or spaces": override(r, " BOB  "+strings.ToLower(r.ID)),
+	} {
+		_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: o}))
+		if err == nil {
+			t.Fatalf("%s: no error", name)
+		}
+		if name == "another id" {
+			symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_ELEVATED")
+		} else {
+			symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
+		}
+	}
+	if got, _ := b.elev.Get(r.ID); got.State != elevation.Active || len(b.signals) != 0 {
+		t.Fatalf("a refused override touched the session: %s, %v", got.State, b.signals)
+	}
+	if b.init.activated != 0 || b.srv.Maintenance() {
+		t.Fatal("a refused override applied or left maintenance on")
+	}
+}
+
+// Only an owner may override: an admin's apply, override or not, is
+// refused before anything is ended.
+func TestANonOwnerCantOverride(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.staged(alice)
+	b.endsOnSignal()
+	r := b.elevated()
+	bob := b.browser()
+	bob.signIn("bob")
+	_, err := bob.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}))
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("want permission denied, got %v", err)
+	}
+	if got, _ := b.elev.Get(r.ID); got.State != elevation.Active || len(b.signals) != 0 || b.init.activated != 0 {
+		t.Fatal("an admin's override ended the session or applied")
+	}
+}
+
+// A session that doesn't end in time holds the apply back: nothing
+// activates under it.
+func TestAnOverrideWaitsForTheSessionToEnd(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.staged(alice)
+	r := b.elevated()
+	_, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_ELEVATED")
+	if len(b.signals) != 1 || b.init.activated != 0 || b.srv.Maintenance() {
+		t.Fatalf("signals %v, activated %d", b.signals, b.init.activated)
+	}
+}
+
+// Updates names the open elevated shells, so the page can show who holds
+// one before the owner tries.
+func TestUpdatesNamesTheOpenElevatedShell(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	r := b.elevated()
+	got, err := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	es := got.Msg.GetActiveElevations()
+	if len(es) != 1 || es[0].GetId() != r.ID || es[0].GetAdmin() != "bob" {
+		t.Fatalf("%v", es)
+	}
+}

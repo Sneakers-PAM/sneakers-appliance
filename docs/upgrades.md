@@ -43,6 +43,20 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    refused while an elevated shell is open (`UPGRADE_ELEVATED`, naming it), and both put the box in
    maintenance first, which refuses new elevated shells (`ELEV_MAINTENANCE`) until the reboot, or
    at once again if the apply fails ([ssh-and-elevation.md](ssh-and-elevation.md)).
+   `GetUpgrades.active_elevations` lists the open elevated shells, so the page shows who holds one
+   before an owner tries.
+
+**The elevation override.** An owner may end the open shell and go ahead in the same request:
+Apply and Revert take an `elevation_override` with the session's id, a typed confirmation of its
+admin and id (`bob E-7KQ2`) and a reason. The override is owner only and behind step-up, like Apply
+and Revert themselves. A wrong confirmation or an empty reason is refused (`ACCESS_CONFIRM`) and
+the shell is left alone; an override naming one session doesn't cover another, which still refuses
+with `UPGRADE_ELEVATED`. When it checks out, the session is terminated (an `elevation.terminate`
+entry in the OS audit log with the reason, the admin it belonged to and `for: upgrade.apply` or
+`upgrade.revert`), and the apply or revert waits, at most 30 seconds, until `sneakers-elevated`
+reports the end; a session that hasn't ended by then refuses with `UPGRADE_ELEVATED` and nothing
+is applied. The apply's own audit entry and history line name the session it ended. Without an
+override the refusal stays. The update window never overrides.
 
 **The policy** (owner, step-up): `automatic` applies a staged release once inside the daily window
 (default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. It's
