@@ -163,16 +163,21 @@ func (s *Store) Read() State {
 // Update applies fn to a copy of the newest state on disk, checks the
 // invariants and, when both pass, writes the result as the next version.
 // Concurrent Updates run one after the other, each on the state the last one
-// left, so no interleaving can break an invariant.
-func (s *Store) Update(fn func(*State) error) error {
-	next, err := s.update(fn)
+// left, so no interleaving can break an invariant. A key the change removes
+// is revoked with no actor recorded; a call made for someone uses UpdateAs.
+func (s *Store) Update(fn func(*State) error) error { return s.UpdateAs("", fn) }
+
+// UpdateAs is Update made by by, an admin's name or ConsoleActor: the keys
+// the change removes are revoked as by's.
+func (s *Store) UpdateAs(by string, fn func(*State) error) error {
+	next, err := s.update(by, fn)
 	if err == nil && s.o.OnChange != nil {
 		s.o.OnChange(next.Clone())
 	}
 	return err
 }
 
-func (s *Store) update(fn func(*State) error) (State, error) {
+func (s *Store) update(by string, fn func(*State) error) (State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur, err := s.load()
@@ -183,7 +188,7 @@ func (s *Store) update(fn func(*State) error) (State, error) {
 	if err := fn(&next); err != nil {
 		return State{}, err
 	}
-	revokeRemoved(cur, &next, time.Now())
+	revokeRemoved(cur, &next, time.Now(), by)
 	adminDone, recoveryDone := s.o.Stage()
 	if err := Check(next, adminDone, recoveryDone); err != nil {
 		s.o.Logger.Warn("access: change refused", log.F("version", cur.Version), log.F("error", codes.Describe(err)))
@@ -207,7 +212,7 @@ func (s *Store) update(fn func(*State) error) (State, error) {
 		return State{}, err
 	}
 	if n := len(next.RevokedKeys) - len(cur.RevokedKeys); n > 0 {
-		s.o.Logger.Info("access: login keys revoked", log.F("version", next.Version), log.F("keys", n))
+		s.o.Logger.Info("access: login keys revoked", log.F("version", next.Version), log.F("keys", n), log.F("by", by))
 	}
 	s.cur = next
 	s.o.Logger.Info("access: store updated", log.F("version", next.Version), log.F("admins", len(next.Admins)), log.F("recoveryKeys", len(next.RecoveryKeys)))

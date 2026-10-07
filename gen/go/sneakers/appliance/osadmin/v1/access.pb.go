@@ -221,8 +221,11 @@ type RevokedKey struct {
 	Fingerprint string                 `protobuf:"bytes,1,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
 	Type        string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	// admin is who the key belonged to.
-	Admin         string                 `protobuf:"bytes,3,opt,name=admin,proto3" json:"admin,omitempty"`
-	Revoked       *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	Admin   string                 `protobuf:"bytes,3,opt,name=admin,proto3" json:"admin,omitempty"`
+	Revoked *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=revoked,proto3" json:"revoked,omitempty"`
+	// revoked_by is who removed the key or its admin: an admin's name, or
+	// "console". "unknown" for a key revoked before this was recorded.
+	RevokedBy     string `protobuf:"bytes,5,opt,name=revoked_by,json=revokedBy,proto3" json:"revoked_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -283,6 +286,13 @@ func (x *RevokedKey) GetRevoked() *timestamppb.Timestamp {
 		return x.Revoked
 	}
 	return nil
+}
+
+func (x *RevokedKey) GetRevokedBy() string {
+	if x != nil {
+		return x.RevokedBy
+	}
+	return ""
 }
 
 type HostKey struct {
@@ -1300,13 +1310,15 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\n" +
 	"created_by\x18\x05 \x01(\tR\tcreatedBy\x126\n" +
 	"\x04keys\x18\x06 \x03(\v2\".sneakers.appliance.osadmin.v1.KeyR\x04keys\x12J\n" +
-	"\x13approval_hold_until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11approvalHoldUntil\"\x8e\x01\n" +
+	"\x13approval_hold_until\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x11approvalHoldUntil\"\xad\x01\n" +
 	"\n" +
 	"RevokedKey\x12 \n" +
 	"\vfingerprint\x18\x01 \x01(\tR\vfingerprint\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
 	"\x05admin\x18\x03 \x01(\tR\x05admin\x124\n" +
-	"\arevoked\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\arevoked\"?\n" +
+	"\arevoked\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\arevoked\x12\x1d\n" +
+	"\n" +
+	"revoked_by\x18\x05 \x01(\tR\trevokedBy\"?\n" +
 	"\aHostKey\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12 \n" +
 	"\vfingerprint\x18\x02 \x01(\tR\vfingerprint\"\xa1\x01\n" +

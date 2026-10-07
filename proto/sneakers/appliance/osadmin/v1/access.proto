@@ -115,6 +115,9 @@ message RevokedKey {
   // admin is who the key belonged to.
   string admin = 3;
   google.protobuf.Timestamp revoked = 4;
+  // revoked_by is who removed the key or its admin: an admin's name, or
+  // "console". "unknown" for a key revoked before this was recorded.
+  string revoked_by = 5;
 }
 
 message HostKey {

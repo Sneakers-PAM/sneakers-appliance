@@ -5,6 +5,7 @@ package accessd_test
 
 import (
 	"context"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 )
 
@@ -153,4 +155,37 @@ func TestARevokedKeyComesBackOnlyThroughAnOwnersUnrevoke(t *testing.T) {
 	}
 	_, err = api.UnrevokeKey(ctx, withSession(connect.NewRequest(&osadminv1.UnrevokeKeyRequest{Fingerprint: gone.fp}), cookie, csrf))
 	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_KEY_TYPE")
+}
+
+// Each revocation names who removed the key: the admin on :8443 or in the
+// closed shell, or the console.
+func TestARevokedKeyNamesWhoRemovedIt(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	b.addAdmin("carol", access.RoleAdmin)
+	b.addAdmin("dave", access.RoleAdmin)
+	if _, err := b.shell("bob").RemoveKey(ctx, connect.NewRequest(&accessv1.RemoveKeyRequest{Fingerprint: b.keys["bob"].fp})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.consoleAccess().RemoveKey(ctx, connect.NewRequest(&accessv1.RemoveKeyRequest{Admin: "dave", Fingerprint: b.keys["dave"].fp})); err != nil {
+		t.Fatal(err)
+	}
+	hc, url := b.osadmin()
+	api := osadminv1connect.NewAccessServiceClient(hc, url)
+	cookie, csrf := b.signIn("alice")
+	if _, err := api.RemoveAdmin(ctx, withSession(connect.NewRequest(&osadminv1.RemoveAdminRequest{Name: "carol"}), cookie, csrf)); err != nil {
+		t.Fatal(err)
+	}
+	list, err := api.ListAdmins(ctx, withSession(connect.NewRequest(&osadminv1.ListAdminsRequest{}), cookie, csrf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, r := range list.Msg.GetRevokedKeys() {
+		got[r.GetAdmin()] = r.GetRevokedBy()
+	}
+	want := map[string]string{"bob": "bob", "dave": access.ConsoleActor, "carol": "alice"}
+	if !maps.Equal(got, want) {
+		t.Fatalf("revoked by %v, want %v", got, want)
+	}
 }
