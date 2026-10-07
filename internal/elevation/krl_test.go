@@ -1,0 +1,101 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package elevation_test
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+)
+
+func sshKeygen(t *testing.T) string {
+	t.Helper()
+	p, err := exec.LookPath("ssh-keygen")
+	if err != nil {
+		if os.Getenv("SNEAKERS_REQUIRE_TOOLS") != "" {
+			t.Fatal("ssh-keygen isn't installed and SNEAKERS_REQUIRE_TOOLS is set")
+		}
+		t.Skip("ssh-keygen isn't installed")
+	}
+	return p
+}
+
+func keygen(t *testing.T, bin string, args ...string) (string, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput() // #nosec G204 -- the test's own ssh-keygen
+	return string(out), err
+}
+
+// OpenSSH's own ssh-keygen reads the revocation list: a used certificate's
+// serial is revoked, a fresh one isn't, and the certificate carries the
+// principal, validity, options and extensions the design names.
+func TestOpenSSHReadsTheCertificateAndTheRevocationList(t *testing.T) {
+	bin := sshKeygen(t)
+	f := newFixture(t, "alice")
+	used := f.request("bob", 30)
+	ua, err := f.svc.Approve(f.st, "alice", used.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.svc.Begin(ua.Certificate, 1); err != nil {
+		t.Fatal(err)
+	}
+	fresh := f.request("bob", 30)
+	fa, err := f.svc.Approve(f.st, "alice", fresh.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	usedFile, freshFile := filepath.Join(dir, "used-cert.pub"), filepath.Join(dir, "fresh-cert.pub")
+	if err := os.WriteFile(usedFile, []byte(ua.Certificate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(freshFile, []byte(fa.Certificate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	krl := filepath.Join(f.dir, "ssh", elevation.RevokedFile)
+	if out, err := keygen(t, bin, "-Q", "-f", krl, usedFile); err == nil || !strings.Contains(out, "REVOKED") {
+		t.Fatalf("the used certificate isn't revoked: %v %s", err, out)
+	}
+	if out, err := keygen(t, bin, "-Q", "-f", krl, freshFile); err != nil || strings.Contains(out, "REVOKED") {
+		t.Fatalf("the fresh certificate is revoked: %v %s", err, out)
+	}
+	out, err := keygen(t, bin, "-L", "-f", freshFile)
+	if err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+	for _, want := range []string{"user certificate", "elev-" + fresh.ID, "force-command /usr/libexec/sneakers-elevated", "source-address 192.0.2.50", "permit-pty"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("ssh-keygen -L has no %q:\n%s", want, out)
+		}
+	}
+	for _, refused := range []string{"permit-port-forwarding", "permit-agent-forwarding", "permit-X11-forwarding", "permit-user-rc"} {
+		if strings.Contains(out, refused) {
+			t.Errorf("ssh-keygen -L shows %q:\n%s", refused, out)
+		}
+	}
+}
+
+func TestAnEmptyRevocationListParses(t *testing.T) {
+	bin := sshKeygen(t)
+	f := newFixture(t, "alice")
+	k := f.keys["bob"]
+	file := filepath.Join(t.TempDir(), "bob.pub")
+	if err := os.WriteFile(file, ssh.MarshalAuthorizedKey(k), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := keygen(t, bin, "-Q", "-f", filepath.Join(f.dir, "ssh", elevation.RevokedFile), file); err != nil {
+		t.Fatalf("%v %s", err, out)
+	}
+}

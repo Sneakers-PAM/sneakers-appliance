@@ -25,12 +25,15 @@ const (
 	AccessConfirm          = 3014
 	EnrolCode              = 3101
 	EnrolClosed            = 3102
+	EnrolUnknown           = 3103
 	LoginCode              = 3201
 	ElevSelfApproval       = 3301
 	ElevHold               = 3302
 	ElevExpired            = 3303
 	ElevUsed               = 3304
 	ElevMaintenance        = 3305
+	ElevMinutes            = 3306
+	ElevUnknown            = 3307
 	NetInvalid             = 3401
 	NetNoAddress           = 3402
 	NetDHCPTimeout         = 3403
@@ -71,12 +74,15 @@ var accessEntries = []apperr.Entry{
 	{Code: AccessConfirm, Symbol: "ACCESS_CONFIRM", Title: "access", Cause: "the typed confirmation doesn't match"},
 	{Code: EnrolCode, Symbol: "ENROL_CODE", Title: "enrol", Cause: "wrong enrolment code"},
 	{Code: EnrolClosed, Symbol: "ENROL_CLOSED", Title: "enrol", Cause: "the enrolment window is closed"},
+	{Code: EnrolUnknown, Symbol: "ENROL_UNKNOWN", Title: "enrol", Cause: "no key with that id is waiting in the enrolment window"},
 	{Code: LoginCode, Symbol: "LOGIN_CODE", Title: "login", Cause: "unknown, used or expired sign-in code"},
 	{Code: ElevSelfApproval, Symbol: "ELEV_SELF_APPROVAL", Title: "elevation", Cause: "with two or more owners, nobody approves their own request"},
 	{Code: ElevHold, Symbol: "ELEV_HOLD", Title: "elevation", Cause: "the approver is under the 24-hour console-recovery hold"},
 	{Code: ElevExpired, Symbol: "ELEV_EXPIRED", Title: "elevation", Cause: "the request or certificate expired"},
 	{Code: ElevUsed, Symbol: "ELEV_USED", Title: "elevation", Cause: "the certificate was already used"},
 	{Code: ElevMaintenance, Symbol: "ELEV_MAINTENANCE", Title: "elevation", Cause: "an upgrade is in progress"},
+	{Code: ElevMinutes, Symbol: "ELEV_MINUTES", Title: "elevation", Cause: "the length is outside 15 minutes to the policy's maximum, or an approval would lengthen the request"},
+	{Code: ElevUnknown, Symbol: "ELEV_UNKNOWN", Title: "elevation", Cause: "no elevation request or certificate has that id"},
 	{Code: NetInvalid, Symbol: "NET_INVALID", Title: "network", Cause: "a setting fails validation (the error names the field)"},
 	{Code: NetNoAddress, Symbol: "NET_NO_ADDRESS", Title: "network", Cause: "the management interface has no usable address"},
 	{Code: NetDHCPTimeout, Symbol: "NET_DHCP_TIMEOUT", Title: "network", Cause: "no DHCP server answered in time"},

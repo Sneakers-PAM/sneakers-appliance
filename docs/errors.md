@@ -28,12 +28,15 @@ shell, the console and :8443 show the same sentence.
 | 3014 | `ACCESS_CONFIRM` | the typed confirmation (the host name) doesn't match |
 | 3101 | `ENROL_CODE` | wrong enrolment code (the attempts left are shown) |
 | 3102 | `ENROL_CLOSED` | the enrolment window is closed |
+| 3103 | `ENROL_UNKNOWN` | no key with that id is waiting in the enrolment window |
 | 3201 | `LOGIN_CODE` | unknown, used or expired sign-in code |
 | 3301 | `ELEV_SELF_APPROVAL` | with two or more owners, nobody approves their own request |
 | 3302 | `ELEV_HOLD` | the approver is under the 24-hour console-recovery hold |
 | 3303 | `ELEV_EXPIRED` | the request or certificate expired |
 | 3304 | `ELEV_USED` | the certificate was already used |
 | 3305 | `ELEV_MAINTENANCE` | an upgrade is in progress |
+| 3306 | `ELEV_MINUTES` | the length is outside 15 minutes to the policy's maximum, or an approval would lengthen the request |
+| 3307 | `ELEV_UNKNOWN` | no elevation request or certificate has that id |
 | 3401 | `NET_INVALID` | a setting fails validation (the error names the field) |
 | 3402 | `NET_NO_ADDRESS` | the management interface has no usable address |
 | 3403 | `NET_DHCP_TIMEOUT` | no DHCP server answered in time |
