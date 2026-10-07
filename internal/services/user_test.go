@@ -160,3 +160,24 @@ func TestTheRootImageTable(t *testing.T) {
 		t.Fatalf("osadmin: %+v", o)
 	}
 }
+
+// netd runs as root in first boot and normal operation, restarted whenever
+// it stops, and accessd starts after it (sshd's files listen on the
+// addresses netd reports).
+func TestTheRootImageTableRunsNetd(t *testing.T) {
+	tbl, err := services.Load(os.DirFS("../../os/rootfs"), "services.d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n, ok := tbl["netd"]
+	if !ok {
+		t.Fatal("no netd")
+	}
+	if n.Exec != "/usr/bin/sneakers-netd" || n.User != "" || n.Restart != services.RestartAlways || n.Start != services.StartAlways ||
+		!n.In(phase.Firstboot) || !n.In(phase.Normal) || n.OnDemand(phase.Firstboot) || n.Readiness.File != "/run/sneakers/netd.ready" {
+		t.Fatalf("netd: %+v", n)
+	}
+	if !slices.Contains(tbl["accessd"].After, "netd") {
+		t.Fatalf("accessd starts before netd: %+v", tbl["accessd"].After)
+	}
+}

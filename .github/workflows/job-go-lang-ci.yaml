@@ -65,6 +65,14 @@ jobs:
         env:
           SNEAKERS_REQUIRE_TOOLS: "1"
         run: go test ./... -cover
+      # netd and the firewall run against real network namespaces, which
+      # need root; as the runner user they skip.
+      - name: Network namespace tests (root)
+        env:
+          SNEAKERS_REQUIRE_NETNS: "1"
+        run: |
+          sudo -E env "PATH=$PATH" "GOCACHE=$(go env GOCACHE)" "GOMODCACHE=$(go env GOMODCACHE)" \
+            go test -count=1 ./internal/netd/ ./internal/firewall/
   lint:
     name: 🧹 GolangCI
     if: github.event.pull_request.draft == false

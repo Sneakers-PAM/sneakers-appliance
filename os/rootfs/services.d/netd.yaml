@@ -1,0 +1,9 @@
+# The network daemon: addresses, DHCP, router advertisements, resolv.conf,
+# SNTP, the management firewall and the connectivity checks, on
+# /run/sneakers/netd.sock. Root, in first boot and normal operation; when
+# it stops, the addresses stay in the kernel and init restarts it.
+exec: /usr/bin/sneakers-netd
+phases: [firstboot, normal]
+restart: always
+readiness:
+  file: /run/sneakers/netd.ready

@@ -4,6 +4,7 @@
 # stops, and logins keep working meanwhile from the files it rendered.
 exec: /usr/bin/sneakers-accessd
 phases: [firstboot, normal]
+after: [netd]
 restart: always
 readiness:
   file: /run/sneakers/access.ready
