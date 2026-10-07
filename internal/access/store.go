@@ -29,6 +29,9 @@ type State struct {
 	Admins          []Admin       `json:"admins"`
 	RecoveryKeys    []RecoveryKey `json:"recoveryKeys"`
 	ElevationPolicy Policy        `json:"elevationPolicy"`
+	// Quorum is the factory-reset roster; nil means every admin, two
+	// approvals.
+	Quorum *QuorumRoster `json:"quorum,omitempty"`
 }
 
 // Clone returns a deep copy of s.
@@ -50,6 +53,7 @@ func (s State) Clone() State {
 		c.Admins[i] = a
 	}
 	c.RecoveryKeys = slices.Clone(s.RecoveryKeys)
+	c.Quorum = s.Quorum.clone()
 	return c
 }
 
