@@ -176,10 +176,10 @@ func sealedPrefix(hdr, bd []byte) []byte {
 }
 
 func binVerifyCmd() *cobra.Command {
-	var key, channel, identity, extract string
+	var key, channel, identity, identityUKI, extract string
 	cmd := &cobra.Command{
 		Use:   "bin-verify <file.bin>",
-		Short: "Verify a .bin's signature, channel and payload digest; with --identity also decrypt it",
+		Short: "Verify a .bin's signature, channel and payload digest; with --identity or --identity-uki also decrypt it",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pub, err := os.ReadFile(key) // #nosec G304 -- a public key file
@@ -202,8 +202,13 @@ func binVerifyCmd() *cobra.Command {
 			if err := p.Verify(pub, channel); err != nil {
 				return err
 			}
-			if identity != "" {
-				id, err := readIdentity(identity)
+			if identity != "" || identityUKI != "" {
+				var id age.Identity
+				if identity != "" {
+					id, err = readIdentity(identity)
+				} else {
+					id, err = ukiIdentity(identityUKI)
+				}
 				if err != nil {
 					return err
 				}
@@ -239,7 +244,9 @@ func binVerifyCmd() *cobra.Command {
 	f.StringVar(&key, "release-key", "", "the channel's release public key (cosign.pub)")
 	f.StringVar(&channel, "channel", "", "production or lab")
 	f.StringVar(&identity, "identity", "", "the update key, to also decrypt (lab runs)")
-	f.StringVar(&extract, "extract", "", "with --identity, unpack the payload here")
+	f.StringVar(&identityUKI, "identity-uki", "", "a UKI whose update key decrypts, as the box does")
+	f.StringVar(&extract, "extract", "", "with --identity or --identity-uki, unpack the payload here")
+	cmd.MarkFlagsMutuallyExclusive("identity", "identity-uki")
 	_ = cmd.MarkFlagRequired("release-key")
 	_ = cmd.MarkFlagRequired("channel")
 	return cmd

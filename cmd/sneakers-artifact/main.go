@@ -7,7 +7,9 @@
 // key: the release workflow's sign job (or a lab build, with its throwaway
 // key) signs the index blob and the .bin header with `cosign sign-blob
 // --bundle` and hands the bundles back to `attach` and `bin-seal`. The only
-// key it makes is a throwaway lab update key.
+// key it makes is a throwaway lab update key. `uki-add-key` puts the update
+// key the sign step hands it into the unsigned UKI, before the db key signs
+// it, so the box can decrypt its channel's packages.
 package main
 
 import (
@@ -34,7 +36,7 @@ func main() {
 
 func root() *cobra.Command {
 	r := &cobra.Command{Use: "sneakers-artifact", Short: "Assemble the sneakers-os artifact, attach its signature and pack the update package", SilenceUsage: true}
-	r.AddCommand(assembleCmd(), indexBlobCmd(), attachCmd(), labUpdateKeyCmd(), binPackCmd(), binSealCmd(), binVerifyCmd(), pushCmd())
+	r.AddCommand(assembleCmd(), indexBlobCmd(), attachCmd(), labUpdateKeyCmd(), ukiAddKeyCmd(), binPackCmd(), binSealCmd(), binVerifyCmd(), pushCmd())
 	return r
 }
 
