@@ -250,3 +250,25 @@ func TestUntarRefusesAPathOutsideTheDirectory(t *testing.T) {
 		t.Fatalf("want UPGRADE_FORMAT, got %v", err)
 	}
 }
+
+// A lab build's version carries its build number, git-describe style
+// (0.0.0-lab.20261007d-g1a2b3c4): a hyphen inside a pre-release
+// identifier is SemVer, and the package takes it. A version that's empty
+// after the hyphen, or holds anything outside SemVer's characters, still
+// isn't one.
+func TestABuildNumberInTheVersion(t *testing.T) {
+	ks := newKeySet(t)
+	h := updatepkg.Header{Version: "0.0.0-lab.20261007d-g1a2b3c4", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelLab}
+	if _, err := updatepkg.Encrypt(strings.NewReader("x"), h, ks.enc.Recipient(), &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := updatepkg.FileName(h); got != "sneakers-appliance-0.0.0-lab.20261007d-g1a2b3c4-amd64-LAB.bin" {
+		t.Fatal(got)
+	}
+	for _, v := range []string{"0.0.0-", "0.0.0-lab..1", "0.0.0-lab_1", "0.0.0-lab/1"} {
+		h.Version = v
+		if _, err := updatepkg.Encrypt(strings.NewReader("x"), h, ks.enc.Recipient(), &bytes.Buffer{}); !codes.Is(err, codes.UpgradeFormat) {
+			t.Errorf("%q: want UPGRADE_FORMAT, got %v", v, err)
+		}
+	}
+}
