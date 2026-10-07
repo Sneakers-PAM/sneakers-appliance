@@ -128,7 +128,7 @@ func TestLoginRefusedByOsadmin(t *testing.T) {
 func TestLoginOsadminDown(t *testing.T) {
 	s := &shell.Services{Session: shell.Session{Admin: "alice", KeyFingerprint: "SHA256:abc"}, Local: osadminv1connect.NewLocalServiceClient(http.DefaultClient, "http://127.0.0.1:1")}
 	_, stderr, err := runWith(t, s, "login ABCD-EFGH", "y\n")
-	if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "appliance admin (:8443) isn't answering") {
+	if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "appliance services are unavailable") {
 		t.Fatalf("%v %q", err, stderr)
 	}
 }

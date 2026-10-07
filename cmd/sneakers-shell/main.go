@@ -23,16 +23,13 @@ import (
 	"golang.org/x/term"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
-	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
 // The local sockets: osadmin's for sign-in approval, init's power socket
 // for reboot and poweroff.
-const (
-	osadminSocket = "/run/sneakers/osadmin.sock"
-	powerSocket   = "/run/sneakers/power.sock"
-)
+const powerSocket = "/run/sneakers/power.sock"
 
 func unixClient(sock string) *http.Client {
 	return &http.Client{Transport: &http.Transport{
@@ -48,11 +45,13 @@ func backend() *shell.Services {
 		name = u.Username
 	}
 	sess, err := shell.SessionFromSSH(os.Getenv, name)
-	return &shell.Services{
+	s := &shell.Services{
 		Session: sess, SessionErr: err,
-		Local: osadminv1connect.NewLocalServiceClient(unixClient(osadminSocket), "http://osadmin.sock"),
-		Power: initv1connect.NewPowerServiceClient(unixClient(powerSocket), "http://power.sock"),
+		Power:      initv1connect.NewPowerServiceClient(unixClient(powerSocket), "http://power.sock"),
+		StatusFile: accessapi.StatusFile,
 	}
+	s.UseAccessd(unixClient(accessapi.SocketPath), "http://access.sock")
+	return s
 }
 
 func main() { os.Exit(run()) }

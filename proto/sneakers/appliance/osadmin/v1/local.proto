@@ -1,9 +1,10 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The local API of sneakers-osadmin on /run/sneakers/osadmin.sock, for the
-// closed shell and the console. A root peer may act as any admin; an admin
-// uid (a closed-shell login) only as itself (SO_PEERCRED).
+// The sign-in approval and the reset cancel, which sneakers-accessd serves
+// on /run/sneakers/access.sock to the closed shell and the console. A root
+// peer may act as any admin; an admin uid (a closed-shell login) only as
+// itself (SO_PEERCRED).
 syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
