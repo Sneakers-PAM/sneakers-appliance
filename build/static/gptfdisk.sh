@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
-# Copyright The CryptOS Authors.
 #
 # Build a fully static sgdisk (gptfdisk) from the Debian-packaged source inside
 # a Debian (glibc) container. A glibc fully-static binary is self-contained (no

@@ -1,6 +1,5 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 // Command sneakers-switchroot is the /init of the UKI's initrd: it opens the
 // root the signed command line names with dm-verity and switch_roots into

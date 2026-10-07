@@ -1,6 +1,5 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 // Package ukipcr predicts the PCR 11 value a Unified Kernel Image will leave
 // behind when systemd-stub boots it.
@@ -13,7 +12,7 @@
 // the SHA-256 of the section name including its NUL terminator, then with the
 // SHA-256 of the section contents as loaded in memory (VirtualSize bytes,
 // zero-filled past the raw data). .pcrsig is skipped because it signs the
-// result of the measurement. Nothing else in a CryptOS boot extends PCR 11:
+// result of the measurement. Nothing else in an appliance boot extends PCR 11:
 // there is no systemd userspace to add phase measurements, and init never
 // touches it.
 //

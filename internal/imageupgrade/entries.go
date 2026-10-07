@@ -1,12 +1,10 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 // Package imageupgrade stages a release into the inactive root slot and
 // manages the systemd-boot entries that boot it (spec 1 Sections 2.6 and
-// 3.1). It starts from CryptOS-PKI's internal/imageupgrade (verify before
-// writing, durable writes, keep the previous release), with systemd-boot
-// boot counting and A/B root partitions in place of file-rename slots.
+// 3.1): it verifies before writing, writes durably and keeps the previous
+// release, with systemd-boot boot counting and A/B root partitions.
 package imageupgrade
 
 import (

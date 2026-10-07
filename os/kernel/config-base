@@ -1,22 +1,20 @@
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
-# Copyright The CryptOS Authors.
 #
 # The appliance kernel: everything built in (CONFIG_MODULES=n), merged onto
-# tinyconfig by build/kernel/build.sh. Ported from CryptOS-PKI's
-# build/kernel/cryptos.config with what k0s needs added. Lockdown is set on
+# tinyconfig by build/kernel/build.sh, with what k0s needs. Lockdown is set on
 # the command line (lockdown=integrity), not forced here.
 
 #
 # Merged onto the tiny base config (`make tinyconfig`, via
 # scripts/kconfig/merge_config.sh) by build/kernel/build.sh. These are the
-# options CryptOS depends on or hardens, plus the dependency substrate the tiny
+# options the appliance depends on or hardens, plus the dependency substrate the tiny
 # base omits. Keep this list reviewed — it is the kernel's security posture.
 # build.sh fails the build if any `=y` here is dropped from the final .config.
 #
 # DRAFT: option set is the intended Phase 1 posture; validate it builds +
 # boots in QEMU before relying on it. Bare-metal driver selection (NIC,
-# NVMe, etc.) is layered on separately (see cryptos#33 / hardware notes).
+# NVMe, etc.) is layered on separately (see the bare-metal hardware notes).
 
 # Dependency substrate. The base is `make tinyconfig` (allnoconfig + tiny),
 # which leaves the prerequisites of the options below unset; without these,
@@ -111,9 +109,9 @@ CONFIG_PRINTK=y
 CONFIG_BLK_DEV_INITRD=y
 CONFIG_RD_GZIP=y
 CONFIG_PROC_FS=y
-# Exec ELF userspace (the Go /init and cryptosctl).
+# Exec ELF userspace (the Go init and the appliance tools).
 CONFIG_BINFMT_ELF=y
-# Go runtime syscall subsystems. The entire userspace (init, cryptosctl) is Go;
+# Go runtime syscall subsystems. The entire userspace (init and its tools) is Go;
 # the tiny base strips these and the Go runtime segfaults at startup without
 # FUTEX (see runtime/os_linux.go). EPOLL backs the netpoller (the mTLS gRPC
 # listener); the fd/barrier syscalls are used across the runtime.
@@ -131,7 +129,7 @@ CONFIG_SERIAL_8250=y
 CONFIG_SERIAL_8250_CONSOLE=y
 # On-screen console for the prod cmdline (`console=tty0`): a virtual terminal
 # rendered on the UEFI GOP framebuffer via efifb + fbcon, so the branded boot
-# and the cryptos-console dashboard are visible on the physical/VM display
+# and the sneakers-console dashboard are visible on the physical/VM display
 # (VMware SVGA, QEMU/OVMF, bare-metal UEFI). Without VT the tty0 device does not
 # exist and console=tty0 is silently ignored; without FB_EFI+FRAMEBUFFER_CONSOLE
 # nothing is drawn on screen. A built-in font is required for fbcon to render.
@@ -154,7 +152,7 @@ CONFIG_VIRTIO_PCI=y
 CONFIG_VIRTIO_NET=y
 CONFIG_VIRTIO_BLK=y
 CONFIG_NETDEVICES=y
-# GPT partition parsing (locate the cryptos-state partition) + ext4 (state fs).
+# GPT partition parsing (locate the state partition) + ext4 (state fs).
 CONFIG_PARTITION_ADVANCED=y
 CONFIG_EFI_PARTITION=y
 CONFIG_EXT4_FS=y

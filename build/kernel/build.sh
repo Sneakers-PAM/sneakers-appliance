@@ -1,13 +1,12 @@
 #!/usr/bin/env bash
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
-# Copyright The CryptOS Authors.
 #
 # build.sh [amd64]: fetch the pinned kernel from its stable git tag, merge
 # os/kernel/config-base and every platform profile onto tinyconfig, check the
 # result, and build a reproducible bzImage. One kernel serves every amd64
 # platform, because one signed UKI does. Output: build/out/kernel/<arch>/bzImage
-# and its .config. Ported from CryptOS-PKI's build/kernel/build.sh.
+# and its .config.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

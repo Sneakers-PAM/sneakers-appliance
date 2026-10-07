@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
-# Copyright The CryptOS Authors.
 #
 # assemble.sh: build the unsigned UKI (systemd-stub with ukify) for one
-# release. Ported from CryptOS-PKI's build/uki/assemble.sh: the initrd here
-# holds only sneakers-switchroot and a static veritysetup; the root lives in
-# its own verity partition, named by the signed command line.
+# release. The initrd holds only sneakers-switchroot and a static
+# veritysetup; the root lives in its own verity partition, named by the
+# signed command line.
 #
 # Inputs (environment):
 #   KERNEL        the kernel image (bzImage)

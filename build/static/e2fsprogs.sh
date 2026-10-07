@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
-# Copyright The CryptOS Authors.
 #
 # Build a fully static mke2fs (installed into the rootfs as mkfs.ext4) from the
 # pinned e2fsprogs git tag, inside a Debian (glibc) container.
