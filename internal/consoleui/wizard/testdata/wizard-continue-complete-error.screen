@@ -4,7 +4,7 @@
     can change this box's software and read its data.
     Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
 
- [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [>] 4 Recovery  [ ] 5 Sign-in
+ [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [x] 4 Recovery  [>] 5 Sign-in
 
  From the admin's machine open https://192.0.2.10:8443/
                             or https://[2001:db8::10]:8443/
@@ -15,8 +15,8 @@
    ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw  offline safe
  Then sign in on :8443 and approve its code: ssh alice@<address> login <code>
 
-
-
+ Setup can't complete yet: SETUP_INCOMPLETE: a step is still open: the escrow
+ hasn't been written
 
  ------------------------------------------------------------------------------
  waiting for a recovery key and the first sign-in; this moves on by itself

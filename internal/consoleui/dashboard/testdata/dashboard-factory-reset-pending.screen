@@ -2,14 +2,14 @@
  ------------------------------------------------------------------------------
  Version      0.1.0 (stable channel), slot A
  Secure Boot  enforcing, org keys only         At rest   TPM
- Platform     running                          Upgrades  none staged
+ Platform     running                          Nodes     1
+ Upgrades     none staged
  Management   192.0.2.10/24  2001:db8::10/64
  :8443        https://192.0.2.10:8443/  (self-signed: check the fingerprint)
               3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
               3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
  SSH host     ssh-ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw
               ssh-rsa      SHA256:ZE49MXHIq3Pj+N4nEUoUfua0dqGgtmXYcekpDgbLqbw
-
  ! Factory reset requested by alice is waiting for its quorum (1 of 2).
 
 

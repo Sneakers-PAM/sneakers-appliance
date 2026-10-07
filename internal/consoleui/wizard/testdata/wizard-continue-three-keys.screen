@@ -2,23 +2,23 @@
  ------------------------------------------------------------------------------
  [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [>] 4 Recovery  [ ] 5 Sign-in
 
- From the admin's machine open:
-     https://192.0.2.10:8443/
-     https://[2001:db8::10]:8443/
- Check the certificate on the first visit (self-signed for now), SHA-256:
+ From the admin's machine open https://192.0.2.10:8443/
+                            or https://[2001:db8::10]:8443/
+ and check its certificate on the first visit (self-signed for now), SHA-256:
      3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
      3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
-
- Waiting for a recovery key and the first sign-in.
- Recovery keys: 3 of up to 3.
+ Recovery keys: 3 of up to 3:
    ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw  offline safe
    ed25519  SHA256:ZE49MXHIq3Pj+N4nEUoUfua0dqGgtmXYcekpDgbLqbw  carol
    rsa      SHA256:3q2+7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA  bank vault
+ Then sign in on :8443 and approve its code: ssh alice@<address> login <code>
+
+
 
 
 
 
  ------------------------------------------------------------------------------
- this screen moves on by itself once the first sign-in is done
+ waiting for a recovery key and the first sign-in; this moves on by itself
 
  Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

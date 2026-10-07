@@ -119,6 +119,34 @@ func NICsPage(f Frame, nics []sources.NIC, service bool, mgmt string, errLine st
 	return f.Page(b, keys, "> ")
 }
 
+// CurrentPage is the address netd took by itself on its first start,
+// offered to keep.
+func CurrentPage(f Frame, a sources.Addresses, err error) tui.Page {
+	var b []tui.Line
+	hosts := hostsOf(a.Management)
+	switch {
+	case err != nil:
+		b = append(b, tui.WrapStyled(tui.Alert, "The network service isn't answering: "+consoleui.Describe(err), width, "")...)
+	case len(hosts) == 0:
+		b = append(b, tui.Text("Waiting for an address: the network service is asking DHCP and router"))
+		b = append(b, tui.Text("advertisements on the first interface with a link ..."))
+	default:
+		b = append(b, tui.Text("The box took an address by itself (DHCP and SLAAC on the first linked NIC):"))
+		for _, m := range a.Management {
+			b = append(b, tui.Styled(tui.Bold, "    "+m))
+		}
+		if a.Hostname != "" {
+			b = append(b, consoleui.Field("Host name", 12, tui.Span{Text: a.Hostname}))
+		}
+		b = append(b, tui.Text(""), tui.Text("Press Enter to keep it (the connection is checked first), or e to choose the"), tui.Text("interface and the settings."))
+	}
+	keys := "e: choose the interface and settings"
+	if len(hosts) > 0 && err == nil {
+		keys = "Enter: keep this address   " + keys
+	}
+	return f.Page(b, keys, "> ")
+}
+
 // Form is the network settings being edited.
 type Form struct {
 	S network.Settings
@@ -221,7 +249,11 @@ var checkStyle = map[string]tui.Style{sources.CheckOK: tui.OK, sources.CheckWarn
 
 // ChecksPage is the checks running, then their results.
 func ChecksPage(f Frame, checks []sources.Check, revert int, errLine string) tui.Page {
-	b := []tui.Line{tui.Text(fmt.Sprintf("Applied. Checking the connection (the change reverts in %d s unless kept):", revert)), tui.Text("")}
+	head := "Checking the connection:"
+	if revert > 0 {
+		head = fmt.Sprintf("Applied. Checking the connection (the change reverts in %d s unless kept):", revert)
+	}
+	b := []tui.Line{tui.Text(head), tui.Text("")}
 	running, failed, blocked := len(checks) == 0, false, false
 	for _, c := range checks {
 		st := c.State
@@ -298,6 +330,8 @@ type Continue struct {
 	Recovery   []*osadminv1.RecoveryKey
 	Max        int32
 	Admin      string
+	// Err is why setup couldn't complete.
+	Err string
 }
 
 // ContinuePage is steps 4 and 5: the recovery keys and the first sign-in,
@@ -313,36 +347,57 @@ func ContinuePage(f Frame, c Continue) tui.Page {
 		}
 		b = append(b, tui.WrapStyled(tui.Alert, msg+", so :8443 can't be reached.", width, "")...)
 	default:
-		b = append(b, tui.Text("From the admin's machine open:"))
 		for i, h := range hosts {
+			lead := "From the admin's machine open "
+			if i > 0 {
+				lead = strings.Repeat(" ", len(lead)-3) + "or "
+			}
 			if i == 2 {
 				break
 			}
-			b = append(b, tui.Line{{Text: "    "}, {Text: "https://" + h + ":8443/", Style: tui.Bold}})
+			b = append(b, tui.Line{{Text: lead}, {Text: "https://" + h + ":8443/", Style: tui.Bold}})
 		}
 	}
 	if c.OsadminErr != nil {
 		b = append(b, tui.WrapStyled(tui.Alert, ":8443 isn't running: "+c.OsadminErr.Error(), width, "")...)
 	}
 	if c.TLS != "" {
-		b = append(b, tui.Text("Check the certificate on the first visit (self-signed for now), SHA-256:"))
+		b = append(b, tui.Text("and check its certificate on the first visit (self-signed for now), SHA-256:"))
 		for _, l := range consoleui.FingerprintLines(c.TLS) {
 			b = append(b, tui.Text("    "+l))
 		}
 	}
-	b = append(b, tui.Text(""), tui.Text("Waiting for a recovery key and the first sign-in."))
-	rk := fmt.Sprintf("Recovery keys: %d of up to %d.", len(c.Recovery), c.Max)
-	if len(c.Recovery) < 2 {
-		rk += " A second one, held by someone else, is recommended."
+	rk := fmt.Sprintf("Recovery keys: %d of up to %d", len(c.Recovery), c.Max)
+	switch len(c.Recovery) {
+	case 0:
+		rk += ". Add one on the :8443 setup page, or: ssh " + c.Admin + "@<address> setup recovery-key < backup.pub"
+	case 1:
+		rk += " (a second, held by someone else, is recommended):"
+	default:
+		rk += ":"
 	}
 	b = append(b, tui.Wrap(rk, width, "")...)
-	if len(c.Recovery) == 0 {
-		b = append(b, tui.Wrap("  none yet: add one on the :8443 setup page, or: ssh "+c.Admin+"@<address> setup recovery-key < backup.pub", width, "")...)
-	}
 	for _, r := range c.Recovery {
 		b = append(b, tui.Styled(tui.OK, fmt.Sprintf("  %-8s %s  %s", strings.TrimPrefix(r.GetType(), "ssh-"), r.GetFingerprint(), r.GetLabel())))
 	}
-	return f.Page(b, "this screen moves on by itself once the first sign-in is done", "")
+	if len(c.Recovery) > 0 {
+		b = append(b, tui.Wrap("Then sign in on :8443 and approve its code: ssh "+c.Admin+"@<address> login <code>", width, "")...)
+	}
+	b = append(b, errLines(c.Err)...)
+	return f.Page(b, "waiting for a recovery key and the first sign-in; this moves on by itself", "")
+}
+
+// TypedOneAdmin confirms the single-admin warning.
+const TypedOneAdmin = "one admin"
+
+// SingleAdminPage is the single-admin warning (spec 2 Section 2.12): with
+// one admin there's no quorum, so the operator confirms it explicitly.
+func SingleAdminPage(f Frame, errLine string) tui.Page {
+	b := tui.WrapStyled(tui.Warn, "This box has one admin. One admin means no quorum: a factory reset then means re-creating the box, never resetting it in place.", width, "")
+	b = append(b, tui.Text(""))
+	b = append(b, tui.Wrap("To have a quorum, add a second admin on :8443 now. To go on with one admin, type "+TypedOneAdmin+" and press Enter.", width, "")...)
+	b = append(b, errLines(errLine)...)
+	return f.Page(b, "type "+TypedOneAdmin+" to confirm", "> ")
 }
 
 // Complete is the last screen's state.

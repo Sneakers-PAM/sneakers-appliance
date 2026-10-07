@@ -167,9 +167,15 @@ On first boot, after the first admin's key is enrolled, the Setup page finishes 
 - **The single-admin warning.** With one admin there is no quorum, so a factory reset means deleting
   and re-creating or re-flashing the box. The operator confirms the warning, or adds a second admin,
   before Finish.
-- **Finish** checks every step (`SETUP_INCOMPLETE` names the open one), writes
-  `/var/lib/sneakers/setup/done` and links to the product's own `/setup`, which runs once the
-  platform is up. After setup the last recovery key can't be removed (`ACCESS_LAST_RECOVERY_KEY`).
+- **The first sign-in.** The first :8443 session started during setup is recorded
+  (`/var/lib/sneakers/setup/signed-in`, `signedIn` on the setup state): it proves the admin can reach
+  and use :8443 from where they sit.
+- **Finish** (or the console's `Setup.Complete`, root only, which runs the same checks) checks every
+  step (`SETUP_INCOMPLETE` names the open one: an owner with a key, a recovery key and its escrow, the
+  single-admin warning, the first sign-in), writes `/var/lib/sneakers/setup/done` and links to the
+  product's own `/setup`, which runs once the platform is up. The console confirms the single-admin
+  warning with `SetupService.AcknowledgeSingleAdmin` (root only). After setup the last recovery key
+  can't be removed (`ACCESS_LAST_RECOVERY_KEY`).
 
 ## Status, Network, Logs and Power
 

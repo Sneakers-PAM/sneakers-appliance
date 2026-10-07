@@ -6,6 +6,7 @@ package sources_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -95,6 +96,17 @@ func (c netdClient) SetServicePorts(ctx context.Context, r *connect.Request[netd
 func (c netdClient) Status(ctx context.Context, r *connect.Request[netdv1.StatusRequest]) (*connect.Response[netdv1.StatusResponse], error) {
 	return c.h.Status(ctx, r)
 }
+func (c netdClient) ListInterfaces(context.Context, *connect.Request[netdv1.ListInterfacesRequest]) (*connect.Response[netdv1.ListInterfacesResponse], error) {
+	c.h.calls = append(c.h.calls, "interfaces")
+	return connect.NewResponse(&netdv1.ListInterfacesResponse{Interfaces: []*netdv1.Nic{{Name: "eth0", Mac: "52:54:00:12:34:56", LinkUp: true, Driver: "virtio_net"}}}), nil
+}
+func (c netdClient) SetManagementPorts(_ context.Context, r *connect.Request[netdv1.SetManagementPortsRequest]) (*connect.Response[netdv1.SetManagementPortsResponse], error) {
+	c.h.calls = append(c.h.calls, fmt.Sprintf("ports ssh=%v https=%v", r.Msg.GetSsh(), r.Msg.GetHttps()))
+	return connect.NewResponse(&netdv1.SetManagementPortsResponse{}), nil
+}
+func (c netdClient) Watch(context.Context, *connect.Request[netdv1.WatchRequest]) (*connect.ServerStreamForClient[netdv1.WatchResponse], error) {
+	return nil, errors.New("not watched here")
+}
 
 // sysfs makes /sys/class/net with two NICs and the loopback.
 func sysfs(t *testing.T) string {
@@ -127,6 +139,9 @@ func TestTheNetworkSwitchesFromTheStubToNetd(t *testing.T) {
 	sys := sysfs(t)
 	f := &fakeNetd{}
 	stub := sources.NewNetwork(table(t, "accessd"), netdClient{f}, sys)
+	if err := stub.SetManagementPorts(ctx, true, false); !sources.IsNotInstalled(err) {
+		t.Fatalf("ports through the stub: %v", err)
+	}
 	nics, err := stub.Interfaces(ctx)
 	// ens256 isn't brought up, so its link is unknown, not missing.
 	if err != nil || len(nics) != 3 || nics[0].Name != "ens192" || !nics[0].Link || nics[0].Driver != "vmxnet3" || nics[1].Link || !nics[1].Up || nics[2].Up {
@@ -174,7 +189,14 @@ func TestTheNetworkSwitchesFromTheStubToNetd(t *testing.T) {
 	if err := real.Confirm(ctx, "T1"); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.calls; len(got) != 5 || got[1] != "set ens192" {
+	ns, err := real.Interfaces(ctx)
+	if err != nil || len(ns) != 1 || ns[0].Name != "eth0" || !ns[0].Up || !ns[0].Link {
+		t.Fatalf("netd's interfaces: %+v %v", ns, err)
+	}
+	if err := real.SetManagementPorts(ctx, true, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.calls; len(got) != 7 || got[1] != "set ens192" || got[6] != "ports ssh=true https=true" {
 		t.Fatalf("netd calls %v", got)
 	}
 }

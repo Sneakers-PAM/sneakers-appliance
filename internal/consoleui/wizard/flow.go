@@ -83,7 +83,7 @@ func Run(ctx context.Context, u *tui.UI, d Deps) error {
 			_, _, err = u.Ask(ctx, tui.Static(ProtectionPage(r.f, r.f.Chrome.Protection, r.f.Chrome.Mode)))
 		case StepAdmin:
 			err = r.admin(ctx)
-		case StepRecovery, StepSignIn:
+		case StepRecovery, StepSignIn, StepDone:
 			err = r.continueOn(ctx)
 		default:
 			return r.complete(ctx)
@@ -99,17 +99,20 @@ func Run(ctx context.Context, u *tui.UI, d Deps) error {
 	}
 }
 
-// next is the first step not done, and fills the step strip.
+// next is the first step not done (0 once every one is), and fills the
+// step strip.
 func (r *run) next(ctx context.Context) (Step, error) {
-	done := make([]bool, 5)
-	first := StepDone
-	for s := StepNetwork; s <= StepSignIn; s++ {
+	done := make([]bool, 0, 5)
+	first := Step(0)
+	for s := StepNetwork; s <= StepDone; s++ {
 		ok, err := r.d.Steps.Done(ctx, s)
 		if err != nil {
 			return 0, err
 		}
-		done[s-1] = ok
-		if !ok && first == StepDone {
+		if s <= StepSignIn {
+			done = append(done, ok)
+		}
+		if !ok && first == 0 {
 			first = s
 		}
 	}
@@ -119,6 +122,12 @@ func (r *run) next(ctx context.Context) (Step, error) {
 
 // network is step 1: the interface, the settings, apply and check.
 func (r *run) network(ctx context.Context) error {
+	if r.d.Network.Installed() {
+		kept, err := r.current(ctx)
+		if err != nil || kept {
+			return err
+		}
+	}
 	nics, err := r.d.Network.Interfaces(ctx)
 	errLine := ""
 	if err != nil {
@@ -333,6 +342,43 @@ func (r *run) apply(ctx context.Context, form Form) (bool, error) {
 		return false, aerr
 	}
 	r.d.Logger.Info("wizard: network applied; checking", log.F("revert_after", revert))
+	return r.checks(ctx, token, revert)
+}
+
+// current is the network netd set up by itself on its first start (DHCP
+// and SLAAC on the first linked NIC): its address, kept with Enter after
+// the checks, or e to choose the interface and settings. kept reports the
+// step done.
+func (r *run) current(ctx context.Context) (bool, error) {
+	for {
+		var a sources.Addresses
+		var aerr error
+		line, _, err := r.u.Ask(ctx, func() (tui.Page, bool) {
+			a, aerr = r.d.Network.Status(ctx)
+			return CurrentPage(r.f, a, aerr), false
+		})
+		if err != nil {
+			return false, err
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "e":
+			return false, nil
+		case "":
+			if aerr != nil || len(hostsOf(a.Management)) == 0 {
+				continue
+			}
+			kept, err := r.checks(ctx, "", 0)
+			if err != nil || kept {
+				return kept, err
+			}
+		}
+	}
+}
+
+// checks runs netd's checks until they settle and shows them; a failed
+// one can be skipped (c), but no address can't. With token the change is
+// confirmed when kept. kept reports the step done; false is e (edit).
+func (r *run) checks(ctx context.Context, token string, revert int) (bool, error) {
 	var checks []sources.Check
 	var checkErr string
 	settled := false
@@ -381,9 +427,11 @@ func (r *run) apply(ctx context.Context, form Form) (bool, error) {
 		default:
 			continue
 		}
-		if err := r.d.Network.Confirm(ctx, token); err != nil {
-			checkErr = "The change couldn't be kept: " + consoleui.Describe(err)
-			continue
+		if token != "" {
+			if err := r.d.Network.Confirm(ctx, token); err != nil {
+				checkErr = "The change couldn't be kept: " + consoleui.Describe(err)
+				continue
+			}
 		}
 		r.d.Logger.Info("wizard: network kept", log.F("checks_failed", failed))
 		return true, nil
@@ -417,11 +465,18 @@ func (r *run) admin(ctx context.Context) error {
 		}
 		break
 	}
-	r.sshd = r.d.Services.Start(ctx, "sshd")
-	if r.sshd != nil {
-		r.d.Logger.Warn("wizard: sshd didn't start for the enrolment", log.F("error", r.sshd.Error()))
-	}
 	ed := r.d.Enrol
+	// sshd starts once the window is open: opening it makes the host keys
+	// sshd needs.
+	ed.Opened = func(ctx context.Context) {
+		if err := r.d.Network.SetManagementPorts(ctx, true, false); err != nil {
+			r.d.Logger.Warn("wizard: port 22 didn't open", log.F("error", err.Error()))
+		}
+		r.sshd = r.d.Services.Start(ctx, "sshd")
+		if r.sshd != nil {
+			r.d.Logger.Warn("wizard: sshd didn't start for the enrolment", log.F("error", r.sshd.Error()))
+		}
+	}
 	ed.Page = func(_ string, body []tui.Line, keys, prompt string) tui.Page { return r.f.Page(body, keys, prompt) }
 	ed.Addresses = r.addresses
 	ed.SSH = func(ctx context.Context) error {
@@ -463,9 +518,18 @@ func (r *run) ensureOwner(ctx context.Context, name string) error {
 	return err
 }
 
-// continueOn is steps 4 and 5: :8443 runs, and the screen follows the
-// recovery keys and the finish until setup is done.
+// continueOn is steps 4 and 5: :8443 (and sshd, for the recovery keys
+// and the sign-in approval) runs, the screen follows the recovery keys and
+// the first sign-in, then setup completes: the single-admin warning
+// confirmed if it applies, and accessd's Complete, which checks every step
+// and writes setup/done.
 func (r *run) continueOn(ctx context.Context) error {
+	if err := r.d.Network.SetManagementPorts(ctx, true, true); err != nil {
+		r.d.Logger.Warn("wizard: ports 22 and 8443 didn't open", log.F("error", err.Error()))
+	}
+	if err := r.d.Services.Start(ctx, "sshd"); err != nil {
+		r.d.Logger.Warn("wizard: sshd isn't running for the recovery keys and sign-in", log.F("error", err.Error()))
+	}
 	osErr := r.d.Services.Start(ctx, "osadmin")
 	if osErr != nil {
 		r.d.Logger.Warn("wizard: osadmin didn't start", log.F("error", osErr.Error()))
@@ -480,32 +544,96 @@ func (r *run) continueOn(ctx context.Context) error {
 	}
 	last := time.Time{}
 	var c Continue
+	var state *osadminv1.GetSetupResponse
 	for {
 		_, _, err := r.u.Ask(ctx, func() (tui.Page, bool) {
 			if time.Since(last) < time.Second {
 				return ContinuePage(r.f, c), false
 			}
 			last = time.Now()
-			c = Continue{OsadminErr: osErr, Max: int32(access.MaxRecoveryKeys), Admin: owner}
+			c = Continue{OsadminErr: osErr, Max: int32(access.MaxRecoveryKeys), Admin: owner, Err: c.Err}
 			c.Addresses, c.AddrErr = r.addresses(ctx)
 			if st := r.d.Status(ctx); st.Status != nil {
 				c.TLS = st.Status.GetTlsFingerprint()
 			}
-			if s, err := r.d.Setup.GetSetup(ctx, connect.NewRequest(&accessv1.GetSetupRequest{})); err == nil {
-				c.Recovery = s.Msg.GetSetup().GetRecoveryKeys()
-				if s.Msg.GetSetup().GetDone() {
-					return tui.Page{}, true
-				}
-				r.f.Done[StepRecovery-1] = len(c.Recovery) > 0
+			s, err := r.d.Setup.GetSetup(ctx, connect.NewRequest(&accessv1.GetSetupRequest{}))
+			if err != nil {
+				return ContinuePage(r.f, c), false
+			}
+			state = s.Msg.GetSetup()
+			c.Recovery = state.GetRecoveryKeys()
+			if r.progress(ctx, state) {
+				return tui.Page{}, true
 			}
 			return ContinuePage(r.f, c), false
 		})
 		if err != nil {
 			return err
 		}
-		if done, err := r.d.Steps.Done(ctx, StepSignIn); err == nil && done {
+		if done, err := r.d.Steps.Done(ctx, StepDone); err == nil && done {
 			return nil
 		}
+		if signed, _ := r.d.Steps.Done(ctx, StepSignIn); !signed || state == nil {
+			continue
+		}
+		if state.GetSingleAdminWarning() && !state.GetSingleAdminAcknowledged() {
+			if err := r.singleAdmin(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+		if _, err := r.d.Setup.Complete(ctx, connect.NewRequest(&accessv1.CompleteRequest{})); err != nil {
+			c.Err = "Setup can't complete yet: " + consoleui.Describe(err)
+			r.d.Logger.Warn("wizard: Setup.Complete refused", log.F("error", consoleui.Describe(err)))
+			continue
+		}
+		r.d.Logger.Info("wizard: setup complete")
+		return r.d.Steps.Complete(ctx, StepDone)
+	}
+}
+
+// progress completes the recovery and sign-in steps as the box shows them
+// done, and reports whether the wait is over (sign-in done, or setup
+// finished from :8443).
+func (r *run) progress(ctx context.Context, s *osadminv1.GetSetupResponse) bool {
+	step := func(st Step) bool { ok, _ := r.d.Steps.Done(ctx, st); return ok }
+	if !step(StepRecovery) && len(s.GetRecoveryKeys()) > 0 {
+		if err := r.d.Steps.Complete(ctx, StepRecovery); err != nil {
+			r.d.Logger.Warn("wizard: the recovery step didn't complete", log.F("error", err.Error()))
+		}
+	}
+	if step(StepRecovery) && !step(StepSignIn) && s.GetSignedIn() {
+		if err := r.d.Steps.Complete(ctx, StepSignIn); err != nil {
+			r.d.Logger.Warn("wizard: the sign-in step didn't complete", log.F("error", err.Error()))
+		}
+	}
+	r.f.Done[StepRecovery-1], r.f.Done[StepSignIn-1] = step(StepRecovery), step(StepSignIn)
+	if s.GetDone() && step(StepSignIn) && !step(StepDone) {
+		if err := r.d.Steps.Complete(ctx, StepDone); err != nil {
+			r.d.Logger.Warn("wizard: the done step didn't complete", log.F("error", err.Error()))
+		}
+	}
+	return step(StepSignIn)
+}
+
+// singleAdmin asks the operator to confirm going on with one admin.
+func (r *run) singleAdmin(ctx context.Context) error {
+	errLine := ""
+	for {
+		line, _, err := r.u.Ask(ctx, tui.Static(SingleAdminPage(r.f, errLine)))
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(line) != TypedOneAdmin {
+			errLine = "Type " + TypedOneAdmin + " to go on with one admin, or add a second admin on :8443 first."
+			continue
+		}
+		if _, err := r.d.Setup.AcknowledgeSingleAdmin(ctx, connect.NewRequest(&accessv1.AcknowledgeSingleAdminRequest{})); err != nil {
+			errLine = consoleui.Describe(err)
+			continue
+		}
+		r.d.Logger.Info("wizard: the single-admin warning was confirmed on the console")
+		return nil
 	}
 }
 

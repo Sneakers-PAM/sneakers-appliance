@@ -45,7 +45,9 @@ protection step, from one source (`internal/consoleui/screens`).
 The steps of first boot, in order, with a step strip on every page
 (`[x] 1 Network  [>] 2 Protection  [ ] 3 Admin  [ ] 4 Recovery  [ ] 5 Sign-in`):
 
-1. **Network.** The interfaces (name, MAC, link, driver); with no link on any, it waits for one.
+1. **Network.** netd takes an address by itself on its first start (DHCP and SLAAC on the first
+   linked NIC); the wizard shows it, and Enter keeps it once the checks pass. **e** chooses instead:
+   the interfaces (name, MAC, link, driver); with no link on any, it waits for one.
    Then the management interface (22 and 8443 listen only there) and, with two NICs, the service
    interface; then the settings, each changed by its number: IPv4 (DHCP, static, off), IPv6 (SLAAC,
    DHCPv6, static, off), host name, DNS and NTP, validated as typed. Enter applies them live and
@@ -56,19 +58,39 @@ The steps of first boot, in order, with a step strip on every page
    init, before the wizard (the state volumes are formatted for them). The page says the level, the
    at-rest key, and how to raise a reduced level later.
 3. **First admin.** The owner's name (checked against the name rules and the reserved names), then
-   sshd starts and the enrolment window opens ([ssh-and-elevation.md](ssh-and-elevation.md#the-enrolment-window)):
+   netd opens port 22, sshd starts and the enrolment window opens ([ssh-and-elevation.md](ssh-and-elevation.md#the-enrolment-window)):
    the page shows `ssh enrol@<address>`, the code, the host key fingerprints, and the keys enrolled
    so far. A key that gave the code is shown with its fingerprint and stored only on a typed `yes`.
    **t** types a key on the console; **f** fetches an `authorized_keys` file over https (no
    redirect to http), and each key found is confirmed with its own `yes`. **d** (Done, after one
    key) closes the window.
-4. and 5. **Continue on :8443.** osadmin starts once step 3 is done. The page shows the :8443 URLs,
+4. and 5. **Continue on :8443.** netd opens port 8443 and osadmin starts once step 3 is done. The page shows the :8443 URLs,
    the certificate's SHA-256 fingerprint to check on the first visit, and the recovery keys set so
    far (one to three, added on the :8443 setup page or with `setup recovery-key` over SSH). It
    moves on by itself once :8443 finishes setup after the first sign-in.
 6. **Complete.** The product's first-run URL, then normal operation.
 
-The wizard resumes at the first step not done after a restart.
+Steps 4 and 5 complete as the box shows them done: a recovery key set, then the first :8443 sign-in
+(recorded by :8443 when the first session starts). With one admin the wizard then shows the
+single-admin warning (no quorum, so a factory reset means re-creating the box) and needs `one admin`
+typed to go on. Then it calls accessd's `Setup.Complete`, which checks every step again (an owner
+with a key, a recovery key and its escrow, the first sign-in, the warning confirmed) and writes
+`/var/lib/sneakers/setup/done`.
+
+### The step machine
+
+`internal/setup` keeps the progress: the steps `network`, `protection`, `admin`, `recovery`,
+`signin` and `done`, completed in that order only (anything else is `SETUP_INCOMPLETE`, naming the
+open step), in `progress.json` written with an atomic rename. Until the protection step it's on
+the tmpfs (`/run/sneakers/setup/`), so a power cut there runs the network step again; from the
+protection step on it's on the state volume (`/var/lib/sneakers/setup/`), and the tmpfs copy is
+removed. After a power cut or a restart of the wizard, it resumes at the first step not done. A
+progress file that doesn't parse stops the wizard rather than run steps again on a box that may be
+set up.
+
+accessd reads the same file for the access store's invariants: no owner with a key is required
+until the admin step is done (first boot adds its owner before the key), and no recovery key until
+the recovery step is; once `setup/done` exists every invariant applies.
 
 ## The status view
 
@@ -123,9 +145,8 @@ table, with no change to the console:
 
 | Backend | Until it's in the build |
 |---|---|
-| netd (the network service) | the interface list is read from sysfs (an interface not brought up shows `not up`); the network step can't apply settings and stops there; the status view says there's no address |
-| sshd's runner | the enrolment window says `ssh enrol@` can't connect, and keys are typed or fetched on the console |
-| the first-boot step machine | the progress is read from what the box shows (the admins' keys, accessd's setup state), the network step's in memory only; the move to normal needs a restart (the complete page offers `reboot`) |
+| netd or sshd, on a build without them | the interface list is read from sysfs (an interface not brought up shows `not up`) and the network step can't apply settings, so it stops there; the enrolment window says `ssh enrol@` can't connect, and keys are typed or fetched on the console |
+| moving to normal while init runs | setup completes and writes `setup/done`; normal operation starts on the next boot (the complete page offers `reboot`) |
 | the platform (spec 3) and the upgrade service (spec 5) | the status view says the platform isn't installed; upgrades show only the staged and rolled-back versions from Status |
 
 The fetch over https uses the system CA bundle; the root image carries none yet, so a fetch fails

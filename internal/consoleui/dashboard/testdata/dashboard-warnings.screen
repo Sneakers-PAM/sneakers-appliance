@@ -6,14 +6,14 @@
 
  Version      0.1.0 (stable channel), slot A
  Secure Boot  off, by choice                   At rest   key file
- Platform     running                          Upgrades  none staged
+ Platform     running                          Nodes     1
+ Upgrades     none staged
  Management   198.51.100.7/24
  :8443        https://198.51.100.7:8443/  (self-signed: check the fingerprint)
               3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
               3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1:3F:A1
  SSH host     ssh-ed25519  SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw
               ssh-rsa      SHA256:ZE49MXHIq3Pj+N4nEUoUfua0dqGgtmXYcekpDgbLqbw
-
  ! The management interface has a public address and the allow-list lets any
    source reach ports 22 and 8443.
  ! The clock isn't synchronised with an NTP server.

@@ -56,7 +56,7 @@ func TestALongBodyIsCutWithANote(t *testing.T) {
 		p.Body = append(p.Body, tui.Text("line"))
 	}
 	text := p.Frame(80, 24).Text()
-	if !strings.Contains(text, "(more on a larger screen)") || !strings.Contains(text, "Enter: menu") {
+	if !strings.Contains(text, "(more below the screen: menu, status)") || !strings.Contains(text, "Enter: menu") {
 		t.Fatalf("frame:\n%s", text)
 	}
 }

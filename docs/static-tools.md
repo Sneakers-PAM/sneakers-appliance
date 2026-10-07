@@ -11,8 +11,10 @@ against its SHA-256 before it is unpacked, inside a musl builder pinned by diges
 | `busybox` | `build/busybox/build.sh` | `sh` (ash) and the support tools in `build/busybox/busybox.config`; every network daemon off |
 
 OpenSSH is configured with the appliance paths: `sshd-session` and `sshd-auth` in
-`/usr/libexec/openssh`, the privilege-separation directory `/run/sneakers/sshd-empty` and the
-config under `/run/sneakers/ssh`. busybox runs its applets from the shell without symlinks, so the
+`/usr/libexec/openssh`, the privilege-separation directory `/run/sneakers/sshd-empty` (on /run, so
+accessd and `sneakers-sshd-run` make it, root's and 0755, before they run `sshd -t` or sshd) and the
+config under `/run/sneakers/ssh`. `sshd-session` arms its login grace time with `setitimer`, which
+needs the kernel's POSIX timers (`CONFIG_POSIX_TIMERS`, in `os/kernel/required.txt`). busybox runs its applets from the shell without symlinks, so the
 root image needs only the one binary.
 
 ```sh

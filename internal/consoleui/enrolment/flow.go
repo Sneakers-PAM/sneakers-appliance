@@ -27,9 +27,12 @@ type Deps struct {
 	// Addresses are the management addresses ssh enrol@ connects to.
 	Addresses func(ctx context.Context) ([]string, error)
 	// SSH says why ssh enrol@ can't connect; nil when sshd runs.
-	SSH  func(ctx context.Context) error
-	Page PageFunc
-	Now  func() time.Time
+	SSH func(ctx context.Context) error
+	// Opened, when set, runs once the first window is open (its host keys
+	// made): first boot opens port 22 and starts sshd there.
+	Opened func(ctx context.Context)
+	Page   PageFunc
+	Now    func() time.Time
 }
 
 func waiting(w *accessv1.Enrolment) *accessv1.EnrolmentKey {
@@ -77,6 +80,9 @@ func Run(ctx context.Context, u *tui.UI, d Deps, admin string, recovery bool) (i
 	w, err := open()
 	if err != nil {
 		return 0, err
+	}
+	if d.Opened != nil {
+		d.Opened(ctx)
 	}
 	enrolled := 0
 	var note, errLine string

@@ -6,11 +6,11 @@
 
  Version      0.0.0-lab.20261007d (lab channel), slot A
  Secure Boot  off, by choice                   At rest   key file
- Platform     not installed yet                Upgrades  none staged
+ Platform     not installed yet                Nodes     1
+ Upgrades     none staged
  Management   no address: the network service isn't installed in this build yet
  :8443        not running yet
  SSH host     no host keys yet (setup's admin step makes them)
-
 
 
 

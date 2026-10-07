@@ -49,3 +49,22 @@ func TestRecoverAccessOverTheSocket(t *testing.T) {
 	_, err = accessv1connect.NewEnrolmentServiceClient(ahc, aurl).OfferEnrolmentKey(ctx, connect.NewRequest(&accessv1.OfferEnrolmentKeyRequest{PublicKey: newKey(t).line, Via: access.ViaTyped}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 }
+
+// The console confirms the single-admin warning (root only); the setup
+// state reports it, and an owner's shell can't.
+func TestTheConsoleAcknowledgesTheSingleAdminWarning(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	chc, curl := b.console()
+	setup := accessv1connect.NewSetupServiceClient(chc, curl)
+	if _, err := setup.AcknowledgeSingleAdmin(ctx, connect.NewRequest(&accessv1.AcknowledgeSingleAdminRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	g, err := setup.GetSetup(ctx, connect.NewRequest(&accessv1.GetSetupRequest{}))
+	if err != nil || !g.Msg.GetSetup().GetSingleAdminAcknowledged() {
+		t.Fatalf("%v %v", g, err)
+	}
+	ahc, aurl := b.as(b.uids["alice"])
+	_, err = accessv1connect.NewSetupServiceClient(ahc, aurl, connect.WithInterceptors(keyHeader(b.keys["alice"].fp))).AcknowledgeSingleAdmin(ctx, connect.NewRequest(&accessv1.AcknowledgeSingleAdminRequest{}))
+	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+}

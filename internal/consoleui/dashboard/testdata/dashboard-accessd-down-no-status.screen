@@ -2,11 +2,11 @@
  ------------------------------------------------------------------------------
  Version      0.1.0, slot B
  Secure Boot  unknown (init isn't answering)   At rest   unknown
- Platform                                      Upgrades  none staged
+ Platform                                      Nodes     1
+ Upgrades     none staged
  Management   no address yet
  :8443        not running yet
  SSH host     no host keys yet (setup's admin step makes them)
-
  ! The appliance services aren't answering yet; there's no status to show.
 
 

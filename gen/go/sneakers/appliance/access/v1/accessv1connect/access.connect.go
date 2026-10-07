@@ -96,6 +96,9 @@ const (
 	// SetupServiceSetRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// SetRecoveryKey RPC.
 	SetupServiceSetRecoveryKeyProcedure = "/sneakers.appliance.access.v1.SetupService/SetRecoveryKey"
+	// SetupServiceAcknowledgeSingleAdminProcedure is the fully-qualified name of the SetupService's
+	// AcknowledgeSingleAdmin RPC.
+	SetupServiceAcknowledgeSingleAdminProcedure = "/sneakers.appliance.access.v1.SetupService/AcknowledgeSingleAdmin"
 	// SetupServiceCompleteProcedure is the fully-qualified name of the SetupService's Complete RPC.
 	SetupServiceCompleteProcedure = "/sneakers.appliance.access.v1.SetupService/Complete"
 	// ElevationServiceRequestElevationProcedure is the fully-qualified name of the ElevationService's
@@ -583,6 +586,9 @@ type SetupServiceClient interface {
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
 	// SetRecoveryKey sets a recovery key during setup (an owner's shell).
 	SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error)
+	// AcknowledgeSingleAdmin records, from the console (root only), that the
+	// operator confirmed the single-admin warning.
+	AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error)
 	// Complete checks every step and finishes setup (root only: firstboot).
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 }
@@ -611,6 +617,12 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("SetRecoveryKey")),
 			connect.WithClientOptions(opts...),
 		),
+		acknowledgeSingleAdmin: connect.NewClient[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse](
+			httpClient,
+			baseURL+SetupServiceAcknowledgeSingleAdminProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("AcknowledgeSingleAdmin")),
+			connect.WithClientOptions(opts...),
+		),
 		complete: connect.NewClient[v1.CompleteRequest, v1.CompleteResponse](
 			httpClient,
 			baseURL+SetupServiceCompleteProcedure,
@@ -622,9 +634,10 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // setupServiceClient implements SetupServiceClient.
 type setupServiceClient struct {
-	getSetup       *connect.Client[v1.GetSetupRequest, v1.GetSetupResponse]
-	setRecoveryKey *connect.Client[v1.SetRecoveryKeyRequest, v1.SetRecoveryKeyResponse]
-	complete       *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
+	getSetup               *connect.Client[v1.GetSetupRequest, v1.GetSetupResponse]
+	setRecoveryKey         *connect.Client[v1.SetRecoveryKeyRequest, v1.SetRecoveryKeyResponse]
+	acknowledgeSingleAdmin *connect.Client[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse]
+	complete               *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
 }
 
 // GetSetup calls sneakers.appliance.access.v1.SetupService.GetSetup.
@@ -635,6 +648,11 @@ func (c *setupServiceClient) GetSetup(ctx context.Context, req *connect.Request[
 // SetRecoveryKey calls sneakers.appliance.access.v1.SetupService.SetRecoveryKey.
 func (c *setupServiceClient) SetRecoveryKey(ctx context.Context, req *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error) {
 	return c.setRecoveryKey.CallUnary(ctx, req)
+}
+
+// AcknowledgeSingleAdmin calls sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin.
+func (c *setupServiceClient) AcknowledgeSingleAdmin(ctx context.Context, req *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error) {
+	return c.acknowledgeSingleAdmin.CallUnary(ctx, req)
 }
 
 // Complete calls sneakers.appliance.access.v1.SetupService.Complete.
@@ -648,6 +666,9 @@ type SetupServiceHandler interface {
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
 	// SetRecoveryKey sets a recovery key during setup (an owner's shell).
 	SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error)
+	// AcknowledgeSingleAdmin records, from the console (root only), that the
+	// operator confirmed the single-admin warning.
+	AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error)
 	// Complete checks every step and finishes setup (root only: firstboot).
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 }
@@ -672,6 +693,12 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("SetRecoveryKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	setupServiceAcknowledgeSingleAdminHandler := connect.NewUnaryHandler(
+		SetupServiceAcknowledgeSingleAdminProcedure,
+		svc.AcknowledgeSingleAdmin,
+		connect.WithSchema(setupServiceMethods.ByName("AcknowledgeSingleAdmin")),
+		connect.WithHandlerOptions(opts...),
+	)
 	setupServiceCompleteHandler := connect.NewUnaryHandler(
 		SetupServiceCompleteProcedure,
 		svc.Complete,
@@ -684,6 +711,8 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceGetSetupHandler.ServeHTTP(w, r)
 		case SetupServiceSetRecoveryKeyProcedure:
 			setupServiceSetRecoveryKeyHandler.ServeHTTP(w, r)
+		case SetupServiceAcknowledgeSingleAdminProcedure:
+			setupServiceAcknowledgeSingleAdminHandler.ServeHTTP(w, r)
 		case SetupServiceCompleteProcedure:
 			setupServiceCompleteHandler.ServeHTTP(w, r)
 		default:
@@ -701,6 +730,10 @@ func (UnimplementedSetupServiceHandler) GetSetup(context.Context, *connect.Reque
 
 func (UnimplementedSetupServiceHandler) SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.SetupService.SetRecoveryKey is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin is not implemented"))
 }
 
 func (UnimplementedSetupServiceHandler) Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error) {

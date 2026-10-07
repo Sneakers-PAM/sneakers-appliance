@@ -12,6 +12,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -40,7 +41,23 @@ type Box struct {
 
 	mu       sync.Mutex
 	recovery []*osadminv1.RecoveryKey
+	signedIn bool
+	acked    bool
 	done     bool
+}
+
+// SignIn records the first :8443 sign-in.
+func (b *Box) SignIn() {
+	b.mu.Lock()
+	b.signedIn = true
+	b.mu.Unlock()
+}
+
+// IsDone reports whether setup/done was written.
+func (b *Box) IsDone() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.done
 }
 
 // NewBox is a box with the named owners, none of them with a key yet.
@@ -203,9 +220,36 @@ type setupSvc struct {
 func (s setupSvc) GetSetup(context.Context, *connect.Request[accessv1.GetSetupRequest]) (*connect.Response[accessv1.GetSetupResponse], error) {
 	s.b.mu.Lock()
 	defer s.b.mu.Unlock()
+	admins := len(s.b.Store.Read().Admins)
 	return connect.NewResponse(&accessv1.GetSetupResponse{Setup: &osadminv1.GetSetupResponse{
 		Done: s.b.done, RecoveryKeys: s.b.recovery, MaxRecoveryKeys: int32(access.MaxRecoveryKeys), ProductSetupUrl: "https://sneakers.example.org/setup",
+		SignedIn: s.b.signedIn, SingleAdminWarning: admins == 1, SingleAdminAcknowledged: s.b.acked, AdminCount: int32(admins), // #nosec G115 -- a few admins
 	}}), nil
+}
+
+func (s setupSvc) AcknowledgeSingleAdmin(context.Context, *connect.Request[accessv1.AcknowledgeSingleAdminRequest]) (*connect.Response[accessv1.AcknowledgeSingleAdminResponse], error) {
+	s.b.mu.Lock()
+	s.b.acked = true
+	s.b.mu.Unlock()
+	return connect.NewResponse(&accessv1.AcknowledgeSingleAdminResponse{}), nil
+}
+
+// Complete checks the steps as accessd does: a recovery key, the first
+// sign-in, and the single-admin warning confirmed when it applies.
+func (s setupSvc) Complete(context.Context, *connect.Request[accessv1.CompleteRequest]) (*connect.Response[accessv1.CompleteResponse], error) {
+	admins := len(s.b.Store.Read().Admins)
+	s.b.mu.Lock()
+	defer s.b.mu.Unlock()
+	switch {
+	case len(s.b.recovery) == 0:
+		return nil, coded(codes.New(codes.SetupIncomplete, "a step is still open: a recovery key"))
+	case !s.b.signedIn:
+		return nil, coded(codes.New(codes.SetupIncomplete, "a step is still open: the first sign-in on :8443"))
+	case admins == 1 && !s.b.acked:
+		return nil, coded(codes.New(codes.SetupIncomplete, "a step is still open: confirm the single-admin warning, or add a second admin"))
+	}
+	s.b.done = true
+	return connect.NewResponse(&accessv1.CompleteResponse{ProductSetupUrl: "https://sneakers.example.org/setup"}), nil
 }
 
 // Services is init's on-demand services: it records each start.
@@ -216,14 +260,16 @@ type Services struct {
 	Missing map[string]bool
 }
 
-// Start starts name.
+// Start starts name; like init, starting a running service does nothing.
 func (s *Services) Start(_ context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.Missing[name] {
 		return sources.NotInstalled{What: "The " + map[string]string{"sshd": "SSH service", "netd": "network service"}[name]}
 	}
-	s.Started = append(s.Started, name)
+	if !slices.Contains(s.Started, name) {
+		s.Started = append(s.Started, name)
+	}
 	return nil
 }
 
@@ -259,6 +305,7 @@ type Network struct {
 	Addrs    []string
 	NoNetd   bool
 	NICs     []sources.NIC
+	Ports    []string
 	checkRun int
 }
 
@@ -330,6 +377,31 @@ func (n *Network) Status(context.Context) (sources.Addresses, error) {
 
 // Settle is a short wait for a background change to land.
 func Settle() { time.Sleep(20 * time.Millisecond) }
+
+// SetManagementPorts records each opening, as "ssh" or "ssh+https".
+func (n *Network) SetManagementPorts(_ context.Context, ssh, https bool) error {
+	if n.NoNetd {
+		return errNoNetd
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	var p []string
+	if ssh {
+		p = append(p, "ssh")
+	}
+	if https {
+		p = append(p, "https")
+	}
+	n.Ports = append(n.Ports, strings.Join(p, "+"))
+	return nil
+}
+
+// Opened is every port opening so far.
+func (n *Network) Opened() []string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return append([]string(nil), n.Ports...)
+}
 
 // Settings are the settings applied so far.
 func (n *Network) Settings() []network.Settings {

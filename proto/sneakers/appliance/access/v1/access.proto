@@ -72,6 +72,9 @@ service SetupService {
   }
   // SetRecoveryKey sets a recovery key during setup (an owner's shell).
   rpc SetRecoveryKey(SetRecoveryKeyRequest) returns (SetRecoveryKeyResponse);
+  // AcknowledgeSingleAdmin records, from the console (root only), that the
+  // operator confirmed the single-admin warning.
+  rpc AcknowledgeSingleAdmin(AcknowledgeSingleAdminRequest) returns (AcknowledgeSingleAdminResponse);
   // Complete checks every step and finishes setup (root only: firstboot).
   rpc Complete(CompleteRequest) returns (CompleteResponse);
 }
@@ -261,6 +264,10 @@ message SetRecoveryKeyRequest {
 message SetRecoveryKeyResponse {
   sneakers.appliance.osadmin.v1.RecoveryKey recovery_key = 1;
 }
+
+message AcknowledgeSingleAdminRequest {}
+
+message AcknowledgeSingleAdminResponse {}
 
 message CompleteRequest {}
 

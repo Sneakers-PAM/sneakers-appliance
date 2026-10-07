@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -119,4 +120,55 @@ func TestAnAdminCantFinishSetup(t *testing.T) {
 	bob.signIn("bob")
 	_, err := osadminv1connect.NewSetupServiceClient(bob.hc, b.ts.URL).Finish(context.Background(), connect.NewRequest(&osadminv1.FinishRequest{}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+}
+
+// Setup can't finish before the first :8443 sign-in: the console's
+// Complete (as root) checks it like every other step.
+func TestFinishNeedsAFirstSignIn(t *testing.T) {
+	b := newBox(t, false)
+	h := b.srv.Handlers()
+	local := func(procedure string, fn func(context.Context) error) error {
+		return b.srv.RunLocal(context.Background(), osadmin.Local{}, procedure, fn)
+	}
+	if err := local(osadminv1connect.SetupServiceAddRecoveryKeyProcedure, func(ctx context.Context) error {
+		_, err := h.Setup.AddRecoveryKey(ctx, connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: newKey(t).line, Label: "safe"}))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := local(osadminv1connect.SetupServiceAcknowledgeSingleAdminProcedure, func(ctx context.Context) error {
+		_, err := h.Setup.AcknowledgeSingleAdmin(ctx, connect.NewRequest(&osadminv1.AcknowledgeSingleAdminRequest{}))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	finish := func() error {
+		return local(osadminv1connect.SetupServiceFinishProcedure, func(ctx context.Context) error {
+			_, err := h.Setup.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{}))
+			return err
+		})
+	}
+	signedIn := func() bool {
+		var got bool
+		if err := local(osadminv1connect.SetupServiceGetSetupProcedure, func(ctx context.Context) error {
+			r, err := h.Setup.GetSetup(ctx, connect.NewRequest(&osadminv1.GetSetupRequest{}))
+			got = err == nil && r.Msg.GetSignedIn()
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	err := finish()
+	symbolIn(t, err, connect.CodeFailedPrecondition, "SETUP_INCOMPLETE")
+	if !strings.Contains(err.Error(), "sign-in") || signedIn() {
+		t.Fatalf("%v", err)
+	}
+	b.browser().signIn("alice")
+	if !signedIn() {
+		t.Fatal("the first sign-in isn't recorded")
+	}
+	if err := finish(); err != nil {
+		t.Fatal(err)
+	}
 }

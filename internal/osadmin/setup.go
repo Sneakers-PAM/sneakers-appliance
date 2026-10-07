@@ -32,6 +32,8 @@ const (
 	// SingleAdminMarker records that the operator confirmed the
 	// single-admin warning.
 	SingleAdminMarker = "single-admin-acknowledged"
+	// SignedInMarker records the first :8443 sign-in, first boot's step 5.
+	SignedInMarker = "signed-in"
 )
 
 type setup struct {
@@ -56,6 +58,7 @@ func (h *setup) GetSetup(ctx context.Context, _ *connect.Request[osadminv1.GetSe
 		AdminCount:              int32(min(len(st.Admins), 1<<30)), // #nosec G115 -- clamped
 		SingleAdminWarning:      len(st.Admins) == 1,
 		SingleAdminAcknowledged: exists(filepath.Join(h.s.o.Paths.SetupDir(), SingleAdminMarker)),
+		SignedIn:                exists(filepath.Join(h.s.o.Paths.SetupDir(), SignedInMarker)),
 		ProductSetupUrl:         h.s.productSetupURL(ctx),
 	}
 	for _, r := range st.RecoveryKeys {
@@ -193,6 +196,9 @@ func (h *setup) Finish(ctx context.Context, _ *connect.Request[osadminv1.FinishR
 	}
 	if len(st.Admins) == 1 && !exists(filepath.Join(h.s.o.Paths.SetupDir(), SingleAdminMarker)) {
 		return nil, codes.New(codes.SetupIncomplete, "a step is still open: confirm the single-admin warning, or add a second admin")
+	}
+	if !exists(filepath.Join(h.s.o.Paths.SetupDir(), SignedInMarker)) {
+		return nil, codes.New(codes.SetupIncomplete, "a step is still open: the first sign-in on :8443")
 	}
 	if err := h.s.mark(DoneMarker); err != nil {
 		return nil, err

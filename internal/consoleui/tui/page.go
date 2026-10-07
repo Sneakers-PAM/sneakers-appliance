@@ -29,7 +29,8 @@ type Frame struct {
 	CursorRow, CursorCol int
 }
 
-const more = "  ... (more on a larger screen)"
+// more ends a body cut to fit; the full text is a command away (status).
+const more = "  ... (more below the screen: menu, status)"
 
 // Frame lays the page out on cols x rows. No row reaches the last column,
 // so writing the last row can't scroll the screen.

@@ -45,6 +45,8 @@ type Addresses struct {
 	Management, Service []string
 	Hostname            string
 	NTPSynced           bool
+	// SSHOpen and HTTPSOpen say whether the firewall accepts 22 and 8443.
+	SSHOpen, HTTPSOpen bool
 }
 
 // Network is netd as the console uses it.
@@ -59,6 +61,10 @@ type Network interface {
 	Confirm(ctx context.Context, token string) error
 	Checks(ctx context.Context) ([]Check, error)
 	Status(ctx context.Context) (Addresses, error)
+	// SetManagementPorts opens or closes 22 and 8443 in the management
+	// firewall: first boot opens 22 at its SSH step and 8443 at its
+	// recovery key step.
+	SetManagementPorts(ctx context.Context, ssh, https bool) error
 }
 
 // SysClassNet is where the kernel lists the network interfaces.
@@ -67,10 +73,10 @@ const SysClassNet = "/sys/class/net"
 var errNoNetd = NotInstalled{What: whatOf("netd")}
 
 // NewNetwork is netd through c when the service table in dir has it, and
-// the stub otherwise. Both read the interface list from sysfs.
+// the stub otherwise, which reads the interface list from sysfs.
 func NewNetwork(dir string, c netdv1connect.NetworkServiceClient, sys string) Network {
 	if Installed(dir, "netd") {
-		return netd{c: c, sys: sys}
+		return netd{c: c}
 	}
 	return netStub{sys: sys}
 }
@@ -86,15 +92,33 @@ func (netStub) Confirm(context.Context, string) error                      { ret
 func (netStub) Checks(context.Context) ([]Check, error)                    { return nil, errNoNetd }
 func (netStub) Status(context.Context) (Addresses, error)                  { return Addresses{}, errNoNetd }
 func (netStub) Set(context.Context, network.Settings) (string, int, error) { return "", 0, errNoNetd }
+func (netStub) SetManagementPorts(context.Context, bool, bool) error       { return errNoNetd }
 
 // netd is the real network service.
 type netd struct {
-	c   netdv1connect.NetworkServiceClient
-	sys string
+	c netdv1connect.NetworkServiceClient
 }
 
-func (n netd) Installed() bool                           { return true }
-func (n netd) Interfaces(context.Context) ([]NIC, error) { return readNICs(n.sys) }
+func (n netd) Installed() bool { return true }
+
+// Interfaces is netd's list; netd brings the interfaces up, so each link
+// state is known.
+func (n netd) Interfaces(ctx context.Context) ([]NIC, error) {
+	r, err := n.c.ListInterfaces(ctx, connect.NewRequest(&netdv1.ListInterfacesRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	var out []NIC
+	for _, x := range r.Msg.GetInterfaces() {
+		out = append(out, NIC{Name: x.GetName(), MAC: x.GetMac(), Driver: x.GetDriver(), Up: true, Link: x.GetLinkUp()})
+	}
+	return out, nil
+}
+
+func (n netd) SetManagementPorts(ctx context.Context, ssh, https bool) error {
+	_, err := n.c.SetManagementPorts(ctx, connect.NewRequest(&netdv1.SetManagementPortsRequest{Ssh: ssh, Https: https}))
+	return err
+}
 
 func (n netd) Get(ctx context.Context) (network.Settings, error) {
 	r, err := n.c.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
@@ -145,7 +169,8 @@ func (n netd) Status(ctx context.Context) (Addresses, error) {
 		return Addresses{}, err
 	}
 	m := r.Msg
-	return Addresses{Management: m.GetManagementAddresses(), Service: m.GetServiceAddresses(), Hostname: m.GetHostname(), NTPSynced: m.GetNtpSynced()}, nil
+	return Addresses{Management: m.GetManagementAddresses(), Service: m.GetServiceAddresses(), Hostname: m.GetHostname(), NTPSynced: m.GetNtpSynced(),
+		SSHOpen: m.GetSshOpen(), HTTPSOpen: m.GetHttpsOpen()}, nil
 }
 
 // iffUp is IFF_UP in an interface's flags.

@@ -68,6 +68,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err := os.WriteFile(c.pidFile, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { // #nosec G306 -- a pid file
 		return err
 	}
+	if err := sshconfig.EnsurePrivsepDir(sshconfig.PrivsepDir); err != nil {
+		return err
+	}
 	defer func() { _ = os.Remove(c.pidFile) }()
 	hup := make(chan os.Signal, 1)
 	signal.Notify(hup, syscall.SIGHUP)

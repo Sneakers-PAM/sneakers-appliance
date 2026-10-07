@@ -54,7 +54,7 @@ func status() *osadminv1.GetStatusResponse {
 }
 
 func data(st *osadminv1.GetStatusResponse) dashboard.Data {
-	return dashboard.Data{Status: sources.StatusView{Status: st}, Slot: "A", HostKeys: keys, Platform: "running"}
+	return dashboard.Data{Status: sources.StatusView{Status: st}, Slot: "A", HostKeys: keys, Platform: sources.PlatformState{State: "running", Nodes: 1}}
 }
 
 // Every dashboard state of Section 2.11, reduced protection included.

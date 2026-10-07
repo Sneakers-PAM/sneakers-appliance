@@ -4,21 +4,21 @@
     can change this box's software and read its data.
     Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
 
- [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [>] 4 Recovery  [ ] 5 Sign-in
+ [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [x] 4 Recovery  [>] 5 Sign-in
 
- The box has no management address yet (The network service isn't installed in
- this build yet), so :8443 can't be reached.
- :8443 isn't running: exit status 1
- Recovery keys: 0 of up to 3. Add one on the :8443 setup page, or: ssh
- alice@<address> setup recovery-key < backup.pub
+ This box has one admin. One admin means no quorum: a factory reset then means
+ re-creating the box, never resetting it in place.
 
+ To have a quorum, add a second admin on :8443 now. To go on with one admin,
+ type one admin and press Enter.
 
+ Type one admin to go on with one admin, or add a second admin on :8443 first.
 
 
 
 
 
  ------------------------------------------------------------------------------
- waiting for a recovery key and the first sign-in; this moves on by itself
-
+ type one admin to confirm
+ >
  Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

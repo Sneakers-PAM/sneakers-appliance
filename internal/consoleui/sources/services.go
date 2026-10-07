@@ -72,15 +72,22 @@ func (NoUpgrades) Current(context.Context) (Upgrade, error) {
 	return Upgrade{}, NotInstalled{What: "The upgrade service"}
 }
 
+// PlatformState is the platform as the status view shows it: its state,
+// and how many nodes run it (this box alone until the join path exists).
+type PlatformState struct {
+	State string
+	Nodes int
+}
+
 // Platform is the platform's state (spec 3: k0s and platformd).
 type Platform interface {
-	State(ctx context.Context) (string, error)
+	State(ctx context.Context) (PlatformState, error)
 }
 
 // NoPlatform is the platform's stub until it's in the build.
 type NoPlatform struct{}
 
 // State answers NotInstalled.
-func (NoPlatform) State(context.Context) (string, error) {
-	return "", NotInstalled{What: whatOf("platform")}
+func (NoPlatform) State(context.Context) (PlatformState, error) {
+	return PlatformState{}, NotInstalled{What: whatOf("platform")}
 }

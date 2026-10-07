@@ -23,7 +23,8 @@ every profile (`vmware`, `qemu`, `proxmox`) are merged onto `tinyconfig`, with
 an unmet dependency, and `build/kernel/check-config.sh` checks the options the appliance can't run
 without (`os/kernel/required.txt`: cgroup v2, namespaces, overlayfs, veth, bridge and
 `br_netfilter`, nftables and the iptables compatibility layer, conntrack, seccomp, dm-verity,
-dm-crypt, SquashFS with zstd, efivarfs, the TPM drivers, the lockdown LSM). Lockdown isn't forced
+dm-crypt, SquashFS with zstd, efivarfs, the TPM drivers, the lockdown LSM, and the POSIX timers
+sshd's login grace time needs, which `tinyconfig` turns off). Lockdown isn't forced
 in the config; the UKI's command line sets `lockdown=integrity`.
 
 Builds are reproducible from `SOURCE_DATE_EPOCH` (the last commit's time by default) with fixed

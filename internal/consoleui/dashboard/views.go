@@ -32,7 +32,7 @@ type Data struct {
 	// UpgradeErr and PlatformErr are their services' answers (NotInstalled
 	// until they're in the build).
 	UpgradeErr  error
-	Platform    string
+	Platform    sources.PlatformState
 	PlatformErr error
 }
 
@@ -173,7 +173,7 @@ func Page(c consoleui.Chrome, d Data, now time.Time) tui.Page {
 	}
 	b = append(b, consoleui.Field("Version", 13, tui.Span{Text: ver + ", slot " + d.Slot}))
 	b = append(b, pair("Secure Boot", secureBoot(c), "At rest", atRest(c)))
-	platform := tui.Span{Text: d.Platform}
+	platform := tui.Span{Text: d.Platform.State}
 	if d.PlatformErr != nil {
 		platform = tui.Span{Text: "not installed yet", Style: tui.Warn}
 		if !sources.IsNotInstalled(d.PlatformErr) {
@@ -187,7 +187,14 @@ func Page(c consoleui.Chrome, d Data, now time.Time) tui.Page {
 	case st.GetStagedVersion() != "":
 		upg = tui.Span{Text: st.GetStagedVersion() + " staged", Style: tui.Bold}
 	}
-	b = append(b, pair("Platform", platform, "Upgrades", upg))
+	nodes := d.Platform.Nodes
+	if nodes < 1 {
+		// The platform answers for its nodes once it runs; until then the
+		// box itself is the one.
+		nodes = 1
+	}
+	b = append(b, pair("Platform", platform, "Nodes", tui.Span{Text: fmt.Sprint(nodes)}))
+	b = append(b, consoleui.Field("Upgrades", 13, upg))
 	switch {
 	case d.NetErr != nil:
 		b = append(b, consoleui.Field("Management", 13, tui.Span{Text: "no address: " + lowerFirst(d.NetErr.Error()), Style: tui.Warn}))
@@ -226,10 +233,7 @@ func Page(c consoleui.Chrome, d Data, now time.Time) tui.Page {
 		}
 		b = append(b, consoleui.Field(label, 13, tui.Span{Text: fmt.Sprintf("%-12s %s", k.Type, k.Fingerprint)}))
 	}
-	if ws := Warnings(d, now); len(ws) > 0 {
-		b = append(b, tui.Text(""))
-		b = append(b, ws...)
-	}
+	b = append(b, Warnings(d, now)...)
 	return c.Page("Status", b, `Enter: menu, or type a console command such as "keys list"`, "> ")
 }
 

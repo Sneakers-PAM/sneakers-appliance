@@ -9,17 +9,16 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
-	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
 // The box's paths the console reads.
 const (
-	NetdSocket = "/run/sneakers/netd.sock"
 	// SSHDir holds the SSH host keys (osadmin's Paths.SSHDir on the box).
 	SSHDir = "/var/lib/sneakers/ssh"
 )
@@ -49,7 +48,7 @@ func Dial() Box {
 	b := Box{
 		Custody:  Custody{C: initv1connect.NewKeyCustodyServiceClient(ic, initURL)},
 		Status:   Status{Access: accessv1connect.NewAccessServiceClient(ac, accessURL), CacheFile: accessapi.StatusFile},
-		Network:  NewNetwork(ServicesDir, netdv1connect.NewNetworkServiceClient(UnixClient(NetdSocket), "http://netd.sock"), SysClassNet),
+		Network:  NewNetwork(ServicesDir, netdapi.NewClient(netdapi.SocketPath), SysClassNet),
 		Services: NewServices(ServicesDir, initv1connect.NewServicesServiceClient(ic, initURL)),
 		Access:   accessv1connect.NewAccessServiceClient(ac, accessURL),
 		Setup:    accessv1connect.NewSetupServiceClient(ac, accessURL),

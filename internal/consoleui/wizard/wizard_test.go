@@ -27,6 +27,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/wizard"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/setup"
 )
 
 var now = time.Date(2026, 10, 7, 18, 3, 0, 0, time.UTC)
@@ -82,6 +83,10 @@ func TestWizardScreens(t *testing.T) {
 		return fr
 	}
 	cases := map[string]tui.Page{
+		"network-current":         wizard.CurrentPage(f, sources.Addresses{Management: []string{"192.0.2.10/24", "2001:db8::10/64", "fe80::1/64"}, Hostname: "sneakers.example.org"}, nil),
+		"network-current-waiting": wizard.CurrentPage(f, sources.Addresses{}, nil),
+		"network-current-error":   wizard.CurrentPage(f, sources.Addresses{}, errors.New("dial unix /run/sneakers/netd.sock: connect: connection refused")),
+		"network-checks-current":  wizard.ChecksPage(f, allOK, 0, ""),
 		"network-list":            wizard.NICsPage(f, nics, false, "", ""),
 		"network-list-bad-number": wizard.NICsPage(f, nics, false, "", "Type a number from 1 to 2."),
 		"network-no-link":         wizard.NICsPage(f, []sources.NIC{{Name: "ens192", MAC: "00:50:56:00:00:01", Driver: "vmxnet3", Up: true}}, false, "", ""),
@@ -111,7 +116,14 @@ func TestWizardScreens(t *testing.T) {
 		"continue-no-address":     wizard.ContinuePage(pf(wizard.StepRecovery, sbOff, keycustody.ModeKeyfile), wizard.Continue{AddrErr: errNoNetd, Max: 3, Admin: "alice", OsadminErr: errors.New("exit status 1")}),
 		"complete-starting":       wizard.CompletePage(pf(wizard.StepDone, full, keycustody.ModeTPM), wizard.Complete{Starting: true, ProductURL: "https://sneakers.example.org/setup"}),
 		"complete-ready":          wizard.CompletePage(pf(wizard.StepDone, full, keycustody.ModeTPM), wizard.Complete{Ready: true, ProductURL: "https://sneakers.example.org/setup"}),
-		"complete-restart":        wizard.CompletePage(pf(wizard.StepDone, sbOff, keycustody.ModeKeyfile), wizard.Complete{HandoverErr: sources.NotInstalled{What: "Moving to normal operation without a restart"}, ProductURL: "https://sneakers.example.org/setup"}),
+		"single-admin":            wizard.SingleAdminPage(pf(wizard.StepSignIn, sbOff, keycustody.ModeKeyfile), ""),
+		"single-admin-retype":     wizard.SingleAdminPage(pf(wizard.StepSignIn, sbOff, keycustody.ModeKeyfile), "Type one admin to go on with one admin, or add a second admin on :8443 first."),
+		"continue-complete-error": wizard.ContinuePage(pf(wizard.StepSignIn, sbOff, keycustody.ModeKeyfile), func() wizard.Continue {
+			c := one
+			c.Err = "Setup can't complete yet: SETUP_INCOMPLETE: a step is still open: the escrow hasn't been written"
+			return c
+		}()),
+		"complete-restart": wizard.CompletePage(pf(wizard.StepDone, sbOff, keycustody.ModeKeyfile), wizard.Complete{HandoverErr: sources.NotInstalled{What: "Moving to normal operation without a restart"}, ProductURL: "https://sneakers.example.org/setup"}),
 	}
 	for name, p := range cases {
 		t.Run(name, func(t *testing.T) { tuitest.Golden(t, "wizard-"+name, p) })
@@ -141,15 +153,22 @@ func (p *power) Reboot(context.Context, *connect.Request[initv1.RebootRequest]) 
 }
 
 type env struct {
-	box  *consoletest.Box
-	svcs *consoletest.Services
-	net  *consoletest.Network
-	pw   *power
-	deps wizard.Deps
+	machine *setup.Machine
+	paths   setup.Paths
+	box     *consoletest.Box
+	svcs    *consoletest.Services
+	net     *consoletest.Network
+	pw      *power
+	deps    wizard.Deps
 }
 
 func newEnv(t *testing.T) *env {
-	e := &env{box: consoletest.NewBox(t), svcs: &consoletest.Services{Missing: map[string]bool{}}, pw: &power{},
+	paths := setup.Paths{Tmp: t.TempDir(), State: t.TempDir()}
+	m, err := setup.Open(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := &env{machine: m, paths: paths, box: consoletest.NewBox(t), svcs: &consoletest.Services{Missing: map[string]bool{}}, pw: &power{},
 		net: &consoletest.Network{Addrs: []string{"192.0.2.10/24"}, Results: []sources.Check{{Name: "link", State: sources.CheckOK}, {Name: "address", State: sources.CheckOK, Detail: "192.0.2.10/24"}}}}
 	e.deps = wizard.Deps{
 		Chrome: consoleui.Chrome{Version: "0.1.0", Phase: "firstboot", Now: func() time.Time { return now }},
@@ -163,7 +182,7 @@ func newEnv(t *testing.T) *env {
 		Status: func(context.Context) sources.StatusView {
 			return sources.StatusView{Status: &osadminv1.GetStatusResponse{TlsFingerprint: tlsFP}}
 		},
-		Steps: &wizard.DerivedSteps{Access: e.box.Access(), Setup: e.box.Setup()},
+		Steps: wizard.MachineSteps{M: e.machine},
 		Power: e.pw,
 		Enrol: enrolment.Deps{Window: e.box.Window(), Now: func() time.Time { return now }},
 	}
@@ -177,6 +196,8 @@ func TestFirstBootOpensTheListenersAtTheirSteps(t *testing.T) {
 	e := newEnv(t)
 	d := tuitest.New(t)
 	tuitest.Run(context.Background(), func(ctx context.Context) error { return wizard.Run(ctx, d.UI, e.deps) })
+	d.Expect(t, "The box took an address by itself")
+	d.Type(t, "e")
 	d.Expect(t, "Choose the management interface")
 	d.Type(t, "")
 	d.Expect(t, "The service interface carries the product")
@@ -201,8 +222,8 @@ func TestFirstBootOpensTheListenersAtTheirSteps(t *testing.T) {
 	d.Expect(t, `"root" can't be an admin name`)
 	d.Type(t, "alice")
 	d.Expect(t, "ssh enrol@192.0.2.10")
-	if got := e.svcs.Starts(); !slices.Equal(got, []string{"sshd"}) {
-		t.Fatalf("at the admin step: %v", got)
+	if got := e.svcs.Starts(); !slices.Equal(got, []string{"sshd"}) || !slices.Equal(e.net.Opened(), []string{"ssh"}) {
+		t.Fatalf("at the admin step: %v, ports %v", got, e.net.Opened())
 	}
 	line, fp := consoletest.Key(t, "alice@laptop")
 	if _, err := e.box.Enrol.Submit(e.box.Enrol.Get().Code, line, "192.0.2.50"); err != nil {
@@ -213,18 +234,48 @@ func TestFirstBootOpensTheListenersAtTheirSteps(t *testing.T) {
 	d.Expect(t, "Keys enrolled so far: 1")
 	d.Type(t, "d")
 	d.Expect(t, "https://192.0.2.10:8443/")
-	if got := e.svcs.Starts(); !slices.Equal(got, []string{"sshd", "osadmin"}) {
-		t.Fatalf("after the admin step: %v", got)
+	if got := e.svcs.Starts(); !slices.Equal(got, []string{"sshd", "osadmin"}) || !slices.Equal(e.net.Opened(), []string{"ssh", "ssh+https"}) {
+		t.Fatalf("after the admin step: %v, ports %v", got, e.net.Opened())
 	}
 	e.box.SetRecovery(&osadminv1.RecoveryKey{Fingerprint: "SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw", Type: "ssh-ed25519", Label: "offline safe"})
 	d.Expect(t, "offline safe")
-	e.box.Finish()
+	d.Expect(t, "[x] 4 Recovery")
+	if e.box.IsDone() {
+		t.Fatal("setup completed before the first sign-in")
+	}
+	e.box.SignIn()
+	d.Expect(t, "This box has one admin.")
+	d.Type(t, "yes")
+	d.Expect(t, "Type one admin to go on with one admin")
+	d.Type(t, "one admin")
 	d.Expect(t, "Restart to start normal operation")
+	if !e.box.IsDone() || !e.machine.Done(setup.StepDone) {
+		t.Fatal("setup/done wasn't written")
+	}
+	if p := setup.ReadProgress(setup.Paths{State: e.paths.State}); !p.Done(setup.StepDone) {
+		t.Fatalf("the state volume's progress: %+v", p)
+	}
 	d.Type(t, "reboot")
 	consoletest.Settle()
 	applied := e.net.Settings()
 	if len(applied) != 1 || applied[0].Hostname != "sneakers.example.org" || !slices.Equal(e.net.Tokens(), []string{"T1"}) || e.pw.reboots.Load() != 1 {
 		t.Fatalf("applied %+v kept %v reboots %d", applied, e.net.Tokens(), e.pw.reboots.Load())
+	}
+}
+
+// netd took an address by itself: Enter keeps it once the checks pass,
+// with nothing set or confirmed.
+func TestTheAddressNetdTookIsKept(t *testing.T) {
+	e := newEnv(t)
+	d := tuitest.New(t)
+	tuitest.Run(context.Background(), func(ctx context.Context) error { return wizard.Run(ctx, d.UI, e.deps) })
+	d.Expect(t, "192.0.2.10/24")
+	d.Type(t, "")
+	d.Expect(t, "Every check passed.")
+	d.Type(t, "")
+	d.Expect(t, "Protection: reduced (Secure Boot off)")
+	if len(e.net.Settings()) != 0 || len(e.net.Tokens()) != 0 || !e.machine.Done(setup.StepNetwork) {
+		t.Fatalf("set %v kept %v", e.net.Settings(), e.net.Tokens())
 	}
 }
 
@@ -257,6 +308,8 @@ func TestAFailedCheckIsSkippedButNoAddressIsNot(t *testing.T) {
 	e.net.Results = []sources.Check{{Name: "address", State: sources.CheckFailed, Code: "NET_NO_ADDRESS"}}
 	d := tuitest.New(t)
 	tuitest.Run(context.Background(), func(ctx context.Context) error { return wizard.Run(ctx, d.UI, e.deps) })
+	d.Expect(t, "The box took an address by itself")
+	d.Type(t, "e")
 	d.Expect(t, "Choose the management interface")
 	d.Type(t, "")
 	d.Type(t, "")
