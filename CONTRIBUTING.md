@@ -19,6 +19,7 @@ issues from a template, a branch per issue, Conventional Commits, squash-merged 
   ```
 
   Files ported from another Apache-2.0 project keep their original copyright line next to this
-  header, and `NOTICE` names the source.
+  header, and `NOTICE` names the source. Code the original author (@Bugs5382) wrote for another
+  of their projects is re-authored here as this project's own, with only this header.
 - No real names, hosts, addresses or other identifiers in code, tests, fixtures or docs. Use
   example.org, 192.0.2.0/24, 2001:db8::/32 and invented names.

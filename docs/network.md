@@ -93,8 +93,8 @@ offer, management interface first. `/run/sneakers/resolv.conf` (which `/etc/reso
 lists at most three servers, link-local ones left out, and at most six search domains. The host
 name is the setting, else the DHCP host name joined to its domain.
 
-The clock is kept by SNTP (`internal/timesync`, ported from CryptOS-PKI and extended for IPv6
-servers and four servers): one bounded sync, then polls. A large offset is stepped once at the
+The clock is kept by SNTP (`internal/timesync`, IPv4 and IPv6 servers, up to
+four): one bounded sync, then polls. A large offset is stepped once at the
 start and slewed after that; the clock is never stepped behind its floor
 (`/var/lib/sneakers/netd/clock-floor`, never earlier than the image's build time).
 
