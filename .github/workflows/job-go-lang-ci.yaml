@@ -116,3 +116,4 @@ jobs:
         run: |
           bash build/release/guard_test.sh
           bash build/release/check-fingerprints_test.sh
+          bash build/release/build_test.sh
