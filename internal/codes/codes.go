@@ -111,7 +111,7 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeAirGapped, Symbol: "UPGRADE_AIR_GAPPED", Title: "upgrade", Cause: "no mirror is configured, so the box fetches nothing; upload the .bin instead"},
 	{Code: UpgradeUpload, Symbol: "UPGRADE_UPLOAD", Title: "upgrade", Cause: "the upload or fetch is unknown, too large, or failed"},
 	{Code: UpgradeNotStaged, Symbol: "UPGRADE_NOT_STAGED", Title: "upgrade", Cause: "no release is staged to apply"},
-	{Code: UpgradeElevated, Symbol: "UPGRADE_ELEVATED", Title: "upgrade", Cause: "an elevated shell is open; it ends, or an owner terminates it, before an update applies or reverts"},
+	{Code: UpgradeElevated, Symbol: "UPGRADE_ELEVATED", Title: "upgrade", Cause: "an elevated shell is open; it ends, or an owner terminates it or overrides it (which ends it), before an update applies or reverts"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},
 	{Code: KeyCustodyRecipients, Symbol: "KEYCUSTODY_RECIPIENTS", Title: "keycustody", Cause: "the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys"},

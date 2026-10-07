@@ -71,9 +71,12 @@ type UpgradeServiceClient interface {
 	// StageUpdate verifies an uploaded or fetched .bin, then decrypts,
 	// unpacks and stages it into the inactive slot.
 	StageUpdate(context.Context, *connect.Request[v1.StageUpdateRequest]) (*connect.Response[v1.StageUpdateResponse], error)
-	// ApplyUpdate boots the staged release.
+	// ApplyUpdate boots the staged release. While an elevated shell is open
+	// it is refused with UPGRADE_ELEVATED, unless the request carries an
+	// owner's elevation_override for that shell.
 	ApplyUpdate(context.Context, *connect.Request[v1.ApplyUpdateRequest]) (*connect.Response[v1.ApplyUpdateResponse], error)
-	// RevertUpdate goes back to the previous release.
+	// RevertUpdate goes back to the previous release. An open elevated
+	// shell holds it back the same way as ApplyUpdate.
 	RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
@@ -179,9 +182,12 @@ type UpgradeServiceHandler interface {
 	// StageUpdate verifies an uploaded or fetched .bin, then decrypts,
 	// unpacks and stages it into the inactive slot.
 	StageUpdate(context.Context, *connect.Request[v1.StageUpdateRequest]) (*connect.Response[v1.StageUpdateResponse], error)
-	// ApplyUpdate boots the staged release.
+	// ApplyUpdate boots the staged release. While an elevated shell is open
+	// it is refused with UPGRADE_ELEVATED, unless the request carries an
+	// owner's elevation_override for that shell.
 	ApplyUpdate(context.Context, *connect.Request[v1.ApplyUpdateRequest]) (*connect.Response[v1.ApplyUpdateResponse], error)
-	// RevertUpdate goes back to the previous release.
+	// RevertUpdate goes back to the previous release. An open elevated
+	// shell holds it back the same way as ApplyUpdate.
 	RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }

@@ -272,8 +272,11 @@ type box struct {
 	elev  *elevation.Service
 	// signals are the elevated sessions' pids the service was told to end.
 	signals []int
-	keys    map[string]sshKey
-	done    bool
+	// onSignal, when set, runs (outside the elevation service's lock) for
+	// each signal, as a session's sneakers-elevated would on SIGTERM.
+	onSignal func(pid int)
+	keys     map[string]sshKey
+	done     bool
 	// sign and enc are this test's production release and update keys.
 	mirror      *httptest.Server
 	mirrorFiles map[string][]byte
@@ -320,7 +323,13 @@ func newBox(t *testing.T, withBob bool) *box {
 		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"),
 		Clock:       b.clk,
 		Maintenance: func() bool { return b.srv != nil && b.srv.Maintenance() },
-		Signal:      func(pid int) error { b.signals = append(b.signals, pid); return nil },
+		Signal: func(pid int) error {
+			b.signals = append(b.signals, pid)
+			if b.onSignal != nil {
+				go b.onSignal(pid)
+			}
+			return nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -330,8 +339,9 @@ func newBox(t *testing.T, withBob bool) *box {
 	b.srv = osadmin.New(osadmin.Options{
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: release.ChannelProduction, ReleaseKeyPEM: b.sign.PublicPEM,
-			UpdateKey:  func() (age.Identity, error) { b.keyReads++; return b.enc, nil },
-			HTTPClient: &http.Client{Transport: lazyTransport{get: mirrorClient}},
+			UpdateKey:        func() (age.Identity, error) { b.keyReads++; return b.enc, nil },
+			HTTPClient:       &http.Client{Transport: lazyTransport{get: mirrorClient}},
+			ElevationEndWait: 500 * time.Millisecond,
 		},
 		Access: b.store, Audit: b.log, Clock: b.clk,
 		KeyCustody: initv1connect.NewKeyCustodyServiceClient(hc, daemons.URL),

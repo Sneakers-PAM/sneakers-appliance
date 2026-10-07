@@ -11,6 +11,7 @@ syntax = "proto3";
 package sneakers.appliance.osadmin.v1;
 
 import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/elevation.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
@@ -38,7 +39,9 @@ service UpgradeService {
       audit: "upgrade.stage"
     };
   }
-  // ApplyUpdate boots the staged release.
+  // ApplyUpdate boots the staged release. While an elevated shell is open
+  // it is refused with UPGRADE_ELEVATED, unless the request carries an
+  // owner's elevation_override for that shell.
   rpc ApplyUpdate(ApplyUpdateRequest) returns (ApplyUpdateResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -46,7 +49,8 @@ service UpgradeService {
       audit: "upgrade.apply"
     };
   }
-  // RevertUpdate goes back to the previous release.
+  // RevertUpdate goes back to the previous release. An open elevated
+  // shell holds it back the same way as ApplyUpdate.
   rpc RevertUpdate(RevertUpdateRequest) returns (RevertUpdateResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -109,6 +113,9 @@ message GetUpgradesResponse {
   UpgradePolicy policy = 4;
   bool air_gapped = 5;
   repeated UpgradeEvent history = 6;
+  // active_elevations are the elevated shells open now; while there is
+  // one, Apply and Revert are refused unless an owner overrides it.
+  repeated Elevation active_elevations = 7;
 }
 
 message FetchUpdateRequest {
@@ -129,11 +136,28 @@ message StageUpdateResponse {
   UpdatePackage package = 1;
 }
 
-message ApplyUpdateRequest {}
+// ElevationOverride ends an open elevated shell so an apply or revert can
+// go ahead. The session is terminated and audited with the reason, and the
+// apply or revert waits until it has ended.
+message ElevationOverride {
+  // elevation_id is the active session being ended, such as E-7KQ2.
+  string elevation_id = 1;
+  // confirm is typed by the owner: the session's admin, a space, and the
+  // request id, such as "bob E-7KQ2".
+  string confirm = 2;
+  // reason is why the session is ended; it goes into the audit entry.
+  string reason = 3;
+}
+
+message ApplyUpdateRequest {
+  ElevationOverride elevation_override = 1;
+}
 
 message ApplyUpdateResponse {}
 
-message RevertUpdateRequest {}
+message RevertUpdateRequest {
+  ElevationOverride elevation_override = 1;
+}
 
 message RevertUpdateResponse {}
 

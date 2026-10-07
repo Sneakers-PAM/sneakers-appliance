@@ -176,7 +176,9 @@ account, signed by the box's own user CA after an owner approves.
 
 While a session is active, the automatic update window waits for it to end, and an owner's Apply or
 Revert on the Updates page is refused with `UPGRADE_ELEVATED`, naming the admin and the request:
-the session ends, or an owner terminates it, before the box goes down. While an update is being
+the session ends, or an owner terminates it, before the box goes down. An owner can also end it
+from the refusal with the typed override ([upgrades.md](upgrades.md)), which terminates the
+session, audited with the reason, and applies once its end is reported. While an update is being
 applied or reverted (from the moment the apply starts until the box reboots, at most 15 minutes if
 the reboot never comes; a failed apply ends it at once), a new request, an approval and the first
 connection with an approved certificate are refused with `ELEV_MAINTENANCE`.
