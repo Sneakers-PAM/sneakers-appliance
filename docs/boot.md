@@ -38,6 +38,18 @@ previous release.
 | `.osrel`, `.uname` | the release's os-release and kernel release |
 | `.sbat` | the shim line and `sneakers-pam,1`, so a bad release can be revoked by generation |
 
+### Consoles
+
+`console=tty0 console=ttyS0` turns on both the screen (the VT on the UEFI framebuffer: efifb and
+fbcon) and the first serial port. The kernel writes its own messages to both, but it points
+`/dev/console` at the last one, ttyS0, and that's what PID 1 starts with. On a VM with a screen and
+no serial port (VMware's default) ttyS0 is still in the list and still opens, but every read and
+write fails with EIO, so nothing from userspace would reach the screen. Init therefore doesn't use
+`/dev/console` as it is: it opens every console in `/sys/class/tty/console/active`, keeps the ones
+that take writes, and joins its standard input, output and error to them
+([init.md](init.md#the-console)). `quiet` stays: the kernel's own log isn't shown, and the first
+thing on the screen is init's.
+
 It then refuses the image unless it carries exactly those six payload sections: `internal/ukipcr`
 predicts PCR 11 only for them, and a box that can't predict PCR 11 for a
 staged release couldn't seal its state key to it. Signing happens later, in the release workflow,

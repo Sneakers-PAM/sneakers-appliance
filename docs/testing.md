@@ -36,6 +36,12 @@ match against, without its colour codes, and `Type` sends console input. `Stop` 
 to the next boot. On a failure the last lines of the console go to the test log and the job
 summary.
 
+Every VM has a QMP socket. `NoSerial` boots without a serial port and `NoVGA` without a display
+adapter. `ExpectScreen` reads the display from a QMP screendump: each 8x16 cell is matched
+against fbcon's font, which the harness reads out of the kernel the image boots (`SNEAKERS_KERNEL`,
+the bzImage; it needs the `xz` tool), and the rows are joined as they wrap. `Press` types on the
+VM's keyboard.
+
 `Stable` watches the console for a while after the banner. It fails if init stops (`init: fatal`,
 a kernel panic) or QEMU exits, and if any service restarts three times or more. A service that's
 known to crash-loop on the image is named with its reason, and it fails once it stops looping, so
@@ -49,6 +55,9 @@ yet.
 | `harness.TestHarnessBootsToSerialBanner` | Secure Boot enforcing (lab keys), swtpm | `phase=firstboot` |
 | `harness.TestFirstBootStaysUp` | as above | init keeps running past the banner and reaches the service table; no crash loop except the known one |
 | `reduced.TestNoSecureBootNoTPMBootsReduced` | no swtpm; an empty vars store, and keys enrolled with Secure Boot off | the Secure Boot choice (no default outside Setup Mode: Enter alone re-prompts), the typed `no secure boot`, first boot; after a kill, the next boot is `protection=reduced (Secure Boot off)` without asking |
+| `console.TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer` | no serial port, VGA, keys enrolled with Secure Boot off, no swtpm (a VMware VM) | the banner and the Secure Boot choice on the screen, `no secure boot` typed on its keyboard, first boot |
+| `console.TestTheSerialLineAloneShowsTheChoiceAndTakesTheAnswer` | no display adapter, as above otherwise (a headless box) | the same on the serial line |
+| `console.TestBothConsolesShowTheChoiceAndTheScreenCanAnswer` | serial and VGA | the choice on both; the answer typed on the screen's keyboard is taken while the serial line shows it |
 | `reset.TestAResetFinishesAtBootThenFirstBootIsFresh` | Secure Boot enforcing, swtpm; the disk laid out as after first boot, with a begun reset record on the ESP | `phase=reset` finishes the reset and reboots without starting services; the key file, state and backup are out of the GPT and the record is `done`; the next boot is first boot, with no reset |
 
 Not in the suite yet, because the image can't do it: an elevation through the real sshd (request,

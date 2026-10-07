@@ -18,11 +18,13 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	log "github.com/Bugs5382/go-log"
 	"golang.org/x/sys/unix"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/console"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
@@ -53,8 +55,13 @@ func main() {
 	select {}
 }
 
+// flushWait is how long a reboot waits for the last lines to reach every
+// console.
+const flushWait = 2 * time.Second
+
 func run(lg log.TraceLogger) error {
 	mountEarly(lg)
+	con := takeConsole(lg)
 	r := reaper.NewReaper()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -93,7 +100,7 @@ func run(lg log.TraceLogger) error {
 
 	switch p {
 	case phase.Reset:
-		return finishReset(ctx, lg)
+		return finishReset(ctx, lg, con)
 	case phase.Mismatch:
 		_, _ = fmt.Fprint(os.Stderr, screens.Mismatch)
 		<-ctx.Done()
@@ -114,6 +121,7 @@ func run(lg log.TraceLogger) error {
 		}
 		if out == enrolReboot {
 			if screens.DetectPlatform(readFile("/sys/class/dmi/id/sys_vendor")) == screens.QEMU {
+				con.Flush(flushWait)
 				unix.Sync()
 				return unix.Reboot(unix.LINUX_REBOOT_CMD_RESTART)
 			}
@@ -128,7 +136,7 @@ func run(lg log.TraceLogger) error {
 		return err
 	}
 	sup := services.NewSupervisor(r, tbl, services.Options{Logger: lg})
-	pw := newPower(sup, lg)
+	pw := newPower(sup, lg, con)
 	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, Logger: lg}
 	srv, err := initapi.Listen(initapi.SocketPath, api)
 	if err != nil {
@@ -161,6 +169,23 @@ func protection(st secureboot.State, f phase.Facts) string {
 		return "reduced (Secure Boot off)"
 	}
 	return "pending"
+}
+
+// takeConsole joins init's standard input, output and error to every
+// active console, so the banner and the Secure Boot screen show on the
+// screen and on the serial line, and either can answer. When none takes
+// writes, init keeps the console the kernel gave it.
+func takeConsole(lg log.Logger) *console.Taken {
+	con, dropped, err := console.Take(func(format string, a ...any) { lg.Warn(fmt.Sprintf(format, a...)) })
+	for name, why := range dropped {
+		lg.Info("init: console left out", log.F("console", name), log.F("reason", why.Error()))
+	}
+	if err != nil {
+		lg.Warn("init: keeping the kernel's console", log.F("error", err.Error()))
+		return nil
+	}
+	lg.Info("init: console", log.F("consoles", strings.Join(con.Kept, " ")))
+	return con
 }
 
 // earlyMounts are what every later step needs. nosuid and nodev are mount
