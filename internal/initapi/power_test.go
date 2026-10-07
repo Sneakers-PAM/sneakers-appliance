@@ -152,7 +152,11 @@ func TestTheShellPowersOffButCantReset(t *testing.T) {
 
 func TestThePowerSocketServesOnlyPower(t *testing.T) {
 	m := &machine{}
-	sock := filepath.Join(t.TempDir(), "power.sock")
+	dir := filepath.Join(t.TempDir(), "run")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(dir, "power.sock")
 	srv, err := initapi.ListenPower(sock, initapi.Options{
 		Allow: func(uid uint32) bool { return uid == me() }, Power: controller(m),
 		Callers:   map[string]power.Kind{testExe(t): power.KindShell},
@@ -165,6 +169,9 @@ func TestThePowerSocketServesOnlyPower(t *testing.T) {
 	st, err := os.Stat(sock)
 	if err != nil || st.Mode().Perm() != 0o666 {
 		t.Fatalf("the power socket's mode %v %v", st.Mode(), err)
+	}
+	if d, err := os.Stat(dir); err != nil || d.Mode().Perm() != 0o755 {
+		t.Fatalf("admin logins can't reach the power socket's directory: %v %v", d.Mode(), err)
 	}
 	hc := client(sock)
 	if _, err := initv1connect.NewPowerServiceClient(hc, "http://power.sock").Reboot(context.Background(), connect.NewRequest(&initv1.RebootRequest{})); err != nil {

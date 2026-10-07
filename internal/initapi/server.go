@@ -114,6 +114,13 @@ func listen(path string, mode os.FileMode, mux *http.ServeMux, o Options) (*Serv
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
+	if mode&0o007 != 0 {
+		// A socket for other uids is useless in a directory they can't
+		// search; the sockets in it keep their own modes.
+		if err := os.Chmod(filepath.Dir(path), 0o755); err != nil { // #nosec G302 -- searchable only; each socket's mode and SO_PEERCRED decide access
+			return nil, err
+		}
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}

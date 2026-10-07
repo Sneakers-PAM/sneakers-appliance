@@ -63,7 +63,8 @@ ones whose bodies later work adds answer `Unimplemented` until then. `ServicesSe
 stops and reports the table's on-demand services.
 
 `PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also
-served alone on `/run/sneakers/power.sock`, mode 0666, which admits root and the admin uids, so the
+served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits
+root and the admin uids, so the
 closed shell's logins can reboot. On both sockets it answers only `sneakers-osadmin` and
 `sneakers-shell`, told apart by the peer's executable, and the factory reset only osadmin. See
 [factory-reset.md](factory-reset.md) for what each request does.
