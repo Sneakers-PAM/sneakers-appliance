@@ -487,6 +487,10 @@ func (s *Server) UpgradeWindowTick(ctx context.Context) {
 		return
 	}
 	day := open.Format(time.DateOnly)
+	if s.o.Elevation != nil && s.o.Elevation.Active() {
+		s.o.Logger.Info("osadmin: the update window waits for an active elevated session to end")
+		return
+	}
 	s.upgrades.mu.Lock()
 	if s.upgrades.lastWindow == day {
 		s.upgrades.mu.Unlock()

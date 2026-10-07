@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -28,6 +29,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
@@ -94,6 +97,17 @@ type box struct {
 	d     *accessd.Server
 	keys  map[string]sshKey
 	uids  map[string]uint32
+	elev  *elevation.Service
+	enrol *enrol.Service
+
+	sigMu   sync.Mutex
+	signals []int
+}
+
+func (b *box) signalled() []int {
+	b.sigMu.Lock()
+	defer b.sigMu.Unlock()
+	return slices.Clone(b.signals)
 }
 
 func newBox(t *testing.T) *box {
@@ -113,19 +127,44 @@ func newBox(t *testing.T) *box {
 	hc := daemons.Client()
 	netd := netdv1connect.NewNetworkServiceClient(hc, daemons.URL)
 	var err error
-	b.d = accessd.New(accessd.Options{
-		Network:    netd,
-		Paths:      accessd.Paths{Run: b.run},
-		StatusFile: filepath.Join(b.run, "access", "status.json"),
-	})
-	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return true, false }, OnChange: b.d.Changed})
-	if err != nil {
-		t.Fatal(err)
-	}
 	b.log, err = osaudit.Open(filepath.Join(b.state, "os-audit"), osaudit.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	var d *accessd.Server
+	rerender := func() {
+		if d != nil {
+			d.Rerender()
+		}
+	}
+	b.elev, err = elevation.Open(elevation.Options{
+		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"),
+		Audit: b.log, OnChange: rerender,
+		Signal: func(pid int) error {
+			b.sigMu.Lock()
+			defer b.sigMu.Unlock()
+			b.signals = append(b.signals, pid)
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d = accessd.New(accessd.Options{
+		Network:    netd,
+		Paths:      accessd.Paths{Run: b.run},
+		StatusFile: filepath.Join(b.run, "access", "status.json"),
+		Elevation:  b.elev,
+		HostKeyDir: filepath.Join(b.state, "ssh"),
+		AuditDir:   b.log.Dir(),
+	})
+	b.d = d
+	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return true, false }, OnChange: b.d.Changed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.enrol = enrol.New(enrol.Options{Store: b.store, Audit: b.log, OnChange: rerender})
+	b.d.SetEnrolment(b.enrol)
 	b.api = osadmin.New(osadmin.Options{
 		Access: b.store, Audit: b.log, Clock: clock.Real{},
 		KeyCustody: initv1connect.NewKeyCustodyServiceClient(hc, daemons.URL),
@@ -133,6 +172,7 @@ func newBox(t *testing.T) *box {
 		Power:      initv1connect.NewPowerServiceClient(hc, daemons.URL),
 		Network:    netd,
 		Paths:      osadmin.Paths{State: b.state},
+		Elevation:  b.elev,
 	})
 	b.d.Attach(b.store, b.api)
 	b.addAdmin("alice", access.RoleOwner)

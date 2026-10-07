@@ -84,6 +84,19 @@ a sign-in from the last 5 minutes.
 | `UpgradeService.ApplyUpdate` | owner | yes | `upgrade.apply` |
 | `UpgradeService.RevertUpdate` | owner | yes | `upgrade.revert` |
 | `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
+| `ElevationService.ListElevations` | admin | no | |
+| `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
+| `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
+| `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
+| `ElevationService.GetElevationRecording` | owner | no | `elevation.recording.view` |
+
+Shell elevation: `ApproveElevation` signs the requester's certificate and may shorten the request
+(`minutes`, never longer). With two or more owners nobody approves their own request
+(`ELEV_SELF_APPROVAL`); the only owner may, and the request is flagged `self_approved` (and on
+Status, `WARNING_KIND_SELF_APPROVED_ELEVATION`, while it is approved or active).
+`TerminateElevation` ends an active session or revokes an approved certificate nobody has used.
+`GetElevationRecording` returns the asciicast recording with `verified` set when every chunk hash
+in the OS audit log matches. See [ssh-and-elevation.md](ssh-and-elevation.md#one-time-elevation).
 
 ### Not available in this release
 
@@ -91,10 +104,6 @@ The pages for these services show "Not available in this release" until their ba
 
 | Method | Role | Step-up | Audit action |
 |---|---|---|---|
-| `ElevationService.ListElevations` | admin | no | |
-| `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
-| `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
-| `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
 | `TlsService.GetTls` | admin | no | |
 | `TlsService.CreateCsr` | admin | no | `tls.csr.create` |
 | `TlsService.UploadCertificate` | admin | yes | `tls.certificate.upload` |

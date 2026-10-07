@@ -34,6 +34,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
@@ -81,10 +83,40 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err := dirs(paths); err != nil {
 		return err
 	}
-	d := accessd.New(accessd.Options{
+	audit, err := osaudit.Open(filepath.Join(c.state, "os-audit"), osaudit.Options{Logger: lg})
+	if err != nil {
+		return err
+	}
+	var d *accessd.Server
+	rerender := func() {
+		if d != nil {
+			d.Rerender()
+		}
+	}
+	// The user CA is generated here at first boot and kept on the state
+	// volume, 0600 root: the interim until init's KeyCustody.Seal is served
+	// and the CA moves into it (docs/ssh-and-elevation.md).
+	elev, err := elevation.Open(elevation.Options{
+		SSHDir:    paths.SSHDir(),
+		StateFile: filepath.Join(c.state, "access", "elevation.json"),
+		Audit:     audit,
+		Logger:    lg,
+		OnChange:  rerender,
+		Signal: func(pid int) error {
+			return accessd.SignalElevated(pid, func(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) })
+		},
+		Alive: func(pid int) bool { return syscall.Kill(pid, 0) == nil },
+	})
+	if err != nil {
+		return err
+	}
+	d = accessd.New(accessd.Options{
 		Network:    netd,
 		Paths:      accessd.Paths{Run: c.run, SSHD: c.sshd},
 		StatusFile: filepath.Join(c.run, "access", "status.json"),
+		Elevation:  elev,
+		HostKeyDir: paths.SSHDir(),
+		AuditDir:   audit.Dir(),
 		Logger:     lg,
 	})
 	var api *osadmin.Server
@@ -96,10 +128,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err != nil {
 		return err
 	}
-	audit, err := osaudit.Open(filepath.Join(c.state, "os-audit"), osaudit.Options{Logger: lg})
-	if err != nil {
-		return err
-	}
+	d.SetEnrolment(enrol.New(enrol.Options{Store: store, Audit: audit, Logger: lg, OnChange: rerender}))
 	go audit.RunRetention(ctx, 24*time.Hour)
 	pins, perr := release.Load()
 	if perr != nil {
@@ -113,6 +142,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Network:    netd,
 		Paths:      paths,
 		CertDir:    paths.OwnDir(),
+		Elevation:  elev,
 		Logger:     lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
@@ -147,6 +177,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			lg.Info("accessd: stopped")
 			return nil
 		case <-minute.C:
+			d.Tick()
 			api.UpgradeWindowTick(ctx)
 			d.RefreshStatus(ctx)
 		}
