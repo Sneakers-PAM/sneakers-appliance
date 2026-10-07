@@ -1,0 +1,16 @@
+# k0s: the cluster (spec 1 Section 3.6, spec 3 Section 2.12), the
+# controller with its worker and a one-member etcd, not --single, so more
+# nodes can join later. Normal operation only, once the state is mounted
+# (/var/lib/k0s is on it), after netd. Root; its output goes to init's
+# console.
+# INTERIM until sneakers-platformd (#99): os/k0s/k0s-interim prepares the
+# box and starts `k0s controller --enable-worker --no-taints` with the
+# box's node name; platformd takes both over and the entry gets
+# `after: [platformd]`.
+exec: /bin/sh
+args: [/usr/libexec/sneakers/k0s-interim, run]
+phases: [normal]
+after: [netd]
+restart: always
+pre-start: [/bin/sh, /usr/libexec/sneakers/k0s-interim, prepare]
+stop-timeout: 2m

@@ -17,10 +17,12 @@ there a missing tool fails instead.
 ## The lab release
 
 `build/lab/build.sh` builds a whole release the way the release workflow does, signed with a key
-set `build/keys/lab-keys.sh` makes for that run only: the (empty) airgap bundle
-(`build/bundle/build.sh`), the root image (`build/root/build.sh`, with the static OpenSSH and
+set `build/keys/lab-keys.sh` makes for that run only: the pinned k0s (`K0S_VERSION` in
+`build/ci/versions.env`), the airgap bundle of the images in `build/lab/images.txt`, each digest
+signed with the run's key (`build/bundle/build.sh`), the root image (`build/root/build.sh`, with the static OpenSSH and
 busybox, and the static cryptsetup, veritysetup, mkfs.ext4 and sgdisk from `STATIC`, which first
-boot needs to make the state volumes), the
+boot needs to make the state volumes, plus `build/lab/overlay`: the image suite's hook and the
+throwaway hello stack, [k0s.md](k0s.md)), the
 UKI (`build/uki/assemble.sh`, signed with `sbsign`), systemd-boot (signed), the enrolment
 material, `release.yaml` and the artifact (`sneakers-artifact assemble`, then `cosign sign-blob`
 over the index blob and `sneakers-artifact attach`). It then builds a kit pinned to that run's keys
@@ -64,6 +66,7 @@ the entry goes when its cause is fixed. Today there are none.
 | `harness.TestFirstBootStaysUp` | as above | Enter at the protection step keeps the TPM; the state is formatted and mounted, protection is full, accessd is ready, and nothing crash-loops |
 | `reduced.TestNoSecureBootNoTPMBootsReduced` | no swtpm; an empty vars store, and keys enrolled with Secure Boot off | the Secure Boot choice (no default outside Setup Mode: Enter alone re-prompts), the typed `no secure boot`, then the key file at the protection step and first boot; after a kill, the next boot is `protection=reduced (Secure Boot off)` without asking either again |
 | `console.TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer` | no serial port, VGA, keys enrolled with Secure Boot off, no swtpm (a VMware VM) | the banner and the Secure Boot choice on the screen, `no secure boot` typed on its keyboard, then Enter at the protection step (key file); then the setup wizard owns the screen: the reduced-protection banner, the NIC list, a NIC and Enter typed on the keyboard, and "The network service isn't installed in this build yet" |
+| `k0s.TestNormalRunsK0sAndTheHelloStack` | no swtpm, an empty vars store, 4 GiB, the lab hook's marker on the ESP | `no secure boot`, the key file, first boot (the hook marks setup done); the next boot is `phase=normal`, k0s starts from the bundled images, the node and the hello pod are Ready, the hello NodePort answers `hello from sneakers-appliance`, and nothing crash-loops ([k0s.md](k0s.md)) |
 | `console.TestTheSerialLineAloneShowsTheChoiceAndTakesTheAnswer` | no display adapter, as above otherwise (a headless box) | the same on the serial line |
 | `console.TestBothConsolesShowTheChoiceAndTheScreenCanAnswer` | serial and VGA | the choice on both; the answer typed on the screen's keyboard is taken while the serial line shows it |
 | `reset.TestAResetFinishesAtBootThenFirstBootIsFresh` | Secure Boot enforcing, swtpm; the disk laid out as after first boot, with a begun reset record on the ESP | `phase=reset` finishes the reset and reboots without starting services; the key file, state and backup are out of the GPT and the record is `done`; the next boot is first boot (the protection step again), with no reset |

@@ -287,3 +287,25 @@ func TestPullRefuses(t *testing.T) {
 		})
 	}
 }
+
+// The lab build signs each pinned digest itself, over the manifest or index
+// bytes FetchManifest returns; their SHA-256 is the digest.
+func TestFetchManifestReturnsThePinnedBytes(t *testing.T) {
+	single, multi := lab(t)
+	for _, im := range []pushed{single, multi} {
+		b, err := bundle.FetchManifest(context.Background(), im.ref, im.digest.String(), true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := digest.FromBytes(b); got != im.digest {
+			t.Fatalf("%s: the bytes hash to %s, want %s", im.ref, got, im.digest)
+		}
+	}
+	other := digest.FromString("not pushed")
+	if _, err := bundle.FetchManifest(context.Background(), single.ref, other.String(), true); !codes.Is(err, codes.KitBundleMismatch) {
+		t.Fatalf("a digest the registry doesn't have: want KIT_BUNDLE_MISMATCH, got %v", err)
+	}
+	if _, err := bundle.FetchManifest(context.Background(), single.ref, "sha256:TBD", true); !codes.Is(err, codes.KitBundleMismatch) {
+		t.Fatalf("a placeholder digest: want KIT_BUNDLE_MISMATCH, got %v", err)
+	}
+}

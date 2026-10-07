@@ -43,7 +43,7 @@ jobs:
           sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
             ovmf qemu-system-x86 qemu-utils swtpm python3-virt-firmware \
             efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
-            systemd-ukify systemd-boot-efi python3-pefile
+            systemd-ukify systemd-boot-efi python3-pefile mtools
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
