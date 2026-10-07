@@ -93,6 +93,7 @@ jobs:
           SNEAKERS_REQUIRE_TOOLS: "1"
         run: |
           export SNEAKERS_KEYS="$RUNNER_TEMP/labkeys"
+          export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage"
           SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
           export SNEAKERS_IMAGE
           go test -tags image -timeout 60m -v ./test/image/...

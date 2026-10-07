@@ -18,6 +18,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/console"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/disk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/factoryreset"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/luks"
@@ -81,7 +82,7 @@ func readReset(espOK bool, lg log.Logger) bool {
 // finishReset carries an interrupted factory reset on at boot, before
 // anything starts, then reboots into first boot. On failure it returns the
 // error and init halts with it on the console; it never boots normally.
-func finishReset(ctx context.Context, lg log.Logger) error {
+func finishReset(ctx context.Context, lg log.Logger, con *console.Taken) error {
 	_, _ = fmt.Fprintln(os.Stderr, "sneakers-init: a factory reset is unfinished; finishing it")
 	d, err := resetDeps(lg)
 	if err != nil {
@@ -93,6 +94,7 @@ func finishReset(ctx context.Context, lg log.Logger) error {
 		return err
 	}
 	lg.Warn("init: factory reset finished; rebooting into first boot", log.F("id", rec.ID), log.F("attempts", rec.Attempts))
+	con.Flush(flushWait)
 	unix.Sync()
 	_ = unix.Unmount(espMount, 0)
 	unix.Sync()
@@ -131,7 +133,24 @@ func (n noReset) Run(context.Context, func(context.Context) error) (factoryreset
 	return factoryreset.Record{}, n.err
 }
 
-func newPower(sup *services.Supervisor, lg log.Logger) *power.Controller {
+// flushedMachine lets the last lines reach every console before the power
+// goes.
+type flushedMachine struct {
+	power.Linux
+	con *console.Taken
+}
+
+func (m flushedMachine) Reboot() error {
+	m.con.Flush(flushWait)
+	return m.Linux.Reboot()
+}
+
+func (m flushedMachine) PowerOff() error {
+	m.con.Flush(flushWait)
+	return m.Linux.PowerOff()
+}
+
+func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken) *power.Controller {
 	var reset power.Resetter
 	if d, err := resetDeps(lg); err != nil {
 		lg.Warn("init: no factory reset on this boot", log.F("error", codes.Describe(err)))
@@ -141,7 +160,7 @@ func newPower(sup *services.Supervisor, lg log.Logger) *power.Controller {
 	}
 	roster := func() (access.State, error) { return access.ReadState(filepath.Join(stateDir, "access")) }
 	return power.New(power.Options{
-		Machine: power.Linux{ESP: espMount, Cryptsetup: &luks.ExecRunner{Binary: cryptsetup}, Logger: lg},
+		Machine: flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: &luks.ExecRunner{Binary: cryptsetup}, Logger: lg}, con: con},
 		Drainer: sup,
 		Audit:   (&lazyAudit{lg: lg}).open,
 		Roster:  roster,

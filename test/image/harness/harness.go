@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package harness boots appliance disk images in QEMU (q35, OVMF with
-// Secure Boot, swtpm) for the image suite, and reads their serial console.
+// Secure Boot, swtpm) for the image suite, and reads their serial console
+// and their display.
 // A missing tool skips with its name (failing instead when
 // SNEAKERS_REQUIRE_TOOLS is set, as CI does).
 package harness
@@ -58,6 +59,12 @@ type Options struct {
 	Keys    string
 	MemMiB  int
 	Timeout time.Duration
+	// NoSerial boots without a serial port, like a VMware VM with none:
+	// the display is the only console.
+	NoSerial bool
+	// NoVGA boots without a display adapter: a headless box, where the
+	// serial line is the only console.
+	NoVGA bool
 }
 
 // Paths of the pinned firmware (Ubuntu's ovmf package in CI).
@@ -107,6 +114,9 @@ type VM struct {
 	dir    string
 	done   chan struct{}
 	in     string
+	// qmpSock is QEMU's QMP socket: screendumps and the keyboard.
+	qmpSock string
+	vga     bool
 }
 
 // Boot starts QEMU with o and returns once it's running.
@@ -160,13 +170,32 @@ func Boot(t testing.TB, o Options) *VM {
 		cancel()
 		t.Fatal(err)
 	}
+	// A unix socket's path must stay under 108 bytes, which a test's temp
+	// directory can pass.
+	qdir, err := os.MkdirTemp("/tmp", "qmp")
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(qdir) })
+	qmpSock := filepath.Join(qdir, "qmp.sock")
 	args := []string{
 		"-machine", "q35,smm=on", "-m", fmt.Sprint(mem), "-smp", "2", "-nographic", "-no-reboot",
 		"-global", "driver=cfi.pflash01,property=secure,value=on",
 		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + OVMFCode,
 		"-drive", "if=pflash,format=raw,unit=1,file=" + vars,
-		"-chardev", "pipe,id=ser0,path=" + ser, "-serial", "chardev:ser0", "-monitor", "none",
+		"-monitor", "none", "-qmp", "unix:" + qmpSock + ",server=on,wait=off",
 		"-netdev", "user,id=n0,restrict=on", "-device", "virtio-net-pci,netdev=n0",
+	}
+	if o.NoSerial {
+		args = append(args, "-serial", "none")
+	} else {
+		args = append(args, "-chardev", "pipe,id=ser0,path="+ser, "-serial", "chardev:ser0")
+	}
+	if o.NoVGA {
+		args = append(args, "-vga", "none")
+	} else {
+		args = append(args, "-vga", "std")
 	}
 	if _, err := os.Stat("/dev/kvm"); err == nil {
 		args = append(args, "-accel", "kvm", "-cpu", "host")
@@ -206,7 +235,7 @@ func Boot(t testing.TB, o Options) *VM {
 		cancel()
 		t.Fatal(err)
 	}
-	vm := &VM{t: t, cmd: cmd, serial: serial, cancel: cancel, dir: dir, done: make(chan struct{}), in: ser + ".in"}
+	vm := &VM{t: t, cmd: cmd, serial: serial, cancel: cancel, dir: dir, done: make(chan struct{}), in: ser + ".in", qmpSock: qmpSock, vga: !o.NoVGA}
 	copied := make(chan struct{})
 	go func() {
 		defer close(copied)
@@ -226,8 +255,15 @@ func Boot(t testing.TB, o Options) *VM {
 		close(vm.done)
 	}()
 	t.Cleanup(func() {
+		var screen []string
+		if t.Failed() && vm.vga && !vm.exited() {
+			screen, _ = vm.screen()
+		}
 		cancel()
 		<-vm.done
+		if len(screen) > 0 {
+			t.Logf("display:\n%s", strings.Join(trimRows(screen), "\n"))
+		}
 		if t.Failed() {
 			b, _ := os.ReadFile(serial) // #nosec G304 -- the test's own log
 			t.Logf("serial console:\n%s\nqemu stderr:\n%s", tail(b, 200), stderr.String())

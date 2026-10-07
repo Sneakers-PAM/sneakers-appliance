@@ -88,3 +88,16 @@ prints `sneakers-init: phase=<phase> protection=<level>`. In `enrol` it runs the
 VMware and bare metal it waits for the admin's power cycle. In `mismatch` it shows the mismatch
 screen and starts nothing. In `reset` it finishes an interrupted factory reset before anything
 starts. SIGTERM stops every service and syncs the disks.
+
+### The console
+
+Right after the early mounts, init reads the kernel's active consoles
+(`/sys/class/tty/console/active`, `tty0 ttyS0` on the appliance), opens each, and leaves out any
+that refuses a zero-length write: a serial port with no UART behind it fails every write with EIO.
+Its log names the consoles it kept (`init: console consoles=tty0`) and each one left out, with the
+reason. Standard output and error become a pipe that init copies to every console kept, so init's
+banner, the Secure Boot screens and every service's output show on the screen and on the serial
+line alike. Each console has its own queue, so a stuck serial line can't stop the screen. Standard
+input is a pipe fed by every console, so the Secure Boot choice can be typed on whichever one the
+admin has. Before it reboots or powers off, init waits up to two seconds for the last lines to
+reach every console. When no console takes writes, init keeps the console the kernel gave it.
