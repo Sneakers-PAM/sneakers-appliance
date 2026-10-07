@@ -18,12 +18,14 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/power"
 )
 
-// OsadminPath is where the root image installs sneakers-osadmin.
-const OsadminPath = "/usr/bin/sneakers-osadmin"
+// AccessdPath is where the root image installs sneakers-accessd, which
+// runs the :8443 API's backend: its power calls are osadmin's.
+// sneakers-osadmin itself runs unprivileged and can't reach init.
+const AccessdPath = "/usr/bin/sneakers-accessd"
 
 // DefaultCallers are the programs PowerService answers.
 var DefaultCallers = map[string]power.Kind{
-	OsadminPath:        power.KindOsadmin,
+	AccessdPath:        power.KindOsadmin,
 	accounts.ShellPath: power.KindShell,
 }
 

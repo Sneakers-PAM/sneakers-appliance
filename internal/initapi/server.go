@@ -6,8 +6,8 @@
 // gRPC protocol. Only root may connect; every connection's peer is checked
 // with SO_PEERCRED before a request is read. PowerService is also served
 // alone on /run/sneakers/power.sock for the closed shell's admin logins,
-// and it answers only osadmin and the shell, told apart by the peer's
-// executable.
+// and it answers only the :8443 API (sneakers-accessd) and the shell, told
+// apart by the peer's executable.
 package initapi
 
 import (
