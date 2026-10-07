@@ -323,8 +323,8 @@ type box struct {
 }
 
 var (
-	eth0 = netd.Link{Name: "eth0", MAC: "52:54:00:00:00:01", Up: true, Driver: "virtio_net"}
-	eth1 = netd.Link{Name: "eth1", MAC: "52:54:00:00:00:02", Up: true, Driver: "virtio_net"}
+	eth0 = netd.Link{Name: "eth0", MAC: "52:54:00:00:00:01", Up: true, Driver: "virtio_net", Bus: "pci0000:00/0000:00:03.0/virtio0"}
+	eth1 = netd.Link{Name: "eth1", MAC: "52:54:00:00:00:02", Up: true, Driver: "virtio_net", Bus: "pci0000:00/0000:00:04.0/virtio1"}
 )
 
 func newBox(t *testing.T, links ...netd.Link) *box {

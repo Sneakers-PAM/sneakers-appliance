@@ -44,7 +44,7 @@ func (l Linux) sys() string {
 	return l.Sys
 }
 
-// Links lists the interfaces with their MAC, carrier and driver.
+// Links lists the interfaces with their MAC, carrier, driver and bus.
 func (l Linux) Links() ([]Link, error) {
 	ifs, err := net.Interfaces()
 	if err != nil {
@@ -63,9 +63,27 @@ func (l Linux) Links() ([]Link, error) {
 		if drv, err := os.Readlink(filepath.Join(l.sys(), "class", "net", i.Name, "device", "driver")); err == nil {
 			k.Driver = filepath.Base(drv)
 		}
+		k.Bus = l.bus(i.Name)
 		out = append(out, k)
 	}
 	return out, nil
+}
+
+// bus is the interface's device path under /sys/devices, empty when it has
+// no device (a virtual interface).
+func (l Linux) bus(name string) string {
+	dev, err := filepath.EvalSymlinks(filepath.Join(l.sys(), "class", "net", name, "device"))
+	if err != nil {
+		return ""
+	}
+	devices, err := filepath.EvalSymlinks(filepath.Join(l.sys(), "devices"))
+	if err != nil {
+		return dev
+	}
+	if rel, err := filepath.Rel(devices, dev); err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	return dev
 }
 
 // LinkUp sets the interface up.

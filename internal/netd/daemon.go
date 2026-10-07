@@ -197,7 +197,8 @@ func (d *Daemon) load() (network.Settings, bool, error) {
 	return network.Defaults(nic), false, nil
 }
 
-// firstNIC is the first NIC by name with a link, else the first by name.
+// firstNIC is the first NIC in bus order with a link, else the first in
+// bus order. Bus order holds across reboots where interface names may not.
 func (d *Daemon) firstNIC() (string, error) {
 	links, err := d.Interfaces()
 	if err != nil {
@@ -214,14 +215,26 @@ func (d *Daemon) firstNIC() (string, error) {
 	return "", nil
 }
 
-// Interfaces lists the NICs, sorted, loopback left out.
+// Interfaces lists the physical NICs by bus order, then MAC. Virtual
+// interfaces are left out: they are never the management or service
+// interface.
 func (d *Daemon) Interfaces() ([]Link, error) {
 	links, err := d.o.Sys.Links()
 	if err != nil {
 		return nil, err
 	}
-	links = slices.DeleteFunc(links, func(l Link) bool { return l.Name == "lo" })
-	sort.Slice(links, func(i, j int) bool { return links[i].Name < links[j].Name })
+	all := len(links)
+	links = slices.DeleteFunc(links, func(l Link) bool { return !l.Physical() })
+	slices.SortFunc(links, func(a, b Link) int {
+		if c := strings.Compare(a.Bus, b.Bus); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.MAC, b.MAC); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Name, b.Name)
+	})
+	d.o.Logger.Debug("netd: physical NICs", log.F("nics", len(links)), log.F("virtual", all-len(links)))
 	return links, nil
 }
 
@@ -265,10 +278,10 @@ func (d *Daemon) knownNICs(s network.Settings) error {
 	}
 	has := func(n string) bool { return slices.ContainsFunc(links, func(l Link) bool { return l.Name == n }) }
 	if !has(s.Management.Name) {
-		return codes.Wrap(codes.NetInvalid, &network.FieldError{Field: "management.name", Reason: fmt.Sprintf("the box has no interface %q", s.Management.Name)})
+		return codes.Wrap(codes.NetInvalid, &network.FieldError{Field: "management.name", Reason: fmt.Sprintf("the box has no physical network interface %q", s.Management.Name)})
 	}
 	if s.Service != nil && !has(s.Service.Name) {
-		return codes.Wrap(codes.NetInvalid, &network.FieldError{Field: "service.name", Reason: fmt.Sprintf("the box has no interface %q", s.Service.Name)})
+		return codes.Wrap(codes.NetInvalid, &network.FieldError{Field: "service.name", Reason: fmt.Sprintf("the box has no physical network interface %q", s.Service.Name)})
 	}
 	return nil
 }
