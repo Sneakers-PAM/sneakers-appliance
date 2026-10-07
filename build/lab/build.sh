@@ -10,6 +10,9 @@
 #   KERNEL       the bzImage (build/kernel/build.sh)
 #   KERNELRELEASE its release string
 #   VERITYSETUP  the static veritysetup (build/static/cryptsetup.sh)
+#   OPENSSH      directory with the static sshd, sshd-session, sshd-auth and
+#                ssh-keygen (build/openssh/build.sh)
+#   BUSYBOX      the static busybox (build/busybox/build.sh)
 #   KEYS         an empty directory for the lab keys (CI passes a tmpfs one)
 #   OUT          the output directory
 #   VERSION      the lab version (default 0.0.1)
@@ -25,7 +28,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${KEYS:?}" "${OUT:?}"
+: "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${KEYS:?}" "${OUT:?}"
 version="${VERSION:-0.0.1}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH COSIGN_PASSWORD=""
@@ -69,9 +72,17 @@ pins="-X $pkg.Channel=lab -X $pkg.Version=$version \
   -X $pkg.ReleaseKey=$(b64 "$KEYS/cosign.pub") -X $pkg.DBCert=$(b64 "$KEYS/db.crt") \
   -X $pkg.PKCert=$(b64 "$KEYS/PK.crt") -X $pkg.KEKCert=$(b64 "$KEYS/KEK.crt")"
 
+echo "lab: bundle"
+# The lab release pins no images, so the bundle is empty; it's still built
+# and checked the way a release's is.
+rm -rf "$work/images" "$work/image-sigs"
+mkdir -p "$work/image-sigs"
+RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" SIGNATURES="$work/image-sigs" OUT="$work/images" \
+  bash "$root/build/bundle/build.sh"
+
 echo "lab: root"
-INIT_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" K0S="$k0s" OUT="$work/root" \
-  bash "$root/build/root/build.sh"
+PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" K0S="$k0s" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
+  IMAGES="$work/images" OUT="$work/root" bash "$root/build/root/build.sh"
 
 echo "lab: UKI"
 KERNEL="$KERNEL" VERITYSETUP="$VERITYSETUP" VERITY_JSON="$work/root/verity.json" \
