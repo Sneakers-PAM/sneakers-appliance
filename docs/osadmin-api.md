@@ -40,20 +40,29 @@ Every response carries `Content-Security-Policy: default-src 'self'; frame-ances
 
 ## Methods
 
-Role `public` needs no session; `admin` is any signed-in admin; `owner` only an owner. Step-up means
-a sign-in from the last 5 minutes.
+Role `public` needs no session; `admin` is any signed-in admin; `owner` only an owner; `code
+session` is the session a redeemed one-time code gives (the setup code, an invitation or a Recover
+access code). Step-up means a sign-in or a fresh TOTP code (`SignInService.StepUp`) from the last 5
+minutes.
 
 ### Available in this release
 
 | Method | Role | Step-up | Audit action |
 |---|---|---|---|
+| `SignInService.SignIn` | public | no | `signin.password` |
+| `SignInService.StepUp` | admin | no | `signin.step-up` |
 | `SignInService.BeginSignIn` | public | no | |
 | `SignInService.PollSignIn` | public | no | |
 | `SignInService.GetSession` | admin | no | |
 | `SignInService.SignOut` | admin | no | `signin.signout` |
 | `StatusService.GetStatus` | admin | no | |
 | `StatusService.SetSecureBoot` | owner | yes | `status.secure-boot.set` |
-| `SetupService.GetSetup` | admin | no | |
+| `SetupService.GetSetup` | admin or code session | no | |
+| `SetupService.RedeemCode` | public | no | `setup.code.redeem` |
+| `SetupService.CheckPassword` | admin or code session | no | |
+| `SetupService.BeginCredentials` | code session | no | `setup.credentials.begin` |
+| `SetupService.CompleteCredentials` | code session | no | `setup.credentials.complete` |
+| `SetupService.AcknowledgeStep` | owner | no | `setup.step.acknowledge` |
 | `SetupService.AddRecoveryKey` | owner | yes | `setup.recovery-key.add` |
 | `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |
 | `SetupService.DownloadEscrow` | owner | no | `setup.escrow.download` |
@@ -68,6 +77,13 @@ a sign-in from the last 5 minutes.
 | `AccessService.UnrevokeKey` | owner | yes | `access.key.unrevoke` |
 | `AccessService.SetElevationPolicy` | owner | yes | `access.elevation-policy.set` |
 | `AccessService.SetQuorum` | owner | yes | `access.quorum.set` |
+| `AccessService.IssueSshKey` | admin | yes | `access.ssh-key.issue` |
+| `AccessService.ChangePassword` | admin | yes | `access.password.change` |
+| `AccessService.BeginTotpReplacement` | admin | yes | `access.totp.begin` |
+| `AccessService.CompleteTotpReplacement` | admin | yes | `access.totp.replace` |
+| `AccessService.ReinviteAdmin` | owner | yes | `access.admin.reinvite` |
+| `AccessService.UnlockAdmin` | owner | yes | `access.admin.unlock` |
+| `AccessService.SetAccessPolicy` | owner | yes | `access.policy.set` |
 | `NetworkService.GetNetwork` | admin | no | |
 | `NetworkService.SetNetwork` | owner | yes | `network.set` |
 | `NetworkService.ConfirmNetwork` | owner | no | `network.confirm` |
@@ -93,6 +109,7 @@ a sign-in from the last 5 minutes.
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
 | `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
 | `ElevationService.GetElevationRecording` | owner | no | `elevation.recording.view` |
+| `RootShellService.IssueRootShellCode` | admin | no | `rootshell.code.issue` |
 
 Sessions: `ListSessions` lists every live session on the box, oldest first, each an
 `ActiveSession` with its `id`, `kind` (`SESSION_KIND_BROWSER` for a signed-in :8443 browser,

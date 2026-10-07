@@ -1,0 +1,48 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The root-shell code page. A root operator's SSH strict menu shows a
+// challenge; the operator pastes it here with a fresh TOTP code, and the
+// box answers with a one-use code made with its root key, tied to that
+// challenge. Typed back into SSH, it opens the root shell: recorded,
+// audited, until exit, idle or the session limit.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// RootShellService issues root-shell codes.
+service RootShellService {
+  // IssueRootShellCode answers a challenge. The caller must be a root
+  // operator, the challenge must be one of the caller's own open
+  // challenges, and totp_code must be a fresh code (the step-up). A wrong
+  // TOTP code counts toward the lockout.
+  rpc IssueRootShellCode(IssueRootShellCodeRequest) returns (IssueRootShellCodeResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "rootshell.code.issue"
+    };
+  }
+}
+
+message IssueRootShellCodeRequest {
+  // challenge is what the SSH menu shows, XXXX-XXXX-XXXX-XXXX; dashes,
+  // spaces and case don't matter.
+  string challenge = 1;
+  string totp_code = 2;
+}
+
+message IssueRootShellCodeResponse {
+  // code is XXXX-XXXX, to type into the SSH session. It works once, for
+  // this challenge only.
+  string code = 1;
+  google.protobuf.Timestamp expires = 2;
+  // session_minutes is how long the root shell may stay open.
+  int32 session_minutes = 3;
+  // source_address is the SSH client the challenge came from, to check.
+  string source_address = 4;
+}

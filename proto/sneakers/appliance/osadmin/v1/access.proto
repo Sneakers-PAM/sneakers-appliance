@@ -1,24 +1,29 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The Access page: admins, roles, keys, host keys, the elevation policy
-// and the factory-reset quorum roster.
+// The Access page: admins, roles, passwords and authenticators, the SSH
+// keys the box issues, the lockout, the root-shell settings, the host keys
+// and the root-operator roster (the same roster approves a factory reset).
 syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
 
 import "google/protobuf/timestamp.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/setup.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
-// AccessService manages who may sign in. An admin manages their own keys;
-// owners manage everyone.
+// AccessService manages who may sign in. An admin manages their own
+// password, authenticator and SSH keys; owners manage everyone.
 service AccessService {
   rpc ListAdmins(ListAdminsRequest) returns (ListAdminsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {role: ROLE_ADMIN};
   }
+  // AddAdmin adds an admin with no password yet and returns a one-time
+  // invitation code (24 hours) the new admin redeems on :8443 to set a
+  // password and an authenticator.
   rpc AddAdmin(AddAdminRequest) returns (AddAdminResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -41,16 +46,18 @@ service AccessService {
       audit: "access.admin.role"
     };
   }
-  // AddKey adds a login key; an admin only to themselves.
+  // AddKey is no longer served: the box issues SSH keys (IssueSshKey) and
+  // never takes one an admin brings. It answers Not available.
   rpc AddKey(AddKeyRequest) returns (AddKeyResponse) {
+    option deprecated = true;
     option (rule) = {
       role: ROLE_ADMIN
       step_up: true
       audit: "access.key.add"
     };
   }
-  // RemoveKey ends every session the key signed in; an admin only their
-  // own keys.
+  // RemoveKey revokes an issued SSH key: its certificate serial joins the
+  // revocation list at once. An admin only their own keys.
   rpc RemoveKey(RemoveKeyRequest) returns (RemoveKeyResponse) {
     option (rule) = {
       role: ROLE_ADMIN
@@ -67,15 +74,19 @@ service AccessService {
       audit: "access.key.unrevoke"
     };
   }
+  // SetElevationPolicy is no longer served: SetAccessPolicy holds the
+  // root-shell settings. It answers Not available.
   rpc SetElevationPolicy(SetElevationPolicyRequest) returns (SetElevationPolicyResponse) {
+    option deprecated = true;
     option (rule) = {
       role: ROLE_OWNER
       step_up: true
       audit: "access.elevation-policy.set"
     };
   }
-  // SetQuorum sets the factory-reset roster (N members) and how many of
-  // them must approve (M).
+  // SetQuorum sets the root-operator roster (N members): they may open the
+  // root shell, and M of them must approve a factory reset. The roster is
+  // never empty.
   rpc SetQuorum(SetQuorumRequest) returns (SetQuorumResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -83,17 +94,88 @@ service AccessService {
       audit: "access.quorum.set"
     };
   }
+  // IssueSshKey has the box make an ed25519 key pair for the caller and
+  // sign it with the box's root key as an SSH user certificate (principal:
+  // the admin's name; valid for valid_days, default from the access
+  // policy). The private key is returned once and never kept; the box
+  // keeps the public key and the certificate. TOTP is still asked at
+  // every SSH login.
+  rpc IssueSshKey(IssueSshKeyRequest) returns (IssueSshKeyResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "access.ssh-key.issue"
+    };
+  }
+  // ChangePassword sets the caller's new password; the current one is
+  // checked first.
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "access.password.change"
+    };
+  }
+  // BeginTotpReplacement returns a new TOTP secret for the caller;
+  // nothing changes until CompleteTotpReplacement checks a code from it.
+  rpc BeginTotpReplacement(BeginTotpReplacementRequest) returns (BeginTotpReplacementResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "access.totp.begin"
+    };
+  }
+  rpc CompleteTotpReplacement(CompleteTotpReplacementRequest) returns (CompleteTotpReplacementResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "access.totp.replace"
+    };
+  }
+  // ReinviteAdmin clears an admin's password and authenticator, ends their
+  // sessions and returns a new invitation code. Owners only, never for
+  // themselves.
+  rpc ReinviteAdmin(ReinviteAdminRequest) returns (ReinviteAdminResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.admin.reinvite"
+    };
+  }
+  // UnlockAdmin ends an admin's lockout.
+  rpc UnlockAdmin(UnlockAdminRequest) returns (UnlockAdminResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.admin.unlock"
+    };
+  }
+  // SetAccessPolicy sets the lockout mode, the root-shell code and session
+  // lifetimes and the default SSH key validity.
+  rpc SetAccessPolicy(SetAccessPolicyRequest) returns (SetAccessPolicyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.policy.set"
+    };
+  }
 }
 
+// Key is an SSH key the box issued to an admin.
 message Key {
   string fingerprint = 1;
   string type = 2;
+  // comment is the label the admin gave it.
   string comment = 3;
   google.protobuf.Timestamp added = 4;
   string added_by = 5;
-  // via is enrol, shell, osadmin, url, typed or console-recovery.
+  // via is issued for a key the box made.
   string via = 6;
   google.protobuf.Timestamp last_used = 7;
+  // serial is the certificate's serial, the one revocation lists.
+  uint64 serial = 8;
+  // valid_before is when the certificate stops working.
+  google.protobuf.Timestamp valid_before = 9;
 }
 
 message Admin {
@@ -103,8 +185,25 @@ message Admin {
   google.protobuf.Timestamp created = 4;
   string created_by = 5;
   repeated Key keys = 6;
-  // approval_hold_until is set after a console Recover access.
-  google.protobuf.Timestamp approval_hold_until = 7;
+  // approval_hold_until is unused: elevation approval is gone.
+  google.protobuf.Timestamp approval_hold_until = 7 [deprecated = true];
+  // credentials_set is false while an invitation is open: the admin has no
+  // password and authenticator yet and can't sign in.
+  bool credentials_set = 8;
+  google.protobuf.Timestamp password_changed = 9;
+  google.protobuf.Timestamp totp_added = 10;
+  // root_operator: on the root-operator roster.
+  bool root_operator = 11;
+  // locked_until is when a timed lockout ends; locked_until_unlocked
+  // marks a lockout only an owner ends.
+  google.protobuf.Timestamp locked_until = 12;
+  bool locked_until_unlocked = 13;
+  // failed_attempts counts the consecutive failures in the current
+  // 15-minute window.
+  int32 failed_attempts = 14;
+  // invite_expires is when an open invitation's code stops working.
+  google.protobuf.Timestamp invite_expires = 15;
+  google.protobuf.Timestamp last_sign_in = 16;
 }
 
 // RevokedKey is a removed login key, on sshd's revocation list until an
@@ -125,21 +224,48 @@ message HostKey {
   string fingerprint = 2;
 }
 
+// ElevationPolicy belonged to the removed owner-approved elevation.
 message ElevationPolicy {
+  option deprecated = true;
   int32 max_minutes = 1;
   int32 default_minutes = 2;
   bool self_approval_when_single_owner = 3;
 }
 
-// Quorum is the factory-reset roster.
+// Quorum is the root-operator roster: who may open the root shell, and
+// whose approvals count for a factory reset.
 message Quorum {
-  // members are the admins whose approvals count (N = len(members)).
+  // members are the root operators (N = len(members)).
   repeated string members = 1;
-  // required is M.
+  // required is M, the approvals a factory reset needs.
   int32 required = 2;
-  // configured is false while the default applies: every admin, two
-  // approvals.
+  // configured is false only on a box set up before the roster was
+  // recorded at the first admin.
   bool configured = 3;
+}
+
+// LockoutMode is what happens after 3 consecutive failures within 15
+// minutes (NIST SP 800-53 AC-7).
+enum LockoutMode {
+  LOCKOUT_MODE_UNSPECIFIED = 0;
+  // LOCKOUT_MODE_TIMED: locked for 15 minutes (the default).
+  LOCKOUT_MODE_TIMED = 1;
+  // LOCKOUT_MODE_UNTIL_UNLOCKED: locked until an owner unlocks it.
+  LOCKOUT_MODE_UNTIL_UNLOCKED = 2;
+}
+
+// AccessPolicy is the box's access settings.
+message AccessPolicy {
+  LockoutMode lockout_mode = 1;
+  // root_code_minutes is how long a root-shell code works (1 to 60,
+  // default 10).
+  int32 root_code_minutes = 2;
+  // root_session_minutes is the longest a root shell stays open (1 to 60,
+  // default 10).
+  int32 root_session_minutes = 3;
+  // ssh_key_valid_days is an issued SSH key's default validity (1 to
+  // 1825, default 365).
+  int32 ssh_key_valid_days = 4;
 }
 
 message ListAdminsRequest {}
@@ -147,20 +273,36 @@ message ListAdminsRequest {}
 message ListAdminsResponse {
   repeated Admin admins = 1;
   repeated HostKey host_keys = 2;
-  ElevationPolicy elevation_policy = 3;
+  ElevationPolicy elevation_policy = 3 [deprecated = true];
   Quorum quorum = 4;
   repeated RevokedKey revoked_keys = 5;
+  AccessPolicy access_policy = 6;
+  // root_key is the box's root key: its type and SHA256: fingerprint
+  // (the key itself never leaves the box).
+  HostKey root_key = 7;
 }
 
 message AddAdminRequest {
   string name = 1;
   Role role = 2;
-  // public_key is the admin's first login key (optional).
-  string public_key = 3;
+  // public_key is unused: the box issues SSH keys.
+  string public_key = 3 [deprecated = true];
+  // root_operator puts the new admin on the root-operator roster.
+  bool root_operator = 4;
+}
+
+// Invitation is a one-time code for an admin to set a password and an
+// authenticator on :8443. Shown once.
+message Invitation {
+  string admin = 1;
+  // code is XXXX-XXXX.
+  string code = 2;
+  google.protobuf.Timestamp expires = 3;
 }
 
 message AddAdminResponse {
   Admin admin = 1;
+  Invitation invitation = 2;
 }
 
 message RemoveAdminRequest {
@@ -177,11 +319,13 @@ message SetRoleRequest {
 message SetRoleResponse {}
 
 message AddKeyRequest {
+  option deprecated = true;
   string admin = 1;
   string public_key = 2;
 }
 
 message AddKeyResponse {
+  option deprecated = true;
   Key key = 1;
 }
 
@@ -199,10 +343,13 @@ message UnrevokeKeyRequest {
 message UnrevokeKeyResponse {}
 
 message SetElevationPolicyRequest {
+  option deprecated = true;
   ElevationPolicy policy = 1;
 }
 
-message SetElevationPolicyResponse {}
+message SetElevationPolicyResponse {
+  option deprecated = true;
+}
 
 message SetQuorumRequest {
   repeated string members = 1;
@@ -210,3 +357,63 @@ message SetQuorumRequest {
 }
 
 message SetQuorumResponse {}
+
+message IssueSshKeyRequest {
+  // label names the key on the Access page (a laptop, say).
+  string label = 1;
+  // valid_days is 0 for the access policy's default.
+  int32 valid_days = 2;
+}
+
+message IssueSshKeyResponse {
+  Key key = 1;
+  // private_key is the OpenSSH private key, shown once.
+  string private_key = 2;
+  // certificate is the OpenSSH certificate line, to save next to the key
+  // as <file_name>-cert.pub.
+  string certificate = 3;
+  // public_key is the OpenSSH public key line.
+  string public_key = 4;
+  // file_name is a suggested name for the private key file.
+  string file_name = 5;
+}
+
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
+message BeginTotpReplacementRequest {}
+
+message BeginTotpReplacementResponse {
+  TotpEnrolment totp = 1;
+}
+
+message CompleteTotpReplacementRequest {
+  string enrolment_id = 1;
+  string totp_code = 2;
+}
+
+message CompleteTotpReplacementResponse {}
+
+message ReinviteAdminRequest {
+  string name = 1;
+}
+
+message ReinviteAdminResponse {
+  Invitation invitation = 1;
+}
+
+message UnlockAdminRequest {
+  string name = 1;
+}
+
+message UnlockAdminResponse {}
+
+message SetAccessPolicyRequest {
+  AccessPolicy policy = 1;
+}
+
+message SetAccessPolicyResponse {}

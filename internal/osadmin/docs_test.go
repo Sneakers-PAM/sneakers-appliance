@@ -24,6 +24,13 @@ func ruleRow(svc, method string, r *osadminv1.Rule) string {
 	case osadminv1.Role_ROLE_OWNER:
 		who = "owner"
 	}
+	if r.GetCodeSession() {
+		if r.GetRole() == osadminv1.Role_ROLE_UNSPECIFIED {
+			who = "code session"
+		} else {
+			who += " or code session"
+		}
+	}
 	step := "no"
 	if r.GetStepUp() {
 		step = "yes"

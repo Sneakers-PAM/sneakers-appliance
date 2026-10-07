@@ -217,6 +217,12 @@ type setupSvc struct {
 	b *Box
 }
 
+// WatchConsoleInfo is the client side of the stream, which the fake
+// doesn't serve.
+func (s setupSvc) WatchConsoleInfo(context.Context, *connect.Request[accessv1.WatchConsoleInfoRequest]) (*connect.ServerStreamForClient[accessv1.WatchConsoleInfoResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not in the fake"))
+}
+
 func (s setupSvc) GetSetup(context.Context, *connect.Request[accessv1.GetSetupRequest]) (*connect.Response[accessv1.GetSetupResponse], error) {
 	s.b.mu.Lock()
 	defer s.b.mu.Unlock()

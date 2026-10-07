@@ -1,7 +1,8 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The shell elevation requests (part of the Access page).
+// The root shells: the history, the recordings and ending a live one. The
+// owner-approved requests are gone; RootShellService issues the codes.
 syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
@@ -11,20 +12,25 @@ import "sneakers/appliance/osadmin/v1/options.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
-// ElevationService approves one-time root shells.
+// ElevationService lists and ends root shells.
 service ElevationService {
   rpc ListElevations(ListElevationsRequest) returns (ListElevationsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {role: ROLE_ADMIN};
   }
+  // ApproveElevation is no longer served: root operators open the root
+  // shell with a challenge and a code. It answers Not available.
   rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse) {
+    option deprecated = true;
     option (rule) = {
       role: ROLE_OWNER
       step_up: true
       audit: "elevation.approve"
     };
   }
+  // DenyElevation is no longer served (see ApproveElevation).
   rpc DenyElevation(DenyElevationRequest) returns (DenyElevationResponse) {
+    option deprecated = true;
     option (rule) = {
       role: ROLE_OWNER
       audit: "elevation.deny"
@@ -47,28 +53,36 @@ service ElevationService {
   }
 }
 
+// Elevation is one root shell: its challenge, its code and its session.
 message Elevation {
   string id = 1;
   string admin = 2;
+  // key_fingerprint is the SSH key the login used; empty for a password
+  // login.
   string key_fingerprint = 3;
   string source_address = 4;
   string reason = 5;
+  // minutes is the session limit the code carries.
   int32 minutes = 6;
+  // requested is when the menu showed the challenge.
   google.protobuf.Timestamp requested = 7;
-  // state is pending, approved, active, ended, denied or expired.
+  // state is issued (a code is out), active, ended or expired.
   string state = 8;
-  // self_approved is set when the only owner approved their own request.
-  bool self_approved = 9;
+  // self_approved is unused: approval is gone.
+  bool self_approved = 9 [deprecated = true];
+  // approved_by is the root operator the code was issued to, approved
+  // when.
   string approved_by = 10;
   google.protobuf.Timestamp approved = 11;
   google.protobuf.Timestamp started = 12;
   google.protobuf.Timestamp ended = 13;
-  // end_reason is exit, time-box, terminated, denied or expired.
+  // end_reason is exit, idle, time-box, terminated or expired.
   string end_reason = 14;
   // recording_sha256 is the hex SHA-256 of the whole session recording.
   string recording_sha256 = 15;
-  uint64 serial = 16;
-  // valid_before is when the certificate stops working for a connect.
+  // serial is unused: no certificate is issued for a root shell.
+  uint64 serial = 16 [deprecated = true];
+  // valid_before is when the challenge or its code stops working.
   google.protobuf.Timestamp valid_before = 17;
   // recording is set when the session left a recording.
   bool recording = 18;
@@ -81,18 +95,24 @@ message ListElevationsResponse {
 }
 
 message ApproveElevationRequest {
+  option deprecated = true;
   string id = 1;
   // minutes may shorten the request; 0 keeps it.
   int32 minutes = 2;
 }
 
-message ApproveElevationResponse {}
+message ApproveElevationResponse {
+  option deprecated = true;
+}
 
 message DenyElevationRequest {
+  option deprecated = true;
   string id = 1;
 }
 
-message DenyElevationResponse {}
+message DenyElevationResponse {
+  option deprecated = true;
+}
 
 message TerminateElevationRequest {
   string id = 1;

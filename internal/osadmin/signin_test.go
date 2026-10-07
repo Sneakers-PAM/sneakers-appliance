@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
@@ -212,15 +213,17 @@ func TestEveryMethodHasARule(t *testing.T) {
 					continue
 				}
 				if r.GetPublic() {
-					if svc.Name() != "SignInService" {
+					if svc.Name() != "SignInService" && m.FullName() != "sneakers.appliance.osadmin.v1.SetupService.RedeemCode" {
 						t.Errorf("%s is public", m.FullName())
 					}
 					continue
 				}
-				if r.GetRole() == osadminv1.Role_ROLE_UNSPECIFIED {
+				if r.GetRole() == osadminv1.Role_ROLE_UNSPECIFIED && !r.GetCodeSession() {
 					t.Errorf("%s has no role", m.FullName())
 				}
-				if !strings.HasSuffix(string(m.Name()), "Session") && !strings.HasPrefix(string(m.Name()), "Get") && !strings.HasPrefix(string(m.Name()), "List") && m.Name() != "RunChecks" && r.GetAudit() == "" {
+				opts, _ := m.Options().(*descriptorpb.MethodOptions)
+				read := opts.GetIdempotencyLevel() == descriptorpb.MethodOptions_NO_SIDE_EFFECTS
+				if !read && !strings.HasSuffix(string(m.Name()), "Session") && !strings.HasPrefix(string(m.Name()), "Get") && !strings.HasPrefix(string(m.Name()), "List") && m.Name() != "RunChecks" && r.GetAudit() == "" {
 					t.Errorf("%s changes something and names no audit action", m.FullName())
 				}
 			}

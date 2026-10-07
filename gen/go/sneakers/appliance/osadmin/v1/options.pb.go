@@ -31,13 +31,15 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Role is an appliance admin's role.
+// Role is an appliance admin's role. Root operators are not a third role
+// but a roster any admin may be on (Admin.root_operator): they may open the
+// root shell, and they approve a factory reset.
 type Role int32
 
 const (
 	Role_ROLE_UNSPECIFIED Role = 0
-	// ROLE_ADMIN can use every page except managing other admins and
-	// approving elevations.
+	// ROLE_ADMIN can use every page except managing other admins and the
+	// box's access settings.
 	Role_ROLE_ADMIN Role = 1
 	// ROLE_OWNER can do everything.
 	Role_ROLE_OWNER Role = 2
@@ -87,16 +89,23 @@ func (Role) EnumDescriptor() ([]byte, []int) {
 // Rule guards one method.
 type Rule struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// public methods need no session (the sign-in methods only).
+	// public methods need no session (the sign-in methods and redeeming a
+	// one-time code only).
 	Public bool `protobuf:"varint,1,opt,name=public,proto3" json:"public,omitempty"`
 	// role is the least role that may call the method.
 	Role Role `protobuf:"varint,2,opt,name=role,proto3,enum=sneakers.appliance.osadmin.v1.Role" json:"role,omitempty"`
-	// step_up: the session's sign-in must be no older than 5 minutes
+	// step_up: the session's sign-in or its last step-up (a fresh TOTP code,
+	// SignInService.StepUp) must be no older than 5 minutes
 	// (ACCESS_STEPUP_REQUIRED).
 	StepUp bool `protobuf:"varint,3,opt,name=step_up,json=stepUp,proto3" json:"step_up,omitempty"`
 	// audit is the OS audit action written for every call, allowed or
 	// refused. Empty for reads.
-	Audit         string `protobuf:"bytes,4,opt,name=audit,proto3" json:"audit,omitempty"`
+	Audit string `protobuf:"bytes,4,opt,name=audit,proto3" json:"audit,omitempty"`
+	// code_session: the method also takes the session a redeemed one-time
+	// code gives (the first-boot setup code, an admin's invitation or the
+	// console's Recover access code), before that admin can sign in. When
+	// role is also set, a signed-in admin of that role may call it too.
+	CodeSession   bool `protobuf:"varint,5,opt,name=code_session,json=codeSession,proto3" json:"code_session,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -159,6 +168,13 @@ func (x *Rule) GetAudit() string {
 	return ""
 }
 
+func (x *Rule) GetCodeSession() bool {
+	if x != nil {
+		return x.CodeSession
+	}
+	return false
+}
+
 var file_sneakers_appliance_osadmin_v1_options_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
@@ -180,12 +196,13 @@ var File_sneakers_appliance_osadmin_v1_options_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"\n" +
-	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\x86\x01\n" +
+	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\xa9\x01\n" +
 	"\x04Rule\x12\x16\n" +
 	"\x06public\x18\x01 \x01(\bR\x06public\x127\n" +
 	"\x04role\x18\x02 \x01(\x0e2#.sneakers.appliance.osadmin.v1.RoleR\x04role\x12\x17\n" +
 	"\astep_up\x18\x03 \x01(\bR\x06stepUp\x12\x14\n" +
-	"\x05audit\x18\x04 \x01(\tR\x05audit*<\n" +
+	"\x05audit\x18\x04 \x01(\tR\x05audit\x12!\n" +
+	"\fcode_session\x18\x05 \x01(\bR\vcodeSession*<\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
