@@ -105,10 +105,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err != nil {
 		return err
 	}
-	// The user CA is generated here at first boot and kept on the state
-	// volume, 0600 root: the interim until init's KeyCustody.Seal is served
-	// and the CA moves into it (docs/ssh-and-elevation.md).
+	custody := initv1connect.NewKeyCustodyServiceClient(ic, "http://init.sock")
+	// The user CA is made at first boot and sealed through init's
+	// KeyCustody (docs/ssh-and-elevation.md).
 	elev, err := elevation.Open(elevation.Options{
+		Sealer:      accessd.CustodySealer{Client: custody},
 		RevokedKeys: revokedKeys,
 		SSHDir:      paths.SSHDir(),
 		StateFile:   filepath.Join(c.state, "access", "elevation.json"),
@@ -151,7 +152,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	}
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{},
-		KeyCustody: initv1connect.NewKeyCustodyServiceClient(ic, "http://init.sock"),
+		KeyCustody: custody,
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
 		Network:    netd,

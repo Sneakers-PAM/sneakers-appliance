@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/disk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody/keycustodytest"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/luks"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/tpm"
@@ -203,6 +205,22 @@ func TestProtectionReasons(t *testing.T) {
 	for _, c := range cases {
 		if got := keycustody.ProtectionFor(c.sb, c.choice, c.mode); got != c.want {
 			t.Errorf("%+v %s %s: got %+v", c.sb, c.choice, c.mode, got)
+		}
+	}
+}
+
+// Backup mounts inside the state volume, so state always opens first.
+func TestStateOpensBeforeBackup(t *testing.T) {
+	for range 20 {
+		d := &keycustodytest.Disk{}
+		if err := keycustody.New(keycustody.Deps{Disk: d}).Initialize(ctx, keycustody.ModeKeyfile, keycustody.SBOff); err != nil {
+			t.Fatal(err)
+		}
+		if err := keycustody.New(keycustody.Deps{Disk: d}).Unlock(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Equal(d.Mounted, []string{"state", "backup", "state", "backup"}) {
+			t.Fatalf("mounted in the order %v", d.Mounted)
 		}
 	}
 }

@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -27,6 +28,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/console"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/reaper"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -90,11 +92,41 @@ func run(lg log.TraceLogger) error {
 			f.SBChoice = phase.SB(c)
 		}
 	}
-	if _, err := os.Stat(setupDone); err == nil {
-		f.SetupDone = true
-	}
 	f.ResetPending = readReset(espOK, lg)
+
+	// The custody header fixes the Secure Boot choice once first boot has
+	// run; the state it unlocks holds setup/done.
+	var kc *keycustody.Custody
+	state := stateDeps{sb: st, in: os.Stdin, out: os.Stderr, logf: func(format string, a ...any) { lg.Info(fmt.Sprintf(format, a...)) }}
+	initialized, opened := false, false
+	if !f.BootedFromISO && !f.ResetPending {
+		dev := bootDisk()
+		if dev == "" {
+			return errors.New("init: the boot disk (the one with the ESP) wasn't found, so the state can't be opened")
+		}
+		kc, state.hasTPM = newCustody(dev, espOK, lg)
+		state.custody = kc
+		h, ok, err := readHeader(ctx, kc)
+		if err != nil {
+			_, _ = fmt.Fprint(os.Stderr, screens.StateLocked(codes.Describe(err)))
+			return err
+		}
+		if initialized = ok; ok {
+			f.SBChoice, f.SBChoiceFixed, f.SBEnrolPending = phase.SB(h.SecureBoot), true, h.EnrolPending
+		}
+	}
+	state.choice = f.SBChoice
 	p := phase.Decide(f)
+	if p == phase.Firstboot && initialized {
+		if err := openState(ctx, state, true); err != nil {
+			return err
+		}
+		opened = true
+		if _, err := os.Stat(setupDone); err == nil {
+			f.SetupDone = true
+			p = phase.Decide(f)
+		}
+	}
 	_, _ = fmt.Fprintf(os.Stderr, "sneakers-init: phase=%s protection=%s\n", p, protection(st, f))
 	lg.Info("init: phase decided", log.F("phase", string(p)), log.F("secure_boot", st.Enforcing), log.F("setup_mode", st.SetupMode))
 
@@ -129,6 +161,18 @@ func run(lg log.TraceLogger) error {
 			return nil
 		}
 		p = phase.Firstboot
+		if c, err := secureboot.ReadChoice(espMount); err == nil && !f.SBChoiceFixed {
+			state.choice = phase.SB(c)
+		}
+	}
+	if p == phase.Firstboot && !opened {
+		if err := openState(ctx, state, initialized); err != nil {
+			return err
+		}
+		opened = true
+		if _, err := os.Stat(setupDone); err == nil {
+			p = phase.Normal
+		}
 	}
 
 	tbl, err := services.Load(os.DirFS("/"), services.Dir)
@@ -137,7 +181,10 @@ func run(lg log.TraceLogger) error {
 	}
 	sup := services.NewSupervisor(r, tbl, services.Options{Logger: lg})
 	pw := newPower(sup, lg, con)
-	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, Logger: lg}
+	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, SecureBoot: st, Logger: lg}
+	if opened {
+		api.KeyCustody = kc
+	}
 	srv, err := initapi.Listen(initapi.SocketPath, api)
 	if err != nil {
 		return err

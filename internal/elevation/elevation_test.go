@@ -6,6 +6,8 @@ package elevation_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/pem"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -46,8 +48,30 @@ func (m *memAudit) last(action string) (osaudit.Entry, bool) {
 	return osaudit.Entry{}, false
 }
 
+// memSealer stands in for init's KeyCustody.
+type memSealer struct {
+	items   map[string][]byte
+	sealErr error
+}
+
+func newMemSealer() *memSealer { return &memSealer{items: map[string][]byte{}} }
+
+func (m *memSealer) Seal(name string, secret []byte) error {
+	if m.sealErr != nil {
+		return m.sealErr
+	}
+	m.items[name] = slices.Clone(secret)
+	return nil
+}
+
+func (m *memSealer) Unseal(name string) ([]byte, bool, error) {
+	b, ok := m.items[name]
+	return slices.Clone(b), ok, nil
+}
+
 type fixture struct {
 	t       *testing.T
+	sealer  *memSealer
 	dir     string
 	clk     *clock.Fake
 	audit   *memAudit
@@ -61,7 +85,7 @@ type fixture struct {
 
 func newFixture(t *testing.T, owners ...string) *fixture {
 	t.Helper()
-	f := &fixture{t: t, dir: t.TempDir(), clk: clock.NewFake(), audit: &memAudit{}, keys: map[string]ssh.PublicKey{}}
+	f := &fixture{t: t, dir: t.TempDir(), clk: clock.NewFake(), audit: &memAudit{}, keys: map[string]ssh.PublicKey{}, sealer: newMemSealer()}
 	f.st = access.State{ElevationPolicy: access.DefaultPolicy()}
 	for _, o := range owners {
 		f.addAdmin(o, access.RoleOwner)
@@ -76,6 +100,7 @@ func (f *fixture) open() {
 	svc, err := elevation.Open(elevation.Options{
 		SSHDir:      filepath.Join(f.dir, "ssh"),
 		StateFile:   filepath.Join(f.dir, "access", "elevation.json"),
+		Sealer:      f.sealer,
 		Clock:       f.clk,
 		Audit:       f.audit,
 		Maintenance: func() bool { return f.maint },
@@ -134,15 +159,18 @@ func parseCert(t *testing.T, line string) *ssh.Certificate {
 	return c
 }
 
-func TestTheUserCAIsMadeOnceAndKeptPrivate(t *testing.T) {
+func TestTheUserCAIsSealedAndMadeOnce(t *testing.T) {
 	f := newFixture(t, "alice")
 	priv := filepath.Join(f.dir, "ssh", elevation.UserCAFile)
-	fi, err := os.Stat(priv)
-	if err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(priv); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the CA's private key is on disk: %v", err)
 	}
-	if fi.Mode().Perm() != 0o600 {
-		t.Fatalf("user CA mode %v", fi.Mode().Perm())
+	sealed, ok := f.sealer.items[elevation.SealedName]
+	if !ok {
+		t.Fatal("the CA isn't sealed")
+	}
+	if _, err := ssh.ParsePrivateKey(sealed); err != nil {
+		t.Fatalf("the sealed CA doesn't parse: %v", err)
 	}
 	pub, err := os.ReadFile(priv + ".pub")
 	if err != nil {
@@ -156,6 +184,66 @@ func TestTheUserCAIsMadeOnceAndKeptPrivate(t *testing.T) {
 	f.open()
 	if !slices.Equal(before, f.svc.UserCA().Marshal()) {
 		t.Fatal("a restart made a new user CA")
+	}
+}
+
+// interimCA writes a CA key file the way accessd kept it before the CA was
+// sealed, and returns its public key.
+func interimCA(t *testing.T, dir string) ssh.PublicKey {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ssh", elevation.UserCAFile), pem.EncodeToMemory(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := ssh.NewSignerFromKey(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s.PublicKey()
+}
+
+func TestAnInterimCAFileMovesIntoTheSealedItem(t *testing.T) {
+	f := &fixture{t: t, dir: t.TempDir(), clk: clock.NewFake(), audit: &memAudit{}, keys: map[string]ssh.PublicKey{}, sealer: newMemSealer()}
+	want := interimCA(t, f.dir)
+	f.open()
+	if !slices.Equal(f.svc.UserCA().Marshal(), want.Marshal()) {
+		t.Fatal("the box's CA changed in the move: elevation certificates would stop working")
+	}
+	if _, err := os.Stat(filepath.Join(f.dir, "ssh", elevation.UserCAFile)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the interim file is still there: %v", err)
+	}
+	if _, ok := f.sealer.items[elevation.SealedName]; !ok {
+		t.Fatal("the CA wasn't sealed")
+	}
+	f.open()
+	if !slices.Equal(f.svc.UserCA().Marshal(), want.Marshal()) {
+		t.Fatal("the CA changed on the next start")
+	}
+}
+
+func TestAnInterimCAFileStaysUntilItIsSealed(t *testing.T) {
+	dir := t.TempDir()
+	interimCA(t, dir)
+	failing := newMemSealer()
+	failing.sealErr = errors.New("KEYCUSTODY_LOCKED: the state isn't unlocked")
+	_, err := elevation.Open(elevation.Options{
+		SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"), Sealer: failing,
+	})
+	if err == nil {
+		t.Fatal("opened without sealing the CA")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ssh", elevation.UserCAFile)); err != nil {
+		t.Fatalf("the interim file went before the CA was sealed: %v", err)
 	}
 }
 

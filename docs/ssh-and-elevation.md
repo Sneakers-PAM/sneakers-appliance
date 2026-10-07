@@ -187,7 +187,7 @@ connection with an approved certificate are refused with `ELEV_MAINTENANCE`.
 
 | File in `/var/lib/sneakers/ssh/` | Contents |
 |---|---|
-| `user_ca`, `user_ca.pub` | the ed25519 user CA accessd makes at first start; sshd trusts `user_ca.pub` for `maint` only |
+| `user_ca.pub` | the ed25519 user CA's public key; sshd trusts it for `maint` only. The private key isn't kept here: it's the sealed item `ssh-user-ca` (below) |
 | `serial` | the last certificate serial issued, written before each certificate is signed |
 | `revoked.krl` | an OpenSSH key revocation list of every serial used, expired or revoked and every removed login key not un-revoked ([access.md](access.md#removed-keys-are-revoked)), rewritten on each change; sshd reads it as `RevokedKeys` |
 | `/var/lib/sneakers/access/elevation.json` | the requests and what became of them: the history the page shows |
@@ -195,7 +195,9 @@ connection with an approved certificate are refused with `ELEV_MAINTENANCE`.
 The CA signs only elevation certificates, in process (`golang.org/x/crypto/ssh`), and is trusted
 only in the `maint` block. It never signs host or login certificates.
 
-**Interim:** the design seals the CA's private key through init's `KeyCustody.Seal("ssh-user-ca")`,
-so that in TPM mode a copied state volume doesn't yield it. Init doesn't serve `KeyCustody` yet, so
-for now `user_ca` is a plain OpenSSH key file, mode 0600, owned by root, on the encrypted state
-volume. When init serves it, accessd moves the key into the sealed item and removes the file.
+**Sealed CA:** accessd makes the CA at its first start and seals the private key through init's
+`KeyCustody.Seal("ssh-user-ca")`, so in TPM mode a copied state volume doesn't yield it; every start
+unseals it. A box set up before this kept the CA as a plain `user_ca` key file (0600, root); accessd
+seals that same key, checks the sealed copy reads back, then overwrites and removes the file, so the
+CA (and the certificates it signed) stays the same. If the seal fails the file is left and accessd
+doesn't start.

@@ -13,6 +13,8 @@ whatever disk the box really has.
 | 5 | `sneakers-state` | Linux LUKS | the rest | first boot |
 | 6 | `sneakers-backup` | Linux LUKS | 30% of the free space, at least 16 GiB | first boot, at the end of the disk |
 
+- First boot's partitions are made at its protection step and then unlocked on every boot: state
+  is mounted at `/var/lib`, backup at `/var/lib/sneakers/backup` ([key-custody.md](key-custody.md#at-boot)).
 - The smallest disk is 64 GiB (`--disk-size`, 64G by default). A disk grown before the first
   power-on (an OVA disk, or a larger bare disk) gets the extra space in state and backup; nothing
   is stranded.

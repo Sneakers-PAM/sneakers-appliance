@@ -16,6 +16,46 @@ On a later boot the key comes from the first TPM copy that unseals, or from the 
 neither works the state stays locked (`KEYCUSTODY_LOCKED`) and the console shows the "State locked"
 screen; the escrow bundle is the way back.
 
+## At boot
+
+Init ([init.md](init.md)) runs the custody before any service starts:
+
+- **First boot, the protection step.** The console shows the Secure Boot facts, then the custody:
+  with a TPM, "Use the TPM (recommended)" is the default (Enter), and only the typed `key file`
+  picks the key file, after the reduced-protection text; without a TPM the key file is the only
+  custody and Enter goes on. Init then initializes the custody: it adds the key-file (key-file mode
+  only), state and backup partitions to the GPT after the installed ones and tells the kernel
+  about each (`BLKPG`, while the ESP stays mounted), formats state and backup as LUKS2 with the one
+  new key, makes their ext4 filesystems with the image's static `mkfs.ext4`, and records the mode
+  and the Secure Boot choice in the header. The choice is `on` only when the firmware enforces with
+  the org keys and the admin didn't choose to run without Secure Boot. A first boot cut short
+  before the header was written makes its partitions again.
+- **Every boot.** Init reads the header, which fixes the Secure Boot choice for the phase decision,
+  unlocks state and backup and mounts them, state at `/var/lib` and backup at
+  `/var/lib/sneakers/backup` (nosuid, nodev), then finishes a Secure Boot transition if the
+  firmware shows it took effect. A volume that doesn't unlock stops the boot: the console shows
+  "State locked" with the reason, and nothing starts, so no service ever runs against an empty or
+  read-only `/var/lib/sneakers`.
+- The keyslot uses Argon2id at a low cost (64 MiB, one lane): the key is 256 random bits, not a
+  passphrase, so a higher cost would only slow every boot.
+- The console then prints the protection line ([Protection](#protection)), and the KeyCustody
+  service is served on `init.sock`.
+
+## The KeyCustody service
+
+Init serves `KeyCustodyService` on `init.sock` (root peers only, checked with `SO_PEERCRED`):
+
+| RPC | What it does |
+|---|---|
+| `Mode` | `tpm` or `keyfile`, as the header records it |
+| `Protection` | `full` or `reduced` with the reason (`no-secure-boot-firmware`, `secure-boot-off`, `no-tpm`); the :8443 Status page shows it |
+| `Seal`, `Unseal` | the sealed items below; an item never sealed is `NotFound` (`KEYCUSTODY_NOT_FOUND`) |
+| `Escrow` | the escrow bundle for one to three recovery keys |
+
+`Initialize` and `SetSecureBoot` answer `Unimplemented`: init fixes the custody at its own
+protection step, and the :8443 Secure Boot setting comes later. accessd seals the SSH user CA
+through it ([ssh-and-elevation.md](ssh-and-elevation.md)).
+
 ## Protection
 
 | Facts | Protection |
