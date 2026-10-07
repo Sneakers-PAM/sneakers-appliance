@@ -8,7 +8,11 @@ the org certificate is never appended to a firmware's default keys.
 
 On firmware with Secure Boot, the `enrol` phase opens with one console screen:
 
-- **Use Secure Boot with the org keys (recommended)** is selected; Enter keeps it.
+- **Use Secure Boot with the org keys (recommended)** is selected; Enter keeps it. That's only so
+  when the firmware is in Setup Mode and the keys can be enrolled straight away. Outside Setup Mode
+  (a VMware VM with its default keys, or Secure Boot turned off in the VM's settings) nothing is
+  selected and Enter alone does nothing: type `1` to see how to clear the firmware's keys, or
+  `no secure boot`.
 - **Run without Secure Boot** needs the typed phrase `no secure boot`. Nothing is enrolled, and the
   box runs in reduced-protection mode; the org signature is still checked on every image and
   upgrade. On VMware the screen also asks you to remove `uefi.allowAuthBypass`.

@@ -41,3 +41,20 @@ func TestScreens(t *testing.T) {
 		t.Error("platform detection")
 	}
 }
+
+func TestChoiceWithoutDefault(t *testing.T) {
+	for in, want := range map[string]string{"1": "on", " 1 ": "on", "no secure boot": "off"} {
+		if got, ok := screens.ChoiceWithoutDefault(in); !ok || got != want {
+			t.Errorf("%q: got %q %v", in, got, ok)
+		}
+	}
+	for _, in := range []string{"", "  ", "2", "yes"} {
+		if _, ok := screens.ChoiceWithoutDefault(in); ok {
+			t.Errorf("%q was taken as a choice", in)
+		}
+	}
+	s := screens.SecureBootChoiceWithoutDefault(screens.VMware)
+	if strings.Contains(s, "Press Enter to keep") || !strings.Contains(s, `type "no secure boot"`) || !strings.Contains(s, "uefi.allowAuthBypass") {
+		t.Fatalf("screen:\n%s", s)
+	}
+}

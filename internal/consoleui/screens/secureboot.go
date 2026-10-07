@@ -55,6 +55,33 @@ func SecureBootChoice(p Platform) string {
 // Choice reads one line typed at the choice screen: Enter (or "1") keeps
 // Secure Boot on; only the exact phrase turns it off. Anything else asks
 // again (ok is false).
+// SecureBootChoiceWithoutDefault is the choice when the firmware isn't in
+// Setup Mode: the org keys can't be enrolled until its keys are cleared, so
+// Enter alone picks nothing and the admin types the choice.
+func SecureBootChoiceWithoutDefault(p Platform) string {
+	var b strings.Builder
+	b.WriteString("Secure Boot\n\n")
+	b.WriteString("    1. Use Secure Boot with the org keys\n")
+	b.WriteString("    2. Run without Secure Boot\n\n")
+	b.WriteString("The firmware isn't in Setup Mode, so the org keys can't be enrolled yet.\n")
+	b.WriteString("Type 1 and press Enter to see how to clear the firmware's keys for Secure Boot, or type \"" + TypedNoSecureBoot + "\" and press Enter to run without it. Enter alone does nothing.\n\n")
+	b.WriteString(reducedWarning + "\n")
+	if p == VMware {
+		b.WriteString("\nOn VMware, if you run without Secure Boot, also remove uefi.allowAuthBypass from the VM's advanced settings.\n")
+	}
+	return b.String()
+}
+
+// ChoiceWithoutDefault reads a line typed at SecureBootChoiceWithoutDefault:
+// "1" or the typed "no secure boot"; anything else, Enter alone among it,
+// isn't a choice.
+func ChoiceWithoutDefault(line string) (choice string, ok bool) {
+	if strings.TrimSpace(line) == "" {
+		return "", false
+	}
+	return Choice(line)
+}
+
 func Choice(line string) (choice string, ok bool) {
 	switch strings.TrimSpace(line) {
 	case "", "1":

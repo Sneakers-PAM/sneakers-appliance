@@ -43,20 +43,28 @@ const (
 // the admin types "no secure boot".
 func runEnrol(d enrolDeps) (enrolOutcome, error) {
 	lines := bufio.NewScanner(d.in)
-	ask := func(screen string) (string, bool) {
+	askWith := func(screen string, parse func(string) (string, bool)) (string, bool) {
 		for {
 			_, _ = fmt.Fprint(d.out, screen)
 			if !lines.Scan() {
 				return "", false
 			}
-			if c, ok := screens.Choice(lines.Text()); ok {
+			if c, ok := parse(lines.Text()); ok {
 				return c, true
 			}
 		}
 	}
+	ask := func(screen string) (string, bool) { return askWith(screen, screens.Choice) }
 	choice := d.choice
 	if choice == "" {
-		c, ok := ask(screens.SecureBootChoice(d.platform))
+		// Enter keeps Secure Boot only when the keys can be enrolled now;
+		// outside Setup Mode it would just lead to the clear-the-keys screen.
+		screen, parse := screens.SecureBootChoice(d.platform), screens.Choice
+		if !inSetupMode(d.vars) {
+			screen, parse = screens.SecureBootChoiceWithoutDefault(d.platform), screens.ChoiceWithoutDefault
+			d.logf("init: firmware not in Setup Mode; the Secure Boot choice has no default")
+		}
+		c, ok := askWith(screen, parse)
 		if !ok {
 			return 0, fmt.Errorf("init: the console closed at the Secure Boot choice")
 		}
@@ -94,4 +102,13 @@ func runEnrol(d enrolDeps) (enrolOutcome, error) {
 		}
 	}
 	return enrolReduced, nil
+}
+
+// inSetupMode reports whether the firmware's SetupMode variable is 1.
+func inSetupMode(v secureboot.Vars) bool {
+	if v == nil {
+		return false
+	}
+	_, data, err := v.Get("SetupMode", secureboot.GlobalGUID)
+	return err == nil && len(data) > 0 && data[0] == 1
 }
