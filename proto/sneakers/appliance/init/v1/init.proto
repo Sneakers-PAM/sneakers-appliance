@@ -2,12 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // The local API of sneakers-init (PID 1) on /run/sneakers/init.sock, served
-// with Connect (which also speaks the gRPC protocol). Only root on the box
-// may connect. Spec 1 owns the package and these services;
+// with Connect (which also speaks the gRPC protocol). Root on the box may
+// connect, and the closed shell's admin logins for PowerService's reboot and
+// power-off only. Spec 1 owns the package and these services;
 // later specs add RPCs by extending them.
 syntax = "proto3";
 
 package sneakers.appliance.init.v1;
+
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1;initv1";
 
@@ -157,11 +160,20 @@ message ImageServiceStatusResponse {
 }
 
 // Power reboots, powers off or factory resets the box.
+// PowerService is answered only to osadmin and the closed shell (the peer's
+// uid and executable are checked); the factory-reset calls only to osadmin.
 service PowerService {
   rpc Reboot(RebootRequest) returns (RebootResponse);
   rpc PowerOff(PowerOffRequest) returns (PowerOffResponse);
-  // FactoryReset runs the reset toolbox's factory reset once its quorum
-  // and delay are done (osadmin decides that; init only runs it).
+  // ArmFactoryReset tells init a factory reset's quorum has approved. Init
+  // checks the approvals against the access store's roster and starts its
+  // own delay; a reboot of init forgets it, which cancels the reset.
+  rpc ArmFactoryReset(ArmFactoryResetRequest) returns (ArmFactoryResetResponse);
+  // CancelFactoryReset forgets an armed reset.
+  rpc CancelFactoryReset(CancelFactoryResetRequest) returns (CancelFactoryResetResponse);
+  // FactoryReset runs an armed reset once init's own delay has passed, if
+  // it wasn't cancelled and hasn't expired. The request must match what
+  // was armed.
   rpc FactoryReset(FactoryResetRequest) returns (FactoryResetResponse);
 }
 
@@ -179,10 +191,32 @@ message PowerOffRequest {
 
 message PowerOffResponse {}
 
+message ArmFactoryResetRequest {
+  // id is osadmin's request id (R-XXXXXX).
+  string id = 1;
+  string started_by = 2;
+  repeated string approvals = 3;
+}
+
+message ArmFactoryResetResponse {
+  // runs_at is the earliest time init will run the reset.
+  google.protobuf.Timestamp runs_at = 1;
+}
+
+message CancelFactoryResetRequest {
+  string id = 1;
+  // actor is who cancelled (an admin's name, or console).
+  string actor = 2;
+}
+
+message CancelFactoryResetResponse {}
+
 message FactoryResetRequest {
   // started_by and approvals are recorded in reset.json on the ESP.
   string started_by = 1;
   repeated string approvals = 2;
+  // id is the armed request's id.
+  string id = 3;
 }
 
 message FactoryResetResponse {}
