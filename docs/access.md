@@ -156,6 +156,30 @@ On first boot, after the first admin's key is enrolled, the Setup page finishes 
 - **Logs and audit:** the OS audit log, newest first, filtered by action, with its chain state, and the
   whole log as a download.
 - **Power:** reboot and shut down, graceful by default; the page lists the signed-in sessions first.
+  A forced reboot or shutdown skips the drain and needs a second, explicit confirmation
+  (`POWER_FORCED_CONFIRM` without it); the audit entry records `mode` as `graceful` or `forced`.
+
+## The factory reset quorum
+
+A factory reset from :8443 needs a quorum of appliance admins, M of N, never one person.
+
+- **The roster** is set on the Access page (owner, step-up): N admins and the threshold M, from 2 to
+  N. Unset, it is every admin with two approvals. Members who are later removed drop out and the
+  threshold drops with them, so the quorum keeps working after an admin leaves.
+- **With a single admin there is no quorum and no factory reset.** The Power page says so; the way
+  back is to delete and re-create, or re-flash, the box (`RESET_UNAVAILABLE`).
+- **Start** (owner, step-up, the host name typed to confirm) opens a request. The starter's approval
+  counts once when they are on the roster; approving again is refused (`RESET_APPROVED`).
+- **Approve** (a roster member, step-up). A request without its quorum after 30 minutes expires.
+- **The delay.** The last approval starts a 10-minute countdown, shown on Status. Any admin may
+  cancel it on :8443, and the console (or a closed-shell login, as itself) through
+  `LocalService.LocalCancelFactoryReset`. The request lives in memory only, so a reboot or a
+  restart of `sneakers-osadmin` cancels it too.
+- **Then** osadmin asks init's `Power.FactoryReset` to run the reset toolbox, with who started it
+  and who approved.
+
+Every step is in the OS audit log: `power.factory-reset.start`, `.approve`, `.cancel`, `.expire` and
+`.run`.
 
 ## Running sneakers-osadmin
 

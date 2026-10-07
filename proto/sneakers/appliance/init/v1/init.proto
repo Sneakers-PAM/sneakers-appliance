@@ -156,19 +156,36 @@ message ImageServiceStatusResponse {
   string failed_version = 3;
 }
 
-// Power reboots or powers off the box.
+// Power reboots, powers off or factory resets the box.
 service PowerService {
   rpc Reboot(RebootRequest) returns (RebootResponse);
   rpc PowerOff(PowerOffRequest) returns (PowerOffResponse);
+  // FactoryReset runs the reset toolbox's factory reset once its quorum
+  // and delay are done (osadmin decides that; init only runs it).
+  rpc FactoryReset(FactoryResetRequest) returns (FactoryResetResponse);
 }
 
-message RebootRequest {}
+message RebootRequest {
+  // forced skips the graceful drain.
+  bool forced = 1;
+}
 
 message RebootResponse {}
 
-message PowerOffRequest {}
+message PowerOffRequest {
+  // forced skips the graceful drain.
+  bool forced = 1;
+}
 
 message PowerOffResponse {}
+
+message FactoryResetRequest {
+  // started_by and approvals are recorded in reset.json on the ESP.
+  string started_by = 1;
+  repeated string approvals = 2;
+}
+
+message FactoryResetResponse {}
 
 // Services starts and stops the table's on-demand services.
 service ServicesService {

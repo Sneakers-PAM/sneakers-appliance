@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"filippo.io/age"
 	log "github.com/Bugs5382/go-log"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
@@ -36,13 +37,16 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
 )
 
 // Port is the appliance admin's port.
 const Port = "8443"
 
 type config struct {
-	state, assets, initSock, netdSock, localSock string
+	state, assets, initSock, netdSock, localSock, esp string
 }
 
 func main() {
@@ -52,6 +56,7 @@ func main() {
 	flag.StringVar(&c.initSock, "init-socket", initapi.SocketPath, "init's socket")
 	flag.StringVar(&c.netdSock, "netd-socket", "/run/sneakers/netd.sock", "netd's socket")
 	flag.StringVar(&c.localSock, "socket", "/run/sneakers/osadmin.sock", "the local socket for the shell and the console")
+	flag.StringVar(&c.esp, "esp", "/run/sneakers/esp", "where init mounts the ESP (the booted UKI carries the update key)")
 	flag.Parse()
 	lg := log.NewLoggerWithOptions("sneakers-osadmin", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatJSON), log.WithDefaultLevel(log.LevelError))
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
@@ -94,6 +99,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	} else {
 		lg.Warn("osadmin: no admin pages installed; serving the API only", log.F("path", c.assets))
 	}
+	pins, perr := release.Load()
+	if perr != nil {
+		lg.Error(perr, "osadmin: this build carries no release pins; updates can't be verified, so none will stage")
+	}
 	opts := osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{},
 		KeyCustody: initv1connect.NewKeyCustodyServiceClient(ic, "http://init.sock"),
@@ -103,8 +112,27 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Paths:      paths,
 		Assets:     assets,
 		Logger:     lg,
+		Upgrade: osadmin.UpgradeOptions{
+			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
+			UpdateKey: func() (age.Identity, error) {
+				return ukikey.Running(secureboot.Efivarfs{Dir: secureboot.DefaultEfivarfs}, os.DirFS(c.esp))
+			},
+		},
 	}
 	srv = osadmin.New(opts)
+
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				srv.UpgradeWindowTick(ctx)
+			}
+		}
+	}()
 
 	local, err := listenLocal(c.localSock, srv, lg)
 	if err != nil {

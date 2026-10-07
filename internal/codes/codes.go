@@ -57,6 +57,9 @@ const (
 	UpgradeDecrypt       = 2506
 	UpgradeChannel       = 2507
 	UpgradePatchBase     = 2508
+	UpgradeAirGapped     = 2509
+	UpgradeUpload        = 2510
+	UpgradeNotStaged     = 2511
 )
 
 // The key custody codes.
@@ -104,6 +107,9 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeDecrypt, Symbol: "UPGRADE_DECRYPT", Title: "upgrade", Cause: "the update package doesn't decrypt with this box's update key"},
 	{Code: UpgradeChannel, Symbol: "UPGRADE_CHANNEL", Title: "upgrade", Cause: "a lab package never installs on a production box, and a production package never on a lab box"},
 	{Code: UpgradePatchBase, Symbol: "UPGRADE_PATCH_BASE", Title: "upgrade", Cause: "the patch is for other base versions than the one this box runs"},
+	{Code: UpgradeAirGapped, Symbol: "UPGRADE_AIR_GAPPED", Title: "upgrade", Cause: "no mirror is configured, so the box fetches nothing; upload the .bin instead"},
+	{Code: UpgradeUpload, Symbol: "UPGRADE_UPLOAD", Title: "upgrade", Cause: "the upload or fetch is unknown, too large, or failed"},
+	{Code: UpgradeNotStaged, Symbol: "UPGRADE_NOT_STAGED", Title: "upgrade", Cause: "no release is staged to apply"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},
 	{Code: KeyCustodyRecipients, Symbol: "KEYCUSTODY_RECIPIENTS", Title: "keycustody", Cause: "the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys"},
