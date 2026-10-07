@@ -233,7 +233,10 @@ func TestOnChangeSeesEveryWrittenVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Update(func(st *access.State) error { st.AddAdmin("alice", access.RoleOwner, "console", time.Now()); return nil }); err != nil {
+	if err := s.Update(func(st *access.State) error {
+		st.AddAdmin("alice", access.RoleOwner, "console", time.Now())
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Update(func(*access.State) error { return errors.New("refused") }); err == nil {
