@@ -28,10 +28,12 @@ A box holds at most two releases: the one it runs and one more (the next, or the
 
 The Updates page drives the same flow for an uploaded or a fetched `.bin`:
 
-1. **Get the file.** Upload it (`POST /upload`, any admin) or fetch it from the configured mirror
-   (`UpgradeService.FetchUpdate`, the file name such as `sneakers-appliance-0.2.0-amd64.bin`). With
-   no mirror the box is air-gapped: it never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload
-   is the only path. The mirror is an `https://` URL; the environment's proxy applies.
+1. **Get the file.** Upload it (`POST /upload`, any admin) or fetch it (`UpgradeService.FetchUpdate`,
+   the file name such as `sneakers-appliance-0.2.0-amd64.bin`) from the configured mirror, then,
+   when the policy's `direct` is on, from the release source (the GitHub Release of the version the
+   name carries; production builds only). With no mirror and `direct` off the box is air-gapped: it
+   never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload is the only path. The mirror is an
+   `https://` URL; the environment's proxy applies.
 2. **Stage** (owner, step-up). The signature, the channel and the payload's SHA-256 are verified
    before anything is decrypted or unpacked; a patch must name the running version as a base.
    A refused file (`UPGRADE_SIGNATURE`, `UPGRADE_CHANNEL`, `UPGRADE_FORMAT`,
@@ -58,8 +60,38 @@ reports the end; a session that hasn't ended by then refuses with `UPGRADE_ELEVA
 is applied. The apply's own audit entry and history line name the session it ended. Without an
 override the refusal stays. The update window never overrides.
 
+## The product bundle
+
+The product (k0s, its images and the product's stacks) isn't in the base image. It ships as its own
+signed, encrypted `.bin`, `sneakers-product-<version>-<arch>.bin` ([release.md](release.md#the-product-bundle)),
+and goes through the same Updates flow as a base update, with the same checks, roles, step-up,
+audit, history, update window and maintenance gate. What differs is the slots and what an apply
+does:
+
+| | Base update | Product bundle |
+|---|---|---|
+| Slots | the two root partitions and the ESP entries | `/var/lib/sneakers/product/a` and `b` on the state volume, with the links `current`, `staged` and `previous` |
+| Stage | `Image.Stage` writes the inactive root | the bundle must fit the running base (`UPGRADE_PRODUCT_BASE`, refused before it's decrypted) and be newer than the installed product (`UPGRADE_DOWNGRADE`); it's unpacked into the slot `current` doesn't name, checked (k0s, the images and their signatures against its `release.yaml`, `KIT_BUNDLE_MISMATCH` or `KIT_IMAGE_UNSIGNED`), and only then linked as `staged`; the upload is removed |
+| Apply | activates the release and reboots | `ApplyUpdate` with `target: UPDATE_TARGET_PRODUCT` moves `current` to the staged slot (the old one becomes `previous`), restarts k0s through init's Services API and opens 80 and 443 on the service interface; no reboot |
+| Revert | `Image.Rollback` and a reboot | `RevertUpdate` with `target: UPDATE_TARGET_PRODUCT` moves `current` back to `previous` and restarts k0s (`UPGRADE_NO_PREVIOUS` when there is none) |
+
+**The first install** is the same flow with no previous slot. After setup the Updates page lists
+the versions to choose from (`ListProductVersions`): the index `sneakers-product-index.json` from
+the mirror, then the release source's latest release, filtered to the box's architecture and
+channel, the running base, stable versions (no pre-release part; on a lab box every lab build
+counts) and, after the first install, versions newer than the installed one, newest first. The
+index is only a menu: nothing in it is trusted, and the chosen bundle is verified when it's staged.
+On an air-gapped box the admin uploads the bundle instead.
+
+**Nothing starts without it.** k0s's service entry waits for `setup/done` (the first admin exists)
+and for an installed bundle (`start-when`, [init.md](init.md#the-service-table)), so a box with no
+product bundle runs no k0s and opens no product port. `GetUpgrades.product` shows the installed,
+staged and previous versions and whether k0s is running.
+
 **The policy** (owner, step-up): `automatic` applies a staged release once inside the daily window
-(default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. It's
+(default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. The
+window applies a staged product bundle first, then a staged base release. `direct` (off by
+default) lets the box fetch from the release source when no mirror is set or the mirror fails. It's
 kept in `/var/lib/sneakers/osadmin-api/upgrade-policy.json`. **The history** of every fetch, stage, apply
 and revert, with its outcome and code, is in `/var/lib/sneakers/osadmin-api/upgrade-history.jsonl` and
 on the page, newest first.

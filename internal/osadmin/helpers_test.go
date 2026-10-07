@@ -35,6 +35,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
+	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
 
 // sshKey is a generated login key: its authorized_keys line and
@@ -215,6 +216,8 @@ type fakeNetd struct {
 	confirmed int
 	mgmt      []string
 	ntp       bool
+	// servicePorts are the ports SetServicePorts last opened.
+	servicePorts []uint32
 }
 
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
@@ -246,6 +249,16 @@ func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return connect.NewResponse(&netdv1.StatusResponse{ManagementAddresses: n.mgmt, Hostname: "box1.sneakers.example.org", NtpSynced: n.ntp}), nil
+}
+
+func (n *fakeNetd) SetServicePorts(_ context.Context, r *connect.Request[netdv1.SetServicePortsRequest]) (*connect.Response[netdv1.SetServicePortsResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.servicePorts = nil
+	for _, rule := range r.Msg.GetRules() {
+		n.servicePorts = append(n.servicePorts, rule.GetPort())
+	}
+	return connect.NewResponse(&netdv1.SetServicePortsResponse{}), nil
 }
 
 func (n *fakeNetd) Checks(context.Context, *connect.Request[netdv1.ChecksRequest]) (*connect.Response[netdv1.ChecksResponse], error) {
@@ -287,6 +300,43 @@ type box struct {
 	enc         *age.X25519Identity
 	keyReads    int
 	mirrorHit   int
+	services    *fakeServices
+}
+
+// fakeServices is init's ServicesService: it records the calls.
+type fakeServices struct {
+	initv1connect.UnimplementedServicesServiceHandler
+	mu      sync.Mutex
+	calls   []string
+	running bool
+}
+
+func (f *fakeServices) Start(_ context.Context, r *connect.Request[initv1.StartRequest]) (*connect.Response[initv1.StartResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "start "+r.Msg.GetName())
+	f.running = true
+	return connect.NewResponse(&initv1.StartResponse{}), nil
+}
+
+func (f *fakeServices) Stop(_ context.Context, r *connect.Request[initv1.StopRequest]) (*connect.Response[initv1.StopResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "stop "+r.Msg.GetName())
+	f.running = false
+	return connect.NewResponse(&initv1.StopResponse{}), nil
+}
+
+func (f *fakeServices) Status(context.Context, *connect.Request[initv1.StatusRequest]) (*connect.Response[initv1.StatusResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return connect.NewResponse(&initv1.StatusResponse{Running: f.running}), nil
+}
+
+func (f *fakeServices) log() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.calls)
 }
 
 // newBox starts osadmin with an owner alice and, when withBob, an admin
@@ -314,10 +364,14 @@ func newBox(t *testing.T, withBob bool) *box {
 	mux.Handle(initv1connect.NewPowerServiceHandler(fakePower{f: b.init}))
 	mux.Handle(initv1connect.NewImageServiceHandler(fakeImage{f: b.init}))
 	mux.Handle(netdv1connect.NewNetworkServiceHandler(b.netd))
+	b.services = &fakeServices{}
+	mux.Handle(initv1connect.NewServicesServiceHandler(b.services))
 	daemons := httptest.NewServer(mux)
 	t.Cleanup(daemons.Close)
 	hc := daemons.Client()
-	b.sign = testpki.ECDSA(t)
+	// The fixture product bundles' images are signed with the fixtures'
+	// release key, so the box pins that one.
+	b.sign = fixtures.LabKeys(t).Cosign
 	b.enc, err = age.GenerateX25519Identity()
 	if err != nil {
 		t.Fatal(err)
@@ -338,25 +392,6 @@ func newBox(t *testing.T, withBob bool) *box {
 		t.Fatal(err)
 	}
 	b.mirrorFiles = map[string][]byte{}
-	mirrorClient := func() *http.Client { return b.mirror.Client() }
-	b.srv = osadmin.New(osadmin.Options{
-		Upgrade: osadmin.UpgradeOptions{
-			Channel: release.ChannelProduction, ReleaseKeyPEM: b.sign.PublicPEM,
-			UpdateKey:        func() (age.Identity, error) { b.keyReads++; return b.enc, nil },
-			HTTPClient:       &http.Client{Transport: lazyTransport{get: mirrorClient}},
-			ElevationEndWait: 500 * time.Millisecond,
-		},
-		Access: b.store, Audit: b.log, Clock: b.clk,
-		KeyCustody: initv1connect.NewKeyCustodyServiceClient(hc, daemons.URL),
-		Image:      initv1connect.NewImageServiceClient(hc, daemons.URL),
-		Power:      initv1connect.NewPowerServiceClient(hc, daemons.URL),
-		Network:    netdv1connect.NewNetworkServiceClient(hc, daemons.URL),
-		Paths:      osadmin.Paths{State: b.state},
-		Elevation:  b.elev,
-		Shells:     b.shells,
-		Cert:       osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
-	})
-	b.ts = httptest.NewTLSServer(b.srv.Handler())
 	b.mirror = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b.mirrorHit++
 		body, ok := b.mirrorFiles[strings.TrimPrefix(r.URL.Path, "/")]
@@ -367,6 +402,28 @@ func newBox(t *testing.T, withBob bool) *box {
 		_, _ = w.Write(body)
 	}))
 	t.Cleanup(b.mirror.Close)
+	mirrorClient := func() *http.Client { return b.mirror.Client() }
+	b.srv = osadmin.New(osadmin.Options{
+		Upgrade: osadmin.UpgradeOptions{
+			Channel: release.ChannelProduction, ReleaseKeyPEM: b.sign.PublicPEM,
+			UpdateKey:        func() (age.Identity, error) { b.keyReads++; return b.enc, nil },
+			HTTPClient:       &http.Client{Transport: lazyTransport{get: mirrorClient}},
+			ElevationEndWait: 500 * time.Millisecond,
+			ProductDir:       filepath.Join(b.state, "product"),
+			DirectURL:        b.mirror.URL + "/direct",
+		},
+		Access: b.store, Audit: b.log, Clock: b.clk,
+		KeyCustody: initv1connect.NewKeyCustodyServiceClient(hc, daemons.URL),
+		Image:      initv1connect.NewImageServiceClient(hc, daemons.URL),
+		Power:      initv1connect.NewPowerServiceClient(hc, daemons.URL),
+		Services:   initv1connect.NewServicesServiceClient(hc, daemons.URL),
+		Network:    netdv1connect.NewNetworkServiceClient(hc, daemons.URL),
+		Paths:      osadmin.Paths{State: b.state},
+		Elevation:  b.elev,
+		Shells:     b.shells,
+		Cert:       osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
+	})
+	b.ts = httptest.NewTLSServer(b.srv.Handler())
 	t.Cleanup(b.ts.Close)
 	return b
 }
