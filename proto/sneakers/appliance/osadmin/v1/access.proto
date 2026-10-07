@@ -1,0 +1,183 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Access page: admins, roles, keys, host keys, the elevation policy
+// and the factory-reset quorum roster.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// AccessService manages who may sign in. An admin manages their own keys;
+// owners manage everyone.
+service AccessService {
+  rpc ListAdmins(ListAdminsRequest) returns (ListAdminsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  rpc AddAdmin(AddAdminRequest) returns (AddAdminResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.admin.add"
+    };
+  }
+  // RemoveAdmin ends every session of the admin.
+  rpc RemoveAdmin(RemoveAdminRequest) returns (RemoveAdminResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.admin.remove"
+    };
+  }
+  rpc SetRole(SetRoleRequest) returns (SetRoleResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.admin.role"
+    };
+  }
+  // AddKey adds a login key; an admin only to themselves.
+  rpc AddKey(AddKeyRequest) returns (AddKeyResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "access.key.add"
+    };
+  }
+  // RemoveKey ends every session the key signed in; an admin only their
+  // own keys.
+  rpc RemoveKey(RemoveKeyRequest) returns (RemoveKeyResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "access.key.remove"
+    };
+  }
+  rpc SetElevationPolicy(SetElevationPolicyRequest) returns (SetElevationPolicyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.elevation-policy.set"
+    };
+  }
+  // SetQuorum sets the factory-reset roster (N members) and how many of
+  // them must approve (M).
+  rpc SetQuorum(SetQuorumRequest) returns (SetQuorumResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.quorum.set"
+    };
+  }
+}
+
+message Key {
+  string fingerprint = 1;
+  string type = 2;
+  string comment = 3;
+  google.protobuf.Timestamp added = 4;
+  string added_by = 5;
+  // via is enrol, shell, osadmin, url, typed or console-recovery.
+  string via = 6;
+  google.protobuf.Timestamp last_used = 7;
+}
+
+message Admin {
+  string name = 1;
+  int32 uid = 2;
+  Role role = 3;
+  google.protobuf.Timestamp created = 4;
+  string created_by = 5;
+  repeated Key keys = 6;
+  // approval_hold_until is set after a console Recover access.
+  google.protobuf.Timestamp approval_hold_until = 7;
+}
+
+message HostKey {
+  string type = 1;
+  string fingerprint = 2;
+}
+
+message ElevationPolicy {
+  int32 max_minutes = 1;
+  int32 default_minutes = 2;
+  bool self_approval_when_single_owner = 3;
+}
+
+// Quorum is the factory-reset roster.
+message Quorum {
+  // members are the admins whose approvals count (N = len(members)).
+  repeated string members = 1;
+  // required is M.
+  int32 required = 2;
+  // configured is false while the default applies: every admin, two
+  // approvals.
+  bool configured = 3;
+}
+
+message ListAdminsRequest {}
+
+message ListAdminsResponse {
+  repeated Admin admins = 1;
+  repeated HostKey host_keys = 2;
+  ElevationPolicy elevation_policy = 3;
+  Quorum quorum = 4;
+}
+
+message AddAdminRequest {
+  string name = 1;
+  Role role = 2;
+  // public_key is the admin's first login key (optional).
+  string public_key = 3;
+}
+
+message AddAdminResponse {
+  Admin admin = 1;
+}
+
+message RemoveAdminRequest {
+  string name = 1;
+}
+
+message RemoveAdminResponse {}
+
+message SetRoleRequest {
+  string name = 1;
+  Role role = 2;
+}
+
+message SetRoleResponse {}
+
+message AddKeyRequest {
+  string admin = 1;
+  string public_key = 2;
+}
+
+message AddKeyResponse {
+  Key key = 1;
+}
+
+message RemoveKeyRequest {
+  string admin = 1;
+  string fingerprint = 2;
+}
+
+message RemoveKeyResponse {}
+
+message SetElevationPolicyRequest {
+  ElevationPolicy policy = 1;
+}
+
+message SetElevationPolicyResponse {}
+
+message SetQuorumRequest {
+  repeated string members = 1;
+  int32 required = 2;
+}
+
+message SetQuorumResponse {}

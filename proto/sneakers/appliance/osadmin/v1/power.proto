@@ -1,0 +1,142 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Power page: reboot, shut down and the factory reset.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// PowerService reboots, shuts down and factory resets the box.
+service PowerService {
+  // GetPower shows what a power action would cut: the active sessions and
+  // any factory reset in progress.
+  rpc GetPower(GetPowerRequest) returns (GetPowerResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // Reboot drains and reboots. forced skips the drain and needs
+  // forced_confirmed, the second explicit confirmation.
+  rpc Reboot(RebootRequest) returns (RebootResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "power.reboot"
+    };
+  }
+  // Shutdown drains and powers off; forced as for Reboot.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "power.shutdown"
+    };
+  }
+  // StartFactoryReset opens a reset request; the starter's approval counts
+  // once. Not offered with a single admin.
+  rpc StartFactoryReset(StartFactoryResetRequest) returns (StartFactoryResetResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "power.factory-reset.start"
+    };
+  }
+  // ApproveFactoryReset adds a roster member's approval. When M approvals
+  // are in, the 10-minute delay starts.
+  rpc ApproveFactoryReset(ApproveFactoryResetRequest) returns (ApproveFactoryResetResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "power.factory-reset.approve"
+    };
+  }
+  // CancelFactoryReset stops a request or its countdown; any admin may.
+  rpc CancelFactoryReset(CancelFactoryResetRequest) returns (CancelFactoryResetResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "power.factory-reset.cancel"
+    };
+  }
+}
+
+// ActiveSession is a signed-in :8443 session a power action would end.
+message ActiveSession {
+  string admin = 1;
+  string source_address = 2;
+  google.protobuf.Timestamp signed_in = 3;
+}
+
+// FactoryResetState is where a factory reset is.
+enum FactoryResetState {
+  FACTORY_RESET_STATE_UNSPECIFIED = 0;
+  // FACTORY_RESET_STATE_PENDING: waiting for approvals.
+  FACTORY_RESET_STATE_PENDING = 1;
+  // FACTORY_RESET_STATE_COUNTDOWN: the quorum approved; the reset runs at
+  // runs_at unless cancelled.
+  FACTORY_RESET_STATE_COUNTDOWN = 2;
+}
+
+message FactoryReset {
+  string id = 1;
+  FactoryResetState state = 2;
+  string started_by = 3;
+  google.protobuf.Timestamp started = 4;
+  // approvals are the roster members who approved, the starter first.
+  repeated string approvals = 5;
+  int32 required = 6;
+  repeated string members = 7;
+  google.protobuf.Timestamp runs_at = 8;
+  google.protobuf.Timestamp expires = 9;
+}
+
+message GetPowerRequest {}
+
+message GetPowerResponse {
+  repeated ActiveSession sessions = 1;
+  FactoryReset factory_reset = 2;
+  // factory_reset_available is false with a single admin or a roster that
+  // can't reach its threshold; the reason says which.
+  bool factory_reset_available = 3;
+  string factory_reset_unavailable_reason = 4;
+}
+
+message RebootRequest {
+  bool forced = 1;
+  bool forced_confirmed = 2;
+}
+
+message RebootResponse {}
+
+message ShutdownRequest {
+  bool forced = 1;
+  bool forced_confirmed = 2;
+}
+
+message ShutdownResponse {}
+
+message StartFactoryResetRequest {
+  // confirm_hostname is the typed confirmation.
+  string confirm_hostname = 1;
+}
+
+message StartFactoryResetResponse {
+  FactoryReset factory_reset = 1;
+}
+
+message ApproveFactoryResetRequest {
+  string id = 1;
+}
+
+message ApproveFactoryResetResponse {
+  FactoryReset factory_reset = 1;
+}
+
+message CancelFactoryResetRequest {
+  string id = 1;
+}
+
+message CancelFactoryResetResponse {}

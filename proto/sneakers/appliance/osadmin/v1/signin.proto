@@ -1,0 +1,101 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// SSH-attested sign-in. The browser asks for a code, the admin approves it
+// over SSH (`ssh alice@<address> login XXXX-XXXX`), and the waiting poll
+// receives the session cookie and the CSRF token.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// SignInService starts, finishes and ends a browser session.
+service SignInService {
+  // BeginSignIn issues a sign-in code bound to the caller's source address
+  // and user agent. It lasts 5 minutes and works once.
+  rpc BeginSignIn(BeginSignInRequest) returns (BeginSignInResponse) {
+    option (rule) = {public: true};
+  }
+  // PollSignIn reports whether the code was approved. On approval it sets
+  // the session cookie and returns the CSRF token. When the caller already
+  // has a session for the same admin, that session is replaced (a step-up).
+  rpc PollSignIn(PollSignInRequest) returns (PollSignInResponse) {
+    option (rule) = {public: true};
+  }
+  // GetSession describes the caller's session.
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // SignOut ends the caller's session.
+  rpc SignOut(SignOutRequest) returns (SignOutResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "signin.signout"
+    };
+  }
+}
+
+message BeginSignInRequest {}
+
+message BeginSignInResponse {
+  // code is shown to the admin, XXXX-XXXX.
+  string code = 1;
+  // poll_token is the browser's secret for PollSignIn; never shown.
+  string poll_token = 2;
+  google.protobuf.Timestamp expires = 3;
+  // source_address and user_agent are what the box sees, shown on the page
+  // and in the SSH approval prompt.
+  string source_address = 4;
+  string user_agent = 5;
+}
+
+message PollSignInRequest {
+  string poll_token = 1;
+}
+
+// SignInState is where a sign-in code is.
+enum SignInState {
+  SIGN_IN_STATE_UNSPECIFIED = 0;
+  SIGN_IN_STATE_PENDING = 1;
+  SIGN_IN_STATE_APPROVED = 2;
+  // SIGN_IN_STATE_EXPIRED: expired, used or unknown (LOGIN_CODE).
+  SIGN_IN_STATE_EXPIRED = 3;
+}
+
+message PollSignInResponse {
+  SignInState state = 1;
+  // session is set when state is approved.
+  Session session = 2;
+}
+
+// Session is a signed-in browser.
+message Session {
+  string admin = 1;
+  Role role = 2;
+  // key_fingerprint is the SSH key that approved the sign-in.
+  string key_fingerprint = 3;
+  google.protobuf.Timestamp signed_in = 4;
+  // step_up_until is when sensitive actions need a fresh sign-in again.
+  google.protobuf.Timestamp step_up_until = 5;
+  // idle_expires moves with every call; expires is the 8-hour limit.
+  google.protobuf.Timestamp idle_expires = 6;
+  google.protobuf.Timestamp expires = 7;
+  // csrf_token goes in the X-CSRF-Token header of every call that changes
+  // something.
+  string csrf_token = 8;
+}
+
+message GetSessionRequest {}
+
+message GetSessionResponse {
+  Session session = 1;
+}
+
+message SignOutRequest {}
+
+message SignOutResponse {}

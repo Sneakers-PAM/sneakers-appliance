@@ -1,0 +1,77 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Backups page.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// BackupService runs and restores backups.
+service BackupService {
+  rpc GetBackups(GetBackupsRequest) returns (GetBackupsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  rpc SetBackupPolicy(SetBackupPolicyRequest) returns (SetBackupPolicyResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "backup.policy.set"
+    };
+  }
+  rpc RunBackup(RunBackupRequest) returns (RunBackupResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "backup.run"
+    };
+  }
+  rpc Restore(RestoreRequest) returns (RestoreResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "backup.restore"
+    };
+  }
+}
+
+message BackupSet {
+  string id = 1;
+  google.protobuf.Timestamp taken = 2;
+  uint64 size_bytes = 3;
+  string target = 4;
+}
+
+message BackupPolicy {
+  // schedule is a daily time, HH:MM local.
+  string schedule = 1;
+  int32 retention_days = 2;
+  repeated string targets = 3;
+}
+
+message GetBackupsRequest {}
+
+message GetBackupsResponse {
+  BackupPolicy policy = 1;
+  repeated BackupSet sets = 2;
+}
+
+message SetBackupPolicyRequest {
+  BackupPolicy policy = 1;
+}
+
+message SetBackupPolicyResponse {}
+
+message RunBackupRequest {}
+
+message RunBackupResponse {}
+
+message RestoreRequest {
+  string set_id = 1;
+}
+
+message RestoreResponse {}

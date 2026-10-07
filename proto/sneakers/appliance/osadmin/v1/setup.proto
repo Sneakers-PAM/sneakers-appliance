@@ -1,0 +1,123 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Setup page (first boot): the recovery keys, the escrow, the
+// single-admin warning and Finish.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// SetupService finishes the appliance setup. Recovery keys may also be
+// changed after setup (a new escrow is written each time).
+service SetupService {
+  rpc GetSetup(GetSetupRequest) returns (GetSetupResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // AddRecoveryKey adds one of up to three recovery keys and writes a new
+  // escrow to the whole set.
+  rpc AddRecoveryKey(AddRecoveryKeyRequest) returns (AddRecoveryKeyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "setup.recovery-key.add"
+    };
+  }
+  // RemoveRecoveryKey removes one (never the last) and writes a new escrow.
+  rpc RemoveRecoveryKey(RemoveRecoveryKeyRequest) returns (RemoveRecoveryKeyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "setup.recovery-key.remove"
+    };
+  }
+  // DownloadEscrow returns the newest escrow file (age ciphertext).
+  rpc DownloadEscrow(DownloadEscrowRequest) returns (DownloadEscrowResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "setup.escrow.download"
+    };
+  }
+  // AcknowledgeSingleAdmin records that the operator read the single-admin
+  // warning: one admin means no quorum, so no factory reset.
+  rpc AcknowledgeSingleAdmin(AcknowledgeSingleAdminRequest) returns (AcknowledgeSingleAdminResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "setup.single-admin.acknowledge"
+    };
+  }
+  // Finish checks every step (SETUP_INCOMPLETE names the open one) and
+  // marks setup done.
+  rpc Finish(FinishRequest) returns (FinishResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "setup.finish"
+    };
+  }
+}
+
+message RecoveryKey {
+  string fingerprint = 1;
+  string type = 2;
+  string label = 3;
+  google.protobuf.Timestamp set = 4;
+  string set_by = 5;
+}
+
+message GetSetupRequest {}
+
+message GetSetupResponse {
+  bool done = 1;
+  repeated RecoveryKey recovery_keys = 2;
+  int32 max_recovery_keys = 3;
+  int32 admin_count = 4;
+  // single_admin_warning is true while the box has one admin.
+  bool single_admin_warning = 5;
+  bool single_admin_acknowledged = 6;
+  // escrow_file is the newest escrow's file name, empty before the first
+  // recovery key.
+  string escrow_file = 7;
+  // product_setup_url is where the product's own /setup runs once the
+  // platform is up.
+  string product_setup_url = 8;
+}
+
+message AddRecoveryKeyRequest {
+  // public_key is one OpenSSH line: ssh-ed25519, or ssh-rsa of 3072 bits
+  // or more.
+  string public_key = 1;
+  string label = 2;
+}
+
+message AddRecoveryKeyResponse {
+  RecoveryKey recovery_key = 1;
+}
+
+message RemoveRecoveryKeyRequest {
+  string fingerprint = 1;
+}
+
+message RemoveRecoveryKeyResponse {}
+
+message DownloadEscrowRequest {}
+
+message DownloadEscrowResponse {
+  string file_name = 1;
+  bytes content = 2;
+}
+
+message AcknowledgeSingleAdminRequest {}
+
+message AcknowledgeSingleAdminResponse {}
+
+message FinishRequest {}
+
+message FinishResponse {
+  string product_setup_url = 1;
+}

@@ -1,0 +1,75 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Network page. Changes go to netd, which undoes them unless they are
+// confirmed within 120 seconds from a session that still works.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/netd/v1/netd.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// NetworkService reads and changes the box's network settings.
+service NetworkService {
+  rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // SetNetwork applies settings with auto-revert.
+  rpc SetNetwork(SetNetworkRequest) returns (SetNetworkResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "network.set"
+    };
+  }
+  // ConfirmNetwork keeps the pending change.
+  rpc ConfirmNetwork(ConfirmNetworkRequest) returns (ConfirmNetworkResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "network.confirm"
+    };
+  }
+  // RunChecks runs the link, address, gateway, DNS and NTP checks.
+  rpc RunChecks(RunChecksRequest) returns (RunChecksResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+}
+
+message GetNetworkRequest {}
+
+message GetNetworkResponse {
+  sneakers.appliance.netd.v1.Settings settings = 1;
+  // pending is true while a change waits for ConfirmNetwork.
+  bool pending = 2;
+  repeated string management_addresses = 3;
+  repeated string service_addresses = 4;
+  bool ntp_synced = 5;
+  int64 ntp_offset_ms = 6;
+}
+
+message SetNetworkRequest {
+  sneakers.appliance.netd.v1.Settings settings = 1;
+}
+
+message SetNetworkResponse {
+  // token is what ConfirmNetwork takes.
+  string token = 1;
+  int32 revert_after_seconds = 2;
+}
+
+message ConfirmNetworkRequest {
+  string token = 1;
+}
+
+message ConfirmNetworkResponse {}
+
+message RunChecksRequest {}
+
+message RunChecksResponse {
+  repeated sneakers.appliance.netd.v1.Check checks = 1;
+}

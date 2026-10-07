@@ -1,0 +1,82 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Certificates page (trust and PKI).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// TlsService manages the product certificate and the CA bundle.
+service TlsService {
+  rpc GetTls(GetTlsRequest) returns (GetTlsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  rpc CreateCsr(CreateCsrRequest) returns (CreateCsrResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "tls.csr.create"
+    };
+  }
+  rpc UploadCertificate(UploadCertificateRequest) returns (UploadCertificateResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "tls.certificate.upload"
+    };
+  }
+  // SetAdminCertificate chooses whether :8443 also uses the product's
+  // certificate (its own stays the default).
+  rpc SetAdminCertificate(SetAdminCertificateRequest) returns (SetAdminCertificateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.admin-certificate.set"
+    };
+  }
+}
+
+message Certificate {
+  string subject = 1;
+  repeated string names = 2;
+  string issuer = 3;
+  string fingerprint = 4;
+  google.protobuf.Timestamp expires = 5;
+}
+
+message GetTlsRequest {}
+
+message GetTlsResponse {
+  Certificate product = 1;
+  // source is self-signed, acme or uploaded.
+  string source = 2;
+  bool admin_uses_product = 3;
+  repeated Certificate ca_bundle = 4;
+}
+
+message CreateCsrRequest {
+  repeated string names = 1;
+}
+
+message CreateCsrResponse {
+  string csr_pem = 1;
+}
+
+message UploadCertificateRequest {
+  string certificate_pem = 1;
+  // chain_pem is the intermediates, if any.
+  string chain_pem = 2;
+}
+
+message UploadCertificateResponse {}
+
+message SetAdminCertificateRequest {
+  bool use_product = 1;
+}
+
+message SetAdminCertificateResponse {}

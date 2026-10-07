@@ -1,0 +1,77 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The shell elevation requests (part of the Access page).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// ElevationService approves one-time root shells.
+service ElevationService {
+  rpc ListElevations(ListElevationsRequest) returns (ListElevationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "elevation.approve"
+    };
+  }
+  rpc DenyElevation(DenyElevationRequest) returns (DenyElevationResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "elevation.deny"
+    };
+  }
+  rpc TerminateElevation(TerminateElevationRequest) returns (TerminateElevationResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "elevation.terminate"
+    };
+  }
+}
+
+message Elevation {
+  string id = 1;
+  string admin = 2;
+  string key_fingerprint = 3;
+  string source_address = 4;
+  string reason = 5;
+  int32 minutes = 6;
+  google.protobuf.Timestamp requested = 7;
+  // state is pending, approved, active, ended, denied or expired.
+  string state = 8;
+}
+
+message ListElevationsRequest {}
+
+message ListElevationsResponse {
+  repeated Elevation elevations = 1;
+}
+
+message ApproveElevationRequest {
+  string id = 1;
+  // minutes may shorten the request; 0 keeps it.
+  int32 minutes = 2;
+}
+
+message ApproveElevationResponse {}
+
+message DenyElevationRequest {
+  string id = 1;
+}
+
+message DenyElevationResponse {}
+
+message TerminateElevationRequest {
+  string id = 1;
+}
+
+message TerminateElevationResponse {}

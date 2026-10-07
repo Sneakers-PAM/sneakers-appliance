@@ -1,0 +1,47 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Add-on modules page (Advanced).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+
+// ModulesService lists and adds project-signed system extensions.
+service ModulesService {
+  rpc ListModules(ListModulesRequest) returns (ListModulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // AddModule adds a module from an uploaded .bin (see the upload endpoint).
+  rpc AddModule(AddModuleRequest) returns (AddModuleResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "modules.add"
+    };
+  }
+}
+
+message Module {
+  string name = 1;
+  string version = 2;
+  bool active = 3;
+}
+
+message ListModulesRequest {}
+
+message ListModulesResponse {
+  // platform is the detected hypervisor or hardware.
+  string platform = 1;
+  repeated Module available = 2;
+}
+
+message AddModuleRequest {
+  string upload_id = 1;
+}
+
+message AddModuleResponse {}
