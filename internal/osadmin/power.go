@@ -9,7 +9,6 @@ import (
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
@@ -24,8 +23,12 @@ type power struct {
 
 func (h *power) GetPower(context.Context, *connect.Request[osadminv1.GetPowerRequest]) (*connect.Response[osadminv1.GetPowerResponse], error) {
 	out := &osadminv1.GetPowerResponse{FactoryReset: h.s.FactoryReset()}
-	for _, sess := range h.s.sessions.All() {
-		out.Sessions = append(out.Sessions, &osadminv1.ActiveSession{Admin: sess.Admin, SourceAddress: sess.Source, SignedIn: timestamppb.New(sess.SignedIn)})
+	live, err := h.s.liveSessions()
+	if err != nil {
+		h.s.o.Logger.Error(err, "osadmin: the SSH sessions can't be read; the warning lists the rest")
+	}
+	for _, l := range live {
+		out.Sessions = append(out.Sessions, l.proto())
 	}
 	st := h.s.o.Access.Read()
 	switch q := st.EffectiveQuorum(); {

@@ -189,7 +189,9 @@ On first boot, after the first admin's key is enrolled, the Setup page finishes 
   within 120 seconds from a session that still works.
 - **Logs and audit:** the OS audit log, newest first, filtered by action, with its chain state, and the
   whole log as a download.
-- **Power:** reboot and shut down, graceful by default; the page lists the signed-in sessions first.
+- **Power:** reboot and shut down, graceful by default; the page lists the live sessions first
+  (the :8443 browsers, the SSH logins and the elevated shells), and an owner can end any of them
+  (step-up, audited as `session.end`; see [osadmin-api.md](osadmin-api.md)).
   Init drains the services, audits, syncs and unmounts before it acts ([factory-reset.md](factory-reset.md)).
   A forced reboot or shutdown skips the drain and needs a second, explicit confirmation
   (`POWER_FORCED_CONFIRM` without it); the audit entry records `mode` as `graceful` or `forced`.

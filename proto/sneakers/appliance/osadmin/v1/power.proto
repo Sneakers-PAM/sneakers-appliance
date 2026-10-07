@@ -61,13 +61,43 @@ service PowerService {
       audit: "power.factory-reset.cancel"
     };
   }
+  // ListSessions lists every live session on the box: the :8443 browsers,
+  // the SSH closed shells and the elevated shells, oldest first.
+  rpc ListSessions(ListSessionsRequest) returns (ListSessionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // EndSession ends one session from ListSessions: a browser is signed
+  // out, an SSH or elevated shell is disconnected.
+  rpc EndSession(EndSessionRequest) returns (EndSessionResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "session.end"
+    };
+  }
 }
 
-// ActiveSession is a signed-in :8443 session a power action would end.
+// SessionKind is what a session is.
+enum SessionKind {
+  SESSION_KIND_UNSPECIFIED = 0;
+  // SESSION_KIND_BROWSER: a signed-in :8443 browser.
+  SESSION_KIND_BROWSER = 1;
+  // SESSION_KIND_SSH: an admin's SSH login to the closed shell.
+  SESSION_KIND_SSH = 2;
+  // SESSION_KIND_ELEVATED: a one-time elevated root shell.
+  SESSION_KIND_ELEVATED = 3;
+}
+
+// ActiveSession is a live session a power action would end.
 message ActiveSession {
   string admin = 1;
   string source_address = 2;
+  // signed_in is when the session started.
   google.protobuf.Timestamp signed_in = 3;
+  // id names the session for EndSession. It is not the session's cookie.
+  string id = 4;
+  SessionKind kind = 5;
 }
 
 // FactoryResetState is where a factory reset is.
@@ -140,3 +170,16 @@ message CancelFactoryResetRequest {
 }
 
 message CancelFactoryResetResponse {}
+
+message ListSessionsRequest {}
+
+message ListSessionsResponse {
+  repeated ActiveSession sessions = 1;
+}
+
+message EndSessionRequest {
+  // id is an ActiveSession's id.
+  string id = 1;
+}
+
+message EndSessionResponse {}

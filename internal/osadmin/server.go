@@ -82,6 +82,9 @@ type Options struct {
 	Upgrade UpgradeOptions
 	// Elevation is the one-time root shells; nil answers Not available.
 	Elevation *elevation.Service
+	// Shells is the admins' SSH logins to the closed shell
+	// (sshsession.Proc on the box); nil lists none.
+	Shells Shells
 	// Assets are the static admin pages; nil serves a short notice.
 	Assets fs.FS
 	Logger log.Logger
