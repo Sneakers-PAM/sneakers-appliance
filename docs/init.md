@@ -34,6 +34,7 @@ readiness:                         # a file that appears, or a command that exit
   timeout: 2m
 start: always                      # always (default) or on-demand
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
+stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 ```
 
 - Entering a phase stops the services that don't run in it and starts the `start: always` ones that
@@ -43,7 +44,10 @@ pre-start: [/usr/libexec/sneakers/platformd, prepare]
 - `pre-start` runs to completion before every start; a non-zero exit keeps the service from
   starting (`SERVICE_PRE_START`) and its restart policy decides whether it's tried again.
 - A service that exits is restarted by its policy with a backoff from 1 to 30 seconds. Stopping
-  sends SIGTERM, then SIGKILL after 10 seconds.
+  sends SIGTERM, then SIGKILL after the entry's `stop-timeout` (10 seconds when unset). k0s sets
+  a longer one so it can stop its workloads cleanly.
+- A drain (a graceful reboot or shutdown, or a factory reset) stops the services in reverse
+  `after:` order, so k0s stops before platformd, and nothing starts again until the box reboots.
 - An entry that doesn't parse, an unknown `after:` name or a loop is `SERVICE_TABLE_INVALID`, and
   the table isn't used.
 

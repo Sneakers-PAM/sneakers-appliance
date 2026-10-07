@@ -4,3 +4,4 @@ phases: [normal]
 after: [platformd]
 restart: always
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
+stop-timeout: 2m

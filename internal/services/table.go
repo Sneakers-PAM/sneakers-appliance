@@ -58,6 +58,10 @@ type Service struct {
 	// PreStart runs to completion before every start; a non-zero exit
 	// keeps the service from starting.
 	PreStart []string `yaml:"pre-start"`
+	// StopTimeout is how long the service gets after SIGTERM before
+	// SIGKILL; zero means the supervisor's default. k0s needs longer than
+	// most to stop its workloads cleanly.
+	StopTimeout time.Duration `yaml:"stop-timeout"`
 }
 
 // Readiness is one probe: a file that appears, or a command that exits 0.
@@ -129,6 +133,8 @@ func parse(name string, b []byte) (*Service, error) {
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: start %q", name, s.Start)
 	case s.Readiness.File != "" && len(s.Readiness.Exec) > 0:
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: readiness takes a file or an exec, not both", name)
+	case s.StopTimeout < 0:
+		return nil, codes.New(codes.ServiceTableInvalid, "%s: stop-timeout %v", name, s.StopTimeout)
 	case len(s.PreStart) > 0 && !path.IsAbs(s.PreStart[0]):
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: pre-start %q must be an absolute path", name, s.PreStart[0])
 	}
