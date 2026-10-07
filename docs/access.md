@@ -84,15 +84,17 @@ Every account's shell is its forced command, so sshd never passes a line to `/bi
 
 ## The :8443 sign-in
 
-`sneakers-osadmin` serves the appliance admin on port 8443 of the management addresses only. The
-browser never takes a password or a key; the admin's SSH key vouches for it.
+`sneakers-osadmin` serves the appliance admin on port 8443 of the management addresses only, and
+forwards every call to accessd, which holds the codes and sessions and decides
+([accessd](#accessd)). The browser never takes a password or a key; the admin's SSH key vouches
+for it.
 
 1. The sign-in page asks for a code (`SignInService.BeginSignIn`) and shows it, `XXXX-XXXX`, with the
    source address and browser the box sees. A code lasts 5 minutes and works once; at most 64 wait
    at a time.
 2. The admin runs `ssh alice@<address> login XXXX-XXXX`. The closed shell shows the browser's address
    and user agent and asks to confirm, then calls `LocalService.ApproveSignIn` on
-   `/run/sneakers/osadmin.sock` with the admin and the fingerprint of the key that signed in. The
+   `/run/sneakers/access.sock` with the admin and the fingerprint of the key that signed in. The
    approval is refused when the key isn't that admin's or an admin uid approves as someone else.
 3. The waiting page (`PollSignIn`) gets the session cookie and its CSRF token.
 
@@ -108,7 +110,7 @@ The approval and the session start are both written to the OS audit log (`signin
 | Idle timeout | 15 minutes; every call moves it |
 | Absolute limit | 8 hours |
 | Per admin | at most 5; a sixth sign-in ends the oldest |
-| Storage | memory only: a restart of `sneakers-osadmin` signs everyone out |
+| Storage | memory only, in accessd: a restart of `sneakers-accessd` signs everyone out (a restart of `sneakers-osadmin` doesn't) |
 
 A session is bound to its admin and key. Every call checks both still exist, so removing a key ends
 the sessions it signed in, and removing an admin ends all of theirs. A role change applies to live
@@ -174,8 +176,8 @@ A factory reset from :8443 needs a quorum of appliance admins, M of N, never one
 - **Approve** (a roster member, step-up). A request without its quorum after 30 minutes expires.
 - **The delay.** The last approval starts a 10-minute countdown, shown on Status. Any admin may
   cancel it on :8443, and the console (or a closed-shell login, as itself) through
-  `LocalService.LocalCancelFactoryReset`. The request lives in memory only, so a reboot or a
-  restart of `sneakers-osadmin` cancels it too.
+  `LocalService.LocalCancelFactoryReset`. The request lives in accessd's memory only, so a reboot or
+  a restart of `sneakers-accessd` cancels it too.
 - **Init checks it too.** The last approval arms init (`Power.ArmFactoryReset`), which checks the
   approvals against the access store's roster itself; if it refuses (`RESET_QUORUM`), the approval
   isn't counted and no countdown starts. A cancel reaches init as well.
@@ -185,12 +187,89 @@ A factory reset from :8443 needs a quorum of appliance admins, M of N, never one
 Every step is in the OS audit log: `power.factory-reset.start`, `.approve`, `.cancel`, `.expire` and
 `.run`.
 
+## accessd
+
+`sneakers-accessd` is the root service that owns access: the access store, the sign-in codes and the
+:8443 sessions, the OS audit log, and the files rendered from the store. It also runs the :8443 API's
+backend, so `sneakers-osadmin` runs as the unprivileged `osadmin` user and holds no session, key or
+store. Both are in init's service table (`os/rootfs/services.d/`):
+
+| Service | Runs as | Phases | Restart |
+|---|---|---|---|
+| `accessd` (`/usr/bin/sneakers-accessd`) | root | firstboot, normal | always |
+| `osadmin` (`/usr/bin/sneakers-osadmin`) | `osadmin` (uid 102) | firstboot (on demand, at its setup step), normal | always, after accessd is ready |
+
+### access.sock
+
+accessd serves `/run/sneakers/access.sock` (mode 0666; the protos are
+`proto/sneakers/appliance/access/v1/access.proto`). Every connection's peer is read with
+`SO_PEERCRED`, and the peer uid is the caller's identity, never a field the client sends. Any other
+uid is refused before a byte is read.
+
+| Peer | Gets | As |
+|---|---|---|
+| root | every method of `AccessService`, `NetworkService`, `SetupService` and `ElevationService`, and `LocalService` | the console, an owner named `console` |
+| an admin uid (a closed-shell login) | the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, elevation request/status/cert, and `LocalService` | that admin, with that admin's role |
+| `osadmin` | the :8443 API (`sneakers.appliance.osadmin.v1`), the upload and the audit export, and `BindingService` | the signed-in admin of the session each call carries |
+
+- The console-only methods (`AddRecoveryKey`, `ResetAllowList`, `Complete`, `ApproveElevation`,
+  `DenyElevation`) refuse an admin uid with `ACCESS_FORBIDDEN`, even an owner's.
+- A uid in the admin range with no admin behind it is refused (`ACCESS_FORBIDDEN`).
+- A closed-shell login sends the fingerprint of the key sshd says signed it in
+  (`Sneakers-Key-Fingerprint`) and its SSH client address (`Sneakers-Source`), for the audit entry.
+  A fingerprint that isn't one of that admin's keys is refused.
+- For `osadmin`, accessd checks the session cookie, the CSRF token, the role and the step-up of
+  every call itself; a call with no valid session is `ACCESS_SESSION`. The browser's address comes
+  from `Sneakers-Client-Address`, which accessd reads from the `osadmin` uid only.
+- Every local call is checked against the same per-method role as on :8443 and written to the OS
+  audit log with the `ssh` or `console` surface.
+
+### What accessd renders
+
+On start and after every change to the store, accessd writes:
+
+- `/run/sneakers/accounts/{passwd,group,shadow}` and the empty homes under `/run/sneakers/home/`;
+- `/run/sneakers/ssh/`: `sshd_config` (listening on netd's management addresses, link-local ones
+  left out; enrol mode until an owner has a key, then admin mode), `authorized_keys/<admin>` and
+  `principals/maint`. It renders into a new directory, has the pinned sshd check it (`sshd -t`), and
+  swaps it in whole; a config sshd refuses is never swapped in. When `sshd_config` changed (a new or
+  removed admin, new addresses) it sends sshd a `SIGHUP`; a key change needs none, since sshd reads
+  the key files at each login.
+
+It also creates `/var/lib/sneakers/osadmin/` owned by `osadmin` (the :8443 certificate) and the
+root-only `/var/lib/sneakers/osadmin-api/` (the update policy, history and uploads, and the disk
+samples).
+
+### The update key
+
+The `.bin` decryption key is read from the running UKI on each use, in accessd (root), and never
+written to disk. The upgrades design gives it to `sneakers-upgraded`, which isn't on the box yet;
+it moves there when that lands.
+
+### When accessd is down
+
+- Logins still authenticate: sshd uses the files accessd rendered, which stay in `/run`.
+- The closed shell's accessd commands say the appliance services are unavailable, and `status`
+  shows the last status accessd kept (`/run/sneakers/access/status.json`, refreshed every minute and
+  on every status call) with the time it was taken.
+- :8443 answers every call with Connect `unavailable` and the same sentence. Status, for a browser
+  accessd accepted in the last 8 hours, gets the last status `sneakers-osadmin` saw (or the file),
+  with an `accessd` health entry saying it's down.
+- Init restarts accessd (`restart: always`).
+
+Elevation, the user CA and the enrolment window are accessd's in the design; they aren't built
+yet, so `ElevationService` answers "Not available in this release".
+
+Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`, `--init-socket`,
+`--netd-socket`, `--esp` (`/run/sneakers/esp`) and `--sshd` (`/usr/sbin/sshd`).
+
 ## Running sneakers-osadmin
 
-`sneakers-osadmin` reads the management addresses and host name from netd, makes or reuses its
-certificate in `/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when netd
-reports new addresses or a new host name it rebinds with a matching certificate, keeping the
-sessions. Until accessd lands it opens the access store and the OS audit log itself. Flags:
-`--state` (`/var/lib/sneakers`), `--assets` (`/usr/share/sneakers/osadmin`), `--init-socket`,
-`--netd-socket` and `--socket` (`/run/sneakers/osadmin.sock`). `LOG_LEVEL` and `LOG_FORMAT` set the
-logging; the defaults are `error` and JSON.
+`sneakers-osadmin` runs as `osadmin` and refuses to run as root. It asks accessd for the management
+addresses and host name (`BindingService.GetBinding`, from netd), makes or reuses its certificate in
+`/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when the addresses or the host
+name change it rebinds with a matching certificate. It serves the static pages and forwards the API,
+`POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Flags:
+`--state` (`/var/lib/sneakers`), `--assets` (`/usr/share/sneakers/osadmin`) and `--access-socket`
+(`/run/sneakers/access.sock`). `LOG_LEVEL` and `LOG_FORMAT` set the logging; the defaults are
+`error` and JSON.

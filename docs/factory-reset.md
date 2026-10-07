@@ -13,7 +13,7 @@ connection's peer is read with `SO_PEERCRED`, and init reads the peer's program 
 
 | Program | Reboot, power-off | Arm, cancel, run a factory reset |
 |---|---|---|
-| `/usr/bin/sneakers-osadmin` | yes | yes |
+| `/usr/bin/sneakers-accessd` (the :8443 API's backend) | yes | yes |
 | `/usr/bin/sneakers-shell` as root (the console) or as an admin uid | yes | no |
 | anything else | `POWER_CALLER` | `POWER_CALLER` |
 

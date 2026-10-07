@@ -73,8 +73,9 @@ stops and reports the table's on-demand services.
 `PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also
 served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits
 root and the admin uids, so the
-closed shell's logins can reboot. On both sockets it answers only `sneakers-osadmin` and
-`sneakers-shell`, told apart by the peer's executable, and the factory reset only osadmin. See
+closed shell's logins can reboot. On both sockets it answers only `sneakers-accessd` (the :8443
+API's backend; `sneakers-osadmin` runs unprivileged and can't reach either socket) and
+`sneakers-shell`, told apart by the peer's executable, and the factory reset only accessd. See
 [factory-reset.md](factory-reset.md) for what each request does.
 
 ## PID 1
