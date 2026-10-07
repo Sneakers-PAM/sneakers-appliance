@@ -1,0 +1,120 @@
+# The appliance admin API
+
+`sneakers-osadmin` serves the :8443 appliance admin: the static admin pages and a Connect API
+(gRPC, gRPC-Web and JSON over HTTP) generated from `proto/sneakers/appliance/osadmin/v1`. Sign-in,
+sessions, roles and step-up are described in [access.md](access.md#the-8443-sign-in).
+
+## Calling it
+
+- **Transport.** HTTPS on port 8443 of each management address only, with the box's own certificate
+  (ECDSA P-256, self-signed, names = the host name and the management addresses). Check its
+  SHA-256 fingerprint against the console on the first visit.
+- **Session.** The `__Host-osadmin-session` cookie, set by `SignInService.PollSignIn` once the code
+  is approved over SSH.
+- **CSRF.** Every call that changes something sends the session's `csrf_token` in the
+  `X-CSRF-Token` header. Reads (`NO_SIDE_EFFECTS` in the proto, also callable with Connect's GET)
+  don't need it.
+- **Errors.** Coded errors start with their symbol ([errors.md](errors.md)):
+  `ACCESS_SESSION` is `unauthenticated`; `ACCESS_FORBIDDEN` and `ACCESS_STEPUP_REQUIRED` are
+  `permission_denied`; a refused key, name, confirmation or network setting is `invalid_argument`;
+  the other refusals are `failed_precondition`. A service whose backend isn't on the box yet answers
+  `unimplemented` with "Not available in this release", and its page says so.
+- **Rules.** Each method carries a `(sneakers.appliance.osadmin.v1.rule)` option: the least role,
+  whether it needs a step-up, and the OS audit action written for every call, allowed or refused.
+  osadmin enforces the rule from the descriptor; a method without one is refused.
+
+## Other endpoints
+
+| Endpoint | What it does |
+|---|---|
+| `GET /export/audit-log` | the whole OS audit log as written (JSON lines, oldest first), so the chain verifies off the box; needs a session, audited as `audit.export` |
+| `GET /` and anything else | the admin pages, with the page routes falling back to `index.html` |
+
+Every response carries `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri
+'none'; form-action 'self'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer` and `Cache-Control: no-store`.
+
+## Methods
+
+Role `public` needs no session; `admin` is any signed-in admin; `owner` only an owner. Step-up means
+a sign-in from the last 5 minutes.
+
+### Available in this release
+
+| Method | Role | Step-up | Audit action |
+|---|---|---|---|
+| `SignInService.BeginSignIn` | public | no | |
+| `SignInService.PollSignIn` | public | no | |
+| `SignInService.GetSession` | admin | no | |
+| `SignInService.SignOut` | admin | no | `signin.signout` |
+| `StatusService.GetStatus` | admin | no | |
+| `StatusService.SetSecureBoot` | owner | yes | `status.secure-boot.set` |
+| `SetupService.GetSetup` | admin | no | |
+| `SetupService.AddRecoveryKey` | owner | yes | `setup.recovery-key.add` |
+| `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |
+| `SetupService.DownloadEscrow` | owner | no | `setup.escrow.download` |
+| `SetupService.AcknowledgeSingleAdmin` | owner | no | `setup.single-admin.acknowledge` |
+| `SetupService.Finish` | owner | yes | `setup.finish` |
+| `AccessService.ListAdmins` | admin | no | |
+| `AccessService.AddAdmin` | owner | yes | `access.admin.add` |
+| `AccessService.RemoveAdmin` | owner | yes | `access.admin.remove` |
+| `AccessService.SetRole` | owner | yes | `access.admin.role` |
+| `AccessService.AddKey` | admin | yes | `access.key.add` |
+| `AccessService.RemoveKey` | admin | yes | `access.key.remove` |
+| `AccessService.SetElevationPolicy` | owner | yes | `access.elevation-policy.set` |
+| `AccessService.SetQuorum` | owner | yes | `access.quorum.set` |
+| `NetworkService.GetNetwork` | admin | no | |
+| `NetworkService.SetNetwork` | owner | yes | `network.set` |
+| `NetworkService.ConfirmNetwork` | owner | no | `network.confirm` |
+| `NetworkService.RunChecks` | admin | no | |
+| `AuditService.ListEvents` | admin | no | |
+| `PowerService.GetPower` | admin | no | |
+| `PowerService.Reboot` | admin | yes | `power.reboot` |
+| `PowerService.Shutdown` | admin | yes | `power.shutdown` |
+| `PowerService.StartFactoryReset` | owner | yes | `power.factory-reset.start` |
+| `PowerService.ApproveFactoryReset` | admin | yes | `power.factory-reset.approve` |
+| `PowerService.CancelFactoryReset` | admin | no | `power.factory-reset.cancel` |
+
+`AccessService.SetQuorum` and `PowerService`'s forced power and factory reset answer "Not available
+in this release" until the quorum lands.
+
+### Not available in this release
+
+The pages for these services show "Not available in this release" until their backends ship.
+
+| Method | Role | Step-up | Audit action |
+|---|---|---|---|
+| `ElevationService.ListElevations` | admin | no | |
+| `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
+| `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
+| `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
+| `TlsService.GetTls` | admin | no | |
+| `TlsService.CreateCsr` | admin | no | `tls.csr.create` |
+| `TlsService.UploadCertificate` | admin | yes | `tls.certificate.upload` |
+| `TlsService.SetAdminCertificate` | owner | yes | `tls.admin-certificate.set` |
+| `McpService.GetMcp` | admin | no | |
+| `McpService.SetMcp` | admin | yes | `mcp.set` |
+| `BackupService.GetBackups` | admin | no | |
+| `BackupService.SetBackupPolicy` | admin | yes | `backup.policy.set` |
+| `BackupService.RunBackup` | admin | no | `backup.run` |
+| `BackupService.Restore` | owner | yes | `backup.restore` |
+| `UpgradeService.GetUpgrades` | admin | no | |
+| `UpgradeService.FetchUpdate` | admin | no | `upgrade.fetch` |
+| `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
+| `UpgradeService.ApplyUpdate` | owner | yes | `upgrade.apply` |
+| `UpgradeService.RevertUpdate` | owner | yes | `upgrade.revert` |
+| `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
+| `ModulesService.ListModules` | admin | no | |
+| `ModulesService.AddModule` | owner | yes | `modules.add` |
+
+## The local socket
+
+`/run/sneakers/osadmin.sock` serves `LocalService` to the closed shell and the console. Every
+connection's peer is read with `SO_PEERCRED`: root and admin uids (20000 and up) are let in, anyone
+else is closed before a byte is read. Root may act as any admin; an admin uid only as itself.
+
+| Method | What it does |
+|---|---|
+| `LocalService.DescribeSignIn` | the browser's address, user agent and expiry for a code, for the approval prompt |
+| `LocalService.ApproveSignIn` | binds the waiting browser to the admin and the key fingerprint that authenticated the SSH session; audited as `signin.approve` with the browser's address and user agent |
+| `LocalService.LocalCancelFactoryReset` | stops a factory reset during its delay (the console); not available in this release |
