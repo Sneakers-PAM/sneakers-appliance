@@ -123,8 +123,9 @@ type Options struct {
 	// Elevated is the certificate's force-command; empty is
 	// DefaultElevated.
 	Elevated string
-	// Maintenance reports an upgrade between its snapshot and MarkGood,
-	// which blocks approvals; nil is never.
+	// Maintenance reports an update being applied (sneakers-osadmin's
+	// apply or revert, until the box reboots), which refuses new requests,
+	// approvals and first connections; nil is never.
 	Maintenance func() bool
 	// Signal asks an active session's sneakers-elevated to end (SIGTERM).
 	Signal func(pid int) error
@@ -134,7 +135,10 @@ type Options struct {
 	// OnChange is called after the open principals or the revocation list
 	// changed, outside the service's lock.
 	OnChange func()
-	Logger   log.Logger
+	// RevokedKeys are the login keys already revoked when the service
+	// opens (the access store's), so the first list written has them.
+	RevokedKeys []ssh.PublicKey
+	Logger      log.Logger
 }
 
 type file struct {
@@ -148,6 +152,8 @@ type Service struct {
 
 	mu  sync.Mutex
 	cur file
+	// revokedKeys are the removed login keys, also on the revocation list.
+	revokedKeys []ssh.PublicKey
 }
 
 // Open loads the requests and the user CA, making the CA, the serial
@@ -166,7 +172,7 @@ func Open(o Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Service{o: o, ca: ca}
+	s := &Service{o: o, ca: ca, revokedKeys: slices.Clone(o.RevokedKeys)}
 	b, err := os.ReadFile(o.StateFile)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -201,6 +207,9 @@ func (s *Service) Request(st access.State, c Caller, reason string, minutes int)
 }
 
 func (s *Service) request(st access.State, c Caller, reason string, minutes int) (Request, error) {
+	if s.maintenance() {
+		return Request{}, codes.New(codes.ElevMaintenance, "an update is being applied; ask again once it has finished")
+	}
 	if strings.TrimSpace(reason) == "" {
 		return Request{}, codes.New(codes.ShellParse, "give a reason: shell --reason \"...\"")
 	}
@@ -270,8 +279,8 @@ func (s *Service) approve(st access.State, approver, id string, minutes int) (Re
 	if r.State != Pending {
 		return Request{}, codes.New(codes.ElevUsed, "%s was already %s", id, r.State)
 	}
-	if s.o.Maintenance != nil && s.o.Maintenance() {
-		return Request{}, codes.New(codes.ElevMaintenance, "an upgrade is in progress; approve once it has finished")
+	if s.maintenance() {
+		return Request{}, codes.New(codes.ElevMaintenance, "an update is being applied; approve once it has finished")
 	}
 	self := false
 	by := approver
@@ -451,6 +460,9 @@ func (s *Service) begin(certificate string, pid int) (Request, time.Time, error)
 	c, ok := pk.(*ssh.Certificate)
 	if !ok || c.SignatureKey == nil || !slices.Equal(c.SignatureKey.Marshal(), s.ca.PublicKey().Marshal()) {
 		return Request{}, time.Time{}, codes.New(codes.ElevUnknown, "the login's certificate isn't one of this box's elevation certificates")
+	}
+	if s.maintenance() {
+		return Request{}, time.Time{}, codes.New(codes.ElevMaintenance, "an update is being applied; connect again once it has finished")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -699,11 +711,32 @@ func (s *Service) save(next file) error {
 	return s.writeKRL()
 }
 
-// writeKRL writes the revocation list from the current requests. Caller
-// holds mu (or is Open).
+// RevokeLoginKeys writes the revocation list with st's revoked login keys:
+// the access store's Revoke, run inside its write.
+func (s *Service) RevokeLoginKeys(st access.State) error {
+	keys, err := st.RevokedPublicKeys()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := s.revokedKeys
+	s.revokedKeys = keys
+	if err := s.writeKRL(); err != nil {
+		s.revokedKeys = prev
+		return err
+	}
+	if len(keys) != len(prev) {
+		s.o.Logger.Info("elevation: revocation list written", log.F("loginKeys", len(keys)), log.F("serials", len(s.revoked())))
+	}
+	return nil
+}
+
+// writeKRL writes the revocation list from the current requests and the
+// revoked login keys. Caller holds mu (or is Open).
 func (s *Service) writeKRL() error {
 	revoked := s.revoked()
-	krl := MarshalKRL(s.ca.PublicKey(), revoked, uint64(len(revoked)), s.now())
+	krl := MarshalKRL(s.ca.PublicKey(), revoked, s.revokedKeys, uint64(len(revoked)+len(s.revokedKeys)), s.now())
 	if err := writeFile(filepath.Join(s.o.SSHDir, RevokedFile), krl, 0o644); err != nil {
 		return fmt.Errorf("elevation: revocation list: %w", err)
 	}
@@ -754,6 +787,10 @@ func (s *Service) newID() string {
 		}
 	}
 }
+
+// maintenance reports an update being applied, which blocks new elevated
+// shells.
+func (s *Service) maintenance() bool { return s.o.Maintenance != nil && s.o.Maintenance() }
 
 func (s *Service) now() time.Time { return s.o.Clock.Now().UTC().Truncate(time.Second) }
 

@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 )
 
@@ -97,5 +98,81 @@ func TestAnEmptyRevocationListParses(t *testing.T) {
 	}
 	if out, err := keygen(t, bin, "-Q", "-f", filepath.Join(f.dir, "ssh", elevation.RevokedFile), file); err != nil {
 		t.Fatalf("%v %s", err, out)
+	}
+}
+
+// writeKey writes k as a .pub file and returns its path.
+func writeKey(t *testing.T, k ssh.PublicKey) string {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "key.pub")
+	if err := os.WriteFile(file, ssh.MarshalAuthorizedKey(k), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return file
+}
+
+// A removed login key is on the list sshd reads, whatever its authorized
+// keys file still says, beside the used certificates' serials.
+func TestOpenSSHSeesRevokedLoginKeys(t *testing.T) {
+	bin := sshKeygen(t)
+	f := newFixture(t, "alice")
+	used := f.request("bob", 30)
+	ua, err := f.svc.Approve(f.st, "alice", used.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.svc.Begin(ua.Certificate, 1); err != nil {
+		t.Fatal(err)
+	}
+	st := f.st.Clone()
+	gone := st.Admins[0].Keys[0]
+	st.RevokedKeys = []access.RevokedKey{{Fingerprint: gone.Fingerprint, PublicKey: gone.PublicKey, Admin: st.Admins[0].Name}}
+	if err := f.svc.RevokeLoginKeys(st); err != nil {
+		t.Fatal(err)
+	}
+	krl := filepath.Join(f.dir, "ssh", elevation.RevokedFile)
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["alice"])); err == nil || !strings.Contains(out, "REVOKED") {
+		t.Fatalf("the removed key isn't revoked: %v %s", err, out)
+	}
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["bob"])); err != nil || strings.Contains(out, "REVOKED") {
+		t.Fatalf("a kept key is revoked: %v %s", err, out)
+	}
+	usedFile := filepath.Join(t.TempDir(), "used-cert.pub")
+	if err := os.WriteFile(usedFile, []byte(ua.Certificate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := keygen(t, bin, "-Q", "-f", krl, usedFile); err == nil || !strings.Contains(out, "REVOKED") {
+		t.Fatalf("the used certificate's serial left the list: %v %s", err, out)
+	}
+
+	// Every later write of the list keeps the key, and un-revoking drops it.
+	f.request("bob", 30)
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["alice"])); err == nil || !strings.Contains(out, "REVOKED") {
+		t.Fatalf("a later write dropped the key: %v %s", err, out)
+	}
+	st.RevokedKeys = nil
+	if err := f.svc.RevokeLoginKeys(st); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["alice"])); err != nil || strings.Contains(out, "REVOKED") {
+		t.Fatalf("an un-revoked key is still revoked: %v %s", err, out)
+	}
+}
+
+// accessd opens the service before the store: the keys already revoked go
+// on the very first list it writes.
+func TestTheFirstListCarriesTheKeysAlreadyRevoked(t *testing.T) {
+	bin := sshKeygen(t)
+	f := newFixture(t, "alice")
+	dir := t.TempDir()
+	if _, err := elevation.Open(elevation.Options{
+		SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"),
+		RevokedKeys: []ssh.PublicKey{f.keys["bob"]},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	krl := filepath.Join(dir, "ssh", elevation.RevokedFile)
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["bob"])); err == nil || !strings.Contains(out, "REVOKED") {
+		t.Fatalf("not revoked: %v %s", err, out)
 	}
 }

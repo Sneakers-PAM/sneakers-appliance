@@ -65,6 +65,7 @@ a sign-in from the last 5 minutes.
 | `AccessService.SetRole` | owner | yes | `access.admin.role` |
 | `AccessService.AddKey` | admin | yes | `access.key.add` |
 | `AccessService.RemoveKey` | admin | yes | `access.key.remove` |
+| `AccessService.UnrevokeKey` | owner | yes | `access.key.unrevoke` |
 | `AccessService.SetElevationPolicy` | owner | yes | `access.elevation-policy.set` |
 | `AccessService.SetQuorum` | owner | yes | `access.quorum.set` |
 | `NetworkService.GetNetwork` | admin | no | |

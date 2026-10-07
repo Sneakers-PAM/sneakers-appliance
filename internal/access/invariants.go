@@ -46,6 +46,9 @@ func Check(s State, step3Done, step4Done bool) error {
 			if who, dup := seen[parsed.Fingerprint]; dup {
 				return codes.New(codes.AccessKeyDuplicate, "key %s is already a key of %s", parsed.Fingerprint, who)
 			}
+			if s.revoked(parsed.Fingerprint) {
+				return codes.New(codes.AccessKeyRevoked, "key %s was removed and is revoked; an owner must un-revoke it before it's added again", parsed.Fingerprint)
+			}
 			seen[parsed.Fingerprint] = "admin " + a.Name
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -56,6 +57,8 @@ type fakeNetd struct {
 	mu       sync.Mutex
 	settings *netdv1.Settings
 	mgmt     []string
+	// down makes Status fail, so sshd's files can't be rendered.
+	down bool
 }
 
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
@@ -74,6 +77,9 @@ func (n *fakeNetd) Set(_ context.Context, r *connect.Request[netdv1.SetRequest])
 func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest]) (*connect.Response[netdv1.StatusResponse], error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.down {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("netd is down"))
+	}
 	return connect.NewResponse(&netdv1.StatusResponse{ManagementAddresses: n.mgmt, Hostname: "box1.sneakers.example.org", NtpSynced: true}), nil
 }
 
@@ -159,7 +165,7 @@ func newBox(t *testing.T) *box {
 		AuditDir:   b.log.Dir(),
 	})
 	b.d = d
-	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return true, false }, OnChange: b.d.Changed})
+	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return true, false }, OnChange: b.d.Changed, Revoke: b.elev.RevokeLoginKeys})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -58,6 +58,15 @@ service AccessService {
       audit: "access.key.remove"
     };
   }
+  // UnrevokeKey takes a removed login key off sshd's revocation list, so it
+  // can be added to an admin again.
+  rpc UnrevokeKey(UnrevokeKeyRequest) returns (UnrevokeKeyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "access.key.unrevoke"
+    };
+  }
   rpc SetElevationPolicy(SetElevationPolicyRequest) returns (SetElevationPolicyResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -98,6 +107,16 @@ message Admin {
   google.protobuf.Timestamp approval_hold_until = 7;
 }
 
+// RevokedKey is a removed login key, on sshd's revocation list until an
+// owner un-revokes it.
+message RevokedKey {
+  string fingerprint = 1;
+  string type = 2;
+  // admin is who the key belonged to.
+  string admin = 3;
+  google.protobuf.Timestamp revoked = 4;
+}
+
 message HostKey {
   string type = 1;
   string fingerprint = 2;
@@ -127,6 +146,7 @@ message ListAdminsResponse {
   repeated HostKey host_keys = 2;
   ElevationPolicy elevation_policy = 3;
   Quorum quorum = 4;
+  repeated RevokedKey revoked_keys = 5;
 }
 
 message AddAdminRequest {
@@ -168,6 +188,12 @@ message RemoveKeyRequest {
 }
 
 message RemoveKeyResponse {}
+
+message UnrevokeKeyRequest {
+  string fingerprint = 1;
+}
+
+message UnrevokeKeyResponse {}
 
 message SetElevationPolicyRequest {
   ElevationPolicy policy = 1;

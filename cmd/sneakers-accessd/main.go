@@ -88,20 +88,35 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		return err
 	}
 	var d *accessd.Server
+	var api *osadmin.Server
 	rerender := func() {
 		if d != nil {
 			d.Rerender()
 		}
 	}
+	// The keys the store already revoked go on the first revocation list
+	// the elevation service writes; from then on the store's every write
+	// rewrites it (access.Options.Revoke).
+	stored, err := access.ReadState(filepath.Join(c.state, "access"))
+	if err != nil {
+		return err
+	}
+	revokedKeys, err := stored.RevokedPublicKeys()
+	if err != nil {
+		return err
+	}
 	// The user CA is generated here at first boot and kept on the state
 	// volume, 0600 root: the interim until init's KeyCustody.Seal is served
 	// and the CA moves into it (docs/ssh-and-elevation.md).
 	elev, err := elevation.Open(elevation.Options{
-		SSHDir:    paths.SSHDir(),
-		StateFile: filepath.Join(c.state, "access", "elevation.json"),
-		Audit:     audit,
-		Logger:    lg,
-		OnChange:  rerender,
+		RevokedKeys: revokedKeys,
+		SSHDir:      paths.SSHDir(),
+		StateFile:   filepath.Join(c.state, "access", "elevation.json"),
+		Audit:       audit,
+		Logger:      lg,
+		OnChange:    rerender,
+		// An update being applied or reverted refuses new elevated shells.
+		Maintenance: func() bool { return api != nil && api.Maintenance() },
 		Signal: func(pid int) error {
 			return accessd.SignalElevated(pid, func(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) })
 		},
@@ -119,11 +134,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		AuditDir:   audit.Dir(),
 		Logger:     lg,
 	})
-	var api *osadmin.Server
 	store, err := access.Open(filepath.Join(c.state, "access"), access.Options{
 		Stage:    func() (bool, bool) { return true, api != nil && api.SetupDone() },
 		Logger:   lg,
 		OnChange: d.Changed,
+		Revoke:   elev.RevokeLoginKeys,
 	})
 	if err != nil {
 		return err
