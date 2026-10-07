@@ -31,7 +31,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	netns.RunHelpers(map[string]func() error{"router": netns.RouterHelper, "box": boxHelper})
+	netns.RunHelpers(map[string]func() error{"router": netns.RouterHelper, "box": boxHelper, "links": linksHelper})
 	os.Exit(m.Run())
 }
 
@@ -42,6 +42,18 @@ type labSys struct {
 	netd.Linux
 	mu   sync.Mutex
 	host string
+}
+
+// Links marks the lab's eth* veth ends as the box's NICs: a veth has no
+// bus, and netd only takes NICs that do.
+func (l *labSys) Links() ([]netd.Link, error) {
+	links, err := l.Linux.Links()
+	for i := range links {
+		if strings.HasPrefix(links[i].Name, "eth") {
+			links[i].Bus = "lab/" + links[i].Name
+		}
+	}
+	return links, err
 }
 
 func (l *labSys) SetHostname(name string) error {
@@ -93,6 +105,51 @@ func boxHelper() error {
 	defer func() { _ = srv.Close() }()
 	<-ctx.Done()
 	return nil
+}
+
+// linksHelper prints the namespace's interfaces as the real Linux system
+// reads them.
+func linksHelper() error {
+	links, err := netd.Linux{}.Links()
+	if err != nil {
+		return err
+	}
+	return json.NewEncoder(os.Stdout).Encode(links)
+}
+
+// The interfaces k0s and the CNI make have no bus, so netd never takes
+// one for the management interface.
+func TestVirtualInterfacesHaveNoBus(t *testing.T) {
+	l := netns.New(t)
+	b, r := l.NS("b"), l.NS("r")
+	l.Link(b, "eth0", r, "lan0")
+	l.IP(b, "link", "add", "dummy0", "type", "dummy")
+	l.IP(b, "link", "add", "cni0", "type", "bridge")
+	l.IP(b, "link", "add", "kube-bridge", "type", "bridge")
+	l.IP(b, "link", "add", "veth1a2b", "type", "veth", "peer", "name", "veth1a2c")
+	for _, n := range []string{"dummy0", "cni0", "kube-bridge", "veth1a2b", "veth1a2c"} {
+		l.IP(b, "link", "set", n, "up")
+	}
+	out, err := l.Run(b, "links")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	var links []netd.Link
+	if err := json.Unmarshal([]byte(out), &links); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	seen := map[string]bool{}
+	for _, k := range links {
+		seen[k.Name] = true
+		if k.Physical() {
+			t.Errorf("%s has a bus %q", k.Name, k.Bus)
+		}
+	}
+	for _, n := range []string{"lo", "eth0", "dummy0", "cni0", "kube-bridge", "veth1a2b", "veth1a2c"} {
+		if !seen[n] {
+			t.Errorf("%s isn't listed: %v", n, links)
+		}
+	}
 }
 
 type netdLab struct {

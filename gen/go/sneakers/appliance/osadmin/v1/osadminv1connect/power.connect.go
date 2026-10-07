@@ -53,6 +53,11 @@ const (
 	// PowerServiceCancelFactoryResetProcedure is the fully-qualified name of the PowerService's
 	// CancelFactoryReset RPC.
 	PowerServiceCancelFactoryResetProcedure = "/sneakers.appliance.osadmin.v1.PowerService/CancelFactoryReset"
+	// PowerServiceListSessionsProcedure is the fully-qualified name of the PowerService's ListSessions
+	// RPC.
+	PowerServiceListSessionsProcedure = "/sneakers.appliance.osadmin.v1.PowerService/ListSessions"
+	// PowerServiceEndSessionProcedure is the fully-qualified name of the PowerService's EndSession RPC.
+	PowerServiceEndSessionProcedure = "/sneakers.appliance.osadmin.v1.PowerService/EndSession"
 )
 
 // PowerServiceClient is a client for the sneakers.appliance.osadmin.v1.PowerService service.
@@ -73,6 +78,12 @@ type PowerServiceClient interface {
 	ApproveFactoryReset(context.Context, *connect.Request[v1.ApproveFactoryResetRequest]) (*connect.Response[v1.ApproveFactoryResetResponse], error)
 	// CancelFactoryReset stops a request or its countdown; any admin may.
 	CancelFactoryReset(context.Context, *connect.Request[v1.CancelFactoryResetRequest]) (*connect.Response[v1.CancelFactoryResetResponse], error)
+	// ListSessions lists every live session on the box: the :8443 browsers,
+	// the SSH closed shells and the elevated shells, oldest first.
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	// EndSession ends one session from ListSessions: a browser is signed
+	// out, an SSH or elevated shell is disconnected.
+	EndSession(context.Context, *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error)
 }
 
 // NewPowerServiceClient constructs a client for the sneakers.appliance.osadmin.v1.PowerService
@@ -123,6 +134,19 @@ func NewPowerServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(powerServiceMethods.ByName("CancelFactoryReset")),
 			connect.WithClientOptions(opts...),
 		),
+		listSessions: connect.NewClient[v1.ListSessionsRequest, v1.ListSessionsResponse](
+			httpClient,
+			baseURL+PowerServiceListSessionsProcedure,
+			connect.WithSchema(powerServiceMethods.ByName("ListSessions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		endSession: connect.NewClient[v1.EndSessionRequest, v1.EndSessionResponse](
+			httpClient,
+			baseURL+PowerServiceEndSessionProcedure,
+			connect.WithSchema(powerServiceMethods.ByName("EndSession")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -134,6 +158,8 @@ type powerServiceClient struct {
 	startFactoryReset   *connect.Client[v1.StartFactoryResetRequest, v1.StartFactoryResetResponse]
 	approveFactoryReset *connect.Client[v1.ApproveFactoryResetRequest, v1.ApproveFactoryResetResponse]
 	cancelFactoryReset  *connect.Client[v1.CancelFactoryResetRequest, v1.CancelFactoryResetResponse]
+	listSessions        *connect.Client[v1.ListSessionsRequest, v1.ListSessionsResponse]
+	endSession          *connect.Client[v1.EndSessionRequest, v1.EndSessionResponse]
 }
 
 // GetPower calls sneakers.appliance.osadmin.v1.PowerService.GetPower.
@@ -166,6 +192,16 @@ func (c *powerServiceClient) CancelFactoryReset(ctx context.Context, req *connec
 	return c.cancelFactoryReset.CallUnary(ctx, req)
 }
 
+// ListSessions calls sneakers.appliance.osadmin.v1.PowerService.ListSessions.
+func (c *powerServiceClient) ListSessions(ctx context.Context, req *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return c.listSessions.CallUnary(ctx, req)
+}
+
+// EndSession calls sneakers.appliance.osadmin.v1.PowerService.EndSession.
+func (c *powerServiceClient) EndSession(ctx context.Context, req *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error) {
+	return c.endSession.CallUnary(ctx, req)
+}
+
 // PowerServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.PowerService
 // service.
 type PowerServiceHandler interface {
@@ -185,6 +221,12 @@ type PowerServiceHandler interface {
 	ApproveFactoryReset(context.Context, *connect.Request[v1.ApproveFactoryResetRequest]) (*connect.Response[v1.ApproveFactoryResetResponse], error)
 	// CancelFactoryReset stops a request or its countdown; any admin may.
 	CancelFactoryReset(context.Context, *connect.Request[v1.CancelFactoryResetRequest]) (*connect.Response[v1.CancelFactoryResetResponse], error)
+	// ListSessions lists every live session on the box: the :8443 browsers,
+	// the SSH closed shells and the elevated shells, oldest first.
+	ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error)
+	// EndSession ends one session from ListSessions: a browser is signed
+	// out, an SSH or elevated shell is disconnected.
+	EndSession(context.Context, *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error)
 }
 
 // NewPowerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -231,6 +273,19 @@ func NewPowerServiceHandler(svc PowerServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(powerServiceMethods.ByName("CancelFactoryReset")),
 		connect.WithHandlerOptions(opts...),
 	)
+	powerServiceListSessionsHandler := connect.NewUnaryHandler(
+		PowerServiceListSessionsProcedure,
+		svc.ListSessions,
+		connect.WithSchema(powerServiceMethods.ByName("ListSessions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	powerServiceEndSessionHandler := connect.NewUnaryHandler(
+		PowerServiceEndSessionProcedure,
+		svc.EndSession,
+		connect.WithSchema(powerServiceMethods.ByName("EndSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.PowerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PowerServiceGetPowerProcedure:
@@ -245,6 +300,10 @@ func NewPowerServiceHandler(svc PowerServiceHandler, opts ...connect.HandlerOpti
 			powerServiceApproveFactoryResetHandler.ServeHTTP(w, r)
 		case PowerServiceCancelFactoryResetProcedure:
 			powerServiceCancelFactoryResetHandler.ServeHTTP(w, r)
+		case PowerServiceListSessionsProcedure:
+			powerServiceListSessionsHandler.ServeHTTP(w, r)
+		case PowerServiceEndSessionProcedure:
+			powerServiceEndSessionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -276,4 +335,12 @@ func (UnimplementedPowerServiceHandler) ApproveFactoryReset(context.Context, *co
 
 func (UnimplementedPowerServiceHandler) CancelFactoryReset(context.Context, *connect.Request[v1.CancelFactoryResetRequest]) (*connect.Response[v1.CancelFactoryResetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.PowerService.CancelFactoryReset is not implemented"))
+}
+
+func (UnimplementedPowerServiceHandler) ListSessions(context.Context, *connect.Request[v1.ListSessionsRequest]) (*connect.Response[v1.ListSessionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.PowerService.ListSessions is not implemented"))
+}
+
+func (UnimplementedPowerServiceHandler) EndSession(context.Context, *connect.Request[v1.EndSessionRequest]) (*connect.Response[v1.EndSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.PowerService.EndSession is not implemented"))
 }

@@ -43,6 +43,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/setup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshsession"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
 )
 
@@ -166,6 +167,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Paths:      paths,
 		CertDir:    paths.OwnDir(),
 		Elevation:  elev,
+		Shells:     &sshsession.Proc{},
 		Logger:     lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,

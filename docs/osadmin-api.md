@@ -79,6 +79,8 @@ a sign-in from the last 5 minutes.
 | `PowerService.StartFactoryReset` | owner | yes | `power.factory-reset.start` |
 | `PowerService.ApproveFactoryReset` | admin | yes | `power.factory-reset.approve` |
 | `PowerService.CancelFactoryReset` | admin | no | `power.factory-reset.cancel` |
+| `PowerService.ListSessions` | admin | no | |
+| `PowerService.EndSession` | owner | yes | `session.end` |
 | `UpgradeService.GetUpgrades` | admin | no | |
 | `UpgradeService.FetchUpdate` | admin | no | `upgrade.fetch` |
 | `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
@@ -90,6 +92,20 @@ a sign-in from the last 5 minutes.
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
 | `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
 | `ElevationService.GetElevationRecording` | owner | no | `elevation.recording.view` |
+
+Sessions: `ListSessions` lists every live session on the box, oldest first, each an
+`ActiveSession` with its `id`, `kind` (`SESSION_KIND_BROWSER` for a signed-in :8443 browser,
+`SESSION_KIND_SSH` for an admin's SSH login to the closed shell, `SESSION_KIND_ELEVATED` for an
+active elevated shell), `admin`, `source_address` and start time (`signed_in`). The SSH sessions
+are read from the process table each time (every `sneakers-shell` process sshd started), and the
+elevated ones from the elevation service once it has swept the sessions whose process is gone, so
+the list is what is running. `GetPower` returns the same list, for the warning before a reboot or
+shutdown. `EndSession` takes an `id` from the list: a browser is signed out at once, an SSH login
+is hung up (the shell gets SIGHUP, the sshd process for its connection SIGTERM, and the shell
+SIGKILL if it is still there 5 seconds later), and an elevated shell is ended as
+`TerminateElevation` ends it. The audit entry's detail records `kind`, `admin` and `source`. A
+browser's `id` is derived from its session and is never its cookie. An `id` that names no live
+session answers `NotFound`.
 
 Shell elevation: `ApproveElevation` signs the requester's certificate and may shorten the request
 (`minutes`, never longer). With two or more owners nobody approves their own request

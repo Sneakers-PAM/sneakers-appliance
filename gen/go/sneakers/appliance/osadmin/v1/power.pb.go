@@ -27,6 +27,62 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SessionKind is what a session is.
+type SessionKind int32
+
+const (
+	SessionKind_SESSION_KIND_UNSPECIFIED SessionKind = 0
+	// SESSION_KIND_BROWSER: a signed-in :8443 browser.
+	SessionKind_SESSION_KIND_BROWSER SessionKind = 1
+	// SESSION_KIND_SSH: an admin's SSH login to the closed shell.
+	SessionKind_SESSION_KIND_SSH SessionKind = 2
+	// SESSION_KIND_ELEVATED: a one-time elevated root shell.
+	SessionKind_SESSION_KIND_ELEVATED SessionKind = 3
+)
+
+// Enum value maps for SessionKind.
+var (
+	SessionKind_name = map[int32]string{
+		0: "SESSION_KIND_UNSPECIFIED",
+		1: "SESSION_KIND_BROWSER",
+		2: "SESSION_KIND_SSH",
+		3: "SESSION_KIND_ELEVATED",
+	}
+	SessionKind_value = map[string]int32{
+		"SESSION_KIND_UNSPECIFIED": 0,
+		"SESSION_KIND_BROWSER":     1,
+		"SESSION_KIND_SSH":         2,
+		"SESSION_KIND_ELEVATED":    3,
+	}
+)
+
+func (x SessionKind) Enum() *SessionKind {
+	p := new(SessionKind)
+	*p = x
+	return p
+}
+
+func (x SessionKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SessionKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_sneakers_appliance_osadmin_v1_power_proto_enumTypes[0].Descriptor()
+}
+
+func (SessionKind) Type() protoreflect.EnumType {
+	return &file_sneakers_appliance_osadmin_v1_power_proto_enumTypes[0]
+}
+
+func (x SessionKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SessionKind.Descriptor instead.
+func (SessionKind) EnumDescriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{0}
+}
+
 // FactoryResetState is where a factory reset is.
 type FactoryResetState int32
 
@@ -64,11 +120,11 @@ func (x FactoryResetState) String() string {
 }
 
 func (FactoryResetState) Descriptor() protoreflect.EnumDescriptor {
-	return file_sneakers_appliance_osadmin_v1_power_proto_enumTypes[0].Descriptor()
+	return file_sneakers_appliance_osadmin_v1_power_proto_enumTypes[1].Descriptor()
 }
 
 func (FactoryResetState) Type() protoreflect.EnumType {
-	return &file_sneakers_appliance_osadmin_v1_power_proto_enumTypes[0]
+	return &file_sneakers_appliance_osadmin_v1_power_proto_enumTypes[1]
 }
 
 func (x FactoryResetState) Number() protoreflect.EnumNumber {
@@ -77,15 +133,19 @@ func (x FactoryResetState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FactoryResetState.Descriptor instead.
 func (FactoryResetState) EnumDescriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{0}
+	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{1}
 }
 
-// ActiveSession is a signed-in :8443 session a power action would end.
+// ActiveSession is a live session a power action would end.
 type ActiveSession struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Admin         string                 `protobuf:"bytes,1,opt,name=admin,proto3" json:"admin,omitempty"`
 	SourceAddress string                 `protobuf:"bytes,2,opt,name=source_address,json=sourceAddress,proto3" json:"source_address,omitempty"`
-	SignedIn      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=signed_in,json=signedIn,proto3" json:"signed_in,omitempty"`
+	// signed_in is when the session started.
+	SignedIn *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=signed_in,json=signedIn,proto3" json:"signed_in,omitempty"`
+	// id names the session for EndSession. It is not the session's cookie.
+	Id            string      `protobuf:"bytes,4,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          SessionKind `protobuf:"varint,5,opt,name=kind,proto3,enum=sneakers.appliance.osadmin.v1.SessionKind" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -139,6 +199,20 @@ func (x *ActiveSession) GetSignedIn() *timestamppb.Timestamp {
 		return x.SignedIn
 	}
 	return nil
+}
+
+func (x *ActiveSession) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ActiveSession) GetKind() SessionKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SessionKind_SESSION_KIND_UNSPECIFIED
 }
 
 type FactoryReset struct {
@@ -789,15 +863,178 @@ func (*CancelFactoryResetResponse) Descriptor() ([]byte, []int) {
 	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{13}
 }
 
+type ListSessionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionsRequest) Reset() {
+	*x = ListSessionsRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionsRequest) ProtoMessage() {}
+
+func (x *ListSessionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionsRequest.ProtoReflect.Descriptor instead.
+func (*ListSessionsRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{14}
+}
+
+type ListSessionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sessions      []*ActiveSession       `protobuf:"bytes,1,rep,name=sessions,proto3" json:"sessions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSessionsResponse) Reset() {
+	*x = ListSessionsResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSessionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSessionsResponse) ProtoMessage() {}
+
+func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
+func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListSessionsResponse) GetSessions() []*ActiveSession {
+	if x != nil {
+		return x.Sessions
+	}
+	return nil
+}
+
+type EndSessionRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is an ActiveSession's id.
+	Id            string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndSessionRequest) Reset() {
+	*x = EndSessionRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndSessionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndSessionRequest) ProtoMessage() {}
+
+func (x *EndSessionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndSessionRequest.ProtoReflect.Descriptor instead.
+func (*EndSessionRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *EndSessionRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type EndSessionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EndSessionResponse) Reset() {
+	*x = EndSessionResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EndSessionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EndSessionResponse) ProtoMessage() {}
+
+func (x *EndSessionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_power_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EndSessionResponse.ProtoReflect.Descriptor instead.
+func (*EndSessionResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP(), []int{17}
+}
+
 var File_sneakers_appliance_osadmin_v1_power_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_power_proto_rawDesc = "" +
 	"\n" +
-	")sneakers/appliance/osadmin/v1/power.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\x85\x01\n" +
+	")sneakers/appliance/osadmin/v1/power.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\xd5\x01\n" +
 	"\rActiveSession\x12\x14\n" +
 	"\x05admin\x18\x01 \x01(\tR\x05admin\x12%\n" +
 	"\x0esource_address\x18\x02 \x01(\tR\rsourceAddress\x127\n" +
-	"\tsigned_in\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bsignedIn\"\xfa\x02\n" +
+	"\tsigned_in\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bsignedIn\x12\x0e\n" +
+	"\x02id\x18\x04 \x01(\tR\x02id\x12>\n" +
+	"\x04kind\x18\x05 \x01(\x0e2*.sneakers.appliance.osadmin.v1.SessionKindR\x04kind\"\xfa\x02\n" +
 	"\fFactoryReset\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12F\n" +
 	"\x05state\x18\x02 \x01(\x0e20.sneakers.appliance.osadmin.v1.FactoryResetStateR\x05state\x12\x1d\n" +
@@ -833,18 +1070,32 @@ const file_sneakers_appliance_osadmin_v1_power_proto_rawDesc = "" +
 	"\rfactory_reset\x18\x01 \x01(\v2+.sneakers.appliance.osadmin.v1.FactoryResetR\ffactoryReset\"+\n" +
 	"\x19CancelFactoryResetRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x1c\n" +
-	"\x1aCancelFactoryResetResponse*|\n" +
+	"\x1aCancelFactoryResetResponse\"\x15\n" +
+	"\x13ListSessionsRequest\"`\n" +
+	"\x14ListSessionsResponse\x12H\n" +
+	"\bsessions\x18\x01 \x03(\v2,.sneakers.appliance.osadmin.v1.ActiveSessionR\bsessions\"#\n" +
+	"\x11EndSessionRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x14\n" +
+	"\x12EndSessionResponse*v\n" +
+	"\vSessionKind\x12\x1c\n" +
+	"\x18SESSION_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14SESSION_KIND_BROWSER\x10\x01\x12\x14\n" +
+	"\x10SESSION_KIND_SSH\x10\x02\x12\x19\n" +
+	"\x15SESSION_KIND_ELEVATED\x10\x03*|\n" +
 	"\x11FactoryResetState\x12#\n" +
 	"\x1fFACTORY_RESET_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bFACTORY_RESET_STATE_PENDING\x10\x01\x12!\n" +
-	"\x1dFACTORY_RESET_STATE_COUNTDOWN\x10\x022\xa1\a\n" +
+	"\x1dFACTORY_RESET_STATE_COUNTDOWN\x10\x022\xb1\t\n" +
 	"\fPowerService\x12v\n" +
 	"\bGetPower\x12..sneakers.appliance.osadmin.v1.GetPowerRequest\x1a/.sneakers.appliance.osadmin.v1.GetPowerResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12}\n" +
 	"\x06Reboot\x12,.sneakers.appliance.osadmin.v1.RebootRequest\x1a-.sneakers.appliance.osadmin.v1.RebootResponse\"\x16\xc2\xf3\x18\x12\x10\x01\x18\x01\"\fpower.reboot\x12\x85\x01\n" +
 	"\bShutdown\x12..sneakers.appliance.osadmin.v1.ShutdownRequest\x1a/.sneakers.appliance.osadmin.v1.ShutdownResponse\"\x18\xc2\xf3\x18\x14\x10\x01\x18\x01\"\x0epower.shutdown\x12\xab\x01\n" +
 	"\x11StartFactoryReset\x127.sneakers.appliance.osadmin.v1.StartFactoryResetRequest\x1a8.sneakers.appliance.osadmin.v1.StartFactoryResetResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19power.factory-reset.start\x12\xb3\x01\n" +
 	"\x13ApproveFactoryReset\x129.sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest\x1a:.sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse\"%\xc2\xf3\x18!\x10\x01\x18\x01\"\x1bpower.factory-reset.approve\x12\xad\x01\n" +
-	"\x12CancelFactoryReset\x128.sneakers.appliance.osadmin.v1.CancelFactoryResetRequest\x1a9.sneakers.appliance.osadmin.v1.CancelFactoryResetResponse\"\"\xc2\xf3\x18\x1e\x10\x01\"\x1apower.factory-reset.cancelB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\x12CancelFactoryReset\x128.sneakers.appliance.osadmin.v1.CancelFactoryResetRequest\x1a9.sneakers.appliance.osadmin.v1.CancelFactoryResetResponse\"\"\xc2\xf3\x18\x1e\x10\x01\"\x1apower.factory-reset.cancel\x12\x82\x01\n" +
+	"\fListSessions\x122.sneakers.appliance.osadmin.v1.ListSessionsRequest\x1a3.sneakers.appliance.osadmin.v1.ListSessionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x88\x01\n" +
+	"\n" +
+	"EndSession\x120.sneakers.appliance.osadmin.v1.EndSessionRequest\x1a1.sneakers.appliance.osadmin.v1.EndSessionResponse\"\x15\xc2\xf3\x18\x11\x10\x02\x18\x01\"\vsession.endB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_power_proto_rawDescOnce sync.Once
@@ -858,53 +1109,64 @@ func file_sneakers_appliance_osadmin_v1_power_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_power_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_power_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sneakers_appliance_osadmin_v1_power_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_sneakers_appliance_osadmin_v1_power_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_sneakers_appliance_osadmin_v1_power_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_sneakers_appliance_osadmin_v1_power_proto_goTypes = []any{
-	(FactoryResetState)(0),              // 0: sneakers.appliance.osadmin.v1.FactoryResetState
-	(*ActiveSession)(nil),               // 1: sneakers.appliance.osadmin.v1.ActiveSession
-	(*FactoryReset)(nil),                // 2: sneakers.appliance.osadmin.v1.FactoryReset
-	(*GetPowerRequest)(nil),             // 3: sneakers.appliance.osadmin.v1.GetPowerRequest
-	(*GetPowerResponse)(nil),            // 4: sneakers.appliance.osadmin.v1.GetPowerResponse
-	(*RebootRequest)(nil),               // 5: sneakers.appliance.osadmin.v1.RebootRequest
-	(*RebootResponse)(nil),              // 6: sneakers.appliance.osadmin.v1.RebootResponse
-	(*ShutdownRequest)(nil),             // 7: sneakers.appliance.osadmin.v1.ShutdownRequest
-	(*ShutdownResponse)(nil),            // 8: sneakers.appliance.osadmin.v1.ShutdownResponse
-	(*StartFactoryResetRequest)(nil),    // 9: sneakers.appliance.osadmin.v1.StartFactoryResetRequest
-	(*StartFactoryResetResponse)(nil),   // 10: sneakers.appliance.osadmin.v1.StartFactoryResetResponse
-	(*ApproveFactoryResetRequest)(nil),  // 11: sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest
-	(*ApproveFactoryResetResponse)(nil), // 12: sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse
-	(*CancelFactoryResetRequest)(nil),   // 13: sneakers.appliance.osadmin.v1.CancelFactoryResetRequest
-	(*CancelFactoryResetResponse)(nil),  // 14: sneakers.appliance.osadmin.v1.CancelFactoryResetResponse
-	(*timestamppb.Timestamp)(nil),       // 15: google.protobuf.Timestamp
+	(SessionKind)(0),                    // 0: sneakers.appliance.osadmin.v1.SessionKind
+	(FactoryResetState)(0),              // 1: sneakers.appliance.osadmin.v1.FactoryResetState
+	(*ActiveSession)(nil),               // 2: sneakers.appliance.osadmin.v1.ActiveSession
+	(*FactoryReset)(nil),                // 3: sneakers.appliance.osadmin.v1.FactoryReset
+	(*GetPowerRequest)(nil),             // 4: sneakers.appliance.osadmin.v1.GetPowerRequest
+	(*GetPowerResponse)(nil),            // 5: sneakers.appliance.osadmin.v1.GetPowerResponse
+	(*RebootRequest)(nil),               // 6: sneakers.appliance.osadmin.v1.RebootRequest
+	(*RebootResponse)(nil),              // 7: sneakers.appliance.osadmin.v1.RebootResponse
+	(*ShutdownRequest)(nil),             // 8: sneakers.appliance.osadmin.v1.ShutdownRequest
+	(*ShutdownResponse)(nil),            // 9: sneakers.appliance.osadmin.v1.ShutdownResponse
+	(*StartFactoryResetRequest)(nil),    // 10: sneakers.appliance.osadmin.v1.StartFactoryResetRequest
+	(*StartFactoryResetResponse)(nil),   // 11: sneakers.appliance.osadmin.v1.StartFactoryResetResponse
+	(*ApproveFactoryResetRequest)(nil),  // 12: sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest
+	(*ApproveFactoryResetResponse)(nil), // 13: sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse
+	(*CancelFactoryResetRequest)(nil),   // 14: sneakers.appliance.osadmin.v1.CancelFactoryResetRequest
+	(*CancelFactoryResetResponse)(nil),  // 15: sneakers.appliance.osadmin.v1.CancelFactoryResetResponse
+	(*ListSessionsRequest)(nil),         // 16: sneakers.appliance.osadmin.v1.ListSessionsRequest
+	(*ListSessionsResponse)(nil),        // 17: sneakers.appliance.osadmin.v1.ListSessionsResponse
+	(*EndSessionRequest)(nil),           // 18: sneakers.appliance.osadmin.v1.EndSessionRequest
+	(*EndSessionResponse)(nil),          // 19: sneakers.appliance.osadmin.v1.EndSessionResponse
+	(*timestamppb.Timestamp)(nil),       // 20: google.protobuf.Timestamp
 }
 var file_sneakers_appliance_osadmin_v1_power_proto_depIdxs = []int32{
-	15, // 0: sneakers.appliance.osadmin.v1.ActiveSession.signed_in:type_name -> google.protobuf.Timestamp
-	0,  // 1: sneakers.appliance.osadmin.v1.FactoryReset.state:type_name -> sneakers.appliance.osadmin.v1.FactoryResetState
-	15, // 2: sneakers.appliance.osadmin.v1.FactoryReset.started:type_name -> google.protobuf.Timestamp
-	15, // 3: sneakers.appliance.osadmin.v1.FactoryReset.runs_at:type_name -> google.protobuf.Timestamp
-	15, // 4: sneakers.appliance.osadmin.v1.FactoryReset.expires:type_name -> google.protobuf.Timestamp
-	1,  // 5: sneakers.appliance.osadmin.v1.GetPowerResponse.sessions:type_name -> sneakers.appliance.osadmin.v1.ActiveSession
-	2,  // 6: sneakers.appliance.osadmin.v1.GetPowerResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	2,  // 7: sneakers.appliance.osadmin.v1.StartFactoryResetResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	2,  // 8: sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	3,  // 9: sneakers.appliance.osadmin.v1.PowerService.GetPower:input_type -> sneakers.appliance.osadmin.v1.GetPowerRequest
-	5,  // 10: sneakers.appliance.osadmin.v1.PowerService.Reboot:input_type -> sneakers.appliance.osadmin.v1.RebootRequest
-	7,  // 11: sneakers.appliance.osadmin.v1.PowerService.Shutdown:input_type -> sneakers.appliance.osadmin.v1.ShutdownRequest
-	9,  // 12: sneakers.appliance.osadmin.v1.PowerService.StartFactoryReset:input_type -> sneakers.appliance.osadmin.v1.StartFactoryResetRequest
-	11, // 13: sneakers.appliance.osadmin.v1.PowerService.ApproveFactoryReset:input_type -> sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest
-	13, // 14: sneakers.appliance.osadmin.v1.PowerService.CancelFactoryReset:input_type -> sneakers.appliance.osadmin.v1.CancelFactoryResetRequest
-	4,  // 15: sneakers.appliance.osadmin.v1.PowerService.GetPower:output_type -> sneakers.appliance.osadmin.v1.GetPowerResponse
-	6,  // 16: sneakers.appliance.osadmin.v1.PowerService.Reboot:output_type -> sneakers.appliance.osadmin.v1.RebootResponse
-	8,  // 17: sneakers.appliance.osadmin.v1.PowerService.Shutdown:output_type -> sneakers.appliance.osadmin.v1.ShutdownResponse
-	10, // 18: sneakers.appliance.osadmin.v1.PowerService.StartFactoryReset:output_type -> sneakers.appliance.osadmin.v1.StartFactoryResetResponse
-	12, // 19: sneakers.appliance.osadmin.v1.PowerService.ApproveFactoryReset:output_type -> sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse
-	14, // 20: sneakers.appliance.osadmin.v1.PowerService.CancelFactoryReset:output_type -> sneakers.appliance.osadmin.v1.CancelFactoryResetResponse
-	15, // [15:21] is the sub-list for method output_type
-	9,  // [9:15] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	20, // 0: sneakers.appliance.osadmin.v1.ActiveSession.signed_in:type_name -> google.protobuf.Timestamp
+	0,  // 1: sneakers.appliance.osadmin.v1.ActiveSession.kind:type_name -> sneakers.appliance.osadmin.v1.SessionKind
+	1,  // 2: sneakers.appliance.osadmin.v1.FactoryReset.state:type_name -> sneakers.appliance.osadmin.v1.FactoryResetState
+	20, // 3: sneakers.appliance.osadmin.v1.FactoryReset.started:type_name -> google.protobuf.Timestamp
+	20, // 4: sneakers.appliance.osadmin.v1.FactoryReset.runs_at:type_name -> google.protobuf.Timestamp
+	20, // 5: sneakers.appliance.osadmin.v1.FactoryReset.expires:type_name -> google.protobuf.Timestamp
+	2,  // 6: sneakers.appliance.osadmin.v1.GetPowerResponse.sessions:type_name -> sneakers.appliance.osadmin.v1.ActiveSession
+	3,  // 7: sneakers.appliance.osadmin.v1.GetPowerResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	3,  // 8: sneakers.appliance.osadmin.v1.StartFactoryResetResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	3,  // 9: sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	2,  // 10: sneakers.appliance.osadmin.v1.ListSessionsResponse.sessions:type_name -> sneakers.appliance.osadmin.v1.ActiveSession
+	4,  // 11: sneakers.appliance.osadmin.v1.PowerService.GetPower:input_type -> sneakers.appliance.osadmin.v1.GetPowerRequest
+	6,  // 12: sneakers.appliance.osadmin.v1.PowerService.Reboot:input_type -> sneakers.appliance.osadmin.v1.RebootRequest
+	8,  // 13: sneakers.appliance.osadmin.v1.PowerService.Shutdown:input_type -> sneakers.appliance.osadmin.v1.ShutdownRequest
+	10, // 14: sneakers.appliance.osadmin.v1.PowerService.StartFactoryReset:input_type -> sneakers.appliance.osadmin.v1.StartFactoryResetRequest
+	12, // 15: sneakers.appliance.osadmin.v1.PowerService.ApproveFactoryReset:input_type -> sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest
+	14, // 16: sneakers.appliance.osadmin.v1.PowerService.CancelFactoryReset:input_type -> sneakers.appliance.osadmin.v1.CancelFactoryResetRequest
+	16, // 17: sneakers.appliance.osadmin.v1.PowerService.ListSessions:input_type -> sneakers.appliance.osadmin.v1.ListSessionsRequest
+	18, // 18: sneakers.appliance.osadmin.v1.PowerService.EndSession:input_type -> sneakers.appliance.osadmin.v1.EndSessionRequest
+	5,  // 19: sneakers.appliance.osadmin.v1.PowerService.GetPower:output_type -> sneakers.appliance.osadmin.v1.GetPowerResponse
+	7,  // 20: sneakers.appliance.osadmin.v1.PowerService.Reboot:output_type -> sneakers.appliance.osadmin.v1.RebootResponse
+	9,  // 21: sneakers.appliance.osadmin.v1.PowerService.Shutdown:output_type -> sneakers.appliance.osadmin.v1.ShutdownResponse
+	11, // 22: sneakers.appliance.osadmin.v1.PowerService.StartFactoryReset:output_type -> sneakers.appliance.osadmin.v1.StartFactoryResetResponse
+	13, // 23: sneakers.appliance.osadmin.v1.PowerService.ApproveFactoryReset:output_type -> sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse
+	15, // 24: sneakers.appliance.osadmin.v1.PowerService.CancelFactoryReset:output_type -> sneakers.appliance.osadmin.v1.CancelFactoryResetResponse
+	17, // 25: sneakers.appliance.osadmin.v1.PowerService.ListSessions:output_type -> sneakers.appliance.osadmin.v1.ListSessionsResponse
+	19, // 26: sneakers.appliance.osadmin.v1.PowerService.EndSession:output_type -> sneakers.appliance.osadmin.v1.EndSessionResponse
+	19, // [19:27] is the sub-list for method output_type
+	11, // [11:19] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_power_proto_init() }
@@ -918,8 +1180,8 @@ func file_sneakers_appliance_osadmin_v1_power_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_power_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_power_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   14,
+			NumEnums:      2,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

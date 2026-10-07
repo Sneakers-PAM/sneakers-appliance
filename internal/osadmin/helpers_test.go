@@ -271,6 +271,8 @@ type box struct {
 	srv   *osadmin.Server
 	ts    *httptest.Server
 	elev  *elevation.Service
+	// shells are the SSH closed-shell sessions.
+	shells *fakeShells
 	// signals are the elevated sessions' pids the service was told to end.
 	signals []int
 	// onSignal, when set, runs (outside the elevation service's lock) for
@@ -291,7 +293,7 @@ type box struct {
 // bob.
 func newBox(t *testing.T, withBob bool) *box {
 	t.Helper()
-	b := &box{t: t, clk: clock.NewFake(), state: t.TempDir(), keys: map[string]sshKey{}}
+	b := &box{t: t, clk: clock.NewFake(), state: t.TempDir(), keys: map[string]sshKey{}, shells: &fakeShells{}}
 	var err error
 	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return true, b.done }})
 	if err != nil {
@@ -351,6 +353,7 @@ func newBox(t *testing.T, withBob bool) *box {
 		Network:    netdv1connect.NewNetworkServiceClient(hc, daemons.URL),
 		Paths:      osadmin.Paths{State: b.state},
 		Elevation:  b.elev,
+		Shells:     b.shells,
 		Cert:       osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
 	})
 	b.ts = httptest.NewTLSServer(b.srv.Handler())

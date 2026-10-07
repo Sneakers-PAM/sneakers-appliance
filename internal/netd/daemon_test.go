@@ -23,7 +23,7 @@ import (
 // A box that was never set up runs the first-boot screen's defaults on
 // its first NIC with a link: DHCP for IPv4, SLAAC (with RA) for IPv6.
 func TestFirstStartRunsTheDefaultsOnTheFirstLinkedNIC(t *testing.T) {
-	down := netd.Link{Name: "eth0", Up: false}
+	down := netd.Link{Name: "eth0", Up: false, Bus: eth0.Bus}
 	b := newBox(t, down, eth1)
 	d := b.start()
 	s, pending := d.Get()

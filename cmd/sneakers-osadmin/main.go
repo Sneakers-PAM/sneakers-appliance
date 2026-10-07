@@ -181,7 +181,7 @@ func serve(h http.Handler, cert tls.Certificate, addrs []string, lg log.Logger) 
 			IdleTimeout:       2 * time.Minute,
 		}
 		go func() {
-			if err := s.ServeTLS(ln, "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			if err := s.ServeTLS(front.TLSOnly(ln, lg), "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				lg.Error(err, "osadmin: listener stopped", log.F("address", ln.Addr().String()))
 			}
 		}()

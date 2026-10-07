@@ -22,13 +22,22 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/timesync"
 )
 
-// Link is one NIC.
+// Link is one network interface.
 type Link struct {
 	Name   string
 	MAC    string
 	Up     bool
 	Driver string
+	// Bus is the interface's device under /sys/devices (for example
+	// pci0000:00/0000:00:03.0/virtio0), empty for a virtual interface:
+	// loopback, dummy, bridge, veth, tun/tap, vxlan, WireGuard and every
+	// interface k0s or the CNI makes.
+	Bus string
 }
+
+// Physical reports whether the interface is a NIC: it has a device on a
+// bus (PCI, virtio, USB).
+func (l Link) Physical() bool { return l.Bus != "" }
 
 // System is the kernel as netd uses it. The Linux one is netlink, sysctl
 // and nftables; the tests use a fake.

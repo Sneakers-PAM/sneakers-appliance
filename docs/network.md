@@ -50,16 +50,23 @@ through accessd. Go callers use `internal/netdapi` (`netdapi.SocketPath`, `netda
 Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`.
 
 Until the first-boot network step sets anything, netd runs the screen's defaults on the first NIC
-with a link (by name): DHCP for IPv4 and SLAAC for IPv6. Nothing is written to `network.yaml` until
-a `Set`.
+with a link, else the first NIC: DHCP for IPv4 and SLAAC for IPv6. Nothing is written to
+`network.yaml` until a `Set`.
+
+A NIC is an interface with a device on a bus, `/sys/class/net/<if>/device` (PCI, virtio, USB).
+Loopback, dummy, bridge, veth, tun/tap, vxlan and WireGuard interfaces have none, and neither do
+the ones k0s and the CNI make (`sneakers0`, `cni0`, `kube-bridge`, `veth*`), so netd never takes
+one for the management or service interface, whatever its name. The NICs are ordered by their
+device path under `/sys/devices` (bus order), then by MAC, so the choice is the same on every boot
+even when the kernel names the interfaces differently.
 
 | Call | What it does |
 |---|---|
 | `Get` | the applied settings, and whether a change waits for `Confirm` |
-| `Set`, `Confirm` | apply a change, and keep it (see [Auto-revert](#auto-revert)); an interface the box doesn't have is `NET_INVALID` naming `management.name` or `service.name` |
+| `Set`, `Confirm` | apply a change, and keep it (see [Auto-revert](#auto-revert)); an interface the box doesn't have, or a virtual one, is `NET_INVALID` naming `management.name` or `service.name` |
 | `Checks` | the connectivity checks below |
 | `Status` | the usable management and service addresses, the host name, the NTP sync and offset, and whether 22 and 8443 are open |
-| `ListInterfaces` | the NICs (loopback left out): name, MAC, link state and driver |
+| `ListInterfaces` | the NICs in bus order (virtual interfaces left out): name, MAC, link state and driver |
 | `SetManagementPorts` | opens or closes 22 and 8443 in the firewall (first boot) |
 | `SetServicePorts` | the product's accept rules on the service interface (spec 3 defines them; netd carries them) |
 | `Watch` | a stream of the usable addresses and the host name: once at the start, then on every change |

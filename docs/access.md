@@ -189,7 +189,9 @@ On first boot, after the first admin's key is enrolled, the Setup page finishes 
   within 120 seconds from a session that still works.
 - **Logs and audit:** the OS audit log, newest first, filtered by action, with its chain state, and the
   whole log as a download.
-- **Power:** reboot and shut down, graceful by default; the page lists the signed-in sessions first.
+- **Power:** reboot and shut down, graceful by default; the page lists the live sessions first
+  (the :8443 browsers, the SSH logins and the elevated shells), and an owner can end any of them
+  (step-up, audited as `session.end`; see [osadmin-api.md](osadmin-api.md)).
   Init drains the services, audits, syncs and unmounts before it acts ([factory-reset.md](factory-reset.md)).
   A forced reboot or shutdown skips the drain and needs a second, explicit confirmation
   (`POWER_FORCED_CONFIRM` without it); the audit entry records `mode` as `graceful` or `forced`.
@@ -310,7 +312,9 @@ Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`, `
 `sneakers-osadmin` runs as `osadmin` and refuses to run as root. It asks accessd for the management
 addresses and host name (`BindingService.GetBinding`, from netd), makes or reuses its certificate in
 `/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when the addresses or the host
-name change it rebinds with a matching certificate. It serves the static pages and forwards the API,
+name change it rebinds with a matching certificate. Port 8443 speaks TLS only: a browser that asks
+for `http://<box>:8443/` gets a `301` to the same host, port and path over `https://`, with a short
+"Redirecting you to https…" page and the link, and nothing else is served over plain HTTP. It serves the static pages and forwards the API,
 `POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Flags:
 `--state` (`/var/lib/sneakers`), `--assets` (`/usr/share/sneakers/osadmin`) and `--access-socket`
 (`/run/sneakers/access.sock`). `LOG_LEVEL` and `LOG_FORMAT` set the logging; the defaults are
