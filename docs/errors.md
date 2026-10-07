@@ -7,8 +7,8 @@ shares with `Image.Stage`; 2xxx are boot.
 ## First boot and access (3xxx)
 
 30xx are the access store, 31xx SSH enrolment, 32xx the :8443 sign-in, 33xx elevation, 34xx the
-network, 35xx the setup steps and 36xx the factory reset and power. The shell, the console and
-:8443 show the same sentence.
+network, 35xx the setup steps, 36xx the factory reset and power, and 37xx the closed shell. The
+shell, the console and :8443 show the same sentence.
 
 | Code | Symbol | Meaning |
 |---|---|---|
@@ -46,6 +46,9 @@ network, 35xx the setup steps and 36xx the factory reset and power. The shell, t
 | 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
 | 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |
 | 3604 | `POWER_FORCED_CONFIRM` | a forced reboot or shutdown needs its second, explicit confirmation |
+| 3701 | `SHELL_PARSE` | the command line doesn't parse: an open quote, a control character, or longer than 64 KiB |
+| 3702 | `SHELL_UNKNOWN` | there is no such command; `help` lists them |
+| 3703 | `NOT_AVAILABLE` | not available in this release, or the appliance services aren't answering |
 
 ## Build kit and boot (1xxx and 2xxx)
 
