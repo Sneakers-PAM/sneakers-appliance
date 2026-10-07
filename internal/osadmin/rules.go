@@ -186,7 +186,9 @@ func (s *Server) write(e osaudit.Entry, err error) {
 	if e.Detail == nil {
 		e.Detail = map[string]string{}
 	}
-	e.Detail["surface"] = osaudit.SurfaceAdmin
+	if _, set := e.Detail["surface"]; !set {
+		e.Detail["surface"] = osaudit.SurfaceAdmin
+	}
 	if aerr := s.o.Audit.Append(e); aerr != nil {
 		s.o.Logger.Error(aerr, "osadmin: audit append failed", log.F("action", e.Action))
 	}

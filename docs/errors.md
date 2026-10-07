@@ -7,7 +7,8 @@ shares with `Image.Stage`; 2xxx are boot.
 ## First boot and access (3xxx)
 
 30xx are the access store, 31xx SSH enrolment, 32xx the :8443 sign-in, 33xx elevation, 34xx the
-network and 35xx the setup steps. The shell, the console and :8443 show the same sentence.
+network, 35xx the setup steps and 36xx the factory reset and power. The shell, the console and
+:8443 show the same sentence.
 
 | Code | Symbol | Meaning |
 |---|---|---|
@@ -41,6 +42,10 @@ network and 35xx the setup steps. The shell, the console and :8443 show the same
 | 3406 | `NET_NTP` | no NTP server gave a usable time |
 | 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
 | 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
+| 3601 | `RESET_UNAVAILABLE` | no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress |
+| 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
+| 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |
+| 3604 | `POWER_FORCED_CONFIRM` | a forced reboot or shutdown needs its second, explicit confirmation |
 
 ## Build kit and boot (1xxx and 2xxx)
 
@@ -82,3 +87,6 @@ network and 35xx the setup steps. The shell, the console and :8443 show the same
 | 2506 | `UPGRADE_DECRYPT` | the update package doesn't decrypt with this box's update key, or the booted UKI carries no update key |
 | 2507 | `UPGRADE_CHANNEL` | a lab package never installs on a production box, and a production package never on a lab box |
 | 2508 | `UPGRADE_PATCH_BASE` | the patch is for other base versions than the one this box runs |
+| 2509 | `UPGRADE_AIR_GAPPED` | no mirror is configured, so the box fetches nothing; upload the `.bin` instead |
+| 2510 | `UPGRADE_UPLOAD` | the upload or fetch is unknown, too large, or failed |
+| 2511 | `UPGRADE_NOT_STAGED` | no release is staged to apply |

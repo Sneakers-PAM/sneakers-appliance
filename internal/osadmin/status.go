@@ -100,6 +100,14 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 			add(osadminv1.WarningKind_WARNING_KIND_CONSOLE_RECOVERY, "A key for "+a.Name+" was added on the console with Recover access.")
 		}
 	}
+	if fr := s.FactoryReset(); fr != nil {
+		out.FactoryReset = fr
+		detail := "A factory reset requested by " + fr.GetStartedBy() + " is waiting for its quorum."
+		if fr.GetState() == osadminv1.FactoryResetState_FACTORY_RESET_STATE_COUNTDOWN {
+			detail = "A factory reset requested by " + fr.GetStartedBy() + " runs at " + fr.GetRunsAt().AsTime().UTC().Format(time.RFC3339) + " unless an admin cancels it."
+		}
+		add(osadminv1.WarningKind_WARNING_KIND_FACTORY_RESET, detail)
+	}
 	out.Disk = s.disk()
 	return connect.NewResponse(out), nil
 }

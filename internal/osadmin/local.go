@@ -97,3 +97,33 @@ func (s *Server) approve(uid uint32, code, admin, keyFP string, detail map[strin
 	detail["browser"], detail["userAgent"] = c.Source, c.UserAgent
 	return s.logins.Approve(code, a.Name, keyFP)
 }
+
+func (h *local) LocalCancelFactoryReset(ctx context.Context, r *connect.Request[osadminv1.LocalCancelFactoryResetRequest]) (*connect.Response[osadminv1.LocalCancelFactoryResetResponse], error) {
+	uid, err := peer(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := h.s.CancelFactoryResetLocal(uid, r.Msg.GetActor()); err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&osadminv1.LocalCancelFactoryResetResponse{}), nil
+}
+
+// CancelFactoryResetLocal stops a factory reset from the console (root,
+// actor "console" unless named) or a closed-shell login (an admin uid,
+// acting as itself).
+func (s *Server) CancelFactoryResetLocal(uid uint32, actor string) error {
+	if uid != 0 {
+		st := s.o.Access.Read()
+		a, ok := st.AdminByUID(int(uid))
+		if !ok {
+			return codes.New(codes.AccessForbidden, "the caller isn't an admin")
+		}
+		actor = a.Name
+	} else if actor == "" {
+		actor = osaudit.SurfaceConsole
+	}
+	err := s.cancelReset("")
+	s.write(osaudit.Entry{Actor: actor, Action: "power.factory-reset.cancel", Target: "box", Detail: map[string]string{"surface": osaudit.SurfaceConsole}}, err)
+	return err
+}

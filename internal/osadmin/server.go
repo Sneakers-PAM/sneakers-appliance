@@ -70,6 +70,8 @@ type Options struct {
 	Paths      Paths
 	// Cert describes :8443's own certificate, for Status.
 	Cert CertInfo
+	// Upgrade configures the update flows.
+	Upgrade UpgradeOptions
 	// Assets are the static admin pages; nil serves a short notice.
 	Assets fs.FS
 	Logger log.Logger
@@ -81,6 +83,8 @@ type Server struct {
 	logins   *weblogin.Manager
 	sessions *weblogin.Sessions
 	certMu   sync.Mutex
+	resets   resets
+	upgrades upgrades
 }
 
 // New returns a server.
@@ -110,9 +114,10 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(osadminv1connect.UnimplementedTlsServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(osadminv1connect.UnimplementedMcpServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
-	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(osadminv1connect.UnimplementedUpgradeServiceHandler{}, opts))
+	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewModulesServiceHandler(osadminv1connect.UnimplementedModulesServiceHandler{}, opts))
 	mux.HandleFunc("GET /export/audit-log", s.exportAudit)
+	mux.HandleFunc("POST /upload", s.handleUpload)
 	mux.Handle("/", s.assets())
 	return securityHeaders(mux)
 }

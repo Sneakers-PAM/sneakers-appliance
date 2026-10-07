@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"filippo.io/age"
 	"golang.org/x/crypto/ssh"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
@@ -30,6 +31,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
 )
 
 // sshKey is a generated login key: its authorized_keys line and
@@ -61,6 +64,12 @@ type fakeInit struct {
 	secureBoot *bool
 	reboots    int
 	poweroffs  int
+	forced     bool
+	resets     []*initv1.FactoryResetRequest
+	staged     []string
+	stagedVer  string
+	activated  int
+	rollbacks  int
 }
 
 func (f *fakeInit) Protection(context.Context, *connect.Request[initv1.ProtectionRequest]) (*connect.Response[initv1.ProtectionResponse], error) {
@@ -100,26 +109,60 @@ type fakePower struct {
 	f *fakeInit
 }
 
-func (p fakePower) Reboot(context.Context, *connect.Request[initv1.RebootRequest]) (*connect.Response[initv1.RebootResponse], error) {
+func (p fakePower) Reboot(_ context.Context, r *connect.Request[initv1.RebootRequest]) (*connect.Response[initv1.RebootResponse], error) {
 	p.f.mu.Lock()
 	defer p.f.mu.Unlock()
 	p.f.reboots++
+	p.f.forced = r.Msg.GetForced()
 	return connect.NewResponse(&initv1.RebootResponse{}), nil
 }
 
-func (p fakePower) PowerOff(context.Context, *connect.Request[initv1.PowerOffRequest]) (*connect.Response[initv1.PowerOffResponse], error) {
+func (p fakePower) PowerOff(_ context.Context, r *connect.Request[initv1.PowerOffRequest]) (*connect.Response[initv1.PowerOffResponse], error) {
 	p.f.mu.Lock()
 	defer p.f.mu.Unlock()
 	p.f.poweroffs++
+	p.f.forced = r.Msg.GetForced()
 	return connect.NewResponse(&initv1.PowerOffResponse{}), nil
+}
+
+func (p fakePower) FactoryReset(_ context.Context, r *connect.Request[initv1.FactoryResetRequest]) (*connect.Response[initv1.FactoryResetResponse], error) {
+	p.f.mu.Lock()
+	defer p.f.mu.Unlock()
+	p.f.resets = append(p.f.resets, r.Msg)
+	return connect.NewResponse(&initv1.FactoryResetResponse{}), nil
 }
 
 type fakeImage struct {
 	initv1connect.UnimplementedImageServiceHandler
+	f *fakeInit
 }
 
-func (fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceStatusRequest]) (*connect.Response[initv1.ImageServiceStatusResponse], error) {
-	return connect.NewResponse(&initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0"}), nil
+func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceStatusRequest]) (*connect.Response[initv1.ImageServiceStatusResponse], error) {
+	i.f.mu.Lock()
+	defer i.f.mu.Unlock()
+	return connect.NewResponse(&initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer}), nil
+}
+
+func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageRequest]) (*connect.Response[initv1.StageResponse], error) {
+	i.f.mu.Lock()
+	defer i.f.mu.Unlock()
+	i.f.staged = append(i.f.staged, r.Msg.GetReference())
+	i.f.stagedVer = "0.2.0"
+	return connect.NewResponse(&initv1.StageResponse{Version: "0.2.0"}), nil
+}
+
+func (i fakeImage) Activate(context.Context, *connect.Request[initv1.ActivateRequest]) (*connect.Response[initv1.ActivateResponse], error) {
+	i.f.mu.Lock()
+	defer i.f.mu.Unlock()
+	i.f.activated++
+	return connect.NewResponse(&initv1.ActivateResponse{}), nil
+}
+
+func (i fakeImage) Rollback(context.Context, *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
+	i.f.mu.Lock()
+	defer i.f.mu.Unlock()
+	i.f.rollbacks++
+	return connect.NewResponse(&initv1.RollbackResponse{}), nil
 }
 
 // fakeNetd is netd as osadmin sees it.
@@ -188,6 +231,13 @@ type box struct {
 	ts    *httptest.Server
 	keys  map[string]sshKey
 	done  bool
+	// sign and enc are this test's production release and update keys.
+	mirror      *httptest.Server
+	mirrorFiles map[string][]byte
+	sign        testpki.ECKey
+	enc         *age.X25519Identity
+	keyReads    int
+	mirrorHit   int
 }
 
 // newBox starts osadmin with an owner alice and, when withBob, an admin
@@ -213,12 +263,24 @@ func newBox(t *testing.T, withBob bool) *box {
 	mux := http.NewServeMux()
 	mux.Handle(initv1connect.NewKeyCustodyServiceHandler(b.init))
 	mux.Handle(initv1connect.NewPowerServiceHandler(fakePower{f: b.init}))
-	mux.Handle(initv1connect.NewImageServiceHandler(fakeImage{}))
+	mux.Handle(initv1connect.NewImageServiceHandler(fakeImage{f: b.init}))
 	mux.Handle(netdv1connect.NewNetworkServiceHandler(b.netd))
 	daemons := httptest.NewServer(mux)
 	t.Cleanup(daemons.Close)
 	hc := daemons.Client()
+	b.sign = testpki.ECDSA(t)
+	b.enc, err = age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.mirrorFiles = map[string][]byte{}
+	mirrorClient := func() *http.Client { return b.mirror.Client() }
 	b.srv = osadmin.New(osadmin.Options{
+		Upgrade: osadmin.UpgradeOptions{
+			Channel: release.ChannelProduction, ReleaseKeyPEM: b.sign.PublicPEM,
+			UpdateKey:  func() (age.Identity, error) { b.keyReads++; return b.enc, nil },
+			HTTPClient: &http.Client{Transport: lazyTransport{get: mirrorClient}},
+		},
 		Access: b.store, Audit: b.log, Clock: b.clk,
 		KeyCustody: initv1connect.NewKeyCustodyServiceClient(hc, daemons.URL),
 		Image:      initv1connect.NewImageServiceClient(hc, daemons.URL),
@@ -228,6 +290,16 @@ func newBox(t *testing.T, withBob bool) *box {
 		Cert:       osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
 	})
 	b.ts = httptest.NewTLSServer(b.srv.Handler())
+	b.mirror = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b.mirrorHit++
+		body, ok := b.mirrorFiles[strings.TrimPrefix(r.URL.Path, "/")]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(body)
+	}))
+	t.Cleanup(b.mirror.Close)
 	t.Cleanup(b.ts.Close)
 	return b
 }
@@ -326,4 +398,12 @@ func lastEntry(t *testing.T, l *osaudit.Log, action string) osaudit.Entry {
 	}
 	t.Fatalf("no %s entry", action)
 	return osaudit.Entry{}
+}
+
+// lazyTransport uses the mirror's client, which exists only after the
+// server it trusts starts.
+type lazyTransport struct{ get func() *http.Client }
+
+func (l lazyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return l.get().Transport.RoundTrip(r)
 }

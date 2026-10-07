@@ -6,7 +6,8 @@ package codes
 import apperr "github.com/Bugs5382/go-apperr"
 
 // The first-boot and access codes (spec 2, Section 4.4). 3xxx: 30xx access,
-// 31xx enrolment, 32xx sign-in, 33xx elevation, 34xx network, 35xx setup.
+// 31xx enrolment, 32xx sign-in, 33xx elevation, 34xx network, 35xx setup,
+// 36xx factory reset and power.
 const (
 	AccessKeyType          = 3001
 	AccessKeyWeak          = 3002
@@ -38,6 +39,10 @@ const (
 	NetNTP                 = 3406
 	NetReverted            = 3407
 	SetupIncomplete        = 3501
+	ResetUnavailable       = 3601
+	ResetApproved          = 3602
+	ResetCancelled         = 3603
+	PowerForcedConfirm     = 3604
 )
 
 var accessEntries = []apperr.Entry{
@@ -71,6 +76,10 @@ var accessEntries = []apperr.Entry{
 	{Code: NetNTP, Symbol: "NET_NTP", Title: "network", Cause: "no NTP server gave a usable time"},
 	{Code: NetReverted, Symbol: "NET_REVERTED", Title: "network", Cause: "a change wasn't confirmed in 120 seconds and was undone"},
 	{Code: SetupIncomplete, Symbol: "SETUP_INCOMPLETE", Title: "setup", Cause: "a setup step is still open (the error names it)"},
+	{Code: ResetUnavailable, Symbol: "RESET_UNAVAILABLE", Title: "reset", Cause: "no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress"},
+	{Code: ResetApproved, Symbol: "RESET_APPROVED", Title: "reset", Cause: "this admin's approval is already counted, or they aren't on the roster"},
+	{Code: ResetCancelled, Symbol: "RESET_CANCELLED", Title: "reset", Cause: "the factory reset was cancelled, expired or never started"},
+	{Code: PowerForcedConfirm, Symbol: "POWER_FORCED_CONFIRM", Title: "power", Cause: "a forced reboot or shutdown needs its second, explicit confirmation"},
 }
 
 func init() { Entries = append(Entries, accessEntries...) }

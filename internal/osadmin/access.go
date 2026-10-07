@@ -41,6 +41,8 @@ func (h *accessSvc) ListAdmins(context.Context, *connect.Request[osadminv1.ListA
 	for _, a := range st.Admins {
 		out.Admins = append(out.Admins, adminToWire(a))
 	}
+	q := st.EffectiveQuorum()
+	out.Quorum = &osadminv1.Quorum{Members: q.Members, Required: int32(min(q.Required, 1<<30)), Configured: q.Configured} // #nosec G115 -- clamped
 	return connect.NewResponse(out), nil
 }
 
@@ -243,3 +245,21 @@ func (h *accessSvc) SetElevationPolicy(ctx context.Context, r *connect.Request[o
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+func (h *accessSvc) SetQuorum(ctx context.Context, r *connect.Request[osadminv1.SetQuorumRequest]) (*connect.Response[osadminv1.SetQuorumResponse], error) {
+	c := callFrom(ctx)
+	roster := access.QuorumRoster{Members: r.Msg.GetMembers(), Required: int(r.Msg.GetRequired())}
+	c.note("quorum", "members", strings.Join(roster.Members, ","), "required", itoa(roster.Required))
+	err := h.s.o.Access.Update(func(st *access.State) error {
+		if err := access.ValidateQuorum(*st, roster); err != nil {
+			return err
+		}
+		st.Quorum = &roster
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("osadmin: quorum roster set", log.F("members", len(roster.Members)), log.F("required", roster.Required), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.SetQuorumResponse{}), nil
+}
