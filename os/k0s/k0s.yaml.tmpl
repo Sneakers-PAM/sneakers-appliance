@@ -1,0 +1,54 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The k0s cluster config (spec 1 Section 3.6, spec 3). Baked read-only into
+# /etc/k0s/; k0s reads it from /run/sneakers/k0s/k0s.yaml. Until
+# sneakers-platformd renders it there (#99), os/k0s/k0s-interim does, and
+# fills in one field: @NODE_NAME@, the box's node name, which is also its
+# etcd member name. docs/k0s.md has the layout.
+#
+# Airgapped: every image is pinned by digest and bundled in the root
+# (/usr/share/sneakers/images), and pulls are off, so anything not bundled
+# fails instead of reaching a registry. The lab build bundles exactly the
+# images below (build/lab/images.txt; os/k0s/config_test.go keeps the two in
+# step). The API, etcd peer and node address is 198.18.0.1 on the sneakers0
+# dummy interface (spec 3), so a DHCP change never reaches them. NodePorts
+# listen on every address.
+apiVersion: k0s.k0sproject.io/v1beta1
+kind: ClusterConfig
+metadata:
+  name: k0s
+spec:
+  api:
+    address: 198.18.0.1
+  images:
+    default_pull_policy: Never
+    pause:
+      image: quay.io/k0sproject/pause
+      version: 3.10.2-0@sha256:1dca17073186db812f380970077f5c82842c810f1bd75800cd926ab50cd34243
+    kubeproxy:
+      image: quay.io/k0sproject/kube-proxy
+      version: v1.36.4@sha256:e043ea8217fdab1ffc3d2ca880d5a16ab9dc462589d75fba45d0c09c477b03f7
+    coredns:
+      image: quay.io/k0sproject/coredns
+      version: 1.14.7-k0s.0@sha256:513b8c9d2e09a90169ca660b7c1ad76fe366ac59a464d7b1a8637e64150e1b31
+    kuberouter:
+      cni:
+        image: quay.io/k0sproject/kube-router
+        version: v2.10.0-iptables1.8.13-k0s.1@sha256:c538cbd79d9ac7fcacab7470993037527e94d19af09a7540d1b3c0a129a73a92
+      cniInstaller:
+        image: quay.io/k0sproject/cni-node
+        version: v1.9.1-k0s.1@sha256:2d1bf841d4773aa00cc4b2e5efcf39f2a026996dc6355ea6641a8672cdce8371
+  network:
+    provider: kuberouter
+    kubeProxy:
+      mode: iptables
+      nodePortAddresses: [0.0.0.0/0]
+  storage:
+    type: etcd
+    etcd:
+      peerAddress: 198.18.0.1
+      extraArgs:
+        name: "@NODE_NAME@"
+  telemetry:
+    enabled: false

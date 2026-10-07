@@ -21,6 +21,9 @@ owner.
 | `/usr/sbin/sshd`, `/usr/libexec/openssh/{sshd-session,sshd-auth}`, `/usr/bin/ssh-keygen` | static OpenSSH ([static-tools.md](static-tools.md)) |
 | `/bin/busybox`, `/bin/sh -> busybox` | the elevated session's shell (`ASH_EXPAND_PRMT` for the minutes-left prompt) |
 | `/usr/bin/k0s` | the k0s binary, checked against `release.yaml`'s SHA-256 for the architecture |
+| `/etc/k0s/{k0s.yaml.tmpl,containerd.toml,containerd.d/}`, `/usr/libexec/sneakers/k0s-interim` | k0s's config, containerd's config and the interim script that prepares the box and starts k0s ([k0s.md](k0s.md)) |
+| `/etc/cni -> /var/lib/cni-conf`, `/opt -> /var/lib/opt`, `/var/run -> /run`, `/var/log -> /var/lib/log`, `/etc/machine-id`, `/etc/hosts`, `/bin/{mount,umount}`, `/lib/modules`, `/usr/libexec/k0s/kubelet-plugins/volume/exec` | what k0s, containerd and the kubelet expect on the host ([k0s.md](k0s.md)) |
+| `/usr/share/sneakers/manifests/` | stacks k0s applies (lab builds: the throwaway hello stack) |
 | `/usr/lib/sneakers/services.d/` | the service table, from `os/rootfs/services.d/` |
 | `/usr/share/sneakers/images/` | the airgap bundle (below) |
 | `/usr/share/sneakers/release/release.yaml` | the release the root was built for |
@@ -33,7 +36,8 @@ owner.
 the architecture, `release.yaml`, the k0s binary, the OpenSSH directory, busybox, the bundle
 directory and the release pins (`PINS_LDFLAGS`, linked into init and accessd). It refuses a k0s
 binary that isn't the pinned one, a missing OpenSSH or busybox, an empty service table, and any
-setuid or setgid file.
+setuid or setgid file. `LAB_OVERLAY` (lab builds only; refused unless the pins say channel `lab`)
+adds the files of a directory to the tree and is refused if it would replace one.
 
 ## Reproducible
 
@@ -69,8 +73,9 @@ The image suite's job summary reports the lab root image's size on every PR.
    missing, or anything it doesn't pin, is `KIT_BUNDLE_MISMATCH`. The kit runs the same check on the
    root of every artifact it verifies.
 
-Any refusal leaves the output directory empty. The lab release pins no images, so its bundle is
-empty, but it's still built and checked.
+Any refusal leaves the output directory empty. The lab release pins k0s's own images and the
+hello image (`build/lab/images.txt`), and the lab build signs each digest with that run's key: it
+fetches the manifest or index bytes with `bundle manifest` and signs them with `cosign sign-blob`.
 
 ### Not pinnable yet
 

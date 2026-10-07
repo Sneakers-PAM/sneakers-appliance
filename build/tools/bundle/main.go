@@ -3,7 +3,8 @@
 
 // Command bundle builds the airgap image bundle from release.yaml (pull) and
 // checks a bundle directory against it in both directions (check), for
-// build/bundle/build.sh.
+// build/bundle/build.sh. For the lab build, manifest writes the manifest or
+// index bytes of one pinned image, which the lab key then signs.
 package main
 
 import (
@@ -31,7 +32,10 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: bundle pull|check [flags]")
+		return fmt.Errorf("usage: bundle pull|check|manifest [flags]")
+	}
+	if args[0] == "manifest" {
+		return manifest(args[1:])
 	}
 	fl := flag.NewFlagSet("bundle "+args[0], flag.ContinueOnError)
 	relPath := fl.String("release", "", "release.yaml")
@@ -76,6 +80,24 @@ func run(args []string) error {
 		lg := log.NewLoggerWithOptions("bundle", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatConsole), log.WithDefaultLevel(log.LevelInfo))
 		return bundle.Pull(ctx, bundle.PullOptions{Release: rel, Arch: *arch, Signatures: *sigs, Key: key, Out: *out, ModTime: epoch, PlainHTTP: *plain, Logger: lg})
 	default:
-		return fmt.Errorf("unknown command %q (pull or check)", args[0])
+		return fmt.Errorf("unknown command %q (pull, check or manifest)", args[0])
 	}
+}
+
+func manifest(args []string) error {
+	fl := flag.NewFlagSet("bundle manifest", flag.ContinueOnError)
+	image := fl.String("image", "", "the image, without a tag")
+	dgst := fl.String("digest", "", "its pinned sha256 digest")
+	out := fl.String("out", "", "the file to write")
+	plain := fl.Bool("plain-http", false, "talk to the registry without TLS (a lab registry only)")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	b, err := bundle.FetchManifest(ctx, *image, *dgst, *plain)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(*out, b, 0o644) // #nosec G306 G703 -- a public manifest, for the build to sign
 }

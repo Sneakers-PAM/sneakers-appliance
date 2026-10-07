@@ -34,9 +34,12 @@ previous release.
 |---|---|
 | `.linux` | the kernel |
 | `.initrd` | `sneakers-switchroot` as `/init` and a static `veritysetup`; no root filesystem |
-| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity` |
+| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity dummy.numdummies=0` |
 | `.osrel`, `.uname` | the release's os-release and kernel release |
 | `.sbat` | the shim line and `sneakers-pam,1`, so a bad release can be revoked by generation |
+
+`dummy.numdummies=0` stops the built-in dummy driver (k0s's `sneakers0`, [k0s.md](k0s.md)) from
+making a `dummy0` at boot, which netd would otherwise take for the first NIC.
 
 ### Consoles
 

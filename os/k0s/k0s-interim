@@ -1,0 +1,111 @@
+#!/bin/sh
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# k0s-interim prepare|run: k0s's pre-start hook and its launcher
+# (os/rootfs/services.d/k0s.yaml). INTERIM: it stands in for
+# sneakers-platformd (#99), which renders the config, owns the data
+# directory and the node's address, and starts k0s; it does only what k0s
+# can't start without on a read-only, systemd-free root. docs/k0s.md has
+# the layout. busybox's sh here has no arithmetic: counters are strings.
+set -eu
+data=/var/lib/k0s
+# The node's name, made once per box and kept on the state volume, so it
+# doesn't follow the host name netd sets and stays unique when more nodes
+# join (spec 3, Section 2.12).
+name_file=/var/lib/sneakers/k0s/node-name
+# The API and node address on the sneakers0 dummy interface (spec 3): a
+# DHCP change on a real interface never changes it, its certificates or
+# etcd's peer address. RFC 2544 space, never routed.
+node_ip=198.18.0.1
+say() { echo "k0s-interim: $*"; }
+
+prepare() {
+  # cgroup v2 for containerd and the kubelet.
+  if ! grep -q '^[^ ]* /sys/fs/cgroup cgroup2 ' /proc/mounts; then
+    mount -t cgroup2 -o nosuid,nodev,noexec cgroup2 /sys/fs/cgroup
+    say "mounted cgroup2 on /sys/fs/cgroup"
+  fi
+
+  if [ ! -s "$name_file" ]; then
+    mkdir -p "${name_file%/*}"
+    read -r uuid < /proc/sys/kernel/random/uuid
+    echo "sneakers-$(echo "$uuid" | cut -c1-8)" > "$name_file.new"
+    mv "$name_file.new" "$name_file"
+  fi
+  read -r name < "$name_file"
+  say "node $name"
+  # The API server labels its lease with the host name, which the kernel
+  # leaves as "(none)" until netd sets one.
+  read -r host < /proc/sys/kernel/hostname || host=""
+  case "$host" in
+    ""|"(none)") echo "$name" > /proc/sys/kernel/hostname ;;
+  esac
+  # /etc/machine-id leads here.
+  if [ ! -s /var/lib/sneakers/machine-id ]; then
+    read -r uuid < /proc/sys/kernel/random/uuid
+    echo "$uuid" | tr -d - > /var/lib/sneakers/machine-id.new
+    mv /var/lib/sneakers/machine-id.new /var/lib/sneakers/machine-id
+  fi
+
+  if ! ip link show sneakers0 >/dev/null 2>&1; then
+    ip link add sneakers0 type dummy
+  fi
+  ip link set sneakers0 up
+  if ! ip -4 addr show dev sneakers0 | grep -q "inet $node_ip/"; then
+    ip addr add "$node_ip/32" dev sneakers0
+  fi
+
+  mkdir -p /run/sneakers/k0s
+  sed "s/@NODE_NAME@/$name/g" /etc/k0s/k0s.yaml.tmpl > /run/sneakers/k0s/k0s.yaml
+
+  # The root's /etc/cni and /opt are links to these, where kube-router
+  # installs the CNI config and plugins.
+  mkdir -p /var/lib/cni-conf/net.d /var/lib/opt/cni/bin
+  # /var/log leads here (pod logs).
+  mkdir -p /var/lib/log
+  # The kubelet won't start a pod without a resolver file; netd writes the
+  # real one.
+  [ -e /run/sneakers/resolv.conf ] || : > /run/sneakers/resolv.conf
+
+  # The airgap bundle: k0s imports every archive in $data/images when its
+  # worker starts. Links into the read-only root, so the images aren't
+  # copied; links an earlier release left are replaced.
+  mkdir -p "$data/images"
+  for l in "$data"/images/*.tar; do
+    if [ -L "$l" ]; then rm -f "$l"; fi
+  done
+  n=""
+  for f in /usr/share/sneakers/images/*.tar; do
+    [ -f "$f" ] || continue
+    ln -s "$f" "$data/images/"
+    n="$n."
+  done
+  say "linked ${#n} bundled images into $data/images"
+
+  # Stacks k0s applies on its own: each /usr/share/sneakers/manifests/<name>/
+  # is copied to $data/manifests/<name>/.
+  for d in /usr/share/sneakers/manifests/*/; do
+    [ -d "$d" ] || continue
+    stack="$(basename "$d")"
+    mkdir -p "$data/manifests/$stack"
+    cp "$d"*.yaml "$data/manifests/$stack/"
+    say "stack $stack in place"
+  done
+}
+
+run() {
+  read -r name < "$name_file"
+  # k0s puts its own binaries first; the kubelet finds mount(8) in /bin.
+  export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+  exec /usr/bin/k0s controller --enable-worker --no-taints \
+    --config /run/sneakers/k0s/k0s.yaml --data-dir "$data" \
+    --disable-components konnectivity-server,metrics-server,update-prober,autopilot \
+    --kubelet-extra-args="--hostname-override=$name --node-ip=$node_ip"
+}
+
+case "${1:-}" in
+  prepare) prepare ;;
+  run) run ;;
+  *) echo "usage: k0s-interim prepare|run" >&2; exit 2 ;;
+esac

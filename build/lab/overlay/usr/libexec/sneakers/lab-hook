@@ -1,0 +1,52 @@
+#!/bin/sh
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# lab-hook: LAB ONLY, for the image suite (test/image/k0s); see
+# lab-hook.yaml. Inert unless /run/sneakers/esp/lab-hook exists.
+set -u
+[ -e /run/sneakers/esp/lab-hook ] || exit 0
+# The console services own the consoles and send other services' output to
+# /run/sneakers/console.log; the suite reads the serial line, so write there.
+if [ -c /dev/ttyS0 ]; then exec >/dev/ttyS0 2>&1; fi
+say() { echo "lab-hook: $*"; }
+done=/var/lib/sneakers/setup/done
+
+if [ ! -e "$done" ]; then
+  mkdir -p "${done%/*}"
+  : > "$done"
+  say "setup marked done; the next boot is normal"
+  exit 0
+fi
+
+k() { /usr/bin/k0s kubectl "$@"; }
+# wait_for <what> <command...>: retry every 10 seconds, for up to 40
+# minutes. busybox's sh here has no arithmetic: count with characters.
+wait_for() {
+  what="$1"; shift
+  i=""
+  until "$@" >/dev/null 2>&1; do
+    i="$i."
+    # After three minutes, show once what the cluster is doing.
+    if [ "${#i}" -eq 18 ]; then
+      say "still waiting for $what"
+      k get pods -A -o wide
+      k -n kube-system logs ds/kube-router --all-containers --tail=40
+    fi
+    if [ "${#i}" -ge 240 ]; then
+      say "gave up waiting for $what"
+      k get pods -A -o wide
+      exit 1
+    fi
+    sleep 10
+  done
+  say "$what"
+}
+wait_for "api up" k get --raw /readyz
+wait_for "node ready" k wait --for=condition=Ready node --all --timeout=10s
+wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l app=hello --timeout=10s
+ip="$(k get node -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')"
+body="$(k -n sneakers-hello exec deploy/hello -- wget -qO- "http://$ip:30080/" 2>&1)"
+say "GET http://$ip:30080/ answered: $body"
+k get nodes -o wide
+k get pods -A -o wide

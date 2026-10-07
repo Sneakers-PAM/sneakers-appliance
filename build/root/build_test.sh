@@ -5,7 +5,8 @@
 # build.sh builds the same root image twice from the same inputs and
 # SOURCE_DATE_EPOCH, byte for byte; the image holds exactly the declared tree
 # in tree.txt, with its owners and modes; and a k0s binary that isn't the
-# pinned one, or a missing OpenSSH or busybox, is refused. The k0s, OpenSSH
+# pinned one, a missing OpenSSH or busybox, or a lab overlay outside a lab
+# build or over a file the tree has, is refused. The k0s, OpenSSH
 # and busybox inputs are stand-ins: only their place in the tree is checked.
 # Needs go, mksquashfs, unsquashfs and veritysetup.
 #
@@ -70,4 +71,8 @@ refused "release.yaml pins $sum" K0S="$work/k0s-other"
 refused "sshd is missing (build/openssh" OPENSSH="$work/nothing"
 refused "is missing (build/busybox" BUSYBOX="$work/nothing"
 refused "no service table" SERVICES="$work/openssh"
-echo "ok: a wrong k0s, missing OpenSSH or busybox, and an empty service table are refused"
+mkdir -p "$work/overlay/etc/k0s"
+printf 'x\n' > "$work/overlay/etc/k0s/k0s.yaml.tmpl"
+refused "LAB_OVERLAY is for lab builds only" LAB_OVERLAY="$work/overlay"
+refused "LAB_OVERLAY would replace /etc/k0s/k0s.yaml.tmpl" PINS_LDFLAGS="-X example.org/pins.Channel=lab" LAB_OVERLAY="$work/overlay"
+echo "ok: a wrong k0s, missing OpenSSH or busybox, an empty service table and a misused lab overlay are refused"
