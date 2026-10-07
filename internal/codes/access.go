@@ -48,6 +48,7 @@ const (
 	ResetFailed            = 3607
 	PowerCaller            = 3608
 	PowerBusy              = 3609
+	PowerAudit             = 3610
 	ShellParse             = 3701
 	ShellUnknown           = 3702
 	NotAvailable           = 3703
@@ -93,6 +94,7 @@ var accessEntries = []apperr.Entry{
 	{Code: ResetFailed, Symbol: "RESET_FAILED", Title: "reset", Cause: "a factory reset step failed (the error names it); the reset carries on at the next boot"},
 	{Code: PowerCaller, Symbol: "POWER_CALLER", Title: "power", Cause: "init takes power and reset requests only from osadmin and the closed shell"},
 	{Code: PowerBusy, Symbol: "POWER_BUSY", Title: "power", Cause: "a reboot, shutdown or factory reset is already under way"},
+	{Code: PowerAudit, Symbol: "POWER_AUDIT", Title: "power", Cause: "the OS audit log can't be written, so init doesn't act on the request"},
 	{Code: ShellParse, Symbol: "SHELL_PARSE", Title: "shell", Cause: "the command line doesn't parse: an open quote, a control character, or longer than 64 KiB"},
 	{Code: ShellUnknown, Symbol: "SHELL_UNKNOWN", Title: "shell", Cause: "there is no such command; help lists them"},
 	{Code: NotAvailable, Symbol: "NOT_AVAILABLE", Title: "shell", Cause: "not available in this release, or the appliance services aren't answering"},

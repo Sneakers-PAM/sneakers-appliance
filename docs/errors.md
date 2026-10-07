@@ -51,6 +51,7 @@ shell, the console and :8443 show the same sentence.
 | 3607 | `RESET_FAILED` | a factory reset step failed (the error names it); the reset carries on at the next boot |
 | 3608 | `POWER_CALLER` | init takes power and reset requests only from osadmin and the closed shell |
 | 3609 | `POWER_BUSY` | a reboot, shutdown or factory reset is already under way |
+| 3610 | `POWER_AUDIT` | the OS audit log can't be written, so init doesn't act on the request |
 | 3701 | `SHELL_PARSE` | the command line doesn't parse: an open quote, a control character, or longer than 64 KiB |
 | 3702 | `SHELL_UNKNOWN` | there is no such command; `help` lists them |
 | 3703 | `NOT_AVAILABLE` | not available in this release, or the appliance services aren't answering |

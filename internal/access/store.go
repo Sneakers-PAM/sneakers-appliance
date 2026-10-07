@@ -176,8 +176,13 @@ func (s *Store) Update(fn func(*State) error) error {
 
 func (s *Store) path() string { return filepath.Join(s.dir, FileName) }
 
-func (s *Store) load() (State, error) {
-	b, err := os.ReadFile(s.path())
+func (s *Store) load() (State, error) { return ReadState(s.dir) }
+
+// ReadState reads the store in dir without opening it for writing: init
+// checks a factory reset's quorum this way, beside the store's writer.
+func ReadState(dir string) (State, error) {
+	p := filepath.Join(dir, FileName)
+	b, err := os.ReadFile(p) // #nosec G304 -- the store file in the directory given
 	if errors.Is(err, fs.ErrNotExist) {
 		return State{NextUID: FirstUID, Admins: []Admin{}, RecoveryKeys: []RecoveryKey{}, ElevationPolicy: DefaultPolicy()}, nil
 	}
@@ -186,7 +191,7 @@ func (s *Store) load() (State, error) {
 	}
 	var st State
 	if err := json.Unmarshal(b, &st); err != nil {
-		return State{}, codes.Wrap(codes.AccessStoreInvalid, fmt.Errorf("%s doesn't parse: %w", s.path(), err))
+		return State{}, codes.Wrap(codes.AccessStoreInvalid, fmt.Errorf("%s doesn't parse: %w", p, err))
 	}
 	return st, nil
 }
