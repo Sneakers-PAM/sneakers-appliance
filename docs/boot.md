@@ -40,4 +40,6 @@ previous release.
 
 It then refuses the image unless it carries exactly those six payload sections: `internal/ukipcr`
 (ported from CryptOS-PKI) predicts PCR 11 only for them, and a box that can't predict PCR 11 for a
-staged release couldn't seal its state key to it. Signing happens later, in the release workflow.
+staged release couldn't seal its state key to it. Signing happens later, in the release workflow,
+whose sign job first adds the update key as a seventh section, `.updkey`, that systemd-stub doesn't
+measure and the PCR 11 prediction skips ([release.md](release.md)).

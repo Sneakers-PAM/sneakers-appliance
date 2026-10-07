@@ -183,6 +183,25 @@ func TestPredict_SkipsThePCRSignature(t *testing.T) {
 	}
 }
 
+// The update key section isn't one of systemd-stub's unified sections, so the
+// stub never measures it.
+func TestPredict_SkipsTheUpdateKey(t *testing.T) {
+	with, err := Predict(buildPE(t,
+		section{name: ".linux", data: []byte("k")},
+		section{name: ".updkey", data: []byte("AGE-SECRET-KEY-1")},
+	))
+	if err != nil {
+		t.Fatalf("Predict: %v", err)
+	}
+	without, err := Predict(buildPE(t, section{name: ".linux", data: []byte("k")}))
+	if err != nil {
+		t.Fatalf("Predict: %v", err)
+	}
+	if !bytes.Equal(with.Value, without.Value) {
+		t.Error(".updkey changed the prediction")
+	}
+}
+
 func TestPredict_ChangesWithTheImage(t *testing.T) {
 	a, err := Predict(buildPE(t, section{name: ".linux", data: []byte("v1")}))
 	if err != nil {

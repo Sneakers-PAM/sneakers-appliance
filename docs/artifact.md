@@ -27,6 +27,8 @@ convenience tag) or kept as an OCI image layout directory for offline sites.
   manifest whose `subject` is the index, with `artifactType`
   `application/vnd.dev.sigstore.bundle.v0.3+json` and the bundle as its one layer. It signs the
   index digest, so it covers every manifest and file through their digests.
+- **The UKI** carries the channel's update key as its `.updkey` section, added before it's signed
+  ([release.md](release.md)).
 - **`release.yaml.sigstore.json`** is the bundle `cosign sign-blob --key --bundle` writes for
   `release.yaml`.
 

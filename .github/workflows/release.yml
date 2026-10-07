@@ -128,13 +128,29 @@ jobs:
           (cd "$RUNNER_TEMP/unsigned" && sha256sum -c --quiet SHA256SUMS)
           bash build/release/check-fingerprints.sh keys/production keys/production/fingerprints.txt
       # The release tool is built here from the tagged commit, not taken from
-      # the build job. It never reads a key: each key is written to tmpfs only
-      # inside the step that signs with it, and removed in that step.
+      # the build job. The only key it reads is the update key, in the step
+      # that adds it to the UKI. Each key is written to tmpfs only inside the
+      # step that uses it, and removed in that step.
       - name: Build the release tool and mount the key tmpfs
         run: |
           CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/sneakers-artifact" ./cmd/sneakers-artifact
           mkdir -p "$RUNNER_TEMP/keys" "$RUNNER_TEMP/work" "$RUNNER_TEMP/signed"
           sudo mount -t tmpfs -o size=1m,mode=0700,uid="$(id -u)" tmpfs "$RUNNER_TEMP/keys"
+      # The update key goes into the UKI before the db key signs it, so the
+      # signature covers it; the box reads it from the booted UKI, in memory
+      # only (docs/release.md). uki-add-key refuses a key that isn't the
+      # committed keys/production/update.pub's.
+      - name: Add the update key to the UKI
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          UPDATE_AGE_KEY: ${{ secrets.UPDATE_AGE_KEY }}
+        run: |
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work"
+          umask 077
+          printf '%s\n' "$UPDATE_AGE_KEY" > "$keys/update.key"
+          trap 'rm -f "$keys/update.key"' EXIT
+          "$RUNNER_TEMP/sneakers-artifact" uki-add-key --uki "$in/sneakers-$VERSION.efi" \
+            --key "$keys/update.key" --recipient keys/production/update.pub --out "$work/sneakers-$VERSION.keyed.efi"
       - name: Sign the UKI and systemd-boot (db key)
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -147,7 +163,7 @@ jobs:
           have="$(openssl pkey -in "$keys/db.key" -pubout -outform DER | sha256sum | cut -d' ' -f1)"
           want="$(openssl x509 -in keys/production/db.crt -noout -pubkey | openssl pkey -pubin -outform DER | sha256sum | cut -d' ' -f1)"
           [ "$have" = "$want" ] || { echo "SB_DB_KEY doesn't belong to keys/production/db.crt" >&2; exit 1; }
-          sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/sneakers-$VERSION.efi" "$in/sneakers-$VERSION.efi"
+          sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/sneakers-$VERSION.efi" "$work/sneakers-$VERSION.keyed.efi"
           sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/systemd-bootx64.efi" "$in/systemd-bootx64.efi"
       - name: Assemble the artifact
         env:
@@ -201,8 +217,9 @@ jobs:
         run: |
           work="$RUNNER_TEMP/work" out="$RUNNER_TEMP/signed"
           "$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$out"
+          # The key in the signed UKI must open the .bin, as it will on the box.
           "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
-            "$out/sneakers-appliance-$VERSION-amd64.bin"
+            --identity-uki "$work/sneakers-$VERSION.efi" "$out/sneakers-appliance-$VERSION-amd64.bin"
       - name: Wipe the keys
         if: always()
         run: |
@@ -299,7 +316,7 @@ jobs:
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
-          KEYS="$keys" OUT="$lab" DISK_SIZE=8G bash build/lab/build.sh
+          KEYS="$keys" OUT="$lab" bash build/lab/build.sh
           go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
           tool="$work/sneakers-artifact"
           "$tool" bin-pack --layout "$lab/artifact" --recipient "$keys/update.pub" \
@@ -308,9 +325,10 @@ jobs:
             --tlog-upload=false --use-signing-config=false "$work/bin/header.json" >/dev/null
           "$tool" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$work/out"
           bin="$work/out/sneakers-appliance-$VERSION-amd64-LAB.bin"
-          # The box's path: verify, decrypt, unpack, then the kit chain on what came out.
+          # The box's path: verify, decrypt with the key in the signed UKI,
+          # unpack, then the kit chain on what came out.
           "$tool" bin-verify --release-key "$keys/cosign.pub" --channel lab \
-            --identity "$keys/update.key" --extract "$work/unpacked" "$bin"
+            --identity-uki "$lab/work/sneakers-$VERSION.efi" --extract "$work/unpacked" "$bin"
           "$lab/sneakers-kit" verify "$work/unpacked"
           # Lab and production never cross.
           if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$bin"; then
