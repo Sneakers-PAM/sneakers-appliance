@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // SecureBoot is the firmware's starting state.
@@ -33,6 +36,10 @@ const (
 	// Off: the Secure Boot firmware with an empty store and enforcement
 	// never turned on.
 	Off
+	// OffWithKeys: keys enrolled (the run's lab keys, standing in for a
+	// vendor's) but enforcement off, so the firmware isn't in Setup Mode:
+	// a VMware VM with Secure Boot turned off in its settings.
+	OffWithKeys
 )
 
 // Disk is one disk attached to the VM.
@@ -98,6 +105,8 @@ type VM struct {
 	serial string
 	cancel context.CancelFunc
 	dir    string
+	done   chan struct{}
+	in     string
 }
 
 // Boot starts QEMU with o and returns once it's running.
@@ -114,6 +123,14 @@ func Boot(t testing.TB, o Options) *VM {
 			"--add-kek", owner, filepath.Join(o.Keys, "KEK.crt"),
 			"--add-db", owner, filepath.Join(o.Keys, "db.crt"),
 			"--secure-boot")
+	case OffWithKeys:
+		owner := "5d4c8e4b-3b9b-4b58-9e2c-0d7e1f2a3b4c"
+		run(t, "virt-fw-vars", "--input", OVMFVars, "--output", vars,
+			"--set-pk", owner, filepath.Join(o.Keys, "PK.crt"),
+			"--add-kek", owner, filepath.Join(o.Keys, "KEK.crt"),
+			"--add-db", owner, filepath.Join(o.Keys, "db.crt"),
+			// OVMF enforces as soon as a PK is enrolled unless this is off.
+			"--set-false", "SecureBootEnable")
 	default:
 		copyFile(t, OVMFVars, vars)
 	}
@@ -127,12 +144,28 @@ func Boot(t testing.TB, o Options) *VM {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	serial := filepath.Join(dir, "serial.log")
+	// The serial line is a pair of FIFOs (QEMU's pipe chardev): the
+	// output is copied into serial.log, and Type writes the input.
+	ser := filepath.Join(dir, "ser")
+	for _, f := range []string{ser + ".in", ser + ".out"} {
+		if err := unix.Mkfifo(f, 0o600); err != nil {
+			cancel()
+			t.Fatal(err)
+		}
+	}
+	// O_RDWR so the open doesn't wait for QEMU; the copy ends when QEMU
+	// has exited and this descriptor is closed.
+	pipe, err := os.OpenFile(ser+".out", os.O_RDWR, 0) // #nosec G304 -- the VM's FIFO
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
 	args := []string{
 		"-machine", "q35,smm=on", "-m", fmt.Sprint(mem), "-smp", "2", "-nographic", "-no-reboot",
 		"-global", "driver=cfi.pflash01,property=secure,value=on",
 		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + OVMFCode,
 		"-drive", "if=pflash,format=raw,unit=1,file=" + vars,
-		"-serial", "file:" + serial, "-monitor", "none",
+		"-chardev", "pipe,id=ser0,path=" + ser, "-serial", "chardev:ser0", "-monitor", "none",
 		"-netdev", "user,id=n0,restrict=on", "-device", "virtio-net-pci,netdev=n0",
 	}
 	if _, err := os.Stat("/dev/kvm"); err == nil {
@@ -173,10 +206,28 @@ func Boot(t testing.TB, o Options) *VM {
 		cancel()
 		t.Fatal(err)
 	}
-	vm := &VM{t: t, cmd: cmd, serial: serial, cancel: cancel, dir: dir}
+	vm := &VM{t: t, cmd: cmd, serial: serial, cancel: cancel, dir: dir, done: make(chan struct{}), in: ser + ".in"}
+	copied := make(chan struct{})
+	go func() {
+		defer close(copied)
+		out, err := os.OpenFile(serial, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- the test's own log
+		if err != nil {
+			return
+		}
+		defer func() { _ = out.Close() }()
+		_, _ = io.Copy(out, pipe)
+	}()
+	go func() {
+		_ = cmd.Wait()
+		// Let the copy drain what QEMU wrote last before it's closed.
+		time.Sleep(500 * time.Millisecond)
+		_ = pipe.Close()
+		<-copied
+		close(vm.done)
+	}()
 	t.Cleanup(func() {
 		cancel()
-		_ = cmd.Wait()
+		<-vm.done
 		if t.Failed() {
 			b, _ := os.ReadFile(serial) // #nosec G304 -- the test's own log
 			t.Logf("serial console:\n%s\nqemu stderr:\n%s", tail(b, 200), stderr.String())
@@ -192,23 +243,128 @@ func Boot(t testing.TB, o Options) *VM {
 	return vm
 }
 
-// Expect waits until the serial console shows re, or fails the test.
+// Type sends s on the serial line, as typed at the console.
+func (vm *VM) Type(s string) {
+	vm.t.Helper()
+	f, err := os.OpenFile(vm.in, os.O_WRONLY, 0) // #nosec G304 -- the VM's FIFO
+	if err != nil {
+		vm.t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	if _, err := f.WriteString(s); err != nil {
+		vm.t.Fatal(err)
+	}
+}
+
+// ansi matches the colour codes init's console log carries.
+var ansi = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+// Expect waits until the serial console shows re, or fails the test. The
+// console is matched without its colour codes.
 func (vm *VM) Expect(re string, timeout time.Duration) string {
 	vm.t.Helper()
 	rx := regexp.MustCompile(re)
 	deadline := time.Now().Add(timeout)
 	for {
-		b, _ := os.ReadFile(vm.serial) // #nosec G304 -- the VM's own log
-		if m := rx.Find(b); m != nil {
-			return string(m)
+		if m := rx.FindString(vm.Console()); m != "" {
+			return m
 		}
 		if time.Now().After(deadline) {
 			vm.t.Fatalf("serial console never showed %q in %s", re, timeout)
 		}
-		if vm.cmd.ProcessState != nil {
+		if vm.exited() {
+			if m := rx.FindString(vm.Console()); m != "" {
+				return m
+			}
 			vm.t.Fatalf("QEMU exited before the serial console showed %q", re)
 		}
 		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+func (vm *VM) exited() bool {
+	select {
+	case <-vm.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// Console is the serial console so far, without colour codes.
+func (vm *VM) Console() string {
+	b, _ := os.ReadFile(vm.serial) // #nosec G304 -- the VM's own log
+	return ansi.ReplaceAllString(string(b), "")
+}
+
+// Disk is the path of the VM's copy of disk i. Once the VM has exited it
+// holds what the guest wrote, and a later Boot can take it as its Image.
+func (vm *VM) Disk(i int) string { return filepath.Join(vm.dir, fmt.Sprintf("disk%d.raw", i)) }
+
+// Stop powers the VM off (QEMU is killed) and waits for it to go. Its disk
+// keeps what the guest had synced.
+func (vm *VM) Stop() {
+	vm.cancel()
+	<-vm.done
+}
+
+// WaitExit waits for QEMU to exit (a guest reboot, with -no-reboot, or a
+// power-off), or fails the test.
+func (vm *VM) WaitExit(timeout time.Duration) {
+	vm.t.Helper()
+	select {
+	case <-vm.done:
+	case <-time.After(timeout):
+		vm.t.Fatalf("QEMU didn't exit within %s", timeout)
+	}
+}
+
+// The console lines that mean init gave up or a service keeps failing.
+var (
+	initFatal = regexp.MustCompile(`init: fatal|Kernel panic|Attempted to kill init`)
+	restarted = regexp.MustCompile(`services: exited .*restart=true service=([A-Za-z0-9_-]+)`)
+)
+
+// CrashLoopRestarts is how many restarts within a Stable window count as a
+// crash loop.
+const CrashLoopRestarts = 3
+
+// Stable watches the console for window and fails the test if init stops
+// (its fatal line or a kernel panic), QEMU exits, or a service is
+// restarted CrashLoopRestarts times or more. known maps a service to the
+// reason it's expected to crash-loop on this image; it's logged, not
+// failed, and a known service that doesn't loop fails, so the entry is
+// removed once its cause is fixed.
+func (vm *VM) Stable(window time.Duration, known map[string]string) {
+	vm.t.Helper()
+	deadline := time.Now().Add(window)
+	for time.Now().Before(deadline) {
+		if vm.exited() {
+			vm.t.Fatalf("QEMU exited during the stability window")
+		}
+		if m := initFatal.FindString(vm.Console()); m != "" {
+			vm.t.Fatalf("init stopped: the console shows %q", m)
+		}
+		time.Sleep(time.Second)
+	}
+	counts := map[string]int{}
+	for _, m := range restarted.FindAllStringSubmatch(vm.Console(), -1) {
+		counts[m[1]]++
+	}
+	for name, n := range counts {
+		if n < CrashLoopRestarts {
+			continue
+		}
+		if why, ok := known[name]; ok {
+			vm.t.Logf("%s restarted %d times in %s, as expected on this image: %s", name, n, window, why)
+			continue
+		}
+		vm.t.Errorf("%s is crash-looping: restarted %d times in %s", name, n, window)
+	}
+	for name, why := range known {
+		if counts[name] < CrashLoopRestarts {
+			vm.t.Errorf("%s was expected to crash-loop (%s) but restarted %d times; drop it from the known list", name, why, counts[name])
+		}
 	}
 }
 
