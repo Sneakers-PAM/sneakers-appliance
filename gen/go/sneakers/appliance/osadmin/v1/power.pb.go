@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/power.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -844,7 +844,7 @@ const file_sneakers_appliance_osadmin_v1_power_proto_rawDesc = "" +
 	"\bShutdown\x12..sneakers.appliance.osadmin.v1.ShutdownRequest\x1a/.sneakers.appliance.osadmin.v1.ShutdownResponse\"\x18\xc2\xf3\x18\x14\x10\x01\x18\x01\"\x0epower.shutdown\x12\xab\x01\n" +
 	"\x11StartFactoryReset\x127.sneakers.appliance.osadmin.v1.StartFactoryResetRequest\x1a8.sneakers.appliance.osadmin.v1.StartFactoryResetResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19power.factory-reset.start\x12\xb3\x01\n" +
 	"\x13ApproveFactoryReset\x129.sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest\x1a:.sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse\"%\xc2\xf3\x18!\x10\x01\x18\x01\"\x1bpower.factory-reset.approve\x12\xad\x01\n" +
-	"\x12CancelFactoryReset\x128.sneakers.appliance.osadmin.v1.CancelFactoryResetRequest\x1a9.sneakers.appliance.osadmin.v1.CancelFactoryResetResponse\"\"\xc2\xf3\x18\x1e\x10\x01\"\x1apower.factory-reset.cancelB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x12CancelFactoryReset\x128.sneakers.appliance.osadmin.v1.CancelFactoryResetRequest\x1a9.sneakers.appliance.osadmin.v1.CancelFactoryResetResponse\"\"\xc2\xf3\x18\x1e\x10\x01\"\x1apower.factory-reset.cancelB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_power_proto_rawDescOnce sync.Once

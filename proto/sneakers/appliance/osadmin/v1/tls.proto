@@ -9,7 +9,7 @@ package sneakers.appliance.osadmin.v1;
 import "google/protobuf/timestamp.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 
-option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
 // TlsService manages the product certificate and the CA bundle.
 service TlsService {

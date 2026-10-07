@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/mcp.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -230,7 +230,7 @@ const file_sneakers_appliance_osadmin_v1_mcp_proto_rawDesc = "" +
 	"\n" +
 	"McpService\x12p\n" +
 	"\x06GetMcp\x12,.sneakers.appliance.osadmin.v1.GetMcpRequest\x1a-.sneakers.appliance.osadmin.v1.GetMcpResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12x\n" +
-	"\x06SetMcp\x12,.sneakers.appliance.osadmin.v1.SetMcpRequest\x1a-.sneakers.appliance.osadmin.v1.SetMcpResponse\"\x11\xc2\xf3\x18\r\x10\x01\x18\x01\"\amcp.setB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x06SetMcp\x12,.sneakers.appliance.osadmin.v1.SetMcpRequest\x1a-.sneakers.appliance.osadmin.v1.SetMcpResponse\"\x11\xc2\xf3\x18\r\x10\x01\x18\x01\"\amcp.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_mcp_proto_rawDescOnce sync.Once

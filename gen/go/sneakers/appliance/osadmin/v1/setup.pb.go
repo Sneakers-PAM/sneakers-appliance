@@ -10,7 +10,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/setup.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -710,7 +710,7 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x11RemoveRecoveryKey\x127.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest\x1a8.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19setup.recovery-key.remove\x12\x9c\x01\n" +
 	"\x0eDownloadEscrow\x124.sneakers.appliance.osadmin.v1.DownloadEscrowRequest\x1a5.sneakers.appliance.osadmin.v1.DownloadEscrowResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\"\x15setup.escrow.download\x12\xbd\x01\n" +
 	"\x16AcknowledgeSingleAdmin\x12<.sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest\x1a=.sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse\"&\xc2\xf3\x18\"\x10\x02\"\x1esetup.single-admin.acknowledge\x12}\n" +
-	"\x06Finish\x12,.sneakers.appliance.osadmin.v1.FinishRequest\x1a-.sneakers.appliance.osadmin.v1.FinishResponse\"\x16\xc2\xf3\x18\x12\x10\x02\x18\x01\"\fsetup.finishB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x06Finish\x12,.sneakers.appliance.osadmin.v1.FinishRequest\x1a-.sneakers.appliance.osadmin.v1.FinishResponse\"\x16\xc2\xf3\x18\x12\x10\x02\x18\x01\"\fsetup.finishB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_setup_proto_rawDescOnce sync.Once

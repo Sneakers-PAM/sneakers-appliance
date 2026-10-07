@@ -9,7 +9,7 @@
 //
 // Source: sneakers/appliance/osadmin/v1/signin.proto
 
-package osadminapiv1connect
+package osadminv1connect
 
 import (
 	connect "connectrpc.com/connect"

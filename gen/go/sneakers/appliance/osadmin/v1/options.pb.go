@@ -13,7 +13,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/options.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -192,7 +192,7 @@ const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"ROLE_ADMIN\x10\x01\x12\x0e\n" +
 	"\n" +
 	"ROLE_OWNER\x10\x02:Y\n" +
-	"\x04rule\x12\x1e.google.protobuf.MethodOptions\x18\xb8\x8e\x03 \x01(\v2#.sneakers.appliance.osadmin.v1.RuleR\x04ruleB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x04rule\x12\x1e.google.protobuf.MethodOptions\x18\xb8\x8e\x03 \x01(\v2#.sneakers.appliance.osadmin.v1.RuleR\x04ruleB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_options_proto_rawDescOnce sync.Once

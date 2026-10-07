@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/backup.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -509,7 +509,7 @@ const file_sneakers_appliance_osadmin_v1_backup_proto_rawDesc = "" +
 	"\x0fSetBackupPolicy\x125.sneakers.appliance.osadmin.v1.SetBackupPolicyRequest\x1a6.sneakers.appliance.osadmin.v1.SetBackupPolicyResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11backup.policy.set\x12\x82\x01\n" +
 	"\tRunBackup\x12/.sneakers.appliance.osadmin.v1.RunBackupRequest\x1a0.sneakers.appliance.osadmin.v1.RunBackupResponse\"\x12\xc2\xf3\x18\x0e\x10\x01\"\n" +
 	"backup.run\x12\x82\x01\n" +
-	"\aRestore\x12-.sneakers.appliance.osadmin.v1.RestoreRequest\x1a..sneakers.appliance.osadmin.v1.RestoreResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0ebackup.restoreB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\aRestore\x12-.sneakers.appliance.osadmin.v1.RestoreRequest\x1a..sneakers.appliance.osadmin.v1.RestoreResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0ebackup.restoreB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_backup_proto_rawDescOnce sync.Once

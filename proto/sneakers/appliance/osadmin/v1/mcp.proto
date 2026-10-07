@@ -8,7 +8,7 @@ package sneakers.appliance.osadmin.v1;
 
 import "sneakers/appliance/osadmin/v1/options.proto";
 
-option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1";
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
 // McpService switches the product's MCP and machine API.
 service McpService {

@@ -10,7 +10,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/access.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -1202,7 +1202,7 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x06AddKey\x12,.sneakers.appliance.osadmin.v1.AddKeyRequest\x1a-.sneakers.appliance.osadmin.v1.AddKeyResponse\"\x18\xc2\xf3\x18\x14\x10\x01\x18\x01\"\x0eaccess.key.add\x12\x8b\x01\n" +
 	"\tRemoveKey\x12/.sneakers.appliance.osadmin.v1.RemoveKeyRequest\x1a0.sneakers.appliance.osadmin.v1.RemoveKeyResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11access.key.remove\x12\xb0\x01\n" +
 	"\x12SetElevationPolicy\x128.sneakers.appliance.osadmin.v1.SetElevationPolicyRequest\x1a9.sneakers.appliance.osadmin.v1.SetElevationPolicyResponse\"%\xc2\xf3\x18!\x10\x02\x18\x01\"\x1baccess.elevation-policy.set\x12\x8b\x01\n" +
-	"\tSetQuorum\x12/.sneakers.appliance.osadmin.v1.SetQuorumRequest\x1a0.sneakers.appliance.osadmin.v1.SetQuorumResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11access.quorum.setB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\tSetQuorum\x12/.sneakers.appliance.osadmin.v1.SetQuorumRequest\x1a0.sneakers.appliance.osadmin.v1.SetQuorumResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11access.quorum.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_access_proto_rawDescOnce sync.Once

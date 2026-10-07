@@ -10,7 +10,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/audit.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -304,7 +304,7 @@ const file_sneakers_appliance_osadmin_v1_audit_proto_rawDesc = "" +
 	"chainError2\x8c\x01\n" +
 	"\fAuditService\x12|\n" +
 	"\n" +
-	"ListEvents\x120.sneakers.appliance.osadmin.v1.ListEventsRequest\x1a1.sneakers.appliance.osadmin.v1.ListEventsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01B^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"ListEvents\x120.sneakers.appliance.osadmin.v1.ListEventsRequest\x1a1.sneakers.appliance.osadmin.v1.ListEventsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_audit_proto_rawDescOnce sync.Once

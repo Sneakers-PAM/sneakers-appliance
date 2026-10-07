@@ -7,7 +7,7 @@
 //
 // Source: sneakers/appliance/osadmin/v1/mcp.proto
 
-package osadminapiv1connect
+package osadminv1connect
 
 import (
 	connect "connectrpc.com/connect"

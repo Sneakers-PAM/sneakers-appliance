@@ -10,7 +10,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/network.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	v1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
@@ -437,7 +437,7 @@ const file_sneakers_appliance_osadmin_v1_network_proto_rawDesc = "" +
 	"\n" +
 	"SetNetwork\x120.sneakers.appliance.osadmin.v1.SetNetworkRequest\x1a1.sneakers.appliance.osadmin.v1.SetNetworkResponse\"\x15\xc2\xf3\x18\x11\x10\x02\x18\x01\"\vnetwork.set\x12\x96\x01\n" +
 	"\x0eConfirmNetwork\x124.sneakers.appliance.osadmin.v1.ConfirmNetworkRequest\x1a5.sneakers.appliance.osadmin.v1.ConfirmNetworkResponse\"\x17\xc2\xf3\x18\x13\x10\x02\"\x0fnetwork.confirm\x12y\n" +
-	"\tRunChecks\x12/.sneakers.appliance.osadmin.v1.RunChecksRequest\x1a0.sneakers.appliance.osadmin.v1.RunChecksResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01B^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\tRunChecks\x12/.sneakers.appliance.osadmin.v1.RunChecksRequest\x1a0.sneakers.appliance.osadmin.v1.RunChecksResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_network_proto_rawDescOnce sync.Once

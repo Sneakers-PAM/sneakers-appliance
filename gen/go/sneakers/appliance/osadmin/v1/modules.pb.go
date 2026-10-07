@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/modules.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -273,7 +273,7 @@ const file_sneakers_appliance_osadmin_v1_modules_proto_rawDesc = "" +
 	"\x11AddModuleResponse2\x99\x02\n" +
 	"\x0eModulesService\x12\x7f\n" +
 	"\vListModules\x121.sneakers.appliance.osadmin.v1.ListModulesRequest\x1a2.sneakers.appliance.osadmin.v1.ListModulesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x85\x01\n" +
-	"\tAddModule\x12/.sneakers.appliance.osadmin.v1.AddModuleRequest\x1a0.sneakers.appliance.osadmin.v1.AddModuleResponse\"\x15\xc2\xf3\x18\x11\x10\x02\x18\x01\"\vmodules.addB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\tAddModule\x12/.sneakers.appliance.osadmin.v1.AddModuleRequest\x1a0.sneakers.appliance.osadmin.v1.AddModuleResponse\"\x15\xc2\xf3\x18\x11\x10\x02\x18\x01\"\vmodules.addB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_modules_proto_rawDescOnce sync.Once

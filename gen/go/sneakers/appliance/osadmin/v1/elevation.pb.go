@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/elevation.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -490,7 +490,7 @@ const file_sneakers_appliance_osadmin_v1_elevation_proto_rawDesc = "" +
 	"\x0eListElevations\x124.sneakers.appliance.osadmin.v1.ListElevationsRequest\x1a5.sneakers.appliance.osadmin.v1.ListElevationsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa0\x01\n" +
 	"\x10ApproveElevation\x126.sneakers.appliance.osadmin.v1.ApproveElevationRequest\x1a7.sneakers.appliance.osadmin.v1.ApproveElevationResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11elevation.approve\x12\x92\x01\n" +
 	"\rDenyElevation\x123.sneakers.appliance.osadmin.v1.DenyElevationRequest\x1a4.sneakers.appliance.osadmin.v1.DenyElevationResponse\"\x16\xc2\xf3\x18\x12\x10\x02\"\x0eelevation.deny\x12\xa6\x01\n" +
-	"\x12TerminateElevation\x128.sneakers.appliance.osadmin.v1.TerminateElevationRequest\x1a9.sneakers.appliance.osadmin.v1.TerminateElevationResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\"\x13elevation.terminateB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x12TerminateElevation\x128.sneakers.appliance.osadmin.v1.TerminateElevationRequest\x1a9.sneakers.appliance.osadmin.v1.TerminateElevationResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\"\x13elevation.terminateB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescOnce sync.Once

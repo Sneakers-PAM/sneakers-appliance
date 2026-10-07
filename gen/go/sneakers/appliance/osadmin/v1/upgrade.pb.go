@@ -13,7 +13,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/upgrade.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -880,7 +880,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\vStageUpdate\x121.sneakers.appliance.osadmin.v1.StageUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.StageUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.stage\x12\x8d\x01\n" +
 	"\vApplyUpdate\x121.sneakers.appliance.osadmin.v1.ApplyUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.ApplyUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.apply\x12\x91\x01\n" +
 	"\fRevertUpdate\x122.sneakers.appliance.osadmin.v1.RevertUpdateRequest\x1a3.sneakers.appliance.osadmin.v1.RevertUpdateResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0eupgrade.revert\x12\xa1\x01\n" +
-	"\x10SetUpgradePolicy\x126.sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest\x1a7.sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse\"\x1c\xc2\xf3\x18\x18\x10\x02\x18\x01\"\x12upgrade.policy.setB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x10SetUpgradePolicy\x126.sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest\x1a7.sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse\"\x1c\xc2\xf3\x18\x18\x10\x02\x18\x01\"\x12upgrade.policy.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescOnce sync.Once

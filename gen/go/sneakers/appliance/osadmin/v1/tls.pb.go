@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/tls.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -499,7 +499,7 @@ const file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc = "" +
 	"\x06GetTls\x12,.sneakers.appliance.osadmin.v1.GetTlsRequest\x1a-.sneakers.appliance.osadmin.v1.GetTlsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x86\x01\n" +
 	"\tCreateCsr\x12/.sneakers.appliance.osadmin.v1.CreateCsrRequest\x1a0.sneakers.appliance.osadmin.v1.CreateCsrResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0etls.csr.create\x12\xa8\x01\n" +
 	"\x11UploadCertificate\x127.sneakers.appliance.osadmin.v1.UploadCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.UploadCertificateResponse\" \xc2\xf3\x18\x1c\x10\x01\x18\x01\"\x16tls.certificate.upload\x12\xb1\x01\n" +
-	"\x13SetAdminCertificate\x129.sneakers.appliance.osadmin.v1.SetAdminCertificateRequest\x1a:.sneakers.appliance.osadmin.v1.SetAdminCertificateResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19tls.admin-certificate.setB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x13SetAdminCertificate\x129.sneakers.appliance.osadmin.v1.SetAdminCertificateRequest\x1a:.sneakers.appliance.osadmin.v1.SetAdminCertificateResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19tls.admin-certificate.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_tls_proto_rawDescOnce sync.Once

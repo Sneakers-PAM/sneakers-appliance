@@ -11,7 +11,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/local.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -344,7 +344,7 @@ const file_sneakers_appliance_osadmin_v1_local_proto_rawDesc = "" +
 	"\fLocalService\x12}\n" +
 	"\x0eDescribeSignIn\x124.sneakers.appliance.osadmin.v1.DescribeSignInRequest\x1a5.sneakers.appliance.osadmin.v1.DescribeSignInResponse\x12z\n" +
 	"\rApproveSignIn\x123.sneakers.appliance.osadmin.v1.ApproveSignInRequest\x1a4.sneakers.appliance.osadmin.v1.ApproveSignInResponse\x12\x98\x01\n" +
-	"\x17LocalCancelFactoryReset\x12=.sneakers.appliance.osadmin.v1.LocalCancelFactoryResetRequest\x1a>.sneakers.appliance.osadmin.v1.LocalCancelFactoryResetResponseB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\x17LocalCancelFactoryReset\x12=.sneakers.appliance.osadmin.v1.LocalCancelFactoryResetRequest\x1a>.sneakers.appliance.osadmin.v1.LocalCancelFactoryResetResponseB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_local_proto_rawDescOnce sync.Once

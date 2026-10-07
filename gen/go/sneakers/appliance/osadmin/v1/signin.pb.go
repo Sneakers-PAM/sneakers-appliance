@@ -11,7 +11,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/signin.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -600,7 +600,7 @@ const file_sneakers_appliance_osadmin_v1_signin_proto_rawDesc = "" +
 	"PollSignIn\x120.sneakers.appliance.osadmin.v1.PollSignInRequest\x1a1.sneakers.appliance.osadmin.v1.PollSignInResponse\"\x06\xc2\xf3\x18\x02\b\x01\x12|\n" +
 	"\n" +
 	"GetSession\x120.sneakers.appliance.osadmin.v1.GetSessionRequest\x1a1.sneakers.appliance.osadmin.v1.GetSessionResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x80\x01\n" +
-	"\aSignOut\x12-.sneakers.appliance.osadmin.v1.SignOutRequest\x1a..sneakers.appliance.osadmin.v1.SignOutResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0esignin.signoutB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\aSignOut\x12-.sneakers.appliance.osadmin.v1.SignOutRequest\x1a..sneakers.appliance.osadmin.v1.SignOutResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0esignin.signoutB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_signin_proto_rawDescOnce sync.Once

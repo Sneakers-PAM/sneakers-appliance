@@ -9,7 +9,7 @@
 // 	protoc        (unknown)
 // source: sneakers/appliance/osadmin/v1/status.proto
 
-package osadminapiv1
+package osadminv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -710,7 +710,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x1aWARNING_KIND_FACTORY_RESET\x10\x062\xa9\x02\n" +
 	"\rStatusService\x12y\n" +
 	"\tGetStatus\x12/.sneakers.appliance.osadmin.v1.GetStatusRequest\x1a0.sneakers.appliance.osadmin.v1.GetStatusResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
-	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.setB^Z\\github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminapiv1b\x06proto3"
+	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_status_proto_rawDescOnce sync.Once
