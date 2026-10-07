@@ -225,3 +225,21 @@ func TestReadStateSeesTheWritersLatestVersion(t *testing.T) {
 		t.Fatal("reading left a file behind")
 	}
 }
+
+// accessd renders the accounts and sshd files from every new version.
+func TestOnChangeSeesEveryWrittenVersion(t *testing.T) {
+	var seen []int
+	s, err := access.Open(t.TempDir(), access.Options{Stage: func() (bool, bool) { return false, false }, OnChange: func(st access.State) { seen = append(seen, st.Version) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Update(func(st *access.State) error { st.AddAdmin("alice", access.RoleOwner, "console", time.Now()); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Update(func(*access.State) error { return errors.New("refused") }); err == nil {
+		t.Fatal("no error")
+	}
+	if len(seen) != 1 || seen[0] != 1 {
+		t.Fatalf("%v", seen)
+	}
+}

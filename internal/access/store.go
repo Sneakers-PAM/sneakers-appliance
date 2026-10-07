@@ -110,6 +110,9 @@ type Options struct {
 	// Stage reports the setup progress; nil applies every invariant.
 	Stage  Stage
 	Logger log.Logger
+	// OnChange, when set, gets every version Update writes, after the
+	// write and outside the store's lock.
+	OnChange func(State)
 }
 
 // Open opens (or starts) the store in dir.
@@ -149,29 +152,37 @@ func (s *Store) Read() State {
 // Concurrent Updates run one after the other, each on the state the last one
 // left, so no interleaving can break an invariant.
 func (s *Store) Update(fn func(*State) error) error {
+	next, err := s.update(fn)
+	if err == nil && s.o.OnChange != nil {
+		s.o.OnChange(next.Clone())
+	}
+	return err
+}
+
+func (s *Store) update(fn func(*State) error) (State, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cur, err := s.load()
 	if err != nil {
-		return err
+		return State{}, err
 	}
 	next := cur.Clone()
 	if err := fn(&next); err != nil {
-		return err
+		return State{}, err
 	}
 	adminDone, recoveryDone := s.o.Stage()
 	if err := Check(next, adminDone, recoveryDone); err != nil {
 		s.o.Logger.Warn("access: change refused", log.F("version", cur.Version), log.F("error", codes.Describe(err)))
-		return err
+		return State{}, err
 	}
 	next.Version = cur.Version + 1
 	if err := s.write(next); err != nil {
 		s.o.Logger.Error(err, "access: store write failed", log.F("version", next.Version))
-		return err
+		return State{}, err
 	}
 	s.cur = next
 	s.o.Logger.Info("access: store updated", log.F("version", next.Version), log.F("admins", len(next.Admins)), log.F("recoveryKeys", len(next.RecoveryKeys)))
-	return nil
+	return next, nil
 }
 
 func (s *Store) path() string { return filepath.Join(s.dir, FileName) }
