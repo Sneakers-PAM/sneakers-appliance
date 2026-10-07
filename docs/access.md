@@ -312,7 +312,9 @@ Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`, `
 `sneakers-osadmin` runs as `osadmin` and refuses to run as root. It asks accessd for the management
 addresses and host name (`BindingService.GetBinding`, from netd), makes or reuses its certificate in
 `/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when the addresses or the host
-name change it rebinds with a matching certificate. It serves the static pages and forwards the API,
+name change it rebinds with a matching certificate. Port 8443 speaks TLS only: a browser that asks
+for `http://<box>:8443/` gets a `301` to the same host, port and path over `https://`, with a short
+"Redirecting you to https…" page and the link, and nothing else is served over plain HTTP. It serves the static pages and forwards the API,
 `POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Flags:
 `--state` (`/var/lib/sneakers`), `--assets` (`/usr/share/sneakers/osadmin`) and `--access-socket`
 (`/run/sneakers/access.sock`). `LOG_LEVEL` and `LOG_FORMAT` set the logging; the defaults are
