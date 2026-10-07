@@ -46,6 +46,11 @@ shell, the console and :8443 show the same sentence.
 | 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
 | 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |
 | 3604 | `POWER_FORCED_CONFIRM` | a forced reboot or shutdown needs its second, explicit confirmation |
+| 3605 | `RESET_VERIFY` | the factory reset's check failed (a partition or a LUKS, filesystem or GPT signature is still there); the box doesn't reboot |
+| 3606 | `RESET_QUORUM` | init refused the factory reset: not armed, approvals that aren't a quorum of the roster, the delay not over, or expired |
+| 3607 | `RESET_FAILED` | a factory reset step failed (the error names it); the reset carries on at the next boot |
+| 3608 | `POWER_CALLER` | init takes power and reset requests only from osadmin and the closed shell |
+| 3609 | `POWER_BUSY` | a reboot, shutdown or factory reset is already under way |
 | 3701 | `SHELL_PARSE` | the command line doesn't parse: an open quote, a control character, or longer than 64 KiB |
 | 3702 | `SHELL_UNKNOWN` | there is no such command; `help` lists them |
 | 3703 | `NOT_AVAILABLE` | not available in this release, or the appliance services aren't answering |

@@ -18,6 +18,10 @@ const (
 	// Mismatch: the box is set to use Secure Boot and the firmware has it
 	// off. The console shows the mismatch screen and nothing starts.
 	Mismatch Phase = "mismatch"
+	// Reset: a factory reset was started and isn't finished. Init carries
+	// it on and starts nothing; the box never boots normally until it's
+	// done.
+	Reset Phase = "reset"
 )
 
 // SB is the admin's Secure Boot choice.
@@ -51,12 +55,18 @@ type Facts struct {
 	SBEnforcingOrgOnly bool
 	// SetupDone: /var/lib/sneakers/setup/done exists.
 	SetupDone bool
+	// ResetPending: the ESP's reset.json records a factory reset that
+	// isn't done.
+	ResetPending bool
 }
 
 // Decide picks the phase for f.
 func Decide(f Facts) Phase {
 	if f.BootedFromISO {
 		return Install
+	}
+	if f.ResetPending {
+		return Reset
 	}
 	after := Firstboot
 	if f.SetupDone {

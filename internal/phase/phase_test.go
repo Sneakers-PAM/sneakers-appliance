@@ -28,6 +28,8 @@ func TestDecidePhase(t *testing.T) {
 		{"mismatch: fixed on, firmware off", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SetupDone: true}, phase.Mismatch},
 		{"mismatch: fixed on, firmware lost its variables", phase.Facts{SBChoice: phase.SBOn, SBChoiceFixed: true, SetupDone: true}, phase.Mismatch},
 		{"turned on later: enrol, not mismatch", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SBEnrolPending: true, SetupDone: true}, phase.Enrol},
+		{"a pending factory reset on a set-up box", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SBEnforcing: true, SBEnforcingOrgOnly: true, SetupDone: true, ResetPending: true}, phase.Reset},
+		{"a pending factory reset beats the mismatch screen", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SetupDone: true, ResetPending: true}, phase.Reset},
 		{"turned on later, now enforcing", phase.Facts{SBSupported: true, SBChoice: phase.SBOn, SBChoiceFixed: true, SBEnrolPending: true, SBEnforcing: true, SBEnforcingOrgOnly: true, SetupDone: true}, phase.Normal},
 	}
 	for _, c := range cases {
