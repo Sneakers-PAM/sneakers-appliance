@@ -210,6 +210,11 @@ func checkImageSignature(fsys fs.FS, name, hexd string, key *ecdsa.PublicKey) er
 	if err != nil {
 		return codes.New(codes.KitImageUnsigned, "image sha256:%s has no signature", hexd)
 	}
+	return verifyImageSignature(b, hexd, key)
+}
+
+// verifyImageSignature checks one sigstore bundle over the image digest hexd.
+func verifyImageSignature(b []byte, hexd string, key *ecdsa.PublicKey) error {
 	bd, err := sigbundle.Parse(b)
 	if err != nil {
 		return codes.New(codes.KitImageUnsigned, "image sha256:%s has no readable signature", hexd)
