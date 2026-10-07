@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 )
@@ -197,5 +198,30 @@ func TestStoreShape(t *testing.T) {
 	}
 	if _, ok := admin["approvalHoldUntil"]; !ok {
 		t.Error("admin has no approvalHoldUntil")
+	}
+}
+
+func TestReadStateSeesTheWritersLatestVersion(t *testing.T) {
+	dir := t.TempDir()
+	s, err := access.Open(dir, access.Options{Stage: func() (bool, bool) { return true, false }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Update(func(st *access.State) error {
+		a := st.AddAdmin("alice", access.RoleOwner, "test", time.Now())
+		a.Keys = append(a.Keys, loginKey(t))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	st, err := access.ReadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.Admin("alice"); !ok || st.Version != s.Read().Version {
+		t.Fatalf("%+v", st)
+	}
+	if _, err := os.Stat(filepath.Join(dir, access.FileName+".tmp")); err == nil {
+		t.Fatal("reading left a file behind")
 	}
 }

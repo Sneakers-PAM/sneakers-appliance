@@ -66,6 +66,9 @@ type fakeInit struct {
 	poweroffs  int
 	forced     bool
 	resets     []*initv1.FactoryResetRequest
+	arms       []*initv1.ArmFactoryResetRequest
+	armErr     error
+	cancels    []string
 	staged     []string
 	stagedVer  string
 	activated  int
@@ -130,6 +133,23 @@ func (p fakePower) FactoryReset(_ context.Context, r *connect.Request[initv1.Fac
 	defer p.f.mu.Unlock()
 	p.f.resets = append(p.f.resets, r.Msg)
 	return connect.NewResponse(&initv1.FactoryResetResponse{}), nil
+}
+
+func (p fakePower) ArmFactoryReset(_ context.Context, r *connect.Request[initv1.ArmFactoryResetRequest]) (*connect.Response[initv1.ArmFactoryResetResponse], error) {
+	p.f.mu.Lock()
+	defer p.f.mu.Unlock()
+	if p.f.armErr != nil {
+		return nil, p.f.armErr
+	}
+	p.f.arms = append(p.f.arms, r.Msg)
+	return connect.NewResponse(&initv1.ArmFactoryResetResponse{}), nil
+}
+
+func (p fakePower) CancelFactoryReset(_ context.Context, r *connect.Request[initv1.CancelFactoryResetRequest]) (*connect.Response[initv1.CancelFactoryResetResponse], error) {
+	p.f.mu.Lock()
+	defer p.f.mu.Unlock()
+	p.f.cancels = append(p.f.cancels, r.Msg.GetId())
+	return connect.NewResponse(&initv1.CancelFactoryResetResponse{}), nil
 }
 
 type fakeImage struct {

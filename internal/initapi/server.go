@@ -4,7 +4,10 @@
 // Package initapi serves init's local API on /run/sneakers/init.sock
 // (proto sneakers.appliance.init.v1) with Connect, which also speaks the
 // gRPC protocol. Only root may connect; every connection's peer is checked
-// with SO_PEERCRED before a request is read.
+// with SO_PEERCRED before a request is read. PowerService is also served
+// alone on /run/sneakers/power.sock for the closed shell's admin logins,
+// and it answers only osadmin and the shell, told apart by the peer's
+// executable.
 package initapi
 
 import (
@@ -22,19 +25,35 @@ import (
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/power"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/services"
 )
 
 // SocketPath is where the API listens.
 const SocketPath = "/run/sneakers/init.sock"
 
+// PowerSocketPath serves PowerService alone to the closed shell's admin
+// logins, which can't reach the root-only init.sock.
+const PowerSocketPath = "/run/sneakers/power.sock"
+
 // Options configure the server.
 type Options struct {
-	// Allow decides which peer uids may connect; nil means RootOnly.
+	// Allow decides which peer uids may connect; nil means RootOnly
+	// (init.sock) or PowerPeerAllowed (power.sock).
 	Allow      func(uid uint32) bool
 	Supervisor *services.Supervisor
-	Logger     log.Logger
+	// Power answers PowerService; nil leaves it Unimplemented.
+	Power *power.Controller
+	// Callers maps an executable to the caller it is; nil means
+	// DefaultCallers.
+	Callers map[string]power.Kind
+	// ExeOf reads a peer's executable; nil reads /proc/<pid>/exe.
+	ExeOf func(pid int32) (string, error)
+	// AdminName names the admin a uid belongs to.
+	AdminName func(uid uint32) (string, bool)
+	Logger    log.Logger
 }
 
 // Server is the running API.
@@ -42,17 +61,65 @@ type Server struct {
 	http *http.Server
 }
 
-// Listen creates the socket (mode 0600, replacing a stale one) and starts
+// Listen creates init.sock (mode 0600, replacing a stale one) and starts
 // serving. The services whose bodies later work adds answer Unimplemented.
 func Listen(path string, o Options) (*Server, error) {
 	if o.Allow == nil {
 		o.Allow = RootOnly
 	}
+	o = o.defaults()
+	mux := http.NewServeMux()
+	mux.Handle(initv1connect.NewKeyCustodyServiceHandler(initv1connect.UnimplementedKeyCustodyServiceHandler{}))
+	mux.Handle(initv1connect.NewPlatformServiceHandler(initv1connect.UnimplementedPlatformServiceHandler{}))
+	mux.Handle(initv1connect.NewImageServiceHandler(initv1connect.UnimplementedImageServiceHandler{}))
+	mux.Handle(powerHandlerFor(o))
+	mux.Handle(initv1connect.NewServicesServiceHandler(&servicesHandler{s: o.Supervisor, log: o.Logger}))
+	return listen(path, 0o600, mux, o)
+}
+
+// ListenPower creates power.sock (mode 0666: SO_PEERCRED admits root and
+// the admin uids, and PowerService checks the program) serving
+// PowerService alone.
+func ListenPower(path string, o Options) (*Server, error) {
+	if o.Allow == nil {
+		o.Allow = PowerPeerAllowed
+	}
+	o = o.defaults()
+	mux := http.NewServeMux()
+	mux.Handle(powerHandlerFor(o))
+	return listen(path, 0o666, mux, o)
+}
+
+// PowerPeerAllowed is power.sock's peer rule: root, or an admin uid (a
+// closed-shell login).
+func PowerPeerAllowed(uid uint32) bool { return uid == 0 || uid >= access.FirstUID }
+
+func (o Options) defaults() Options {
 	if o.Logger == nil {
 		o.Logger = log.Nop()
 	}
+	if o.Callers == nil {
+		o.Callers = DefaultCallers
+	}
+	if o.ExeOf == nil {
+		o.ExeOf = procExe
+	}
+	if o.AdminName == nil {
+		o.AdminName = func(uint32) (string, bool) { return "", false }
+	}
+	return o
+}
+
+func listen(path string, mode os.FileMode, mux *http.ServeMux, o Options) (*Server, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
+	}
+	if mode&0o007 != 0 {
+		// A socket for other uids is useless in a directory they can't
+		// search; the sockets in it keep their own modes.
+		if err := os.Chmod(filepath.Dir(path), 0o755); err != nil { // #nosec G302 -- searchable only; each socket's mode and SO_PEERCRED decide access
+			return nil, err
+		}
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, err
@@ -61,16 +128,10 @@ func Listen(path string, o Options) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	if err := os.Chmod(path, mode); err != nil {
 		_ = ln.Close()
 		return nil, err
 	}
-	mux := http.NewServeMux()
-	mux.Handle(initv1connect.NewKeyCustodyServiceHandler(initv1connect.UnimplementedKeyCustodyServiceHandler{}))
-	mux.Handle(initv1connect.NewPlatformServiceHandler(initv1connect.UnimplementedPlatformServiceHandler{}))
-	mux.Handle(initv1connect.NewImageServiceHandler(initv1connect.UnimplementedImageServiceHandler{}))
-	mux.Handle(initv1connect.NewPowerServiceHandler(initv1connect.UnimplementedPowerServiceHandler{}))
-	mux.Handle(initv1connect.NewServicesServiceHandler(&servicesHandler{s: o.Supervisor, log: o.Logger}))
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
@@ -130,8 +191,10 @@ func toConnect(err error) error {
 	switch code {
 	case codes.ServiceUnknown:
 		c = connect.CodeNotFound
-	case codes.ServicePreStart:
+	case codes.ServicePreStart, codes.PowerBusy:
 		c = connect.CodeAborted
+	case codes.PowerCaller:
+		c = connect.CodePermissionDenied
 	}
 	return connect.NewError(c, errors.New(codes.Describe(err)))
 }

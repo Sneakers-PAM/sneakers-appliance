@@ -11,6 +11,7 @@ LUKS2 header once first boot fixed it, the ESP's `loader/sneakers/secure-boot` b
 | Facts | Phase |
 |---|---|
 | booted from the install medium | `install` |
+| the ESP's `reset.json` records a factory reset that isn't done (or doesn't read) | `reset`: init finishes the reset, starts nothing, and reboots into first boot ([factory-reset.md](factory-reset.md)) |
 | set to Secure Boot on, past enrolment, and the firmware doesn't enforce (or no longer has Secure Boot variables) | `mismatch`: the console shows the mismatch screen and nothing starts |
 | no Secure Boot firmware, or Secure Boot off by choice | `firstboot`, or `normal` once setup is done |
 | Secure Boot firmware and no choice yet, or on but not enforcing with org-only keys (including turned on later, before the keys are enrolled) | `enrol` |
@@ -34,6 +35,7 @@ readiness:                         # a file that appears, or a command that exit
   timeout: 2m
 start: always                      # always (default) or on-demand
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
+stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 ```
 
 - Entering a phase stops the services that don't run in it and starts the `start: always` ones that
@@ -43,7 +45,10 @@ pre-start: [/usr/libexec/sneakers/platformd, prepare]
 - `pre-start` runs to completion before every start; a non-zero exit keeps the service from
   starting (`SERVICE_PRE_START`) and its restart policy decides whether it's tried again.
 - A service that exits is restarted by its policy with a backoff from 1 to 30 seconds. Stopping
-  sends SIGTERM, then SIGKILL after 10 seconds.
+  sends SIGTERM, then SIGKILL after the entry's `stop-timeout` (10 seconds when unset). k0s sets
+  a longer one so it can stop its workloads cleanly.
+- A drain (a graceful reboot or shutdown, or a factory reset) stops the services in reverse
+  `after:` order, so k0s stops before platformd, and nothing starts again until the box reboots.
 - An entry that doesn't parse, an unknown `after:` name or a loop is `SERVICE_TABLE_INVALID`, and
   the table isn't used.
 
@@ -57,6 +62,13 @@ Init serves its local API (Connect, which also speaks the gRPC protocol) on `/ru
 ones whose bodies later work adds answer `Unimplemented` until then. `ServicesService` starts,
 stops and reports the table's on-demand services.
 
+`PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also
+served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits
+root and the admin uids, so the
+closed shell's logins can reboot. On both sockets it answers only `sneakers-osadmin` and
+`sneakers-shell`, told apart by the peer's executable, and the factory reset only osadmin. See
+[factory-reset.md](factory-reset.md) for what each request does.
+
 ## PID 1
 
 Init mounts `/proc`, `/sys`, `/dev`, `/run`, `/tmp` and efivarfs, and mounts the ESP at
@@ -65,4 +77,5 @@ status to whatever started it, so services run without `os/exec`'s own waiting. 
 prints `sneakers-init: phase=<phase> protection=<level>`. In `enrol` it runs the Secure Boot screens
 ([secure-boot.md](secure-boot.md)): on QEMU and Proxmox it reboots by itself after enrolling; on
 VMware and bare metal it waits for the admin's power cycle. In `mismatch` it shows the mismatch
-screen and starts nothing. SIGTERM stops every service and syncs the disks.
+screen and starts nothing. In `reset` it finishes an interrupted factory reset before anything
+starts. SIGTERM stops every service and syncs the disks.

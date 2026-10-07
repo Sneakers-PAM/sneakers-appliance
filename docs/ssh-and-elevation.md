@@ -70,7 +70,7 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `shell --minutes N --reason "..."`, `elevation status [<id>]`, `elevation cert <id>` | no | yes | accessd |
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `mcp ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
-| `reboot`, `poweroff` | yes | yes | accessd; typed `reboot` or `poweroff` |
+| `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
 
 A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` and isn't listed by
 `help` or completed. `-o json` prints a command's result, or its error as

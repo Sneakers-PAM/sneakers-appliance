@@ -156,6 +156,7 @@ On first boot, after the first admin's key is enrolled, the Setup page finishes 
 - **Logs and audit:** the OS audit log, newest first, filtered by action, with its chain state, and the
   whole log as a download.
 - **Power:** reboot and shut down, graceful by default; the page lists the signed-in sessions first.
+  Init drains the services, audits, syncs and unmounts before it acts ([factory-reset.md](factory-reset.md)).
   A forced reboot or shutdown skips the drain and needs a second, explicit confirmation
   (`POWER_FORCED_CONFIRM` without it); the audit entry records `mode` as `graceful` or `forced`.
 
@@ -175,8 +176,11 @@ A factory reset from :8443 needs a quorum of appliance admins, M of N, never one
   cancel it on :8443, and the console (or a closed-shell login, as itself) through
   `LocalService.LocalCancelFactoryReset`. The request lives in memory only, so a reboot or a
   restart of `sneakers-osadmin` cancels it too.
-- **Then** osadmin asks init's `Power.FactoryReset` to run the reset toolbox, with who started it
-  and who approved.
+- **Init checks it too.** The last approval arms init (`Power.ArmFactoryReset`), which checks the
+  approvals against the access store's roster itself; if it refuses (`RESET_QUORUM`), the approval
+  isn't counted and no countdown starts. A cancel reaches init as well.
+- **Then** osadmin asks init's `Power.FactoryReset` to run the armed request. Init runs it only after
+  its own delay, if nothing cancelled it ([factory-reset.md](factory-reset.md)).
 
 Every step is in the OS audit log: `power.factory-reset.start`, `.approve`, `.cancel`, `.expire` and
 `.run`.

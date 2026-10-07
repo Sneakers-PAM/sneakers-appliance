@@ -5,7 +5,9 @@
 
 // Command sneakers-init is PID 1 on the appliance: it mounts the early
 // filesystems, reaps every child, decides the boot phase, runs the enrol
-// phase, supervises the service table, and serves init.sock.
+// phase, finishes an interrupted factory reset, supervises the service
+// table, and serves init.sock and power.sock (reboot, shutdown and the
+// factory reset).
 package main
 
 import (
@@ -84,11 +86,14 @@ func run(lg log.TraceLogger) error {
 	if _, err := os.Stat(setupDone); err == nil {
 		f.SetupDone = true
 	}
+	f.ResetPending = readReset(espOK, lg)
 	p := phase.Decide(f)
 	_, _ = fmt.Fprintf(os.Stderr, "sneakers-init: phase=%s protection=%s\n", p, protection(st, f))
 	lg.Info("init: phase decided", log.F("phase", string(p)), log.F("secure_boot", st.Enforcing), log.F("setup_mode", st.SetupMode))
 
 	switch p {
+	case phase.Reset:
+		return finishReset(ctx, lg)
 	case phase.Mismatch:
 		_, _ = fmt.Fprint(os.Stderr, screens.Mismatch)
 		<-ctx.Done()
@@ -123,11 +128,18 @@ func run(lg log.TraceLogger) error {
 		return err
 	}
 	sup := services.NewSupervisor(r, tbl, services.Options{Logger: lg})
-	srv, err := initapi.Listen(initapi.SocketPath, initapi.Options{Supervisor: sup, Logger: lg})
+	pw := newPower(sup, lg)
+	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, Logger: lg}
+	srv, err := initapi.Listen(initapi.SocketPath, api)
 	if err != nil {
 		return err
 	}
 	defer srv.Stop()
+	psrv, err := initapi.ListenPower(initapi.PowerSocketPath, api)
+	if err != nil {
+		return err
+	}
+	defer psrv.Stop()
 	if err := sup.EnterPhase(ctx, p); err != nil {
 		return err
 	}

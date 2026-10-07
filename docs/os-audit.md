@@ -19,7 +19,9 @@ One file per UTC day, `log-<YYYY-MM-DD>.jsonl`, mode 0600. Each line is one entr
 | `detail` | action-specific fields |
 | `prev` | the hex SHA-256 of the line before, across day files |
 
-Every line is fsynced before the action it records is reported done. A clock stepped back (an NTP
+Every line is fsynced before the action it records is reported done. Init and osadmin both append
+to the log: each takes an flock on `.lock` in the log directory and reads the head again when the
+other has written since, so the two keep one chain. A clock stepped back (an NTP
 correction on a box that booted with the wrong time) keeps appending to the newest file, so the
 files always read in chain order.
 
@@ -48,6 +50,12 @@ confirmation. Either way the entry records who asked, where from and how:
 | `actor`, `keyFp`, `source` | the admin, the key that signed in and the client address, or `console` |
 | `detail.surface` | `console` or `8443` |
 | `detail.mode` | `graceful`, or `forced` after the second confirmation |
+
+Init writes its own entries for the same request with `detail.surface` `init`: the caller
+(`detail.caller` `osadmin` or `shell`, its `uid` and `pid`), `outcome` `accepted` when it takes the
+request, then `ok` (or `drain-failed`) before it syncs and acts, or `refused` with the code. The
+factory reset adds `power.factory-reset.arm`, `.cancel` and `.run` from init
+([factory-reset.md](factory-reset.md)).
 
 ## Retention
 

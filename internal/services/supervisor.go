@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -324,7 +326,46 @@ func (s *Supervisor) exited(ctx context.Context, u *unit, err error, backoff tim
 	}()
 }
 
-// stop ends a service: SIGTERM, then SIGKILL after StopTimeout.
+// draining is the phase a drain leaves the supervisor in: no service runs
+// in it, so nothing starts again until init reboots or powers off.
+const draining phase.Phase = "draining"
+
+// Drain stops every service but keep, dependents before what they run
+// after (k0s before platformd), each with its own stop-timeout, and leaves
+// the supervisor in a phase where nothing starts again. It's the graceful
+// half of a reboot, a shutdown and a factory reset.
+func (s *Supervisor) Drain(ctx context.Context, keep ...string) error {
+	s.mu.Lock()
+	s.phase = draining
+	s.mu.Unlock()
+	var names []string
+	for _, n := range s.table.Names() {
+		if !slices.Contains(keep, n) {
+			names = append(names, n)
+		}
+	}
+	order, err := s.table.order(names)
+	if err != nil {
+		return err
+	}
+	slices.Reverse(order)
+	s.o.Logger.Info("services: draining", log.F("order", strings.Join(order, ",")), log.F("keep", strings.Join(keep, ",")))
+	for _, n := range order {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		start := time.Now()
+		running := s.Running(n)
+		s.stop(n)
+		if running {
+			s.o.Logger.Info("services: drained", log.F("service", n), log.F("took", time.Since(start).String()))
+		}
+	}
+	return nil
+}
+
+// stop ends a service: SIGTERM, then SIGKILL after its stop-timeout (the
+// supervisor's StopTimeout when the entry sets none).
 func (s *Supervisor) stop(name string) {
 	s.mu.Lock()
 	u := s.units[name]
@@ -336,9 +377,14 @@ func (s *Supervisor) stop(name string) {
 	}
 	s.o.Logger.Info("services: stopping", log.F("service", name))
 	_ = proc.Signal(syscall.SIGTERM)
+	timeout := s.o.StopTimeout
+	if t := s.table[name].StopTimeout; t > 0 {
+		timeout = t
+	}
 	select {
 	case <-done:
-	case <-time.After(s.o.StopTimeout):
+	case <-time.After(timeout):
+		s.o.Logger.Warn("services: no exit after SIGTERM; killing", log.F("service", name), log.F("timeout", timeout.String()))
 		_ = proc.Signal(syscall.SIGKILL)
 		<-done
 	}

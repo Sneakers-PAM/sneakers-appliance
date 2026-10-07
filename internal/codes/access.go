@@ -43,6 +43,12 @@ const (
 	ResetApproved          = 3602
 	ResetCancelled         = 3603
 	PowerForcedConfirm     = 3604
+	ResetVerify            = 3605
+	ResetQuorum            = 3606
+	ResetFailed            = 3607
+	PowerCaller            = 3608
+	PowerBusy              = 3609
+	PowerAudit             = 3610
 	ShellParse             = 3701
 	ShellUnknown           = 3702
 	NotAvailable           = 3703
@@ -83,6 +89,12 @@ var accessEntries = []apperr.Entry{
 	{Code: ResetApproved, Symbol: "RESET_APPROVED", Title: "reset", Cause: "this admin's approval is already counted, or they aren't on the roster"},
 	{Code: ResetCancelled, Symbol: "RESET_CANCELLED", Title: "reset", Cause: "the factory reset was cancelled, expired or never started"},
 	{Code: PowerForcedConfirm, Symbol: "POWER_FORCED_CONFIRM", Title: "power", Cause: "a forced reboot or shutdown needs its second, explicit confirmation"},
+	{Code: ResetVerify, Symbol: "RESET_VERIFY", Title: "reset", Cause: "the factory reset's check failed (a partition or a LUKS, filesystem or GPT signature is still there); the box doesn't reboot"},
+	{Code: ResetQuorum, Symbol: "RESET_QUORUM", Title: "reset", Cause: "init refused the factory reset: not armed, approvals that aren't a quorum of the roster, the delay not over, or expired"},
+	{Code: ResetFailed, Symbol: "RESET_FAILED", Title: "reset", Cause: "a factory reset step failed (the error names it); the reset carries on at the next boot"},
+	{Code: PowerCaller, Symbol: "POWER_CALLER", Title: "power", Cause: "init takes power and reset requests only from osadmin and the closed shell"},
+	{Code: PowerBusy, Symbol: "POWER_BUSY", Title: "power", Cause: "a reboot, shutdown or factory reset is already under way"},
+	{Code: PowerAudit, Symbol: "POWER_AUDIT", Title: "power", Cause: "the OS audit log can't be written, so init doesn't act on the request"},
 	{Code: ShellParse, Symbol: "SHELL_PARSE", Title: "shell", Cause: "the command line doesn't parse: an open quote, a control character, or longer than 64 KiB"},
 	{Code: ShellUnknown, Symbol: "SHELL_UNKNOWN", Title: "shell", Cause: "there is no such command; help lists them"},
 	{Code: NotAvailable, Symbol: "NOT_AVAILABLE", Title: "shell", Cause: "not available in this release, or the appliance services aren't answering"},
