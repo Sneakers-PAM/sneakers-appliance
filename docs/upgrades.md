@@ -23,3 +23,26 @@ A box holds at most two releases: the one it runs and one more (the next, or the
 - With Secure Boot off (TPM mode), the new release's PCR 4 must be predicted from the firmware's
   event log; until that replay is in, staging is refused (`UPGRADE_UNPREDICTABLE`) rather than
   sealed to a guess.
+
+## Updating from :8443
+
+The Updates page drives the same flow for an uploaded or a fetched `.bin`:
+
+1. **Get the file.** Upload it (`POST /upload`, any admin) or fetch it from the configured mirror
+   (`UpgradeService.FetchUpdate`, the file name such as `sneakers-appliance-0.2.0-amd64.bin`). With
+   no mirror the box is air-gapped: it never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload
+   is the only path. The mirror is an `https://` URL; the environment's proxy applies.
+2. **Stage** (owner, step-up). The signature, the channel and the payload's SHA-256 are verified
+   before anything is decrypted or unpacked; a patch must name the running version as a base.
+   A refused file (`UPGRADE_SIGNATURE`, `UPGRADE_CHANNEL`, `UPGRADE_FORMAT`,
+   `UPGRADE_PATCH_BASE`) is deleted, never unpacked, and the refusal is audited. Only then is the
+   update key read from the booted UKI, the payload decrypted and unpacked, and the layout handed to
+   `Image.Stage`.
+3. **Apply** (owner, step-up) activates the staged release and reboots into it (`UPGRADE_NOT_STAGED`
+   when nothing is staged). **Revert** rolls back to the previous release and reboots.
+
+**The policy** (owner, step-up): `automatic` applies a staged release once inside the daily window
+(default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. It's
+kept in `/var/lib/sneakers/osadmin/upgrade-policy.json`. **The history** of every fetch, stage, apply
+and revert, with its outcome and code, is in `/var/lib/sneakers/osadmin/upgrade-history.jsonl` and
+on the page, newest first.

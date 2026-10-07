@@ -28,6 +28,7 @@ sessions, roles and step-up are described in [access.md](access.md#the-8443-sign
 | Endpoint | What it does |
 |---|---|
 | `GET /export/audit-log` | the whole OS audit log as written (JSON lines, oldest first), so the chain verifies off the box; needs a session, audited as `audit.export` |
+| `POST /upload` | an update `.bin` as the request body (at most 8 GiB), with the session cookie and `X-CSRF-Token`; answers `{"uploadId": "..."}` for `UpgradeService.StageUpdate`; audited as `upgrade.upload`. Nothing is verified or unpacked until it's staged |
 | `GET /` and anything else | the admin pages, with the page routes falling back to `index.html` |
 
 Every response carries `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri
@@ -74,9 +75,12 @@ a sign-in from the last 5 minutes.
 | `PowerService.StartFactoryReset` | owner | yes | `power.factory-reset.start` |
 | `PowerService.ApproveFactoryReset` | admin | yes | `power.factory-reset.approve` |
 | `PowerService.CancelFactoryReset` | admin | no | `power.factory-reset.cancel` |
-
-`AccessService.SetQuorum` and `PowerService`'s forced power and factory reset answer "Not available
-in this release" until the quorum lands.
+| `UpgradeService.GetUpgrades` | admin | no | |
+| `UpgradeService.FetchUpdate` | admin | no | `upgrade.fetch` |
+| `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
+| `UpgradeService.ApplyUpdate` | owner | yes | `upgrade.apply` |
+| `UpgradeService.RevertUpdate` | owner | yes | `upgrade.revert` |
+| `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
 
 ### Not available in this release
 
@@ -98,12 +102,6 @@ The pages for these services show "Not available in this release" until their ba
 | `BackupService.SetBackupPolicy` | admin | yes | `backup.policy.set` |
 | `BackupService.RunBackup` | admin | no | `backup.run` |
 | `BackupService.Restore` | owner | yes | `backup.restore` |
-| `UpgradeService.GetUpgrades` | admin | no | |
-| `UpgradeService.FetchUpdate` | admin | no | `upgrade.fetch` |
-| `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
-| `UpgradeService.ApplyUpdate` | owner | yes | `upgrade.apply` |
-| `UpgradeService.RevertUpdate` | owner | yes | `upgrade.revert` |
-| `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
 | `ModulesService.ListModules` | admin | no | |
 | `ModulesService.AddModule` | owner | yes | `modules.add` |
 
@@ -117,4 +115,4 @@ else is closed before a byte is read. Root may act as any admin; an admin uid on
 |---|---|
 | `LocalService.DescribeSignIn` | the browser's address, user agent and expiry for a code, for the approval prompt |
 | `LocalService.ApproveSignIn` | binds the waiting browser to the admin and the key fingerprint that authenticated the SSH session; audited as `signin.approve` with the browser's address and user agent |
-| `LocalService.LocalCancelFactoryReset` | stops a factory reset during its delay (the console); not available in this release |
+| `LocalService.LocalCancelFactoryReset` | stops a factory reset or its countdown (the console, or a closed-shell login as itself); audited as `power.factory-reset.cancel` |
