@@ -50,6 +50,9 @@ const (
 	// ElevationServiceTerminateElevationProcedure is the fully-qualified name of the ElevationService's
 	// TerminateElevation RPC.
 	ElevationServiceTerminateElevationProcedure = "/sneakers.appliance.osadmin.v1.ElevationService/TerminateElevation"
+	// ElevationServiceGetElevationRecordingProcedure is the fully-qualified name of the
+	// ElevationService's GetElevationRecording RPC.
+	ElevationServiceGetElevationRecordingProcedure = "/sneakers.appliance.osadmin.v1.ElevationService/GetElevationRecording"
 )
 
 // ElevationServiceClient is a client for the sneakers.appliance.osadmin.v1.ElevationService
@@ -59,6 +62,9 @@ type ElevationServiceClient interface {
 	ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error)
 	DenyElevation(context.Context, *connect.Request[v1.DenyElevationRequest]) (*connect.Response[v1.DenyElevationResponse], error)
 	TerminateElevation(context.Context, *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error)
+	// GetElevationRecording is a session's recording (asciicast v2), checked
+	// against the chunk hashes in the OS audit log. Owners only.
+	GetElevationRecording(context.Context, *connect.Request[v1.GetElevationRecordingRequest]) (*connect.Response[v1.GetElevationRecordingResponse], error)
 }
 
 // NewElevationServiceClient constructs a client for the
@@ -98,15 +104,23 @@ func NewElevationServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(elevationServiceMethods.ByName("TerminateElevation")),
 			connect.WithClientOptions(opts...),
 		),
+		getElevationRecording: connect.NewClient[v1.GetElevationRecordingRequest, v1.GetElevationRecordingResponse](
+			httpClient,
+			baseURL+ElevationServiceGetElevationRecordingProcedure,
+			connect.WithSchema(elevationServiceMethods.ByName("GetElevationRecording")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // elevationServiceClient implements ElevationServiceClient.
 type elevationServiceClient struct {
-	listElevations     *connect.Client[v1.ListElevationsRequest, v1.ListElevationsResponse]
-	approveElevation   *connect.Client[v1.ApproveElevationRequest, v1.ApproveElevationResponse]
-	denyElevation      *connect.Client[v1.DenyElevationRequest, v1.DenyElevationResponse]
-	terminateElevation *connect.Client[v1.TerminateElevationRequest, v1.TerminateElevationResponse]
+	listElevations        *connect.Client[v1.ListElevationsRequest, v1.ListElevationsResponse]
+	approveElevation      *connect.Client[v1.ApproveElevationRequest, v1.ApproveElevationResponse]
+	denyElevation         *connect.Client[v1.DenyElevationRequest, v1.DenyElevationResponse]
+	terminateElevation    *connect.Client[v1.TerminateElevationRequest, v1.TerminateElevationResponse]
+	getElevationRecording *connect.Client[v1.GetElevationRecordingRequest, v1.GetElevationRecordingResponse]
 }
 
 // ListElevations calls sneakers.appliance.osadmin.v1.ElevationService.ListElevations.
@@ -129,6 +143,11 @@ func (c *elevationServiceClient) TerminateElevation(ctx context.Context, req *co
 	return c.terminateElevation.CallUnary(ctx, req)
 }
 
+// GetElevationRecording calls sneakers.appliance.osadmin.v1.ElevationService.GetElevationRecording.
+func (c *elevationServiceClient) GetElevationRecording(ctx context.Context, req *connect.Request[v1.GetElevationRecordingRequest]) (*connect.Response[v1.GetElevationRecordingResponse], error) {
+	return c.getElevationRecording.CallUnary(ctx, req)
+}
+
 // ElevationServiceHandler is an implementation of the
 // sneakers.appliance.osadmin.v1.ElevationService service.
 type ElevationServiceHandler interface {
@@ -136,6 +155,9 @@ type ElevationServiceHandler interface {
 	ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error)
 	DenyElevation(context.Context, *connect.Request[v1.DenyElevationRequest]) (*connect.Response[v1.DenyElevationResponse], error)
 	TerminateElevation(context.Context, *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error)
+	// GetElevationRecording is a session's recording (asciicast v2), checked
+	// against the chunk hashes in the OS audit log. Owners only.
+	GetElevationRecording(context.Context, *connect.Request[v1.GetElevationRecordingRequest]) (*connect.Response[v1.GetElevationRecordingResponse], error)
 }
 
 // NewElevationServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -170,6 +192,13 @@ func NewElevationServiceHandler(svc ElevationServiceHandler, opts ...connect.Han
 		connect.WithSchema(elevationServiceMethods.ByName("TerminateElevation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	elevationServiceGetElevationRecordingHandler := connect.NewUnaryHandler(
+		ElevationServiceGetElevationRecordingProcedure,
+		svc.GetElevationRecording,
+		connect.WithSchema(elevationServiceMethods.ByName("GetElevationRecording")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.ElevationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ElevationServiceListElevationsProcedure:
@@ -180,6 +209,8 @@ func NewElevationServiceHandler(svc ElevationServiceHandler, opts ...connect.Han
 			elevationServiceDenyElevationHandler.ServeHTTP(w, r)
 		case ElevationServiceTerminateElevationProcedure:
 			elevationServiceTerminateElevationHandler.ServeHTTP(w, r)
+		case ElevationServiceGetElevationRecordingProcedure:
+			elevationServiceGetElevationRecordingHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -203,4 +234,8 @@ func (UnimplementedElevationServiceHandler) DenyElevation(context.Context, *conn
 
 func (UnimplementedElevationServiceHandler) TerminateElevation(context.Context, *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ElevationService.TerminateElevation is not implemented"))
+}
+
+func (UnimplementedElevationServiceHandler) GetElevationRecording(context.Context, *connect.Request[v1.GetElevationRecordingRequest]) (*connect.Response[v1.GetElevationRecordingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ElevationService.GetElevationRecording is not implemented"))
 }

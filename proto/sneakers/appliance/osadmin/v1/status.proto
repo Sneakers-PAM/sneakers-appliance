@@ -51,6 +51,9 @@ enum WarningKind {
   // Recover access and is still under its 24-hour hold.
   WARNING_KIND_CONSOLE_RECOVERY = 5;
   WARNING_KIND_FACTORY_RESET = 6;
+  // WARNING_KIND_SELF_APPROVED_ELEVATION: the only owner approved their
+  // own elevation, and it is approved or active.
+  WARNING_KIND_SELF_APPROVED_ELEVATION = 7;
 }
 
 message Warning {

@@ -92,6 +92,9 @@ const (
 	// Recover access and is still under its 24-hour hold.
 	WarningKind_WARNING_KIND_CONSOLE_RECOVERY WarningKind = 5
 	WarningKind_WARNING_KIND_FACTORY_RESET    WarningKind = 6
+	// WARNING_KIND_SELF_APPROVED_ELEVATION: the only owner approved their
+	// own elevation, and it is approved or active.
+	WarningKind_WARNING_KIND_SELF_APPROVED_ELEVATION WarningKind = 7
 )
 
 // Enum value maps for WarningKind.
@@ -104,15 +107,17 @@ var (
 		4: "WARNING_KIND_NTP_UNSYNCED",
 		5: "WARNING_KIND_CONSOLE_RECOVERY",
 		6: "WARNING_KIND_FACTORY_RESET",
+		7: "WARNING_KIND_SELF_APPROVED_ELEVATION",
 	}
 	WarningKind_value = map[string]int32{
-		"WARNING_KIND_UNSPECIFIED":        0,
-		"WARNING_KIND_EXPOSURE":           1,
-		"WARNING_KIND_REDUCED_PROTECTION": 2,
-		"WARNING_KIND_SELF_SIGNED_TLS":    3,
-		"WARNING_KIND_NTP_UNSYNCED":       4,
-		"WARNING_KIND_CONSOLE_RECOVERY":   5,
-		"WARNING_KIND_FACTORY_RESET":      6,
+		"WARNING_KIND_UNSPECIFIED":             0,
+		"WARNING_KIND_EXPOSURE":                1,
+		"WARNING_KIND_REDUCED_PROTECTION":      2,
+		"WARNING_KIND_SELF_SIGNED_TLS":         3,
+		"WARNING_KIND_NTP_UNSYNCED":            4,
+		"WARNING_KIND_CONSOLE_RECOVERY":        5,
+		"WARNING_KIND_FACTORY_RESET":           6,
+		"WARNING_KIND_SELF_APPROVED_ELEVATION": 7,
 	}
 )
 
@@ -699,7 +704,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"Protection\x12\x1a\n" +
 	"\x16PROTECTION_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPROTECTION_FULL\x10\x01\x12\x16\n" +
-	"\x12PROTECTION_REDUCED\x10\x02*\xef\x01\n" +
+	"\x12PROTECTION_REDUCED\x10\x02*\x99\x02\n" +
 	"\vWarningKind\x12\x1c\n" +
 	"\x18WARNING_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15WARNING_KIND_EXPOSURE\x10\x01\x12#\n" +
@@ -707,7 +712,8 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x1cWARNING_KIND_SELF_SIGNED_TLS\x10\x03\x12\x1d\n" +
 	"\x19WARNING_KIND_NTP_UNSYNCED\x10\x04\x12!\n" +
 	"\x1dWARNING_KIND_CONSOLE_RECOVERY\x10\x05\x12\x1e\n" +
-	"\x1aWARNING_KIND_FACTORY_RESET\x10\x062\xa9\x02\n" +
+	"\x1aWARNING_KIND_FACTORY_RESET\x10\x06\x12(\n" +
+	"$WARNING_KIND_SELF_APPROVED_ELEVATION\x10\a2\xa9\x02\n" +
 	"\rStatusService\x12y\n" +
 	"\tGetStatus\x12/.sneakers.appliance.osadmin.v1.GetStatusRequest\x1a0.sneakers.appliance.osadmin.v1.GetStatusResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
 	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"

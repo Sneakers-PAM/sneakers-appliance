@@ -36,6 +36,15 @@ service ElevationService {
       audit: "elevation.terminate"
     };
   }
+  // GetElevationRecording is a session's recording (asciicast v2), checked
+  // against the chunk hashes in the OS audit log. Owners only.
+  rpc GetElevationRecording(GetElevationRecordingRequest) returns (GetElevationRecordingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "elevation.recording.view"
+    };
+  }
 }
 
 message Elevation {
@@ -48,6 +57,21 @@ message Elevation {
   google.protobuf.Timestamp requested = 7;
   // state is pending, approved, active, ended, denied or expired.
   string state = 8;
+  // self_approved is set when the only owner approved their own request.
+  bool self_approved = 9;
+  string approved_by = 10;
+  google.protobuf.Timestamp approved = 11;
+  google.protobuf.Timestamp started = 12;
+  google.protobuf.Timestamp ended = 13;
+  // end_reason is exit, time-box, terminated, denied or expired.
+  string end_reason = 14;
+  // recording_sha256 is the hex SHA-256 of the whole session recording.
+  string recording_sha256 = 15;
+  uint64 serial = 16;
+  // valid_before is when the certificate stops working for a connect.
+  google.protobuf.Timestamp valid_before = 17;
+  // recording is set when the session left a recording.
+  bool recording = 18;
 }
 
 message ListElevationsRequest {}
@@ -75,3 +99,16 @@ message TerminateElevationRequest {
 }
 
 message TerminateElevationResponse {}
+
+message GetElevationRecordingRequest {
+  string id = 1;
+}
+
+message GetElevationRecordingResponse {
+  // cast is the recording, asciicast v2.
+  bytes cast = 1;
+  // verified is true when every logged chunk hash matches.
+  bool verified = 2;
+  // verify_error says why it doesn't, in one sentence.
+  string verify_error = 3;
+}

@@ -27,10 +27,6 @@ import "sneakers/appliance/osadmin/v1/setup.proto";
 import "sneakers/appliance/osadmin/v1/status.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1;accessv1";
-// The default, set so the raw descriptor's option bytes don't print as
-// letters glued onto go_package, which the org's host-name scan reads as
-// one name.
-option optimize_for = SPEED;
 
 // AccessService is the status, the admins, their keys and the recovery
 // keys. An admin manages their own keys; owners manage everyone.
@@ -82,7 +78,8 @@ service SetupService {
 
 // ElevationService is the one-time root shells.
 service ElevationService {
-  // RequestElevation asks for an elevated shell for the caller's key.
+  // RequestElevation asks for an elevated shell for the key the caller's
+  // closed-shell login signed in with, from its SSH client address.
   rpc RequestElevation(RequestElevationRequest) returns (RequestElevationResponse);
   rpc ListElevations(ListElevationsRequest) returns (ListElevationsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -96,6 +93,47 @@ service ElevationService {
   rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse);
   // DenyElevation is the console's (root only); owners deny on :8443.
   rpc DenyElevation(DenyElevationRequest) returns (DenyElevationResponse);
+  // TerminateElevation ends an active elevated session (root only; owners
+  // terminate on :8443).
+  rpc TerminateElevation(TerminateElevationRequest) returns (TerminateElevationResponse);
+  // BeginElevatedSession is sneakers-elevated's (root only), before it
+  // gives a prompt: it uses the certificate up (its principal leaves the
+  // principals file and its serial joins the revocation list) and returns
+  // the approved length.
+  rpc BeginElevatedSession(BeginElevatedSessionRequest) returns (BeginElevatedSessionResponse);
+  // EndElevatedSession is sneakers-elevated's (root only) when the
+  // session ends.
+  rpc EndElevatedSession(EndElevatedSessionRequest) returns (EndElevatedSessionResponse);
+}
+
+// EnrolmentService is the SSH key enrolment window (first-boot step 3,
+// and the console's Recover access). The console (root) opens it, accepts
+// each key with a typed yes, and closes it; the enrol uid
+// (sneakers-enrol, the enrol account's forced command) sends the code and
+// the key sshd authenticated, and waits for the console.
+service EnrolmentService {
+  // OpenEnrolment opens a window for an admin's keys (root only). It
+  // generates the SSH host keys when the box has none.
+  rpc OpenEnrolment(OpenEnrolmentRequest) returns (OpenEnrolmentResponse);
+  // GetEnrolment is the window as the console shows it (root only).
+  rpc GetEnrolment(GetEnrolmentRequest) returns (GetEnrolmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AcceptEnrolmentKey stores a key that gave the right code (root only;
+  // confirm is the typed yes).
+  rpc AcceptEnrolmentKey(AcceptEnrolmentKeyRequest) returns (AcceptEnrolmentKeyResponse);
+  // RejectEnrolmentKey refuses a key that gave the right code (root only).
+  rpc RejectEnrolmentKey(RejectEnrolmentKeyRequest) returns (RejectEnrolmentKeyResponse);
+  // CloseEnrolment closes the window (root only): Done on the console.
+  rpc CloseEnrolment(CloseEnrolmentRequest) returns (CloseEnrolmentResponse);
+  // SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
+  // code the admin typed and the key sshd authenticated.
+  rpc SubmitEnrolmentCode(SubmitEnrolmentCodeRequest) returns (SubmitEnrolmentCodeResponse);
+  // GetEnrolmentKey is sneakers-enrol's (the enrol uid only): whether the
+  // console has accepted the key yet.
+  rpc GetEnrolmentKey(GetEnrolmentKeyRequest) returns (GetEnrolmentKeyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // BindingService tells sneakers-osadmin where to listen (the osadmin uid
@@ -261,6 +299,118 @@ message DenyElevationRequest {
 }
 
 message DenyElevationResponse {}
+
+message TerminateElevationRequest {
+  string id = 1;
+}
+
+message TerminateElevationResponse {}
+
+message BeginElevatedSessionRequest {
+  // certificate is the certificate sshd accepted, from SSH_USER_AUTH.
+  string certificate = 1;
+  // pid is sneakers-elevated's, so a terminate can reach it.
+  int32 pid = 2;
+}
+
+message BeginElevatedSessionResponse {
+  sneakers.appliance.osadmin.v1.Elevation elevation = 1;
+  // ends is when the session's time box runs out.
+  google.protobuf.Timestamp ends = 2;
+}
+
+message EndElevatedSessionRequest {
+  string id = 1;
+  // reason is exit, time-box or terminated.
+  string reason = 2;
+  // recording_sha256 is the hex SHA-256 of the whole recording.
+  string recording_sha256 = 3;
+}
+
+message EndElevatedSessionResponse {}
+
+// Enrolment is an enrolment window as the console shows it.
+message Enrolment {
+  bool open = 1;
+  string admin = 2;
+  // code is XXXX-XXXX (Crockford base32).
+  string code = 3;
+  google.protobuf.Timestamp opened = 4;
+  // idle_until is when the window closes unless something happens.
+  google.protobuf.Timestamp idle_until = 5;
+  int32 attempts_left = 6;
+  repeated sneakers.appliance.osadmin.v1.HostKey host_keys = 7;
+  repeated EnrolmentKey keys = 8;
+  // enrolled counts the keys accepted in this window.
+  int32 enrolled = 9;
+  // closed_reason is done, idle, attempts or empty while open.
+  string closed_reason = 10;
+}
+
+// EnrolmentKey is a key that gave the right code.
+message EnrolmentKey {
+  string id = 1;
+  string fingerprint = 2;
+  string type = 3;
+  string comment = 4;
+  string source_address = 5;
+  // state is waiting, accepted or rejected.
+  string state = 6;
+}
+
+message OpenEnrolmentRequest {
+  string admin = 1;
+}
+
+message OpenEnrolmentResponse {
+  Enrolment enrolment = 1;
+}
+
+message GetEnrolmentRequest {}
+
+message GetEnrolmentResponse {
+  Enrolment enrolment = 1;
+}
+
+message AcceptEnrolmentKeyRequest {
+  string id = 1;
+  // confirm must be yes.
+  string confirm = 2;
+}
+
+message AcceptEnrolmentKeyResponse {
+  sneakers.appliance.osadmin.v1.Key key = 1;
+}
+
+message RejectEnrolmentKeyRequest {
+  string id = 1;
+}
+
+message RejectEnrolmentKeyResponse {}
+
+message CloseEnrolmentRequest {}
+
+message CloseEnrolmentResponse {}
+
+message SubmitEnrolmentCodeRequest {
+  string code = 1;
+  // public_key is the key sshd authenticated, from SSH_USER_AUTH.
+  string public_key = 2;
+}
+
+message SubmitEnrolmentCodeResponse {
+  string id = 1;
+  string admin = 2;
+  string fingerprint = 3;
+}
+
+message GetEnrolmentKeyRequest {
+  string id = 1;
+}
+
+message GetEnrolmentKeyResponse {
+  EnrolmentKey key = 1;
+}
 
 message GetBindingRequest {}
 
