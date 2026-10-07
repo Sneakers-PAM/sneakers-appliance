@@ -5,7 +5,6 @@ package accessd
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/netip"
 
@@ -254,51 +253,6 @@ func (h *setupH) Complete(ctx context.Context, r *connect.Request[accessv1.Compl
 		return nil, err
 	}
 	return connect.NewResponse(&accessv1.CompleteResponse{ProductSetupUrl: out.GetProductSetupUrl()}), nil
-}
-
-type elevationH struct {
-	accessv1connect.UnimplementedElevationServiceHandler
-	s *Server
-}
-
-var errElevationNotAvailable = connect.NewError(connect.CodeUnimplemented, errors.New(osadmin.NotAvailable)) //nolint:staticcheck // shown to people as a sentence
-
-func (h *elevationH) RequestElevation(ctx context.Context, r *connect.Request[accessv1.RequestElevationRequest]) (*connect.Response[accessv1.RequestElevationResponse], error) {
-	if _, err := h.s.caller(ctx, r.Header(), accessv1connect.ElevationServiceRequestElevationProcedure); err != nil {
-		return nil, err
-	}
-	return nil, errElevationNotAvailable
-}
-
-func (h *elevationH) ListElevations(ctx context.Context, r *connect.Request[accessv1.ListElevationsRequest]) (*connect.Response[accessv1.ListElevationsResponse], error) {
-	out, err := run(ctx, h.s, r.Header(), accessv1connect.ElevationServiceListElevationsProcedure, osadminv1connect.ElevationServiceListElevationsProcedure, h.s.h.Elevation.ListElevations, &osadminv1.ListElevationsRequest{})
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&accessv1.ListElevationsResponse{Elevations: out.GetElevations()}), nil
-}
-
-func (h *elevationH) GetElevationCertificate(ctx context.Context, r *connect.Request[accessv1.GetElevationCertificateRequest]) (*connect.Response[accessv1.GetElevationCertificateResponse], error) {
-	if _, err := h.s.caller(ctx, r.Header(), accessv1connect.ElevationServiceGetElevationCertificateProcedure); err != nil {
-		return nil, err
-	}
-	return nil, errElevationNotAvailable
-}
-
-func (h *elevationH) ApproveElevation(ctx context.Context, r *connect.Request[accessv1.ApproveElevationRequest]) (*connect.Response[accessv1.ApproveElevationResponse], error) {
-	if _, err := run(ctx, h.s, r.Header(), accessv1connect.ElevationServiceApproveElevationProcedure, osadminv1connect.ElevationServiceApproveElevationProcedure, h.s.h.Elevation.ApproveElevation,
-		&osadminv1.ApproveElevationRequest{Id: r.Msg.GetId(), Minutes: r.Msg.GetMinutes()}); err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&accessv1.ApproveElevationResponse{}), nil
-}
-
-func (h *elevationH) DenyElevation(ctx context.Context, r *connect.Request[accessv1.DenyElevationRequest]) (*connect.Response[accessv1.DenyElevationResponse], error) {
-	if _, err := run(ctx, h.s, r.Header(), accessv1connect.ElevationServiceDenyElevationProcedure, osadminv1connect.ElevationServiceDenyElevationProcedure, h.s.h.Elevation.DenyElevation,
-		&osadminv1.DenyElevationRequest{Id: r.Msg.GetId()}); err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&accessv1.DenyElevationResponse{}), nil
 }
 
 type bindingH struct {

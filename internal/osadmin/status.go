@@ -22,6 +22,7 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	netmodel "github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
@@ -98,6 +99,13 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	for _, a := range s.o.Access.Read().Admins {
 		if a.ApprovalHoldUntil != nil && now.Before(*a.ApprovalHoldUntil) {
 			add(osadminv1.WarningKind_WARNING_KIND_CONSOLE_RECOVERY, "A key for "+a.Name+" was added on the console with Recover access.")
+		}
+	}
+	if s.o.Elevation != nil {
+		for _, r := range s.o.Elevation.List() {
+			if r.SelfApproved && (r.State == elevation.Approved || r.State == elevation.Active) {
+				add(osadminv1.WarningKind_WARNING_KIND_SELF_APPROVED_ELEVATION, "Elevation "+r.ID+" of "+r.Admin+" was self-approved by the only owner and is "+string(r.State)+".")
+			}
 		}
 	}
 	if fr := s.FactoryReset(); fr != nil {

@@ -50,7 +50,7 @@ var system = []Account{
 }
 
 var (
-	enrol  = Account{"enrol", 103, 103, "SSH key enrolment", HomeRoot + "/enrol", EnrolShell}
+	enrol  = Account{"enrol", EnrolUID, EnrolUID, "SSH key enrolment", HomeRoot + "/enrol", EnrolShell}
 	nobody = Account{"nobody", 65534, 65534, "nobody", "/", NoLogin}
 )
 
@@ -67,6 +67,9 @@ func ServiceUser(name string) (Account, bool) {
 
 // OsadminUID is the uid sneakers-osadmin runs as.
 const OsadminUID = 102
+
+// EnrolUID is the enrol account's uid, which sneakers-enrol runs as.
+const EnrolUID = 103
 
 // Accounts returns every account for s, in file order.
 func Accounts(s access.State, enrolOpen bool) []Account {

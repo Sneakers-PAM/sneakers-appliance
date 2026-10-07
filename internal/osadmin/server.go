@@ -25,6 +25,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
@@ -79,6 +80,8 @@ type Options struct {
 	CertDir string
 	// Upgrade configures the update flows.
 	Upgrade UpgradeOptions
+	// Elevation is the one-time root shells; nil answers Not available.
+	Elevation *elevation.Service
 	// Assets are the static admin pages; nil serves a short notice.
 	Assets fs.FS
 	Logger log.Logger
@@ -133,7 +136,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewNetworkServiceHandler(&networkSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewAuditServiceHandler(&audit{s: s}, opts))
 	mux.Handle(osadminv1connect.NewPowerServiceHandler(&power{s: s}, opts))
-	mux.Handle(osadminv1connect.NewElevationServiceHandler(osadminv1connect.UnimplementedElevationServiceHandler{}, opts))
+	mux.Handle(osadminv1connect.NewElevationServiceHandler(&elevationSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(osadminv1connect.UnimplementedTlsServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(osadminv1connect.UnimplementedMcpServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
@@ -157,7 +160,7 @@ type Handlers struct {
 func (s *Server) Handlers() Handlers {
 	return Handlers{
 		Status: &status{s: s}, Setup: &setup{s: s}, Access: &accessSvc{s: s}, Network: &networkSvc{s: s},
-		Elevation: osadminv1connect.UnimplementedElevationServiceHandler{},
+		Elevation: &elevationSvc{s: s},
 	}
 }
 

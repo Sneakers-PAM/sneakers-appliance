@@ -37,7 +37,22 @@ type Elevation struct {
 	Minutes        int32                  `protobuf:"varint,6,opt,name=minutes,proto3" json:"minutes,omitempty"`
 	Requested      *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=requested,proto3" json:"requested,omitempty"`
 	// state is pending, approved, active, ended, denied or expired.
-	State         string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
+	State string `protobuf:"bytes,8,opt,name=state,proto3" json:"state,omitempty"`
+	// self_approved is set when the only owner approved their own request.
+	SelfApproved bool                   `protobuf:"varint,9,opt,name=self_approved,json=selfApproved,proto3" json:"self_approved,omitempty"`
+	ApprovedBy   string                 `protobuf:"bytes,10,opt,name=approved_by,json=approvedBy,proto3" json:"approved_by,omitempty"`
+	Approved     *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=approved,proto3" json:"approved,omitempty"`
+	Started      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started,proto3" json:"started,omitempty"`
+	Ended        *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=ended,proto3" json:"ended,omitempty"`
+	// end_reason is exit, time-box, terminated, denied or expired.
+	EndReason string `protobuf:"bytes,14,opt,name=end_reason,json=endReason,proto3" json:"end_reason,omitempty"`
+	// recording_sha256 is the hex SHA-256 of the whole session recording.
+	RecordingSha256 string `protobuf:"bytes,15,opt,name=recording_sha256,json=recordingSha256,proto3" json:"recording_sha256,omitempty"`
+	Serial          uint64 `protobuf:"varint,16,opt,name=serial,proto3" json:"serial,omitempty"`
+	// valid_before is when the certificate stops working for a connect.
+	ValidBefore *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=valid_before,json=validBefore,proto3" json:"valid_before,omitempty"`
+	// recording is set when the session left a recording.
+	Recording     bool `protobuf:"varint,18,opt,name=recording,proto3" json:"recording,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -126,6 +141,76 @@ func (x *Elevation) GetState() string {
 		return x.State
 	}
 	return ""
+}
+
+func (x *Elevation) GetSelfApproved() bool {
+	if x != nil {
+		return x.SelfApproved
+	}
+	return false
+}
+
+func (x *Elevation) GetApprovedBy() string {
+	if x != nil {
+		return x.ApprovedBy
+	}
+	return ""
+}
+
+func (x *Elevation) GetApproved() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Approved
+	}
+	return nil
+}
+
+func (x *Elevation) GetStarted() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Started
+	}
+	return nil
+}
+
+func (x *Elevation) GetEnded() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Ended
+	}
+	return nil
+}
+
+func (x *Elevation) GetEndReason() string {
+	if x != nil {
+		return x.EndReason
+	}
+	return ""
+}
+
+func (x *Elevation) GetRecordingSha256() string {
+	if x != nil {
+		return x.RecordingSha256
+	}
+	return ""
+}
+
+func (x *Elevation) GetSerial() uint64 {
+	if x != nil {
+		return x.Serial
+	}
+	return 0
+}
+
+func (x *Elevation) GetValidBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ValidBefore
+	}
+	return nil
+}
+
+func (x *Elevation) GetRecording() bool {
+	if x != nil {
+		return x.Recording
+	}
+	return false
 }
 
 type ListElevationsRequest struct {
@@ -457,11 +542,118 @@ func (*TerminateElevationResponse) Descriptor() ([]byte, []int) {
 	return file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescGZIP(), []int{8}
 }
 
+type GetElevationRecordingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetElevationRecordingRequest) Reset() {
+	*x = GetElevationRecordingRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_elevation_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetElevationRecordingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetElevationRecordingRequest) ProtoMessage() {}
+
+func (x *GetElevationRecordingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_elevation_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetElevationRecordingRequest.ProtoReflect.Descriptor instead.
+func (*GetElevationRecordingRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetElevationRecordingRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetElevationRecordingResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// cast is the recording, asciicast v2.
+	Cast []byte `protobuf:"bytes,1,opt,name=cast,proto3" json:"cast,omitempty"`
+	// verified is true when every logged chunk hash matches.
+	Verified bool `protobuf:"varint,2,opt,name=verified,proto3" json:"verified,omitempty"`
+	// verify_error says why it doesn't, in one sentence.
+	VerifyError   string `protobuf:"bytes,3,opt,name=verify_error,json=verifyError,proto3" json:"verify_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetElevationRecordingResponse) Reset() {
+	*x = GetElevationRecordingResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_elevation_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetElevationRecordingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetElevationRecordingResponse) ProtoMessage() {}
+
+func (x *GetElevationRecordingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_elevation_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetElevationRecordingResponse.ProtoReflect.Descriptor instead.
+func (*GetElevationRecordingResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetElevationRecordingResponse) GetCast() []byte {
+	if x != nil {
+		return x.Cast
+	}
+	return nil
+}
+
+func (x *GetElevationRecordingResponse) GetVerified() bool {
+	if x != nil {
+		return x.Verified
+	}
+	return false
+}
+
+func (x *GetElevationRecordingResponse) GetVerifyError() string {
+	if x != nil {
+		return x.VerifyError
+	}
+	return ""
+}
+
 var File_sneakers_appliance_osadmin_v1_elevation_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_elevation_proto_rawDesc = "" +
 	"\n" +
-	"-sneakers/appliance/osadmin/v1/elevation.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\x83\x02\n" +
+	"-sneakers/appliance/osadmin/v1/elevation.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\xa8\x05\n" +
 	"\tElevation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05admin\x18\x02 \x01(\tR\x05admin\x12'\n" +
@@ -470,7 +662,20 @@ const file_sneakers_appliance_osadmin_v1_elevation_proto_rawDesc = "" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x18\n" +
 	"\aminutes\x18\x06 \x01(\x05R\aminutes\x128\n" +
 	"\trequested\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\trequested\x12\x14\n" +
-	"\x05state\x18\b \x01(\tR\x05state\"\x17\n" +
+	"\x05state\x18\b \x01(\tR\x05state\x12#\n" +
+	"\rself_approved\x18\t \x01(\bR\fselfApproved\x12\x1f\n" +
+	"\vapproved_by\x18\n" +
+	" \x01(\tR\n" +
+	"approvedBy\x126\n" +
+	"\bapproved\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\bapproved\x124\n" +
+	"\astarted\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\astarted\x120\n" +
+	"\x05ended\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x05ended\x12\x1d\n" +
+	"\n" +
+	"end_reason\x18\x0e \x01(\tR\tendReason\x12)\n" +
+	"\x10recording_sha256\x18\x0f \x01(\tR\x0frecordingSha256\x12\x16\n" +
+	"\x06serial\x18\x10 \x01(\x04R\x06serial\x12=\n" +
+	"\fvalid_before\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\vvalidBefore\x12\x1c\n" +
+	"\trecording\x18\x12 \x01(\bR\trecording\"\x17\n" +
 	"\x15ListElevationsRequest\"b\n" +
 	"\x16ListElevationsResponse\x12H\n" +
 	"\n" +
@@ -485,12 +690,19 @@ const file_sneakers_appliance_osadmin_v1_elevation_proto_rawDesc = "" +
 	"\x15DenyElevationResponse\"+\n" +
 	"\x19TerminateElevationRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x1c\n" +
-	"\x1aTerminateElevationResponse2\xfe\x04\n" +
+	"\x1aTerminateElevationResponse\".\n" +
+	"\x1cGetElevationRecordingRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"r\n" +
+	"\x1dGetElevationRecordingResponse\x12\x12\n" +
+	"\x04cast\x18\x01 \x01(\fR\x04cast\x12\x1a\n" +
+	"\bverified\x18\x02 \x01(\bR\bverified\x12!\n" +
+	"\fverify_error\x18\x03 \x01(\tR\vverifyError2\xb8\x06\n" +
 	"\x10ElevationService\x12\x88\x01\n" +
 	"\x0eListElevations\x124.sneakers.appliance.osadmin.v1.ListElevationsRequest\x1a5.sneakers.appliance.osadmin.v1.ListElevationsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa0\x01\n" +
 	"\x10ApproveElevation\x126.sneakers.appliance.osadmin.v1.ApproveElevationRequest\x1a7.sneakers.appliance.osadmin.v1.ApproveElevationResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11elevation.approve\x12\x92\x01\n" +
 	"\rDenyElevation\x123.sneakers.appliance.osadmin.v1.DenyElevationRequest\x1a4.sneakers.appliance.osadmin.v1.DenyElevationResponse\"\x16\xc2\xf3\x18\x12\x10\x02\"\x0eelevation.deny\x12\xa6\x01\n" +
-	"\x12TerminateElevation\x128.sneakers.appliance.osadmin.v1.TerminateElevationRequest\x1a9.sneakers.appliance.osadmin.v1.TerminateElevationResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\"\x13elevation.terminateB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\x12TerminateElevation\x128.sneakers.appliance.osadmin.v1.TerminateElevationRequest\x1a9.sneakers.appliance.osadmin.v1.TerminateElevationResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\"\x13elevation.terminate\x12\xb7\x01\n" +
+	"\x15GetElevationRecording\x12;.sneakers.appliance.osadmin.v1.GetElevationRecordingRequest\x1a<.sneakers.appliance.osadmin.v1.GetElevationRecordingResponse\"#\xc2\xf3\x18\x1c\x10\x02\"\x18elevation.recording.view\x90\x02\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescOnce sync.Once
@@ -504,35 +716,43 @@ func file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_elevation_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_elevation_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_sneakers_appliance_osadmin_v1_elevation_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_sneakers_appliance_osadmin_v1_elevation_proto_goTypes = []any{
-	(*Elevation)(nil),                  // 0: sneakers.appliance.osadmin.v1.Elevation
-	(*ListElevationsRequest)(nil),      // 1: sneakers.appliance.osadmin.v1.ListElevationsRequest
-	(*ListElevationsResponse)(nil),     // 2: sneakers.appliance.osadmin.v1.ListElevationsResponse
-	(*ApproveElevationRequest)(nil),    // 3: sneakers.appliance.osadmin.v1.ApproveElevationRequest
-	(*ApproveElevationResponse)(nil),   // 4: sneakers.appliance.osadmin.v1.ApproveElevationResponse
-	(*DenyElevationRequest)(nil),       // 5: sneakers.appliance.osadmin.v1.DenyElevationRequest
-	(*DenyElevationResponse)(nil),      // 6: sneakers.appliance.osadmin.v1.DenyElevationResponse
-	(*TerminateElevationRequest)(nil),  // 7: sneakers.appliance.osadmin.v1.TerminateElevationRequest
-	(*TerminateElevationResponse)(nil), // 8: sneakers.appliance.osadmin.v1.TerminateElevationResponse
-	(*timestamppb.Timestamp)(nil),      // 9: google.protobuf.Timestamp
+	(*Elevation)(nil),                     // 0: sneakers.appliance.osadmin.v1.Elevation
+	(*ListElevationsRequest)(nil),         // 1: sneakers.appliance.osadmin.v1.ListElevationsRequest
+	(*ListElevationsResponse)(nil),        // 2: sneakers.appliance.osadmin.v1.ListElevationsResponse
+	(*ApproveElevationRequest)(nil),       // 3: sneakers.appliance.osadmin.v1.ApproveElevationRequest
+	(*ApproveElevationResponse)(nil),      // 4: sneakers.appliance.osadmin.v1.ApproveElevationResponse
+	(*DenyElevationRequest)(nil),          // 5: sneakers.appliance.osadmin.v1.DenyElevationRequest
+	(*DenyElevationResponse)(nil),         // 6: sneakers.appliance.osadmin.v1.DenyElevationResponse
+	(*TerminateElevationRequest)(nil),     // 7: sneakers.appliance.osadmin.v1.TerminateElevationRequest
+	(*TerminateElevationResponse)(nil),    // 8: sneakers.appliance.osadmin.v1.TerminateElevationResponse
+	(*GetElevationRecordingRequest)(nil),  // 9: sneakers.appliance.osadmin.v1.GetElevationRecordingRequest
+	(*GetElevationRecordingResponse)(nil), // 10: sneakers.appliance.osadmin.v1.GetElevationRecordingResponse
+	(*timestamppb.Timestamp)(nil),         // 11: google.protobuf.Timestamp
 }
 var file_sneakers_appliance_osadmin_v1_elevation_proto_depIdxs = []int32{
-	9, // 0: sneakers.appliance.osadmin.v1.Elevation.requested:type_name -> google.protobuf.Timestamp
-	0, // 1: sneakers.appliance.osadmin.v1.ListElevationsResponse.elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	1, // 2: sneakers.appliance.osadmin.v1.ElevationService.ListElevations:input_type -> sneakers.appliance.osadmin.v1.ListElevationsRequest
-	3, // 3: sneakers.appliance.osadmin.v1.ElevationService.ApproveElevation:input_type -> sneakers.appliance.osadmin.v1.ApproveElevationRequest
-	5, // 4: sneakers.appliance.osadmin.v1.ElevationService.DenyElevation:input_type -> sneakers.appliance.osadmin.v1.DenyElevationRequest
-	7, // 5: sneakers.appliance.osadmin.v1.ElevationService.TerminateElevation:input_type -> sneakers.appliance.osadmin.v1.TerminateElevationRequest
-	2, // 6: sneakers.appliance.osadmin.v1.ElevationService.ListElevations:output_type -> sneakers.appliance.osadmin.v1.ListElevationsResponse
-	4, // 7: sneakers.appliance.osadmin.v1.ElevationService.ApproveElevation:output_type -> sneakers.appliance.osadmin.v1.ApproveElevationResponse
-	6, // 8: sneakers.appliance.osadmin.v1.ElevationService.DenyElevation:output_type -> sneakers.appliance.osadmin.v1.DenyElevationResponse
-	8, // 9: sneakers.appliance.osadmin.v1.ElevationService.TerminateElevation:output_type -> sneakers.appliance.osadmin.v1.TerminateElevationResponse
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	11, // 0: sneakers.appliance.osadmin.v1.Elevation.requested:type_name -> google.protobuf.Timestamp
+	11, // 1: sneakers.appliance.osadmin.v1.Elevation.approved:type_name -> google.protobuf.Timestamp
+	11, // 2: sneakers.appliance.osadmin.v1.Elevation.started:type_name -> google.protobuf.Timestamp
+	11, // 3: sneakers.appliance.osadmin.v1.Elevation.ended:type_name -> google.protobuf.Timestamp
+	11, // 4: sneakers.appliance.osadmin.v1.Elevation.valid_before:type_name -> google.protobuf.Timestamp
+	0,  // 5: sneakers.appliance.osadmin.v1.ListElevationsResponse.elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	1,  // 6: sneakers.appliance.osadmin.v1.ElevationService.ListElevations:input_type -> sneakers.appliance.osadmin.v1.ListElevationsRequest
+	3,  // 7: sneakers.appliance.osadmin.v1.ElevationService.ApproveElevation:input_type -> sneakers.appliance.osadmin.v1.ApproveElevationRequest
+	5,  // 8: sneakers.appliance.osadmin.v1.ElevationService.DenyElevation:input_type -> sneakers.appliance.osadmin.v1.DenyElevationRequest
+	7,  // 9: sneakers.appliance.osadmin.v1.ElevationService.TerminateElevation:input_type -> sneakers.appliance.osadmin.v1.TerminateElevationRequest
+	9,  // 10: sneakers.appliance.osadmin.v1.ElevationService.GetElevationRecording:input_type -> sneakers.appliance.osadmin.v1.GetElevationRecordingRequest
+	2,  // 11: sneakers.appliance.osadmin.v1.ElevationService.ListElevations:output_type -> sneakers.appliance.osadmin.v1.ListElevationsResponse
+	4,  // 12: sneakers.appliance.osadmin.v1.ElevationService.ApproveElevation:output_type -> sneakers.appliance.osadmin.v1.ApproveElevationResponse
+	6,  // 13: sneakers.appliance.osadmin.v1.ElevationService.DenyElevation:output_type -> sneakers.appliance.osadmin.v1.DenyElevationResponse
+	8,  // 14: sneakers.appliance.osadmin.v1.ElevationService.TerminateElevation:output_type -> sneakers.appliance.osadmin.v1.TerminateElevationResponse
+	10, // 15: sneakers.appliance.osadmin.v1.ElevationService.GetElevationRecording:output_type -> sneakers.appliance.osadmin.v1.GetElevationRecordingResponse
+	11, // [11:16] is the sub-list for method output_type
+	6,  // [6:11] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_elevation_proto_init() }
@@ -547,7 +767,7 @@ func file_sneakers_appliance_osadmin_v1_elevation_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_elevation_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_elevation_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

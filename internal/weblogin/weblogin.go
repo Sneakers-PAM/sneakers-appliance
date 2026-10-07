@@ -178,6 +178,10 @@ func Normalize(code string) string {
 	return c[:4] + "-" + c[4:]
 }
 
+// NewCode returns a fresh XXXX-XXXX code (the enrolment window uses the
+// same form).
+func NewCode() string { return newCode() }
+
 func newCode() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)

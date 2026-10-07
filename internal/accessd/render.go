@@ -34,13 +34,14 @@ func (s *Server) Changed(st access.State) {
 	defer s.renderMu.Unlock()
 	started := time.Now()
 	p := s.o.Paths
-	if err := accounts.Render(st, false, p.AccountsDir()); err != nil {
+	enrolOpen := s.o.Enrolment != nil && s.o.Enrolment.IsOpen()
+	if err := accounts.Render(st, enrolOpen, p.AccountsDir()); err != nil {
 		s.o.Logger.Error(err, "accessd: accounts not rendered", log.F("version", st.Version))
 	}
-	if err := accounts.MakeHomes(st, false, p.HomesDir()); err != nil {
+	if err := accounts.MakeHomes(st, enrolOpen, p.HomesDir()); err != nil {
 		s.o.Logger.Error(err, "accessd: login homes not made", log.F("version", st.Version))
 	}
-	if err := s.renderSSH(st); err != nil {
+	if err := s.renderSSH(st, enrolOpen); err != nil {
 		s.o.Logger.Error(err, "accessd: sshd files not rendered; the previous ones stay", log.F("version", st.Version))
 	}
 	s.o.Logger.Info("accessd: rendered from the store", log.F("version", st.Version), log.F("ms", time.Since(started).Milliseconds()))
@@ -56,7 +57,7 @@ func (s *Server) sshPaths() sshconfig.Paths {
 // renderSSH renders into a new directory, has the pinned sshd check it,
 // then swaps it in whole; sshd gets a SIGHUP when sshd_config changed (a
 // key file is read at each login, so a key change needs none).
-func (s *Server) renderSSH(st access.State) error {
+func (s *Server) renderSSH(st access.State, enrolOpen bool) error {
 	if s.o.Network == nil {
 		return errors.New("no netd client")
 	}
@@ -84,7 +85,10 @@ func (s *Server) renderSSH(st access.State) error {
 	if err := os.MkdirAll(next, 0o755); err != nil { // #nosec G301 -- sshd reads the key files as the logging-in user
 		return err
 	}
-	in := sshconfig.Input{ListenAddrs: listen, Mode: mode, State: st, Paths: s.sshPaths()}
+	in := sshconfig.Input{ListenAddrs: listen, Mode: mode, EnrolOpen: enrolOpen, State: st, Paths: s.sshPaths()}
+	if s.o.Elevation != nil {
+		in.Principals = s.o.Elevation.Principals()
+	}
 	if err := sshconfig.Render(in, next); err != nil {
 		return err
 	}
@@ -110,7 +114,7 @@ func (s *Server) renderSSH(st access.State) error {
 		s.o.Logger.Warn("accessd: the previous sshd files weren't removed", log.F("error", err.Error()))
 	}
 	changed := perr == nil && !bytes.Equal(cfg, prev)
-	s.o.Logger.Debug("accessd: sshd files rendered", log.F("mode", string(mode)), log.F("listen", len(listen)), log.F("configChanged", changed))
+	s.o.Logger.Debug("accessd: sshd files rendered", log.F("mode", string(mode)), log.F("enrolOpen", enrolOpen), log.F("principals", len(in.Principals)), log.F("listen", len(listen)), log.F("configChanged", changed))
 	if changed {
 		s.reloadSSHD()
 	}

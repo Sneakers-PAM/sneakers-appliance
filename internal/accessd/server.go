@@ -37,6 +37,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 )
@@ -71,7 +73,18 @@ type Options struct {
 	// StatusFile is where the last status is kept, readable by the shell
 	// and sneakers-osadmin when accessd is down.
 	StatusFile string
-	Logger     log.Logger
+	// Elevation is the one-time root shells; nil answers Not available.
+	Elevation *elevation.Service
+	// Enrolment is the SSH key enrolment window; nil answers Not
+	// available.
+	Enrolment *enrol.Service
+	// HostKeyDir is where the SSH host keys live
+	// (/var/lib/sneakers/ssh); empty never makes them.
+	HostKeyDir string
+	// AuditDir is the OS audit log's directory, where the session
+	// recordings are.
+	AuditDir string
+	Logger   log.Logger
 }
 
 // Server is accessd.
@@ -104,11 +117,11 @@ func (s *Server) Attach(store *access.Store, api *osadmin.Server) {
 // nobodyUID is the overflow uid, never an admin.
 const nobodyUID = 65534
 
-// PeerAllowed is access.sock's peer rule: root, the osadmin uid, or a uid
-// in the admin range (which must also belong to an admin, checked per
-// call).
+// PeerAllowed is access.sock's peer rule: root, the osadmin uid, the
+// enrol uid, or a uid in the admin range (which must also belong to an
+// admin, checked per call).
 func PeerAllowed(uid uint32) bool {
-	return uid == 0 || uid == accounts.OsadminUID || (uid >= access.FirstUID && uid < nobodyUID)
+	return uid == 0 || uid == accounts.OsadminUID || uid == accounts.EnrolUID || (uid >= access.FirstUID && uid < nobodyUID)
 }
 
 // Handler routes each request by its peer's class.
@@ -118,7 +131,12 @@ func (s *Server) Handler() http.Handler {
 	local.Handle(accessv1connect.NewNetworkServiceHandler(&networkH{s: s}))
 	local.Handle(accessv1connect.NewSetupServiceHandler(&setupH{s: s}))
 	local.Handle(accessv1connect.NewElevationServiceHandler(&elevationH{s: s}))
+	local.Handle(accessv1connect.NewEnrolmentServiceHandler(&enrolmentH{s: s}))
 	local.Handle("/"+osadminv1connect.LocalServiceName+"/", s.api.LocalHandler())
+
+	// The enrol uid is sneakers-enrol: the code and its key's state only.
+	enrolMux := http.NewServeMux()
+	enrolMux.Handle(accessv1connect.NewEnrolmentServiceHandler(&enrolmentH{s: s}))
 
 	front := http.NewServeMux()
 	front.Handle(accessv1connect.NewBindingServiceHandler(&bindingH{s: s}))
@@ -137,6 +155,8 @@ func (s *Server) Handler() http.Handler {
 				r2.RemoteAddr = a.String()
 			}
 			front.ServeHTTP(w, r2)
+		case p.UID == accounts.EnrolUID:
+			enrolMux.ServeHTTP(w, r)
 		default:
 			local.ServeHTTP(w, r)
 		}
@@ -161,6 +181,30 @@ var shellMethods = map[string]bool{
 	accessv1connect.ElevationServiceRequestElevationProcedure:        true,
 	accessv1connect.ElevationServiceListElevationsProcedure:          true,
 	accessv1connect.ElevationServiceGetElevationCertificateProcedure: true,
+}
+
+// SetEnrolment gives accessd the enrolment window, which needs the store
+// accessd renders from.
+func (s *Server) SetEnrolment(e *enrol.Service) { s.o.Enrolment = e }
+
+// Rerender renders the files that follow the store, the elevation
+// principals and the enrolment window again: the elevation service's and
+// the window's OnChange.
+func (s *Server) Rerender() {
+	if s.store != nil {
+		s.Changed(s.store.Read())
+	}
+}
+
+// Tick runs the minute's sweeps: expired elevation requests and
+// certificates, lost sessions, and an idle enrolment window.
+func (s *Server) Tick() {
+	if s.o.Elevation != nil {
+		s.o.Elevation.Sweep()
+	}
+	if s.o.Enrolment != nil {
+		s.o.Enrolment.Sweep()
+	}
 }
 
 // caller names a local call's caller from its peer uid. procedure is the

@@ -46,6 +46,8 @@ const (
 	SetupServiceName = "sneakers.appliance.access.v1.SetupService"
 	// ElevationServiceName is the fully-qualified name of the ElevationService service.
 	ElevationServiceName = "sneakers.appliance.access.v1.ElevationService"
+	// EnrolmentServiceName is the fully-qualified name of the EnrolmentService service.
+	EnrolmentServiceName = "sneakers.appliance.access.v1.EnrolmentService"
 	// BindingServiceName is the fully-qualified name of the BindingService service.
 	BindingServiceName = "sneakers.appliance.access.v1.BindingService"
 )
@@ -111,6 +113,36 @@ const (
 	// ElevationServiceDenyElevationProcedure is the fully-qualified name of the ElevationService's
 	// DenyElevation RPC.
 	ElevationServiceDenyElevationProcedure = "/sneakers.appliance.access.v1.ElevationService/DenyElevation"
+	// ElevationServiceTerminateElevationProcedure is the fully-qualified name of the ElevationService's
+	// TerminateElevation RPC.
+	ElevationServiceTerminateElevationProcedure = "/sneakers.appliance.access.v1.ElevationService/TerminateElevation"
+	// ElevationServiceBeginElevatedSessionProcedure is the fully-qualified name of the
+	// ElevationService's BeginElevatedSession RPC.
+	ElevationServiceBeginElevatedSessionProcedure = "/sneakers.appliance.access.v1.ElevationService/BeginElevatedSession"
+	// ElevationServiceEndElevatedSessionProcedure is the fully-qualified name of the ElevationService's
+	// EndElevatedSession RPC.
+	ElevationServiceEndElevatedSessionProcedure = "/sneakers.appliance.access.v1.ElevationService/EndElevatedSession"
+	// EnrolmentServiceOpenEnrolmentProcedure is the fully-qualified name of the EnrolmentService's
+	// OpenEnrolment RPC.
+	EnrolmentServiceOpenEnrolmentProcedure = "/sneakers.appliance.access.v1.EnrolmentService/OpenEnrolment"
+	// EnrolmentServiceGetEnrolmentProcedure is the fully-qualified name of the EnrolmentService's
+	// GetEnrolment RPC.
+	EnrolmentServiceGetEnrolmentProcedure = "/sneakers.appliance.access.v1.EnrolmentService/GetEnrolment"
+	// EnrolmentServiceAcceptEnrolmentKeyProcedure is the fully-qualified name of the EnrolmentService's
+	// AcceptEnrolmentKey RPC.
+	EnrolmentServiceAcceptEnrolmentKeyProcedure = "/sneakers.appliance.access.v1.EnrolmentService/AcceptEnrolmentKey"
+	// EnrolmentServiceRejectEnrolmentKeyProcedure is the fully-qualified name of the EnrolmentService's
+	// RejectEnrolmentKey RPC.
+	EnrolmentServiceRejectEnrolmentKeyProcedure = "/sneakers.appliance.access.v1.EnrolmentService/RejectEnrolmentKey"
+	// EnrolmentServiceCloseEnrolmentProcedure is the fully-qualified name of the EnrolmentService's
+	// CloseEnrolment RPC.
+	EnrolmentServiceCloseEnrolmentProcedure = "/sneakers.appliance.access.v1.EnrolmentService/CloseEnrolment"
+	// EnrolmentServiceSubmitEnrolmentCodeProcedure is the fully-qualified name of the
+	// EnrolmentService's SubmitEnrolmentCode RPC.
+	EnrolmentServiceSubmitEnrolmentCodeProcedure = "/sneakers.appliance.access.v1.EnrolmentService/SubmitEnrolmentCode"
+	// EnrolmentServiceGetEnrolmentKeyProcedure is the fully-qualified name of the EnrolmentService's
+	// GetEnrolmentKey RPC.
+	EnrolmentServiceGetEnrolmentKeyProcedure = "/sneakers.appliance.access.v1.EnrolmentService/GetEnrolmentKey"
 	// BindingServiceGetBindingProcedure is the fully-qualified name of the BindingService's GetBinding
 	// RPC.
 	BindingServiceGetBindingProcedure = "/sneakers.appliance.access.v1.BindingService/GetBinding"
@@ -671,7 +703,8 @@ func (UnimplementedSetupServiceHandler) Complete(context.Context, *connect.Reque
 
 // ElevationServiceClient is a client for the sneakers.appliance.access.v1.ElevationService service.
 type ElevationServiceClient interface {
-	// RequestElevation asks for an elevated shell for the caller's key.
+	// RequestElevation asks for an elevated shell for the key the caller's
+	// closed-shell login signed in with, from its SSH client address.
 	RequestElevation(context.Context, *connect.Request[v1.RequestElevationRequest]) (*connect.Response[v1.RequestElevationResponse], error)
 	ListElevations(context.Context, *connect.Request[v1.ListElevationsRequest]) (*connect.Response[v1.ListElevationsResponse], error)
 	// GetElevationCertificate returns the certificate of an approved
@@ -681,6 +714,17 @@ type ElevationServiceClient interface {
 	ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error)
 	// DenyElevation is the console's (root only); owners deny on :8443.
 	DenyElevation(context.Context, *connect.Request[v1.DenyElevationRequest]) (*connect.Response[v1.DenyElevationResponse], error)
+	// TerminateElevation ends an active elevated session (root only; owners
+	// terminate on :8443).
+	TerminateElevation(context.Context, *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error)
+	// BeginElevatedSession is sneakers-elevated's (root only), before it
+	// gives a prompt: it uses the certificate up (its principal leaves the
+	// principals file and its serial joins the revocation list) and returns
+	// the approved length.
+	BeginElevatedSession(context.Context, *connect.Request[v1.BeginElevatedSessionRequest]) (*connect.Response[v1.BeginElevatedSessionResponse], error)
+	// EndElevatedSession is sneakers-elevated's (root only) when the
+	// session ends.
+	EndElevatedSession(context.Context, *connect.Request[v1.EndElevatedSessionRequest]) (*connect.Response[v1.EndElevatedSessionResponse], error)
 }
 
 // NewElevationServiceClient constructs a client for the
@@ -727,6 +771,24 @@ func NewElevationServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(elevationServiceMethods.ByName("DenyElevation")),
 			connect.WithClientOptions(opts...),
 		),
+		terminateElevation: connect.NewClient[v1.TerminateElevationRequest, v1.TerminateElevationResponse](
+			httpClient,
+			baseURL+ElevationServiceTerminateElevationProcedure,
+			connect.WithSchema(elevationServiceMethods.ByName("TerminateElevation")),
+			connect.WithClientOptions(opts...),
+		),
+		beginElevatedSession: connect.NewClient[v1.BeginElevatedSessionRequest, v1.BeginElevatedSessionResponse](
+			httpClient,
+			baseURL+ElevationServiceBeginElevatedSessionProcedure,
+			connect.WithSchema(elevationServiceMethods.ByName("BeginElevatedSession")),
+			connect.WithClientOptions(opts...),
+		),
+		endElevatedSession: connect.NewClient[v1.EndElevatedSessionRequest, v1.EndElevatedSessionResponse](
+			httpClient,
+			baseURL+ElevationServiceEndElevatedSessionProcedure,
+			connect.WithSchema(elevationServiceMethods.ByName("EndElevatedSession")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -737,6 +799,9 @@ type elevationServiceClient struct {
 	getElevationCertificate *connect.Client[v1.GetElevationCertificateRequest, v1.GetElevationCertificateResponse]
 	approveElevation        *connect.Client[v1.ApproveElevationRequest, v1.ApproveElevationResponse]
 	denyElevation           *connect.Client[v1.DenyElevationRequest, v1.DenyElevationResponse]
+	terminateElevation      *connect.Client[v1.TerminateElevationRequest, v1.TerminateElevationResponse]
+	beginElevatedSession    *connect.Client[v1.BeginElevatedSessionRequest, v1.BeginElevatedSessionResponse]
+	endElevatedSession      *connect.Client[v1.EndElevatedSessionRequest, v1.EndElevatedSessionResponse]
 }
 
 // RequestElevation calls sneakers.appliance.access.v1.ElevationService.RequestElevation.
@@ -765,10 +830,26 @@ func (c *elevationServiceClient) DenyElevation(ctx context.Context, req *connect
 	return c.denyElevation.CallUnary(ctx, req)
 }
 
+// TerminateElevation calls sneakers.appliance.access.v1.ElevationService.TerminateElevation.
+func (c *elevationServiceClient) TerminateElevation(ctx context.Context, req *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error) {
+	return c.terminateElevation.CallUnary(ctx, req)
+}
+
+// BeginElevatedSession calls sneakers.appliance.access.v1.ElevationService.BeginElevatedSession.
+func (c *elevationServiceClient) BeginElevatedSession(ctx context.Context, req *connect.Request[v1.BeginElevatedSessionRequest]) (*connect.Response[v1.BeginElevatedSessionResponse], error) {
+	return c.beginElevatedSession.CallUnary(ctx, req)
+}
+
+// EndElevatedSession calls sneakers.appliance.access.v1.ElevationService.EndElevatedSession.
+func (c *elevationServiceClient) EndElevatedSession(ctx context.Context, req *connect.Request[v1.EndElevatedSessionRequest]) (*connect.Response[v1.EndElevatedSessionResponse], error) {
+	return c.endElevatedSession.CallUnary(ctx, req)
+}
+
 // ElevationServiceHandler is an implementation of the sneakers.appliance.access.v1.ElevationService
 // service.
 type ElevationServiceHandler interface {
-	// RequestElevation asks for an elevated shell for the caller's key.
+	// RequestElevation asks for an elevated shell for the key the caller's
+	// closed-shell login signed in with, from its SSH client address.
 	RequestElevation(context.Context, *connect.Request[v1.RequestElevationRequest]) (*connect.Response[v1.RequestElevationResponse], error)
 	ListElevations(context.Context, *connect.Request[v1.ListElevationsRequest]) (*connect.Response[v1.ListElevationsResponse], error)
 	// GetElevationCertificate returns the certificate of an approved
@@ -778,6 +859,17 @@ type ElevationServiceHandler interface {
 	ApproveElevation(context.Context, *connect.Request[v1.ApproveElevationRequest]) (*connect.Response[v1.ApproveElevationResponse], error)
 	// DenyElevation is the console's (root only); owners deny on :8443.
 	DenyElevation(context.Context, *connect.Request[v1.DenyElevationRequest]) (*connect.Response[v1.DenyElevationResponse], error)
+	// TerminateElevation ends an active elevated session (root only; owners
+	// terminate on :8443).
+	TerminateElevation(context.Context, *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error)
+	// BeginElevatedSession is sneakers-elevated's (root only), before it
+	// gives a prompt: it uses the certificate up (its principal leaves the
+	// principals file and its serial joins the revocation list) and returns
+	// the approved length.
+	BeginElevatedSession(context.Context, *connect.Request[v1.BeginElevatedSessionRequest]) (*connect.Response[v1.BeginElevatedSessionResponse], error)
+	// EndElevatedSession is sneakers-elevated's (root only) when the
+	// session ends.
+	EndElevatedSession(context.Context, *connect.Request[v1.EndElevatedSessionRequest]) (*connect.Response[v1.EndElevatedSessionResponse], error)
 }
 
 // NewElevationServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -819,6 +911,24 @@ func NewElevationServiceHandler(svc ElevationServiceHandler, opts ...connect.Han
 		connect.WithSchema(elevationServiceMethods.ByName("DenyElevation")),
 		connect.WithHandlerOptions(opts...),
 	)
+	elevationServiceTerminateElevationHandler := connect.NewUnaryHandler(
+		ElevationServiceTerminateElevationProcedure,
+		svc.TerminateElevation,
+		connect.WithSchema(elevationServiceMethods.ByName("TerminateElevation")),
+		connect.WithHandlerOptions(opts...),
+	)
+	elevationServiceBeginElevatedSessionHandler := connect.NewUnaryHandler(
+		ElevationServiceBeginElevatedSessionProcedure,
+		svc.BeginElevatedSession,
+		connect.WithSchema(elevationServiceMethods.ByName("BeginElevatedSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	elevationServiceEndElevatedSessionHandler := connect.NewUnaryHandler(
+		ElevationServiceEndElevatedSessionProcedure,
+		svc.EndElevatedSession,
+		connect.WithSchema(elevationServiceMethods.ByName("EndElevatedSession")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.ElevationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ElevationServiceRequestElevationProcedure:
@@ -831,6 +941,12 @@ func NewElevationServiceHandler(svc ElevationServiceHandler, opts ...connect.Han
 			elevationServiceApproveElevationHandler.ServeHTTP(w, r)
 		case ElevationServiceDenyElevationProcedure:
 			elevationServiceDenyElevationHandler.ServeHTTP(w, r)
+		case ElevationServiceTerminateElevationProcedure:
+			elevationServiceTerminateElevationHandler.ServeHTTP(w, r)
+		case ElevationServiceBeginElevatedSessionProcedure:
+			elevationServiceBeginElevatedSessionHandler.ServeHTTP(w, r)
+		case ElevationServiceEndElevatedSessionProcedure:
+			elevationServiceEndElevatedSessionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -858,6 +974,272 @@ func (UnimplementedElevationServiceHandler) ApproveElevation(context.Context, *c
 
 func (UnimplementedElevationServiceHandler) DenyElevation(context.Context, *connect.Request[v1.DenyElevationRequest]) (*connect.Response[v1.DenyElevationResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.ElevationService.DenyElevation is not implemented"))
+}
+
+func (UnimplementedElevationServiceHandler) TerminateElevation(context.Context, *connect.Request[v1.TerminateElevationRequest]) (*connect.Response[v1.TerminateElevationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.ElevationService.TerminateElevation is not implemented"))
+}
+
+func (UnimplementedElevationServiceHandler) BeginElevatedSession(context.Context, *connect.Request[v1.BeginElevatedSessionRequest]) (*connect.Response[v1.BeginElevatedSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.ElevationService.BeginElevatedSession is not implemented"))
+}
+
+func (UnimplementedElevationServiceHandler) EndElevatedSession(context.Context, *connect.Request[v1.EndElevatedSessionRequest]) (*connect.Response[v1.EndElevatedSessionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.ElevationService.EndElevatedSession is not implemented"))
+}
+
+// EnrolmentServiceClient is a client for the sneakers.appliance.access.v1.EnrolmentService service.
+type EnrolmentServiceClient interface {
+	// OpenEnrolment opens a window for an admin's keys (root only). It
+	// generates the SSH host keys when the box has none.
+	OpenEnrolment(context.Context, *connect.Request[v1.OpenEnrolmentRequest]) (*connect.Response[v1.OpenEnrolmentResponse], error)
+	// GetEnrolment is the window as the console shows it (root only).
+	GetEnrolment(context.Context, *connect.Request[v1.GetEnrolmentRequest]) (*connect.Response[v1.GetEnrolmentResponse], error)
+	// AcceptEnrolmentKey stores a key that gave the right code (root only;
+	// confirm is the typed yes).
+	AcceptEnrolmentKey(context.Context, *connect.Request[v1.AcceptEnrolmentKeyRequest]) (*connect.Response[v1.AcceptEnrolmentKeyResponse], error)
+	// RejectEnrolmentKey refuses a key that gave the right code (root only).
+	RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error)
+	// CloseEnrolment closes the window (root only): Done on the console.
+	CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error)
+	// SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
+	// code the admin typed and the key sshd authenticated.
+	SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error)
+	// GetEnrolmentKey is sneakers-enrol's (the enrol uid only): whether the
+	// console has accepted the key yet.
+	GetEnrolmentKey(context.Context, *connect.Request[v1.GetEnrolmentKeyRequest]) (*connect.Response[v1.GetEnrolmentKeyResponse], error)
+}
+
+// NewEnrolmentServiceClient constructs a client for the
+// sneakers.appliance.access.v1.EnrolmentService service. By default, it uses the Connect protocol
+// with the binary Protobuf Codec, asks for gzipped responses, and sends uncompressed requests. To
+// use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or connect.WithGRPCWeb()
+// options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewEnrolmentServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) EnrolmentServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	enrolmentServiceMethods := v1.File_sneakers_appliance_access_v1_access_proto.Services().ByName("EnrolmentService").Methods()
+	return &enrolmentServiceClient{
+		openEnrolment: connect.NewClient[v1.OpenEnrolmentRequest, v1.OpenEnrolmentResponse](
+			httpClient,
+			baseURL+EnrolmentServiceOpenEnrolmentProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("OpenEnrolment")),
+			connect.WithClientOptions(opts...),
+		),
+		getEnrolment: connect.NewClient[v1.GetEnrolmentRequest, v1.GetEnrolmentResponse](
+			httpClient,
+			baseURL+EnrolmentServiceGetEnrolmentProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("GetEnrolment")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		acceptEnrolmentKey: connect.NewClient[v1.AcceptEnrolmentKeyRequest, v1.AcceptEnrolmentKeyResponse](
+			httpClient,
+			baseURL+EnrolmentServiceAcceptEnrolmentKeyProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("AcceptEnrolmentKey")),
+			connect.WithClientOptions(opts...),
+		),
+		rejectEnrolmentKey: connect.NewClient[v1.RejectEnrolmentKeyRequest, v1.RejectEnrolmentKeyResponse](
+			httpClient,
+			baseURL+EnrolmentServiceRejectEnrolmentKeyProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("RejectEnrolmentKey")),
+			connect.WithClientOptions(opts...),
+		),
+		closeEnrolment: connect.NewClient[v1.CloseEnrolmentRequest, v1.CloseEnrolmentResponse](
+			httpClient,
+			baseURL+EnrolmentServiceCloseEnrolmentProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("CloseEnrolment")),
+			connect.WithClientOptions(opts...),
+		),
+		submitEnrolmentCode: connect.NewClient[v1.SubmitEnrolmentCodeRequest, v1.SubmitEnrolmentCodeResponse](
+			httpClient,
+			baseURL+EnrolmentServiceSubmitEnrolmentCodeProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("SubmitEnrolmentCode")),
+			connect.WithClientOptions(opts...),
+		),
+		getEnrolmentKey: connect.NewClient[v1.GetEnrolmentKeyRequest, v1.GetEnrolmentKeyResponse](
+			httpClient,
+			baseURL+EnrolmentServiceGetEnrolmentKeyProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("GetEnrolmentKey")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// enrolmentServiceClient implements EnrolmentServiceClient.
+type enrolmentServiceClient struct {
+	openEnrolment       *connect.Client[v1.OpenEnrolmentRequest, v1.OpenEnrolmentResponse]
+	getEnrolment        *connect.Client[v1.GetEnrolmentRequest, v1.GetEnrolmentResponse]
+	acceptEnrolmentKey  *connect.Client[v1.AcceptEnrolmentKeyRequest, v1.AcceptEnrolmentKeyResponse]
+	rejectEnrolmentKey  *connect.Client[v1.RejectEnrolmentKeyRequest, v1.RejectEnrolmentKeyResponse]
+	closeEnrolment      *connect.Client[v1.CloseEnrolmentRequest, v1.CloseEnrolmentResponse]
+	submitEnrolmentCode *connect.Client[v1.SubmitEnrolmentCodeRequest, v1.SubmitEnrolmentCodeResponse]
+	getEnrolmentKey     *connect.Client[v1.GetEnrolmentKeyRequest, v1.GetEnrolmentKeyResponse]
+}
+
+// OpenEnrolment calls sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment.
+func (c *enrolmentServiceClient) OpenEnrolment(ctx context.Context, req *connect.Request[v1.OpenEnrolmentRequest]) (*connect.Response[v1.OpenEnrolmentResponse], error) {
+	return c.openEnrolment.CallUnary(ctx, req)
+}
+
+// GetEnrolment calls sneakers.appliance.access.v1.EnrolmentService.GetEnrolment.
+func (c *enrolmentServiceClient) GetEnrolment(ctx context.Context, req *connect.Request[v1.GetEnrolmentRequest]) (*connect.Response[v1.GetEnrolmentResponse], error) {
+	return c.getEnrolment.CallUnary(ctx, req)
+}
+
+// AcceptEnrolmentKey calls sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey.
+func (c *enrolmentServiceClient) AcceptEnrolmentKey(ctx context.Context, req *connect.Request[v1.AcceptEnrolmentKeyRequest]) (*connect.Response[v1.AcceptEnrolmentKeyResponse], error) {
+	return c.acceptEnrolmentKey.CallUnary(ctx, req)
+}
+
+// RejectEnrolmentKey calls sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey.
+func (c *enrolmentServiceClient) RejectEnrolmentKey(ctx context.Context, req *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error) {
+	return c.rejectEnrolmentKey.CallUnary(ctx, req)
+}
+
+// CloseEnrolment calls sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment.
+func (c *enrolmentServiceClient) CloseEnrolment(ctx context.Context, req *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error) {
+	return c.closeEnrolment.CallUnary(ctx, req)
+}
+
+// SubmitEnrolmentCode calls sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode.
+func (c *enrolmentServiceClient) SubmitEnrolmentCode(ctx context.Context, req *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error) {
+	return c.submitEnrolmentCode.CallUnary(ctx, req)
+}
+
+// GetEnrolmentKey calls sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey.
+func (c *enrolmentServiceClient) GetEnrolmentKey(ctx context.Context, req *connect.Request[v1.GetEnrolmentKeyRequest]) (*connect.Response[v1.GetEnrolmentKeyResponse], error) {
+	return c.getEnrolmentKey.CallUnary(ctx, req)
+}
+
+// EnrolmentServiceHandler is an implementation of the sneakers.appliance.access.v1.EnrolmentService
+// service.
+type EnrolmentServiceHandler interface {
+	// OpenEnrolment opens a window for an admin's keys (root only). It
+	// generates the SSH host keys when the box has none.
+	OpenEnrolment(context.Context, *connect.Request[v1.OpenEnrolmentRequest]) (*connect.Response[v1.OpenEnrolmentResponse], error)
+	// GetEnrolment is the window as the console shows it (root only).
+	GetEnrolment(context.Context, *connect.Request[v1.GetEnrolmentRequest]) (*connect.Response[v1.GetEnrolmentResponse], error)
+	// AcceptEnrolmentKey stores a key that gave the right code (root only;
+	// confirm is the typed yes).
+	AcceptEnrolmentKey(context.Context, *connect.Request[v1.AcceptEnrolmentKeyRequest]) (*connect.Response[v1.AcceptEnrolmentKeyResponse], error)
+	// RejectEnrolmentKey refuses a key that gave the right code (root only).
+	RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error)
+	// CloseEnrolment closes the window (root only): Done on the console.
+	CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error)
+	// SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
+	// code the admin typed and the key sshd authenticated.
+	SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error)
+	// GetEnrolmentKey is sneakers-enrol's (the enrol uid only): whether the
+	// console has accepted the key yet.
+	GetEnrolmentKey(context.Context, *connect.Request[v1.GetEnrolmentKeyRequest]) (*connect.Response[v1.GetEnrolmentKeyResponse], error)
+}
+
+// NewEnrolmentServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewEnrolmentServiceHandler(svc EnrolmentServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	enrolmentServiceMethods := v1.File_sneakers_appliance_access_v1_access_proto.Services().ByName("EnrolmentService").Methods()
+	enrolmentServiceOpenEnrolmentHandler := connect.NewUnaryHandler(
+		EnrolmentServiceOpenEnrolmentProcedure,
+		svc.OpenEnrolment,
+		connect.WithSchema(enrolmentServiceMethods.ByName("OpenEnrolment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	enrolmentServiceGetEnrolmentHandler := connect.NewUnaryHandler(
+		EnrolmentServiceGetEnrolmentProcedure,
+		svc.GetEnrolment,
+		connect.WithSchema(enrolmentServiceMethods.ByName("GetEnrolment")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	enrolmentServiceAcceptEnrolmentKeyHandler := connect.NewUnaryHandler(
+		EnrolmentServiceAcceptEnrolmentKeyProcedure,
+		svc.AcceptEnrolmentKey,
+		connect.WithSchema(enrolmentServiceMethods.ByName("AcceptEnrolmentKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	enrolmentServiceRejectEnrolmentKeyHandler := connect.NewUnaryHandler(
+		EnrolmentServiceRejectEnrolmentKeyProcedure,
+		svc.RejectEnrolmentKey,
+		connect.WithSchema(enrolmentServiceMethods.ByName("RejectEnrolmentKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	enrolmentServiceCloseEnrolmentHandler := connect.NewUnaryHandler(
+		EnrolmentServiceCloseEnrolmentProcedure,
+		svc.CloseEnrolment,
+		connect.WithSchema(enrolmentServiceMethods.ByName("CloseEnrolment")),
+		connect.WithHandlerOptions(opts...),
+	)
+	enrolmentServiceSubmitEnrolmentCodeHandler := connect.NewUnaryHandler(
+		EnrolmentServiceSubmitEnrolmentCodeProcedure,
+		svc.SubmitEnrolmentCode,
+		connect.WithSchema(enrolmentServiceMethods.ByName("SubmitEnrolmentCode")),
+		connect.WithHandlerOptions(opts...),
+	)
+	enrolmentServiceGetEnrolmentKeyHandler := connect.NewUnaryHandler(
+		EnrolmentServiceGetEnrolmentKeyProcedure,
+		svc.GetEnrolmentKey,
+		connect.WithSchema(enrolmentServiceMethods.ByName("GetEnrolmentKey")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/sneakers.appliance.access.v1.EnrolmentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case EnrolmentServiceOpenEnrolmentProcedure:
+			enrolmentServiceOpenEnrolmentHandler.ServeHTTP(w, r)
+		case EnrolmentServiceGetEnrolmentProcedure:
+			enrolmentServiceGetEnrolmentHandler.ServeHTTP(w, r)
+		case EnrolmentServiceAcceptEnrolmentKeyProcedure:
+			enrolmentServiceAcceptEnrolmentKeyHandler.ServeHTTP(w, r)
+		case EnrolmentServiceRejectEnrolmentKeyProcedure:
+			enrolmentServiceRejectEnrolmentKeyHandler.ServeHTTP(w, r)
+		case EnrolmentServiceCloseEnrolmentProcedure:
+			enrolmentServiceCloseEnrolmentHandler.ServeHTTP(w, r)
+		case EnrolmentServiceSubmitEnrolmentCodeProcedure:
+			enrolmentServiceSubmitEnrolmentCodeHandler.ServeHTTP(w, r)
+		case EnrolmentServiceGetEnrolmentKeyProcedure:
+			enrolmentServiceGetEnrolmentKeyHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedEnrolmentServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedEnrolmentServiceHandler struct{}
+
+func (UnimplementedEnrolmentServiceHandler) OpenEnrolment(context.Context, *connect.Request[v1.OpenEnrolmentRequest]) (*connect.Response[v1.OpenEnrolmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) GetEnrolment(context.Context, *connect.Request[v1.GetEnrolmentRequest]) (*connect.Response[v1.GetEnrolmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.GetEnrolment is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) AcceptEnrolmentKey(context.Context, *connect.Request[v1.AcceptEnrolmentKeyRequest]) (*connect.Response[v1.AcceptEnrolmentKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) GetEnrolmentKey(context.Context, *connect.Request[v1.GetEnrolmentKeyRequest]) (*connect.Response[v1.GetEnrolmentKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey is not implemented"))
 }
 
 // BindingServiceClient is a client for the sneakers.appliance.access.v1.BindingService service.

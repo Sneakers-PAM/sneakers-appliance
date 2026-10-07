@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
@@ -254,5 +255,68 @@ func TestComplete(t *testing.T) {
 	}
 	if got := shell.Complete(shell.OriginSSH, "network a"); got != "network a" {
 		t.Errorf("SSH completes a console-only command: %q", got)
+	}
+}
+
+// sequenceBackend answers elevation.status with the states in order.
+type sequenceBackend struct {
+	recordingBackend
+	states []string
+}
+
+func (b *sequenceBackend) Call(ctx context.Context, r shell.Request) (shell.Result, error) {
+	switch r.Action {
+	case "elevation.request":
+		b.calls = append(b.calls, r)
+		return shell.Result{Text: "Requested E-7K2Q (30 minutes).", Data: map[string]string{"id": "E-7K2Q", "state": "pending"}}, nil
+	case "elevation.status":
+		b.calls = append(b.calls, r)
+		s := b.states[0]
+		if len(b.states) > 1 {
+			b.states = b.states[1:]
+		}
+		return shell.Result{Data: []map[string]string{{"id": "E-7K2Q", "state": s}}}, nil
+	case "elevation.cert":
+		b.calls = append(b.calls, r)
+		return shell.Result{Text: "the-elevation-certificate"}, nil
+	}
+	return b.recordingBackend.Call(ctx, r)
+}
+
+// shell waits for the approval and prints the certificate.
+func TestShellWaitsForTheApproval(t *testing.T) {
+	b := &sequenceBackend{states: []string{"pending", "pending", "approved"}}
+	var out bytes.Buffer
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(""), Out: &out, Err: &out, Poll: time.Millisecond}
+	if err := shell.Run(context.Background(), e, `shell --minutes 30 --reason "kubelet"`); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(b.actions(), ","); got != "elevation.request,elevation.status,elevation.status,elevation.status,elevation.cert" {
+		t.Fatalf("%s", got)
+	}
+	if !strings.Contains(out.String(), "Waiting for an owner") || !strings.Contains(out.String(), "the-elevation-certificate") {
+		t.Fatalf("%q", out.String())
+	}
+}
+
+func TestShellStopsWaitingOnADenial(t *testing.T) {
+	b := &sequenceBackend{states: []string{"pending", "denied"}}
+	var out bytes.Buffer
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(""), Out: &out, Err: &out, Poll: time.Millisecond}
+	err := shell.Run(context.Background(), e, `shell --minutes 30 --reason "kubelet"`)
+	assertCode(t, err, "ELEV_USED")
+}
+
+func TestShellLeavesTheRequestPendingOnCtrlC(t *testing.T) {
+	b := &sequenceBackend{states: []string{"pending"}}
+	var out bytes.Buffer
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(""), Out: &out, Err: &out, Poll: time.Millisecond}
+	if err := shell.Run(ctx, e, `shell --minutes 30 --reason "kubelet"`); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "still pending") {
+		t.Fatalf("%q", out.String())
 	}
 }

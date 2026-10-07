@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -63,6 +64,9 @@ type Env struct {
 	In      io.Reader
 	Out     io.Writer
 	Err     io.Writer
+	// Poll is how often `shell` checks its request while it waits for an
+	// approver; zero is every 2 seconds.
+	Poll time.Duration
 }
 
 type flagSpec struct {
@@ -394,7 +398,56 @@ func runShellRequest(ctx context.Context, e *Env, _ *Command, _ []string, flags 
 	if err != nil || m < 15 || m > 240 {
 		return Result{}, codes.New(codes.ShellParse, "--minutes is 15 to 240")
 	}
-	return e.Backend.Call(ctx, Request{Action: "elevation.request", Flags: flags})
+	res, err := e.Backend.Call(ctx, Request{Action: "elevation.request", Flags: flags})
+	if err != nil {
+		return Result{}, err
+	}
+	data, _ := res.Data.(map[string]string)
+	id := data["id"]
+	if id == "" {
+		return res, nil
+	}
+	_, _ = fmt.Fprintln(e.Out, res.Text)
+	_, _ = fmt.Fprintln(e.Out, "Waiting for an owner to approve it; Ctrl-C leaves the request pending.")
+	return waitForApproval(ctx, e, id, res)
+}
+
+// waitForApproval polls request id until an owner approves it (then
+// prints its certificate), denies it or it expires. A status the shell
+// can't read ends the wait with the request's own result.
+func waitForApproval(ctx context.Context, e *Env, id string, requested Result) (Result, error) {
+	poll := e.Poll
+	if poll <= 0 {
+		poll = 2 * time.Second
+	}
+	t := time.NewTicker(poll)
+	defer t.Stop()
+	for {
+		st, err := e.Backend.Call(ctx, Request{Action: "elevation.status", Args: []string{id}})
+		if err != nil {
+			return Result{}, err
+		}
+		state := ""
+		if rows, ok := st.Data.([]map[string]string); ok && len(rows) == 1 {
+			state = rows[0]["state"]
+		}
+		switch state {
+		case "pending":
+		case "approved":
+			return e.Backend.Call(ctx, Request{Action: "elevation.cert", Args: []string{id}})
+		case "denied":
+			return Result{}, codes.New(codes.ElevUsed, "%s was denied", id)
+		case "expired":
+			return Result{}, codes.New(codes.ElevExpired, "%s expired without an approval", id)
+		default:
+			return requested, nil
+		}
+		select {
+		case <-ctx.Done():
+			return Result{Text: fmt.Sprintf("%s is still pending. Once it is approved, run: elevation cert %s", id, id), Data: map[string]string{"id": id, "state": "pending"}}, nil
+		case <-t.C:
+		}
+	}
 }
 
 func emit(e *Env, asJSON bool, r Result) error {

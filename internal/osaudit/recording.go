@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -24,6 +25,12 @@ const (
 	ActionRecordingChunk = "recording.chunk"
 	ActionRecordingEnd   = "recording.end"
 )
+
+// RecordingPath is where request id's session recording lives in the log
+// directory dir.
+func RecordingPath(dir, id string) string {
+	return filepath.Join(dir, SessionsDir, id+".cast")
+}
 
 // Appender takes audit entries; *Log is one.
 type Appender interface {

@@ -65,6 +65,10 @@ func keyToWire(k access.AdminKey) *osadminv1.Key {
 	return w
 }
 
+// HostKeys are the SSH host keys' types and fingerprints, for the
+// console's enrolment screen.
+func (s *Server) HostKeys() []*osadminv1.HostKey { return s.hostKeys() }
+
 // hostKeys reads the SSH host public keys; a box before step 3 has none.
 func (s *Server) hostKeys() []*osadminv1.HostKey {
 	paths, _ := filepath.Glob(filepath.Join(s.o.Paths.SSHDir(), "ssh_host_*_key.pub"))
