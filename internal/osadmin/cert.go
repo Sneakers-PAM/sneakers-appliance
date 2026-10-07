@@ -118,7 +118,7 @@ func loadCert(dir string) (tls.Certificate, CertInfo, error) {
 // ReadCertInfo describes the certificate in dir without reading its key.
 // The directory is sneakers-osadmin's, so a link there isn't followed.
 func ReadCertInfo(dir string) (CertInfo, error) {
-	f, err := os.OpenFile(filepath.Join(dir, certFile), os.O_RDONLY|unix.O_NOFOLLOW, 0)
+	f, err := os.OpenFile(filepath.Join(dir, certFile), os.O_RDONLY|unix.O_NOFOLLOW, 0) // #nosec G304 -- the certificate under osadmin's own directory, links refused
 	if err != nil {
 		return CertInfo{}, fmt.Errorf("tls: %w", err)
 	}

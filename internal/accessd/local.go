@@ -261,7 +261,7 @@ type elevationH struct {
 	s *Server
 }
 
-var errElevationNotAvailable = connect.NewError(connect.CodeUnimplemented, errors.New(osadmin.NotAvailable))
+var errElevationNotAvailable = connect.NewError(connect.CodeUnimplemented, errors.New(osadmin.NotAvailable)) //nolint:staticcheck // shown to people as a sentence
 
 func (h *elevationH) RequestElevation(ctx context.Context, r *connect.Request[accessv1.RequestElevationRequest]) (*connect.Response[accessv1.RequestElevationResponse], error) {
 	if _, err := h.s.caller(ctx, r.Header(), accessv1connect.ElevationServiceRequestElevationProcedure); err != nil {
