@@ -12,13 +12,16 @@ import (
 
 	"connectrpc.com/connect"
 
+	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 )
 
 // Services is the shell's backend on the box. Sign-in approval goes to
-// osadmin's LocalService; the commands of later specs answer "Not available
+// osadmin's LocalService; reboot and poweroff go to init's PowerService on
+// power.sock, always graceful (init checks it's the shell asking); the commands of later specs answer "Not available
 // in this release"; the rest are accessd's, whose socket client lands with
 // accessd, so until then they say the appliance services are unavailable.
 type Services struct {
@@ -27,6 +30,7 @@ type Services struct {
 	// the session's key, so it's refused.
 	SessionErr error
 	Local      osadminv1connect.LocalServiceClient
+	Power      initv1connect.PowerServiceClient
 }
 
 // ErrNotInRelease is the answer of a command whose backend isn't on the box.
@@ -42,6 +46,8 @@ func (s *Services) Call(ctx context.Context, r Request) (Result, error) {
 		return s.lookup(ctx, r.Args[0])
 	case r.Action == "login.approve":
 		return s.approve(ctx, r.Args[0])
+	case (r.Action == "power.reboot" || r.Action == "power.off") && s.Power != nil:
+		return s.power(ctx, r.Action)
 	case laterAction(r.Action):
 		return Result{}, ErrNotInRelease
 	}
@@ -70,6 +76,21 @@ func (s *Services) approve(ctx context.Context, code string) (Result, error) {
 	return Result{Text: "Signed in. The browser continues on its own.", Data: map[string]string{"signedIn": s.Session.Admin}}, nil
 }
 
+func (s *Services) power(ctx context.Context, action string) (Result, error) {
+	var err error
+	text := "Rebooting. The services are stopping first."
+	if action == "power.off" {
+		text = "Shutting down. The services are stopping first."
+		_, err = s.Power.PowerOff(ctx, connect.NewRequest(&initv1.PowerOffRequest{}))
+	} else {
+		_, err = s.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))
+	}
+	if err != nil {
+		return Result{}, fromDaemon(err, "init")
+	}
+	return Result{Text: text}, nil
+}
+
 // Printable makes a string from the network safe to show on a terminal:
 // control characters (escape sequences among them) become '?', and it's cut
 // to a couple of hundred characters.
@@ -92,14 +113,18 @@ func Printable(v string) string {
 
 // fromOsadmin turns a LocalService error into the coded error it names.
 // osadmin's messages start with the code's symbol and number.
-func fromOsadmin(err error) error {
+func fromOsadmin(err error) error { return fromDaemon(err, "the appliance admin (:8443)") }
+
+// fromDaemon turns a daemon's Connect error into the coded error its
+// message names.
+func fromDaemon(err error, who string) error {
 	ce := new(connect.Error)
 	if !errors.As(err, &ce) {
-		return codes.Wrap(codes.NotAvailable, fmt.Errorf("the appliance admin (:8443) isn't answering; try again shortly: %w", err))
+		return codes.Wrap(codes.NotAvailable, fmt.Errorf("%s isn't answering; try again shortly: %w", who, err))
 	}
 	switch ce.Code() {
 	case connect.CodeUnavailable, connect.CodeDeadlineExceeded, connect.CodeCanceled:
-		return codes.Wrap(codes.NotAvailable, errors.New("the appliance admin (:8443) isn't answering; try again shortly"))
+		return codes.Wrap(codes.NotAvailable, fmt.Errorf("%s isn't answering; try again shortly", who))
 	case connect.CodeUnimplemented:
 		return ErrNotInRelease
 	}

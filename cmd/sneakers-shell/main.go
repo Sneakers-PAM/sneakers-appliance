@@ -22,12 +22,25 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
-// osadminSocket is osadmin's local socket: sign-in approval.
-const osadminSocket = "/run/sneakers/osadmin.sock"
+// The local sockets: osadmin's for sign-in approval, init's power socket
+// for reboot and poweroff.
+const (
+	osadminSocket = "/run/sneakers/osadmin.sock"
+	powerSocket   = "/run/sneakers/power.sock"
+)
+
+func unixClient(sock string) *http.Client {
+	return &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
+		},
+	}, Timeout: 30 * time.Second}
+}
 
 func backend() *shell.Services {
 	name := "unknown"
@@ -35,12 +48,11 @@ func backend() *shell.Services {
 		name = u.Username
 	}
 	sess, err := shell.SessionFromSSH(os.Getenv, name)
-	hc := &http.Client{Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", osadminSocket)
-		},
-	}, Timeout: 30 * time.Second}
-	return &shell.Services{Session: sess, SessionErr: err, Local: osadminv1connect.NewLocalServiceClient(hc, "http://osadmin.sock")}
+	return &shell.Services{
+		Session: sess, SessionErr: err,
+		Local: osadminv1connect.NewLocalServiceClient(unixClient(osadminSocket), "http://osadmin.sock"),
+		Power: initv1connect.NewPowerServiceClient(unixClient(powerSocket), "http://power.sock"),
+	}
 }
 
 func main() { os.Exit(run()) }

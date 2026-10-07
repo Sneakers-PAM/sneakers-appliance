@@ -6,6 +6,7 @@ package shell_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +14,8 @@ import (
 
 	"connectrpc.com/connect"
 
+	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
@@ -147,5 +150,57 @@ func TestAccessdCommandsSayServicesUnavailable(t *testing.T) {
 		if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "appliance services are unavailable") {
 			t.Errorf("%q: %v %q", line, err, stderr)
 		}
+	}
+}
+
+// fakePower is init's PowerService on power.sock as the shell sees it.
+type fakePower struct {
+	initv1connect.UnimplementedPowerServiceHandler
+	calls  []string
+	refuse error
+}
+
+func (f *fakePower) Reboot(_ context.Context, r *connect.Request[initv1.RebootRequest]) (*connect.Response[initv1.RebootResponse], error) {
+	if f.refuse != nil {
+		return nil, f.refuse
+	}
+	f.calls = append(f.calls, fmt.Sprintf("reboot forced=%v", r.Msg.GetForced()))
+	return connect.NewResponse(&initv1.RebootResponse{}), nil
+}
+
+func (f *fakePower) PowerOff(_ context.Context, r *connect.Request[initv1.PowerOffRequest]) (*connect.Response[initv1.PowerOffResponse], error) {
+	f.calls = append(f.calls, fmt.Sprintf("poweroff forced=%v", r.Msg.GetForced()))
+	return connect.NewResponse(&initv1.PowerOffResponse{}), nil
+}
+
+func withPower(t *testing.T, f *fakePower) *shell.Services {
+	t.Helper()
+	_, h := initv1connect.NewPowerServiceHandler(f)
+	srv := httptest.NewServer(h)
+	t.Cleanup(srv.Close)
+	return &shell.Services{Session: shell.Session{Admin: "alice"}, Power: initv1connect.NewPowerServiceClient(http.DefaultClient, srv.URL)}
+}
+
+func TestRebootAndPoweroffGoToInitGracefully(t *testing.T) {
+	f := &fakePower{}
+	s := withPower(t, f)
+	if _, _, err := runWith(t, s, "reboot", "reboot\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runWith(t, s, "poweroff", "poweroff\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runWith(t, s, "reboot", "no\n"); err == nil {
+		t.Fatal("an unconfirmed reboot went through")
+	}
+	if strings.Join(f.calls, ";") != "reboot forced=false;poweroff forced=false" {
+		t.Fatalf("%v", f.calls)
+	}
+}
+
+func TestInitsRefusalIsShown(t *testing.T) {
+	s := withPower(t, &fakePower{refuse: connect.NewError(connect.CodePermissionDenied, errors.New("POWER_CALLER (3608): /tmp/x isn't osadmin or the closed shell"))})
+	if _, _, err := runWith(t, s, "reboot", "reboot\n"); !codes.Is(err, codes.PowerCaller) {
+		t.Fatalf("got %v", err)
 	}
 }
