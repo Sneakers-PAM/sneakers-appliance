@@ -154,7 +154,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 }
 
 // dirs makes osadmin's own directory (its certificate, written as the
-// osadmin user) and the API's root-only one.
+// osadmin user; a certificate an earlier root osadmin left there is handed
+// over) and the API's root-only one.
 func dirs(p osadmin.Paths) error {
 	if err := os.MkdirAll(p.APIDir(), 0o700); err != nil {
 		return err
@@ -162,7 +163,16 @@ func dirs(p osadmin.Paths) error {
 	if err := os.MkdirAll(p.OwnDir(), 0o700); err != nil {
 		return err
 	}
-	return os.Chown(p.OwnDir(), accounts.OsadminUID, accounts.OsadminUID)
+	if err := os.Chown(p.OwnDir(), accounts.OsadminUID, accounts.OsadminUID); err != nil {
+		return err
+	}
+	for _, name := range []string{"tls.crt", "tls.key"} {
+		err := os.Lchown(filepath.Join(p.OwnDir(), name), accounts.OsadminUID, accounts.OsadminUID)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	return nil
 }
 
 // listen serves access.sock: mode 0666, since admin uids and osadmin
