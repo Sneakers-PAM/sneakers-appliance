@@ -1,0 +1,49 @@
+drwxr-xr-x 0/0 /
+drwxr-xr-x 0/0 /bin
+-rwxr-xr-x 0/0 /bin/busybox
+lrwxrwxrwx 0/0 /bin/sh -> busybox
+drwxr-xr-x 0/0 /boot
+drwxr-xr-x 0/0 /boot/efi
+drwxr-xr-x 0/0 /dev
+drwxr-xr-x 0/0 /etc
+lrwxrwxrwx 0/0 /etc/group -> /run/sneakers/accounts/group
+drwxr-xr-x 0/0 /etc/k0s
+lrwxrwxrwx 0/0 /etc/passwd -> /run/sneakers/accounts/passwd
+lrwxrwxrwx 0/0 /etc/resolv.conf -> /run/sneakers/resolv.conf
+lrwxrwxrwx 0/0 /etc/shadow -> /run/sneakers/accounts/shadow
+drwxr-xr-x 0/0 /proc
+drwxr-xr-x 0/0 /run
+drwxr-xr-x 0/0 /sbin
+-rwxr-xr-x 0/0 /sbin/init
+drwxr-xr-x 0/0 /sys
+drwxr-xr-x 0/0 /tmp
+drwxr-xr-x 0/0 /usr
+drwxr-xr-x 0/0 /usr/bin
+-rwxr-xr-x 0/0 /usr/bin/k0s
+-rwxr-xr-x 0/0 /usr/bin/sneakers-accessd
+-rwxr-xr-x 0/0 /usr/bin/sneakers-osadmin
+-rwxr-xr-x 0/0 /usr/bin/sneakers-shell
+-rwxr-xr-x 0/0 /usr/bin/ssh-keygen
+drwxr-xr-x 0/0 /usr/lib
+drwxr-xr-x 0/0 /usr/lib/sneakers
+drwxr-xr-x 0/0 /usr/lib/sneakers/services.d
+-rw-r--r-- 0/0 /usr/lib/sneakers/services.d/accessd.yaml
+-rw-r--r-- 0/0 /usr/lib/sneakers/services.d/osadmin.yaml
+drwxr-xr-x 0/0 /usr/libexec
+drwxr-xr-x 0/0 /usr/libexec/openssh
+-rwxr-xr-x 0/0 /usr/libexec/openssh/sshd-auth
+-rwxr-xr-x 0/0 /usr/libexec/openssh/sshd-session
+-rwxr-xr-x 0/0 /usr/libexec/sneakers-elevated
+-rwxr-xr-x 0/0 /usr/libexec/sneakers-enrol
+-rwxr-xr-x 0/0 /usr/libexec/sneakers-enrol-keys
+drwxr-xr-x 0/0 /usr/sbin
+-rwxr-xr-x 0/0 /usr/sbin/sshd
+drwxr-xr-x 0/0 /usr/share
+drwxr-xr-x 0/0 /usr/share/sneakers
+drwxr-xr-x 0/0 /usr/share/sneakers/charts
+drwxr-xr-x 0/0 /usr/share/sneakers/images
+drwxr-xr-x 0/0 /usr/share/sneakers/osadmin
+drwxr-xr-x 0/0 /usr/share/sneakers/release
+-rw-r--r-- 0/0 /usr/share/sneakers/release/release.yaml
+drwxr-xr-x 0/0 /var
+drwxr-xr-x 0/0 /var/lib

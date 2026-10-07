@@ -74,6 +74,10 @@ jobs:
         run: bash build/kernel/build.sh amd64
       - name: Build the static cryptsetup
         run: bash build/static/cryptsetup.sh amd64
+      - name: Build the static OpenSSH and busybox
+        run: |
+          bash build/busybox/build.sh out/static
+          bash build/openssh/build.sh out/static
       - name: Build the release, unsigned
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -81,6 +85,7 @@ jobs:
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
+          OPENSSH=out/static BUSYBOX=out/static/busybox \
           OUT="$RUNNER_TEMP/unsigned" bash build/release/build.sh
           {
             echo "### Unsigned build ${VERSION} (amd64)"
@@ -305,6 +310,10 @@ jobs:
         run: bash build/kernel/build.sh amd64
       - name: Build the static cryptsetup
         run: bash build/static/cryptsetup.sh amd64
+      - name: Build the static OpenSSH and busybox
+        run: |
+          bash build/busybox/build.sh out/static
+          bash build/openssh/build.sh out/static
       - name: Build a lab release and its .bin
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -316,6 +325,7 @@ jobs:
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
+          OPENSSH=out/static BUSYBOX=out/static/busybox \
           KEYS="$keys" OUT="$lab" bash build/lab/build.sh
           go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
           tool="$work/sneakers-artifact"

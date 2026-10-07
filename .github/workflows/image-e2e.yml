@@ -60,6 +60,19 @@ jobs:
       - name: Build the static cryptsetup
         if: steps.static.outputs.cache-hit != 'true'
         run: bash build/static/cryptsetup.sh amd64
+      # The same cache key as the Static tools workflow, so a run of either
+      # restores what the other built.
+      - name: Cache the static OpenSSH and busybox
+        id: sshtools
+        uses: actions/cache@v4
+        with:
+          path: out/static
+          key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**') }}
+      - name: Build the static OpenSSH and busybox
+        if: steps.sshtools.outputs.cache-hit != 'true'
+        run: |
+          bash build/busybox/build.sh out/static
+          bash build/openssh/build.sh out/static
       - name: Build the lab release and its raw disk
         run: |
           keys="$RUNNER_TEMP/labkeys"
@@ -68,10 +81,11 @@ jobs:
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
+          OPENSSH=out/static BUSYBOX=out/static/busybox \
           KEYS="$keys" OUT="$RUNNER_TEMP/lab" bash build/lab/build.sh
           {
             echo "### Lab release"
-            echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes"
+            echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes (SquashFS zstd with the verity tree)"
             echo "- raw disk: $(ls "$RUNNER_TEMP"/lab/disk)"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Image suite

@@ -110,6 +110,8 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/
+      - name: Root image is reproducible and holds the declared tree
+        run: bash build/root/build_test.sh
       - name: Release guard and production fingerprint check
         run: |
           bash build/release/guard_test.sh

@@ -11,6 +11,10 @@
 #   KERNEL         the bzImage (build/kernel/build.sh)
 #   KERNELRELEASE  its release string
 #   VERITYSETUP    the static veritysetup (build/static/cryptsetup.sh)
+#   OPENSSH        directory with the static OpenSSH (build/openssh/build.sh)
+#   BUSYBOX        the static busybox (build/busybox/build.sh)
+#   SIGNATURES     the org signatures of the pinned images, <hex>.sigstore.json
+#                  each (the sneakers-release countersignatures)
 #   OUT            the output directory
 #   KEYS           the public key directory (default keys/production)
 #
@@ -27,7 +31,8 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OUT:?}"
+: "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+: "${SIGNATURES:?sneakers-release publishes no image countersignatures yet; the bundle can't be built without them}"
 keys="${KEYS:-$root/keys/production}"
 arch=amd64
 # shellcheck source=build/release/pins.env
@@ -56,9 +61,13 @@ pins="-X $pkg.Channel=production -X $pkg.Version=$VERSION \
   -X $pkg.ReleaseKey=$(b64 "$keys/cosign.pub") -X $pkg.DBCert=$(b64 "$keys/db.crt") \
   -X $pkg.PKCert=$(b64 "$keys/PK.crt") -X $pkg.KEKCert=$(b64 "$keys/KEK.crt")"
 
+echo "release: bundle"
+RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" SIGNATURES="$SIGNATURES" ARCH="$arch" OUT="$work/images" \
+  bash "$root/build/bundle/build.sh"
+
 echo "release: root"
-INIT_LDFLAGS="$pins" VERSION="$VERSION" ARCH="$arch" RELEASE="$OUT/release.yaml" K0S="$work/k0s" OUT="$work/root" \
-  bash "$root/build/root/build.sh"
+PINS_LDFLAGS="$pins" VERSION="$VERSION" ARCH="$arch" RELEASE="$OUT/release.yaml" K0S="$work/k0s" OPENSSH="$OPENSSH" \
+  BUSYBOX="$BUSYBOX" IMAGES="$work/images" OUT="$work/root" bash "$root/build/root/build.sh"
 cp "$work/root/root-$VERSION.img" "$work/root/verity.json" "$OUT/"
 
 echo "release: UKI (unsigned)"
