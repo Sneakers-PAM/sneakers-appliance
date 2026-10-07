@@ -7,7 +7,7 @@
 | The root image: reproducible, the declared tree, its refusals | `bash build/root/build_test.sh` | every PR (`🔑 Lab keys and tool interop`) |
 | The airgap bundle: pull by digest per architecture, signatures, both-way check (a `registry:2` container) | `go test ./internal/bundle/` | every PR (`🧪 Build & Test`) |
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
-| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | every PR (`image-e2e.yml`) |
+| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a pull request only builds the lab release and reports the root image size |
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
