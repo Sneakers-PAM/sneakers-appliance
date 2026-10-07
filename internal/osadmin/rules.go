@@ -9,11 +9,13 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
@@ -166,6 +168,96 @@ func hasKey(a *access.Admin, fp string) bool {
 		}
 	}
 	return false
+}
+
+// SurfaceSSH marks an audit entry from a closed-shell login.
+const SurfaceSSH = "ssh"
+
+// Local is a caller on access.sock that accessd named by its peer uid: a
+// closed-shell login (Admin set, KeyFP the key sshd says signed it in, when
+// the shell knows it) or the console (Admin empty, an owner named console).
+type Local struct {
+	Admin, KeyFP, Source string
+}
+
+// RunLocal runs fn, the body of procedure, as l: the procedure's rule
+// decides the role it needs (no session, CSRF or step-up: the caller
+// authenticated to sshd or sits at the console), and the call is audited
+// like one from :8443, from the ssh or console surface.
+func (s *Server) RunLocal(ctx context.Context, l Local, procedure string, fn func(context.Context) error) error {
+	md := methodOf(procedure)
+	rule := RuleOf(md)
+	if rule == nil {
+		s.o.Logger.Error(nil, "osadmin: a local call names a method with no rule; refused", log.F("procedure", procedure))
+		return connect.NewError(connect.CodePermissionDenied, errors.New("this method has no access rule"))
+	}
+	surface := SurfaceSSH
+	if l.Admin == "" {
+		surface = osaudit.SurfaceConsole
+	}
+	c := &call{procedure: procedure, source: l.Source, detail: map[string]string{"surface": surface}}
+	err := s.localIdentity(c, l, rule)
+	if err == nil {
+		s.o.Logger.Debug("osadmin: local call", log.F("procedure", procedure), log.F("admin", c.session.Admin))
+		err = fn(context.WithValue(ctx, callKey{}, c))
+		if err != nil && connect.CodeOf(err) == connect.CodeUnimplemented {
+			err = notAvailable()
+		}
+	}
+	if c.detail == nil {
+		c.detail = map[string]string{}
+	}
+	c.detail["surface"] = surface
+	s.audit(c, rule, err)
+	if err != nil {
+		s.o.Logger.Warn("osadmin: local call failed", log.F("procedure", procedure), log.F("admin", c.session.Admin), log.F("error", describe(err)))
+		return toConnect(err)
+	}
+	return nil
+}
+
+func (s *Server) localIdentity(c *call, l Local, rule *osadminv1.Rule) error {
+	if l.Admin == "" {
+		c.session, c.role = weblogin.Session{Admin: osaudit.SurfaceConsole}, access.RoleOwner
+		return nil
+	}
+	c.session = weblogin.Session{Admin: l.Admin, KeyFP: l.KeyFP}
+	st := s.o.Access.Read()
+	a, ok := st.Admin(l.Admin)
+	if !ok {
+		return codes.New(codes.AccessSession, "there is no admin named %q any more", l.Admin)
+	}
+	if l.KeyFP != "" && !hasKey(a, l.KeyFP) {
+		return codes.New(codes.AccessForbidden, "that key isn't one of %s's keys", a.Name)
+	}
+	c.role = a.Role
+	if rule.GetRole() == osadminv1.Role_ROLE_OWNER && a.Role != access.RoleOwner {
+		return codes.New(codes.AccessForbidden, "only an owner may do this")
+	}
+	return nil
+}
+
+// methodOf finds a procedure's method descriptor, or nil.
+func methodOf(procedure string) protoreflect.MethodDescriptor {
+	name := strings.ReplaceAll(strings.TrimPrefix(procedure, "/"), "/", ".")
+	d, err := protoregistry.GlobalFiles.FindDescriptorByName(protoreflect.FullName(name))
+	if err != nil {
+		return nil
+	}
+	md, _ := d.(protoreflect.MethodDescriptor)
+	return md
+}
+
+// via is how a key added in this call arrived: the shell, the console
+// (typed or pasted) or :8443.
+func (c *call) via() string {
+	switch c.detail["surface"] {
+	case SurfaceSSH:
+		return access.ViaShell
+	case osaudit.SurfaceConsole:
+		return access.ViaTyped
+	}
+	return access.ViaOSAdmin
 }
 
 // audit writes the entry for a method whose rule names an action.
