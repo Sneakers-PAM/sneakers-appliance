@@ -138,5 +138,36 @@ func WriteChoice(espDir, choice string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, p)
+	if err := os.Rename(tmp, p); err != nil {
+		return err
+	}
+	// On FAT the renamed file's size lives in its new directory entry,
+	// written with the file's inode, and the rename and any new directories
+	// are directory changes: without syncing the file again and every
+	// directory up to the ESP's root, a power cut in the next seconds
+	// leaves an empty choice or none, and the box asks again.
+	if err := syncPath(p); err != nil {
+		return err
+	}
+	for d := filepath.Dir(p); ; d = filepath.Dir(d) {
+		if err := syncPath(d); err != nil {
+			return err
+		}
+		if d == filepath.Clean(espDir) || d == filepath.Dir(d) {
+			return nil
+		}
+	}
+}
+
+// syncPath syncs the file or directory at p.
+func syncPath(p string) error {
+	d, err := os.Open(p) // #nosec G304 -- a path on the mounted ESP
+	if err != nil {
+		return err
+	}
+	if err := d.Sync(); err != nil {
+		_ = d.Close()
+		return err
+	}
+	return d.Close()
 }
