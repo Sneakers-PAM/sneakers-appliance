@@ -2,7 +2,7 @@
 
 A release reaches the box as one signed and encrypted update package, the `.bin`, downloaded from
 the GitHub Release or uploaded by hand ([release.md](release.md)). The box verifies the signature
-and the channel before it decrypts anything; a lab package never installs on a production box.
+and the channel before it decrypts anything, with the update key read from the UKI it booted; a lab package never installs on a production box.
 
 A box holds at most two releases: the one it runs and one more (the next, or the previous).
 

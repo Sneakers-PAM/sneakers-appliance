@@ -47,12 +47,14 @@ The box reads a package in this order, and refuses with the first code that appl
    (`UPGRADE_SIGNATURE`). A package from the other channel is `UPGRADE_CHANNEL`.
 3. The signed header's channel is the box's (`UPGRADE_CHANNEL`).
 4. The ciphertext's size and SHA-256 equal the header's (`UPGRADE_SIGNATURE`).
-5. Only then is it decrypted with the box's update key (`UPGRADE_DECRYPT`).
+5. Only then is it decrypted with the update key read from the UKI that booted
+   (`UPGRADE_DECRYPT`; see below).
 6. A patch applies only on one of its exact base versions (`UPGRADE_PATCH_BASE`).
 
 `sneakers-artifact` writes and checks packages: `bin-pack` encrypts a layout and writes the header
 to sign, `bin-seal` joins the header, its bundle and the ciphertext, and `bin-verify` runs steps 1
-to 4 (and, given `--identity`, decrypts and unpacks, for lab runs).
+to 4. Given `--identity` (an age key file) or `--identity-uki` (a UKI, read the way the box reads
+it), it also decrypts, and with `--extract` unpacks the payload.
 
 ## Lab and production keys
 
@@ -60,11 +62,35 @@ The release key (which signs the artifact and the `.bin` header) and the update 
 payload is encrypted to) each have a lab and a production variant:
 
 - **Production:** the public halves are committed in `keys/production/` (`cosign.pub`,
-  `update.pub`, recorded in `fingerprints.txt`). The release key's private half is a secret of the
-  `production` environment ([runbooks/production-keys.md](runbooks/production-keys.md)). Encrypting
-  needs only `update.pub`, so the release job never holds the update key's private half.
+  `update.pub`, recorded in `fingerprints.txt`). Both private halves are secrets of the
+  `production` environment (`RELEASE_COSIGN_KEY` and `UPDATE_AGE_KEY`,
+  [runbooks/production-keys.md](runbooks/production-keys.md)). Encrypting needs only `update.pub`;
+  the update key's private half is read only by the sign step that adds it to the UKI.
 - **Lab:** `build/keys/lab-keys.sh` makes a fresh set per run, every key labelled
   `LAB ephemeral NOT FOR PRODUCTION`, on a tmpfs that's unmounted at the end of the job.
+
+## The update key in the UKI
+
+The box decrypts with an update key it carries in its signed UKI, as a PE section of its own,
+`.updkey`:
+
+- The sign job writes `UPDATE_AGE_KEY` to the key tmpfs, and `sneakers-artifact uki-add-key` adds
+  it to the unsigned UKI. The tool refuses a key that doesn't belong to the committed
+  `update.pub`, a UKI that's already signed, and a UKI that already has a key. The key file is
+  removed in the same step, then the db key signs the keyed UKI, so the signature covers the key.
+- On the box the key is read from the UKI systemd-boot booted (the entry `LoaderEntrySelected`
+  names, found under `EFI/Linux` on the ESP) into memory only; it's never written anywhere. A UKI
+  without the section is `UPGRADE_DECRYPT`.
+- systemd-stub doesn't measure `.updkey`, and `internal/ukipcr` skips it too, so the key doesn't
+  change PCR 11 or the box's sealing.
+- The sign job checks the finished `.bin` decrypts with the key read back out of the signed UKI.
+- A lab build does the same with its lab update key (`build/lab/build.sh`).
+
+The trade-off: the encryption protects the package in transit and on download mirrors, not from
+someone who holds a genuine image. Anyone with a genuine image (the published `sneakers-os`
+artifact, install media or a box's ESP) can read the update key out of its UKI. A package's
+authenticity comes from its signature, never from the encryption: a box installs only what the
+release key signed for its channel, whoever could decrypt it.
 
 A lab `.bin` is named `-LAB.bin`, signed with the lab key and encrypted to the lab update key, so a
 production box refuses it, and the reverse. The sign job runs `check-fingerprints.sh` and refuses
@@ -76,9 +102,9 @@ any certificate or key that isn't the recorded production one.
 |---|---|---|
 | `guard` | nothing | refuses a tag that isn't `v<semver>` or whose commit isn't on `main`, and a production release before `keys/production/fingerprints.txt` and the `SNEAKERS_RELEASE_VERSION` pin (`build/release/pins.env`) exist |
 | `build` | nothing | builds the kernel, the root image, the unsigned UKI and systemd-boot, the production kit, and `SHA256SUMS` over all of it (`build/release/build.sh`) |
-| `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; signs the UKI and systemd-boot with the db key, then the artifact and the `.bin` header with the release key; each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
+| `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; adds the update key to the UKI; signs the UKI and systemd-boot with the db key, then the artifact and the `.bin` header with the release key; checks the `.bin` decrypts with the key in the signed UKI; each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
 | `publish` | `packages: write`, `contents: write` | verifies the artifact with the production kit and the `.bin` with the production key, pushes `sneakers-os` to GHCR, verifies what it pushed, and attaches the `.bin` and its `.sha256` to the tag's GitHub Release |
-| `lab` | lab keys only | the whole path with a lab key set: builds, packs, verifies, decrypts, unpacks, runs the lab kit on the result, and checks a production verify of the lab `.bin` is refused; nothing leaves the run |
+| `lab` | lab keys only | the whole path with a lab key set: builds (the lab update key in the UKI), packs, verifies, decrypts with the key in the signed UKI, unpacks, runs the lab kit on the result, and checks a production verify of the lab `.bin` is refused; nothing leaves the run |
 
 The release `release.yaml` and its signature come from the pinned `sneakers-release` GitHub
 Release; the k0s binary from its upstream release, checked against the pin in `release.yaml`. The
