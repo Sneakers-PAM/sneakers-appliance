@@ -3,9 +3,10 @@
 An owner-only procedure. It names no secret value; the certificate and key fingerprints in
 `keys/production/fingerprints.txt` are the public record.
 
-There are five production keys, all generated fresh for this project, labelled production, and
-never used by a lab or test build or shared with any other project. Four sign; the fifth, the
-update key, is what every release's `.bin` is encrypted to ([release.md](../release.md)):
+There are five production keys. Each is generated fresh for production, labelled production, and
+never made from, copied from or reused as lab or test material, nor shared with any other
+project. Four sign; the fifth, the update key, is what every release's `.bin` is encrypted to, and
+every production UKI carries it ([release.md](../release.md)):
 
 | `production` environment secret | Key | Signs | Read by the release job |
 |---|---|---|---|
@@ -13,7 +14,7 @@ update key, is what every release's `.bin` is encrypted to ([release.md](../rele
 | `SB_KEK_KEY` | RSA-2048 | `db.auth`, `dbx.auth` | only when a tag changes the committed db or dbx |
 | `SB_DB_KEY` | RSA-2048 | Authenticode on the UKI and systemd-boot | every tag |
 | `RELEASE_COSIGN_KEY` and `RELEASE_COSIGN_PASSWORD` | cosign ECDSA P-256 (encrypted key file) | the `sneakers-os` artifact, `release.yaml`, the `.bin` header, and every image in the bundle, third-party ones included | every tag |
-| none (see below) | the update key, age X25519 | nothing: the `.bin` payload is encrypted to its public half, `update.pub` | never; encrypting needs only `update.pub` |
+| `UPDATE_AGE_KEY` | the update key, age X25519 | nothing: the `.bin` payload is encrypted to its public half, `update.pub`, and the sign job adds the private half to the unsigned UKI as its `.updkey` section before the db key signs it | every tag, only by the step that adds it to the UKI |
 
 RSA-2048 because every UEFI implementation must accept it. The release key is separate so it can
 rotate without touching firmware.
@@ -26,7 +27,8 @@ pins the lab keys and a production build the production ones, so a production bo
 `.bin` (`UPGRADE_CHANNEL`) and a lab box refuses a production one. The release workflow's `sign`
 job runs `build/release/check-fingerprints.sh` and refuses to sign unless every certificate and
 `update.pub` match `fingerprints.txt`, and it checks each private key belongs to its committed
-public half before using it.
+public half before using it. Before any production key is used, read its subject (or label) and
+check it says production: anything labelled `LAB`, test, ephemeral or dev is refused.
 
 ## Custody rules
 
@@ -36,9 +38,23 @@ public half before using it.
 - The `production` environment has the owner as required reviewer and allows only `v*` tags
   ([repo-settings.md](../repo-settings.md)). Only the tag release workflow's `sign` job reads it.
 - Inside that job the secrets are written to a tmpfs directory (mode 0600), used by the pinned
-  `sbsign` and `cosign` only, and removed in an `always()` step. They're never passed on a command
+  `sbsign` and `cosign` and by `sneakers-artifact uki-add-key` only, each removed in the step that
+  used it, and the tmpfs is unmounted in an `always()` step. They're never passed on a command
   line, never written to the workspace and never uploaded.
 - GitHub's deployment log for the environment is the audit trail of every use.
+- The update key is the one key that leaves the environment, inside every signed UKI. The sign job
+  adds it with `uki-add-key`, which refuses a key that doesn't belong to the committed
+  `update.pub`, and checks the finished `.bin` decrypts with the key read back out of the signed
+  UKI. The box reads it from the UKI that booted, into memory only, and never writes it anywhere.
+
+### The update key's trade-off
+
+The encryption protects a `.bin` in transit and on download mirrors. It doesn't keep the payload
+from anyone who holds a genuine image: the update key can be read out of any production UKI (the
+published `sneakers-os` artifact, install media, a box's ESP). Authenticity comes from the
+signature, never from the encryption: a box installs only what the release key signed for its
+channel. Treat the update key as confidential to the environment, but don't rely on it for more
+than that.
 
 ## 1. Generate the keys
 
@@ -52,11 +68,13 @@ for role in PK KEK db; do
     -keyout "${role}.key" -out "${role}.crt"
 done
 cosign generate-key-pair --output-key-prefix release-cosign   # prompts for the password
-age-keygen -o update.key
-age-keygen -y update.key > update.pub
+{ echo '# Sneakers-PAM Production update key 2026'; age-keygen; } > update.key
+{ echo '# Sneakers-PAM Production update key 2026'; age-keygen -y update.key; } > update.pub
 ```
 
-Long validity is fine: firmware doesn't check db expiry.
+Long validity is fine: firmware doesn't check db expiry. Every key here is new: never start from a
+lab key set (`build/keys/lab-keys.sh` output, labelled `LAB ephemeral NOT FOR PRODUCTION`), a test
+fixture or another project's key.
 
 ## 2. Build and sign the enrolment material
 
@@ -86,12 +104,10 @@ and `fingerprints.txt` into `keys/production/`. A test in `🧪 Build & Test`
 ## 4. Set the secrets, then wipe
 
 Under Settings, Environments, `production`, set `SB_PK_KEY`, `SB_KEK_KEY` and `SB_DB_KEY` (the PEM
-`.key` files), `RELEASE_COSIGN_KEY` (`release-cosign.key`) and `RELEASE_COSIGN_PASSWORD`. Then
-unmount the tmpfs. The environment is now the only place the signing keys exist.
-
-`update.key` isn't a GitHub secret: the release job never decrypts, so it doesn't need it. Every
-production box needs it to decrypt a `.bin`, so copy it to the owner's offline storage before the
-tmpfs is unmounted, and keep it there until the box's copy is provisioned.
+`.key` files), `RELEASE_COSIGN_KEY` (`release-cosign.key`), `RELEASE_COSIGN_PASSWORD` and
+`UPDATE_AGE_KEY` (`update.key`, comment line included). Then unmount the tmpfs. The environment is
+now the only place the private keys exist; no box is provisioned with the update key by hand,
+because each one reads it from the UKI it boots.
 
 ## Rotation and loss
 
@@ -100,8 +116,12 @@ tmpfs is unmounted, and keep it there until the box's copy is provisioned.
   old db certificate to dbx if it might be compromised.
 - **KEK or PK:** a new key set, and a re-enrolment on every box, which the docs describe as a
   reinstall and restore.
-- **The update key:** a new key pair and its `update.pub` and fingerprint committed; every box
-  must hold the new private half before the first `.bin` encrypted to it ships.
+- **The update key:** a box opens a `.bin` with the key in the UKI it's running, so a new key
+  reaches boxes only through a transition release whose `.bin` is still encrypted to the old
+  `update.pub` while its UKI carries the new key; the next release is encrypted to the new one.
+  The sign job builds both from one key today, so a rotation needs that workflow change first.
+  The key is readable from any genuine image anyway, so a leak alone isn't a reason to rotate it.
 - GitHub secrets can't be read back, so losing the environment loses the keys; recover as above.
+  The update key can also be read back out of any production UKI.
 - A suspected leak: rotate db through KEK, put the old db certificate in dbx, and pin a new release
   key in a new kit.
