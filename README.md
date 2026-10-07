@@ -31,6 +31,8 @@ sneakers-kit build sneakers-os:0.1.0 --format ova --out ./out
   [docs/upgrades.md](docs/upgrades.md): how the release and the box work.
 - [docs/access.md](docs/access.md), [docs/osadmin-api.md](docs/osadmin-api.md): who gets in, and the
   :8443 appliance admin, its factory reset quorum and update flows.
+- [docs/ssh-and-elevation.md](docs/ssh-and-elevation.md): key-only SSH, sshd's rendered config and
+  elevation.
 - [docs/building.md](docs/building.md), [docs/testing.md](docs/testing.md): building the OS and testing it.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how changes land here.
 

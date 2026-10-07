@@ -1,0 +1,57 @@
+# Rendered by accessd from the access store; changes here are overwritten.
+{{- range .ListenAddrs}}
+ListenAddress {{.}}
+{{- end}}
+{{- range .HostKeys}}
+HostKey {{.}}
+{{- end}}
+AuthenticationMethods publickey
+PubkeyAuthentication yes
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+PermitRootLogin no
+DisableForwarding yes
+PermitTunnel no
+PermitUserRC no
+PermitUserEnvironment no
+StrictModes yes
+AuthorizedKeysFile {{.AuthorizedKeysDir}}/%u
+RevokedKeys {{.RevokedKeys}}
+ExposeAuthInfo yes
+ForceCommand {{.Shell}}
+MaxAuthTries 3
+LoginGraceTime 30
+ClientAliveInterval 60
+ClientAliveCountMax 3
+LogLevel VERBOSE
+PidFile {{.PidFile}}
+AllowUsers {{join .AllowUsers " "}}
+PubkeyAcceptedAlgorithms {{join .PubkeyAlgorithms ","}}
+HostKeyAlgorithms {{join .HostKeyAlgorithms ","}}
+KexAlgorithms {{join .KexAlgorithms ","}}
+Ciphers {{join .Ciphers ","}}
+MACs {{join .MACs ","}}
+{{- if .SessionPath}}
+SshdSessionPath {{.SessionPath}}
+{{- end}}
+{{- if .AuthPath}}
+SshdAuthPath {{.AuthPath}}
+{{- end}}
+# No Subsystem lines: no sftp, no scp.
+
+Match User maint
+    PermitRootLogin forced-commands-only
+    AuthorizedKeysFile none
+    TrustedUserCAKeys {{.UserCA}}
+    AuthorizedPrincipalsFile {{.PrincipalsDir}}/maint
+    ForceCommand {{.Elevated}}
+    MaxSessions 1
+{{- if .EnrolOpen}}
+
+Match User enrol
+    AuthorizedKeysFile none
+    AuthorizedKeysCommand {{.EnrolKeys}} %f %k %t
+    AuthorizedKeysCommandUser sshkeys
+    ForceCommand {{.Enrol}}
+{{- end}}

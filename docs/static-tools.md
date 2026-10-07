@@ -23,7 +23,9 @@ bash build/openssh/test.sh out/static
 
 The scripts need Docker and build for the host's architecture. CI (`job-static-tools.yaml`) builds
 amd64 and arm64 on native runners, caches the outputs by the hash of `build/openssh/` and
-`build/busybox/`, and lists each binary's SHA-256 in the job summary.
+`build/busybox/`, and lists each binary's SHA-256 in the job summary. It then runs the
+`internal/sshconfig` tests with the built `sshd`, so every rendered `sshd_config` passes `sshd -t`
+(see [ssh-and-elevation.md](ssh-and-elevation.md)).
 
 To bump a version, change it and its SHA-256 in `versions.env`. For OpenSSH, check the tarball's
 signature against the OpenSSH release key before taking its SHA-256.

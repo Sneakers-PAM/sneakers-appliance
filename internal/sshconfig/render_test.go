@@ -1,0 +1,247 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package sshconfig_test
+
+import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/pem"
+	"flag"
+	"fmt"
+	"net/netip"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
+)
+
+var update = flag.Bool("update", false, "rewrite the golden files")
+
+// requireSshd returns the pinned static sshd from SNEAKERS_TEST_SSHD. The
+// Static tools workflow builds it and sets SNEAKERS_REQUIRE_SSHD, which
+// turns a missing sshd into a failure instead of a skip.
+func requireSshd(t *testing.T) string {
+	t.Helper()
+	p := os.Getenv("SNEAKERS_TEST_SSHD")
+	if p == "" {
+		if os.Getenv("SNEAKERS_REQUIRE_SSHD") != "" {
+			t.Fatal("SNEAKERS_TEST_SSHD isn't set and SNEAKERS_REQUIRE_SSHD is")
+		}
+		t.Skip("SNEAKERS_TEST_SSHD isn't set; the Static tools workflow runs this test against the pinned sshd")
+	}
+	return p
+}
+
+func mustNoErr(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func addrs(ss ...string) []netip.Addr {
+	var out []netip.Addr
+	for _, s := range ss {
+		out = append(out, netip.MustParseAddr(s))
+	}
+	return out
+}
+
+func edKeyLine(t *testing.T) string {
+	t.Helper()
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	mustNoErr(t, err)
+	pk, err := ssh.NewPublicKey(pub)
+	mustNoErr(t, err)
+	return strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pk)))
+}
+
+func twoAdmins(t *testing.T) access.State {
+	t.Helper()
+	s := access.State{NextUID: access.FirstUID}
+	now := time.Date(2026, 10, 5, 14, 0, 0, 0, time.UTC)
+	for _, n := range []string{"alice", "bob"} {
+		a := s.AddAdmin(n, access.RoleOwner, "console", now)
+		k, err := access.ParseLoginKey(edKeyLine(t))
+		mustNoErr(t, err)
+		a.Keys = append(a.Keys, access.AdminKey{Key: k, Added: now, AddedBy: "console", Via: access.ViaEnrol})
+	}
+	return s
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	mustNoErr(t, err)
+	return string(b)
+}
+
+var algoLines = map[string][]string{
+	"PubkeyAcceptedAlgorithms": sshconfig.PubkeyAlgorithms,
+	"HostKeyAlgorithms":        sshconfig.HostKeyAlgorithms,
+	"KexAlgorithms":            sshconfig.KexAlgorithms,
+	"Ciphers":                  sshconfig.Ciphers,
+	"MACs":                     sshconfig.MACs,
+}
+
+// withoutAlgorithms checks the algorithm lines against the lists and drops
+// them, so the golden files hold everything else. The lists name OpenSSH's
+// own extension algorithms, which aren't kept in fixture files.
+func withoutAlgorithms(t *testing.T, cfg string) string {
+	t.Helper()
+	var kept []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(cfg, "\n") {
+		kw, val, _ := strings.Cut(line, " ")
+		if want, ok := algoLines[kw]; ok {
+			if val != strings.Join(want, ",") {
+				t.Fatalf("%s is %q", kw, val)
+			}
+			seen[kw] = true
+			continue
+		}
+		kept = append(kept, line)
+	}
+	for kw := range algoLines {
+		if !seen[kw] {
+			t.Fatalf("no %s line", kw)
+		}
+	}
+	return strings.Join(kept, "\n")
+}
+
+func golden(t *testing.T, got, path string) {
+	t.Helper()
+	if *update {
+		mustNoErr(t, os.WriteFile(path, []byte(got), 0o600))
+	}
+	if want := readFile(t, path); got != want {
+		t.Fatalf("differs from %s:\n%s", path, got)
+	}
+}
+
+func TestRenderGolden(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		mode      sshconfig.Mode
+		enrolOpen bool
+	}{
+		{"enrol", sshconfig.EnrolMode, false},
+		{"admin", sshconfig.AdminMode, false},
+		{"admin-enrol-open", sshconfig.AdminMode, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			in := sshconfig.Input{ListenAddrs: addrs("192.0.2.10", "2001:db8::10"), Mode: c.mode, EnrolOpen: c.enrolOpen,
+				State: twoAdmins(t), Principals: []string{"elev-E-7K2Q"}}
+			mustNoErr(t, sshconfig.Render(in, dir))
+			golden(t, withoutAlgorithms(t, readFile(t, filepath.Join(dir, "sshd_config"))), "testdata/"+c.name+".golden")
+		})
+	}
+}
+
+func TestNoSubsystemNoPassword(t *testing.T) {
+	dir := t.TempDir()
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), Mode: sshconfig.AdminMode, State: twoAdmins(t)}, dir))
+	cfg := readFile(t, filepath.Join(dir, "sshd_config"))
+	for _, banned := range []string{"\nSubsystem", "PasswordAuthentication yes", "KbdInteractiveAuthentication yes", "DisableForwarding no", "Match User enrol"} {
+		if strings.Contains(cfg, banned) {
+			t.Fatalf("config contains %q", banned)
+		}
+	}
+	for _, want := range []string{"AuthenticationMethods publickey\n", "PermitRootLogin no\n", "ExposeAuthInfo yes\n", "AllowUsers alice bob maint\n"} {
+		if !strings.Contains(cfg, want) {
+			t.Fatalf("config lacks %q", want)
+		}
+	}
+}
+
+func TestAuthorizedKeysAreRestricted(t *testing.T) {
+	dir := t.TempDir()
+	s := twoAdmins(t)
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), Mode: sshconfig.AdminMode, State: s}, dir))
+	for _, a := range s.Admins {
+		got := readFile(t, filepath.Join(dir, "authorized_keys", a.Name))
+		if got != "restrict,pty "+a.Keys[0].PublicKey+"\n" {
+			t.Fatalf("%s: %q", a.Name, got)
+		}
+	}
+	if readFile(t, filepath.Join(dir, "principals", "maint")) != "" {
+		t.Fatal("principals without an open elevation")
+	}
+}
+
+func TestEnrolModeRendersNoAdminKeys(t *testing.T) {
+	dir := t.TempDir()
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), Mode: sshconfig.EnrolMode, State: twoAdmins(t)}, dir))
+	ents, err := os.ReadDir(filepath.Join(dir, "authorized_keys"))
+	mustNoErr(t, err)
+	if len(ents) != 0 {
+		t.Fatalf("enrol mode rendered admin keys: %v", ents)
+	}
+}
+
+// testPaths points every file sshd reads into dir, with real host keys.
+func testPaths(t *testing.T, sshd, dir string) sshconfig.Paths {
+	t.Helper()
+	keys := filepath.Join(dir, "keys")
+	mustNoErr(t, os.MkdirAll(keys, 0o700))
+	_, edPriv, err := ed25519.GenerateKey(rand.Reader)
+	mustNoErr(t, err)
+	rsaPriv, err := rsa.GenerateKey(rand.Reader, 3072)
+	mustNoErr(t, err)
+	var hostKeys []string
+	for name, k := range map[string]any{"ssh_host_ed25519_key": edPriv, "ssh_host_rsa_key": rsaPriv} {
+		block, err := ssh.MarshalPrivateKey(k, "")
+		mustNoErr(t, err)
+		p := filepath.Join(keys, name)
+		mustNoErr(t, os.WriteFile(p, pem.EncodeToMemory(block), 0o600))
+		hostKeys = append(hostKeys, p)
+	}
+	ca := filepath.Join(keys, "user_ca.pub")
+	mustNoErr(t, os.WriteFile(ca, []byte(edKeyLine(t)+"\n"), 0o644))
+	krl := filepath.Join(keys, "revoked.krl")
+	mustNoErr(t, os.WriteFile(krl, nil, 0o644))
+	bin := filepath.Dir(sshd)
+	return sshconfig.Paths{
+		ConfigDir: filepath.Join(dir, "ssh"), HostKeys: hostKeys, RevokedKeys: krl, UserCA: ca,
+		PidFile: filepath.Join(dir, "sshd.pid"), Shell: "/bin/true", Elevated: "/bin/true", Enrol: "/bin/true", EnrolKeys: "/bin/true",
+		SessionPath: filepath.Join(bin, "sshd-session"), AuthPath: filepath.Join(bin, "sshd-auth"),
+	}
+}
+
+func TestRenderPassesSshdT(t *testing.T) {
+	sshd := requireSshd(t)
+	base := t.TempDir()
+	paths := testPaths(t, sshd, base)
+	for _, c := range []struct {
+		mode      sshconfig.Mode
+		enrolOpen bool
+	}{{sshconfig.EnrolMode, false}, {sshconfig.AdminMode, false}, {sshconfig.AdminMode, true}} {
+		t.Run(fmt.Sprintf("%s-%v", c.mode, c.enrolOpen), func(t *testing.T) {
+			dir := paths.ConfigDir
+			mustNoErr(t, os.RemoveAll(dir))
+			in := sshconfig.Input{ListenAddrs: addrs("192.0.2.10", "2001:db8::10"), Mode: c.mode, EnrolOpen: c.enrolOpen,
+				State: twoAdmins(t), Principals: []string{"elev-E-7K2Q"}, Paths: paths}
+			mustNoErr(t, sshconfig.Render(in, dir))
+			mustNoErr(t, sshconfig.Check(sshd, dir))
+		})
+	}
+}
+
+func TestCheckRefusesABadConfig(t *testing.T) {
+	sshd := requireSshd(t)
+	dir := t.TempDir()
+	mustNoErr(t, os.WriteFile(filepath.Join(dir, "sshd_config"), []byte("NotAnOption yes\n"), 0o600))
+	if err := sshconfig.Check(sshd, dir); err == nil {
+		t.Fatal("sshd -t accepted an unknown option")
+	}
+}
