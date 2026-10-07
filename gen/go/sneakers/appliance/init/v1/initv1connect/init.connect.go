@@ -88,6 +88,9 @@ const (
 	PowerServiceRebootProcedure = "/sneakers.appliance.init.v1.PowerService/Reboot"
 	// PowerServicePowerOffProcedure is the fully-qualified name of the PowerService's PowerOff RPC.
 	PowerServicePowerOffProcedure = "/sneakers.appliance.init.v1.PowerService/PowerOff"
+	// PowerServiceFactoryResetProcedure is the fully-qualified name of the PowerService's FactoryReset
+	// RPC.
+	PowerServiceFactoryResetProcedure = "/sneakers.appliance.init.v1.PowerService/FactoryReset"
 	// ServicesServiceStartProcedure is the fully-qualified name of the ServicesService's Start RPC.
 	ServicesServiceStartProcedure = "/sneakers.appliance.init.v1.ServicesService/Start"
 	// ServicesServiceStopProcedure is the fully-qualified name of the ServicesService's Stop RPC.
@@ -613,6 +616,9 @@ func (UnimplementedImageServiceHandler) Status(context.Context, *connect.Request
 type PowerServiceClient interface {
 	Reboot(context.Context, *connect.Request[v1.RebootRequest]) (*connect.Response[v1.RebootResponse], error)
 	PowerOff(context.Context, *connect.Request[v1.PowerOffRequest]) (*connect.Response[v1.PowerOffResponse], error)
+	// FactoryReset runs the reset toolbox's factory reset once its quorum
+	// and delay are done (osadmin decides that; init only runs it).
+	FactoryReset(context.Context, *connect.Request[v1.FactoryResetRequest]) (*connect.Response[v1.FactoryResetResponse], error)
 }
 
 // NewPowerServiceClient constructs a client for the sneakers.appliance.init.v1.PowerService
@@ -638,13 +644,20 @@ func NewPowerServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(powerServiceMethods.ByName("PowerOff")),
 			connect.WithClientOptions(opts...),
 		),
+		factoryReset: connect.NewClient[v1.FactoryResetRequest, v1.FactoryResetResponse](
+			httpClient,
+			baseURL+PowerServiceFactoryResetProcedure,
+			connect.WithSchema(powerServiceMethods.ByName("FactoryReset")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // powerServiceClient implements PowerServiceClient.
 type powerServiceClient struct {
-	reboot   *connect.Client[v1.RebootRequest, v1.RebootResponse]
-	powerOff *connect.Client[v1.PowerOffRequest, v1.PowerOffResponse]
+	reboot       *connect.Client[v1.RebootRequest, v1.RebootResponse]
+	powerOff     *connect.Client[v1.PowerOffRequest, v1.PowerOffResponse]
+	factoryReset *connect.Client[v1.FactoryResetRequest, v1.FactoryResetResponse]
 }
 
 // Reboot calls sneakers.appliance.init.v1.PowerService.Reboot.
@@ -657,10 +670,18 @@ func (c *powerServiceClient) PowerOff(ctx context.Context, req *connect.Request[
 	return c.powerOff.CallUnary(ctx, req)
 }
 
+// FactoryReset calls sneakers.appliance.init.v1.PowerService.FactoryReset.
+func (c *powerServiceClient) FactoryReset(ctx context.Context, req *connect.Request[v1.FactoryResetRequest]) (*connect.Response[v1.FactoryResetResponse], error) {
+	return c.factoryReset.CallUnary(ctx, req)
+}
+
 // PowerServiceHandler is an implementation of the sneakers.appliance.init.v1.PowerService service.
 type PowerServiceHandler interface {
 	Reboot(context.Context, *connect.Request[v1.RebootRequest]) (*connect.Response[v1.RebootResponse], error)
 	PowerOff(context.Context, *connect.Request[v1.PowerOffRequest]) (*connect.Response[v1.PowerOffResponse], error)
+	// FactoryReset runs the reset toolbox's factory reset once its quorum
+	// and delay are done (osadmin decides that; init only runs it).
+	FactoryReset(context.Context, *connect.Request[v1.FactoryResetRequest]) (*connect.Response[v1.FactoryResetResponse], error)
 }
 
 // NewPowerServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -682,12 +703,20 @@ func NewPowerServiceHandler(svc PowerServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(powerServiceMethods.ByName("PowerOff")),
 		connect.WithHandlerOptions(opts...),
 	)
+	powerServiceFactoryResetHandler := connect.NewUnaryHandler(
+		PowerServiceFactoryResetProcedure,
+		svc.FactoryReset,
+		connect.WithSchema(powerServiceMethods.ByName("FactoryReset")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.init.v1.PowerService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PowerServiceRebootProcedure:
 			powerServiceRebootHandler.ServeHTTP(w, r)
 		case PowerServicePowerOffProcedure:
 			powerServicePowerOffHandler.ServeHTTP(w, r)
+		case PowerServiceFactoryResetProcedure:
+			powerServiceFactoryResetHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -703,6 +732,10 @@ func (UnimplementedPowerServiceHandler) Reboot(context.Context, *connect.Request
 
 func (UnimplementedPowerServiceHandler) PowerOff(context.Context, *connect.Request[v1.PowerOffRequest]) (*connect.Response[v1.PowerOffResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.PowerService.PowerOff is not implemented"))
+}
+
+func (UnimplementedPowerServiceHandler) FactoryReset(context.Context, *connect.Request[v1.FactoryResetRequest]) (*connect.Response[v1.FactoryResetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.PowerService.FactoryReset is not implemented"))
 }
 
 // ServicesServiceClient is a client for the sneakers.appliance.init.v1.ServicesService service.
