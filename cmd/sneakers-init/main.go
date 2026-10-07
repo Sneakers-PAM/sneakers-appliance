@@ -163,17 +163,22 @@ func protection(st secureboot.State, f phase.Facts) string {
 	return "pending"
 }
 
-// mountEarly mounts what every later step needs. Errors are logged, not
-// fatal: a missing efivarfs, for instance, just means no Secure Boot.
+// earlyMounts are what every later step needs. nosuid and nodev are mount
+// flags (passed as flags to every one of them), never filesystem data: tmpfs
+// refuses an option it doesn't know with EINVAL.
+var earlyMounts = []struct{ src, dst, fstype, data string }{
+	{"proc", "/proc", "proc", ""},
+	{"sysfs", "/sys", "sysfs", ""},
+	{"devtmpfs", "/dev", "devtmpfs", "mode=0755"},
+	{"tmpfs", "/run", "tmpfs", "mode=0755"},
+	{"tmpfs", "/tmp", "tmpfs", "mode=1777"},
+	{"efivarfs", secureboot.DefaultEfivarfs, "efivarfs", ""},
+}
+
+// mountEarly mounts earlyMounts. Errors are logged, not fatal: a missing
+// efivarfs, for instance, just means no Secure Boot.
 func mountEarly(lg log.Logger) {
-	for _, m := range []struct{ src, dst, fstype, data string }{
-		{"proc", "/proc", "proc", ""},
-		{"sysfs", "/sys", "sysfs", ""},
-		{"devtmpfs", "/dev", "devtmpfs", "mode=0755"},
-		{"tmpfs", "/run", "tmpfs", "mode=0755,nosuid,nodev"},
-		{"tmpfs", "/tmp", "tmpfs", "mode=1777,nosuid,nodev"},
-		{"efivarfs", secureboot.DefaultEfivarfs, "efivarfs", ""},
-	} {
+	for _, m := range earlyMounts {
 		_ = os.MkdirAll(m.dst, 0o755) // #nosec G301 -- standard mount points
 		if err := unix.Mount(m.src, m.dst, m.fstype, unix.MS_NOSUID|unix.MS_NODEV, m.data); err != nil && err != unix.EBUSY {
 			lg.Warn("init: mount", log.F("target", m.dst), log.F("error", err.Error()))
