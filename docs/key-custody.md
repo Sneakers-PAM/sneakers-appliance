@@ -69,7 +69,9 @@ through it ([ssh-and-elevation.md](ssh-and-elevation.md)).
 
 `Seal(name, secret)` keeps a small secret (the vault root key first) under the state key: AES-256-GCM
 with a key derived from the state key (HKDF-SHA256), the item's name as associated data, one file
-per item under `/var/lib/sneakers/sealed/` on the state volume. `Unseal(name)` returns it.
+per item under `/var/lib/sneakers/sealed/` on the state volume, written to a temporary file that's
+synced, renamed into place and the directory synced, so a power cut leaves the old item or the new
+one, never an empty file. `Unseal(name)` returns it.
 
 `Escrow(recipients)` returns the escrow bundle: the state key and every sealed item, encrypted with
 age to one to three SSH recovery keys (`ssh-ed25519` or `ssh-rsa`;

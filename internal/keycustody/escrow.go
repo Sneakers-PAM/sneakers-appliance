@@ -59,7 +59,8 @@ func (c *Custody) aead() (cipher.AEAD, error) {
 
 // Seal stores a small secret (the vault root key first) under the state
 // key's protector: AES-256-GCM with a key derived from the state key, the
-// item's name as associated data, written atomically.
+// item's name as associated data, written atomically and synced, so a power cut leaves
+// the old item or the new one.
 func (c *Custody) Seal(name string, secret []byte) error {
 	if !itemNameRE.MatchString(name) {
 		return codes.New(codes.KeyCustodyInvalid, "sealed item name %q", name)
@@ -77,11 +78,7 @@ func (c *Custody) Seal(name string, secret []byte) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := filepath.Join(dir, "."+name+".new")
-	if err := os.WriteFile(tmp, blob, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, filepath.Join(dir, name))
+	return writeDurable(dir, name, blob)
 }
 
 // Unseal returns a sealed secret.
