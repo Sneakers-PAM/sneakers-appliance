@@ -35,3 +35,115 @@ applied again and the box records `NET_REVERTED`, so a change that cuts the admi
 Only one change waits at a time: a second one is refused naming `pending` until the first is
 confirmed or reverted. If applying a change fails outright, the previous settings are applied again
 straight away and the error is returned.
+
+The window survives a restart: while a change waits, netd keeps the previous settings in
+`network.prev.yaml` next to `network.yaml`. If netd stops or the box loses power inside the
+window, the next start applies `network.prev.yaml` again, so an unconfirmed change is undone.
+
+## sneakers-netd
+
+`sneakers-netd` runs as root in first boot and normal operation (`os/rootfs/services.d/netd.yaml`,
+readiness `/run/sneakers/netd.ready`; init restarts it whenever it stops, and the addresses stay in
+the kernel meanwhile). It serves `sneakers.appliance.netd.v1.NetworkService` on
+`/run/sneakers/netd.sock` to root peers only (`SO_PEERCRED`); osadmin and the closed shell reach it
+through accessd. Go callers use `internal/netdapi` (`netdapi.SocketPath`, `netdapi.NewClient`).
+Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`.
+
+Until the first-boot network step sets anything, netd runs the screen's defaults on the first NIC
+with a link (by name): DHCP for IPv4 and SLAAC for IPv6. Nothing is written to `network.yaml` until
+a `Set`.
+
+| Call | What it does |
+|---|---|
+| `Get` | the applied settings, and whether a change waits for `Confirm` |
+| `Set`, `Confirm` | apply a change, and keep it (see [Auto-revert](#auto-revert)); an interface the box doesn't have is `NET_INVALID` naming `management.name` or `service.name` |
+| `Checks` | the connectivity checks below |
+| `Status` | the usable management and service addresses, the host name, the NTP sync and offset, and whether 22 and 8443 are open |
+| `ListInterfaces` | the NICs (loopback left out): name, MAC, link state and driver |
+| `SetManagementPorts` | opens or closes 22 and 8443 in the firewall (first boot) |
+| `SetServicePorts` | the product's accept rules on the service interface (spec 3 defines them; netd carries them) |
+| `Watch` | a stream of the usable addresses and the host name: once at the start, then on every change |
+
+### Addresses
+
+netd applies the settings over rtnetlink, interface by interface and family by family; a change
+that leaves a family's settings alone (only the DNS servers, say) leaves its addresses and clients
+running, so a lease isn't dropped under an admin's session.
+
+- **IPv4 DHCP:** a DHCPv4 client (`github.com/insomniacslk/dhcp`, BSD-3-Clause) asks for the
+  address, router, DNS servers, NTP servers (option 42), host name, domain and search list. The
+  address carries the lease's lifetime, it renews at T1 (then every 30 seconds until the lease
+  ends), and a lost lease removes the address and its default route.
+- **IPv6 SLAAC:** the kernel makes the addresses and the default route from router advertisements
+  (`accept_ra=2`, since k0s turns forwarding on, and `autoconf=1`). netd reads the advertisements
+  too (`github.com/mdlayher/ndp`, MIT) for their RDNSS and DNSSL options, and when the router sets
+  the O flag it sends a stateless DHCPv6 information request for the NTP servers (option 56).
+- **IPv6 DHCPv6:** a stateful DHCPv6 client asks for an address (a /128 with the server's
+  lifetimes), DNS, search list and NTP; the default route still comes from router advertisements.
+- **Static:** the address and the default route are set as given; every other global address of
+  that family on the interface is removed.
+- **Off:** the family's addresses and default route are removed (IPv6 off sets `disable_ipv6`).
+
+Default routes have metric 100 on the management interface and 200 on the service interface.
+
+### DNS, NTP and the host name
+
+The settings win where they say something; otherwise netd uses what DHCP and router advertisements
+offer, management interface first. `/run/sneakers/resolv.conf` (which `/etc/resolv.conf` links to)
+lists at most three servers, link-local ones left out, and at most six search domains. The host
+name is the setting, else the DHCP host name joined to its domain.
+
+The clock is kept by SNTP (`internal/timesync`, ported from CryptOS-PKI and extended for IPv6
+servers and four servers): one bounded sync, then polls. A large offset is stepped once at the
+start and slewed after that; the clock is never stepped behind its floor
+(`/var/lib/sneakers/netd/clock-floor`, never earlier than the image's build time).
+
+### The checks
+
+`Checks` runs on the management interface and reports each as `ok`, `warn` or `failed`, with the
+`NET_*` code when it isn't ok:
+
+| Check | ok when | otherwise |
+|---|---|---|
+| `link` | the NIC has a carrier | `failed`, `NET_NO_ADDRESS` |
+| `address` | each enabled family has a usable address (IPv6 DAD finished; the check waits up to 3 s for it) | no address at all: `failed`, `NET_NO_ADDRESS`, the one check setup can't skip; one family missing: `warn`, `NET_DHCP_TIMEOUT` |
+| `gateway` | each family's default gateway answers ARP or neighbour discovery | none known: `warn`; no answer: `failed`; both `NET_GATEWAY` |
+| `dns` | each DNS server answers a query for the first NTP host name (or `example.org`) | `failed`, `NET_DNS`; no server at all: `warn` |
+| `ntp` | the clock synced; the detail gives the server and the offset | unsynced: `failed`; no server: `warn`; both `NET_NTP` |
+
+Every check except `address` with no address at all is skippable: the first-boot screen offers
+**Edit** or **Continue anyway**.
+
+### The management firewall
+
+netd writes one nftables table, `inet sneakers_mgmt` (`github.com/google/nftables`, Apache-2.0;
+there's no `nft` binary on the box), whose `input` chain runs at priority -10, before the k0s
+network stack's filter chains. The whole table is replaced in one netlink transaction on every
+change:
+
+1. established and related traffic is accepted;
+2. 22 and 8443 are accepted on the management interface only, and only once the first-boot step
+   that opens them has called `SetManagementPorts` (22 at the SSH step, 8443 at the recovery-key
+   step). Once `/var/lib/sneakers/setup/done` exists both stay open. The choice is kept in
+   `/run/sneakers/netd/ports.json`, so it lasts until the next boot;
+3. with an empty allow-list (first boot's default) any source on the management interface is
+   accepted; otherwise only the allow-list's prefixes (IPv4 and IPv6 interval sets, `allow4` and
+   `allow6`), and a family with no prefix has no way in;
+4. the product's service-interface rules from `SetServicePorts`;
+5. every other packet to 22 or 8443 is dropped. Other ports are left alone.
+
+### Address events
+
+netd watches the kernel's address, link and route notices. Whenever the usable addresses change
+(no link-local address, none still in DAD or failed it), `Watch` sends the new list, so sshd and
+osadmin rebind (a DHCP renewal to a new address, an IPv6 privacy address rotation).
+
+### Tests
+
+The unit tests run netd against a fake kernel. The network-namespace tests run the real netd
+(rtnetlink, sysctls, nftables, the DHCP and RA clients) inside a namespace, against a router
+namespace that serves DHCPv4, DHCPv6, router advertisements with RDNSS, DNS and SNTP from the same
+libraries: DHCPv4, SLAAC with RDNSS on an IPv6-only network, stateful DHCPv6, dual stack, static,
+and an address change reaching `Watch`. The firewall's tests connect from a second namespace: 22 and
+8443 answer only from the allow-list, only on the management interface, and only once opened. They
+need root and skip without it; CI runs them as root (`SNEAKERS_REQUIRE_NETNS=1`).

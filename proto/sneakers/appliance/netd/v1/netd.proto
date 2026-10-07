@@ -27,6 +27,15 @@ service NetworkService {
   rpc SetServicePorts(SetServicePortsRequest) returns (SetServicePortsResponse);
   // Status returns the live addresses and the clock's sync state.
   rpc Status(StatusRequest) returns (StatusResponse);
+  // ListInterfaces lists the NICs for the first-boot network step.
+  rpc ListInterfaces(ListInterfacesRequest) returns (ListInterfacesResponse);
+  // SetManagementPorts opens or closes 22 and 8443 in the management
+  // firewall. First boot opens 22 at its SSH step and 8443 at its recovery
+  // key step; once setup is done netd keeps both open by itself.
+  rpc SetManagementPorts(SetManagementPortsRequest) returns (SetManagementPortsResponse);
+  // Watch sends the live addresses once, then again on every change, so
+  // sshd and osadmin rebind.
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
 }
 
 // Ipv4Mode is how an interface gets its IPv4 address.
@@ -147,6 +156,39 @@ message StatusResponse {
   bool ntp_synced = 4;
   // ntp_offset_ms is the last measured offset.
   int64 ntp_offset_ms = 5;
+  // ssh_open and https_open say whether the firewall accepts 22 and 8443.
+  bool ssh_open = 6;
+  bool https_open = 7;
+}
+
+message ListInterfacesRequest {}
+
+// Nic is one network interface the box has (loopback left out).
+message Nic {
+  string name = 1;
+  string mac = 2;
+  bool link_up = 3;
+  // driver is the kernel driver, such as virtio_net; empty when unknown.
+  string driver = 4;
+}
+
+message ListInterfacesResponse {
+  repeated Nic interfaces = 1;
+}
+
+message SetManagementPortsRequest {
+  bool ssh = 1;
+  bool https = 2;
+}
+
+message SetManagementPortsResponse {}
+
+message WatchRequest {}
+
+message WatchResponse {
+  repeated string management_addresses = 1;
+  repeated string service_addresses = 2;
+  string hostname = 3;
 }
 
 message PortRule {

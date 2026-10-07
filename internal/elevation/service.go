@@ -642,14 +642,35 @@ func (s *Service) List() []Request {
 func (s *Service) Principals() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return openPrincipals(s.cur.Requests, s.now())
+}
+
+func openPrincipals(reqs []Request, now time.Time) []string {
 	var out []string
-	now := s.now()
-	for _, r := range s.cur.Requests {
-		if r.State == Approved && now.Before(*r.ValidBefore) {
+	for _, r := range reqs {
+		if r.State == Approved && r.ValidBefore != nil && now.Before(*r.ValidBefore) {
 			out = append(out, Principal(r.ID))
 		}
 	}
 	return out
+}
+
+// ReadPrincipals reads the open principals from the state file without
+// opening the service, for sneakers-sshd-run's own render. A missing file
+// is no principals.
+func ReadPrincipals(stateFile string, now time.Time) ([]string, error) {
+	b, err := os.ReadFile(stateFile) // #nosec G304 -- elevation.json on the state volume
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("elevation: %w", err)
+	}
+	var f file
+	if err := json.Unmarshal(b, &f); err != nil {
+		return nil, fmt.Errorf("elevation: %s doesn't parse: %w", stateFile, err)
+	}
+	return openPrincipals(f.Requests, now), nil
 }
 
 // Revoked are the serials on the revocation list: every certificate that

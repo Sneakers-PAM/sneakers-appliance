@@ -3,6 +3,8 @@
 | What | Where | When |
 |---|---|---|
 | Unit tests (the chain, the writers, init, custody, Secure Boot, the upgrade stager) | `go test ./...` | every PR (`🧪 Build & Test`) |
+| netd and the firewall in network namespaces (needs root) | `sudo -E go test ./internal/netd/ ./internal/firewall/` | every PR (`🧪 Build & Test`, with `SNEAKERS_REQUIRE_NETNS=1`) |
+| sshd-run and the rendered config against the pinned static sshd | `SNEAKERS_TEST_SSHD=out/static/sshd go test -run 'Sshd\|Check' ./internal/sshconfig/ ./internal/sshdrun/` | every PR (`Static tools`) |
 | Tool interop (efitools, cosign, sbsign, sbverify, unsquashfs, ukify against the kit's checks) | `go test -tags tools ./test/kit/labkeys/` | every PR (`🔑 Lab keys and tool interop`) |
 | The root image: reproducible, the declared tree, its refusals | `bash build/root/build_test.sh` | every PR (`🔑 Lab keys and tool interop`) |
 | The airgap bundle: pull by digest per architecture, signatures, both-way check (a `registry:2` container) | `go test ./internal/bundle/` | every PR (`🧪 Build & Test`) |
@@ -62,6 +64,7 @@ the entry goes when its cause is fixed. Today there are none.
 | `console.TestBothConsolesShowTheChoiceAndTheScreenCanAnswer` | serial and VGA | the choice on both; the answer typed on the screen's keyboard is taken while the serial line shows it |
 | `reset.TestAResetFinishesAtBootThenFirstBootIsFresh` | Secure Boot enforcing, swtpm; the disk laid out as after first boot, with a begun reset record on the ESP | `phase=reset` finishes the reset and reboots without starting services; the key file, state and backup are out of the GPT and the record is `done`; the next boot is first boot (the protection step again), with no reset |
 | `custody.TestKeyFileCustodyWithoutSecureBootOrTPM` | firmware without Secure Boot, no swtpm (the first lab target) | first boot keeps the key in the key file, formats and mounts the state, accessd is ready and nothing crash-loops; the next boot reads the mode back from the LUKS2 header and asks nothing; with the key file wiped, the boot stops at "State locked" with `KEYCUSTODY_LOCKED` and starts no service |
+| `network.TestFirstBootGetsADHCPAddressAndKeepsSSHClosed` | no display adapter, keys enrolled with Secure Boot off, no swtpm; host port forwarded to the guest's 22 | netd takes QEMU's DHCP lease with no setting made (its `management addresses` line on the console), SSH gives no banner before the first-boot SSH step, and nothing crash-loops |
 
 Not in the suite yet, because the image can't do it: an elevation through the real sshd (request,
 approval, certificate login, the time box, revocation) and the SSH key enrolment window. Both need

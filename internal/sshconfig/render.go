@@ -64,7 +64,7 @@ func DefaultPaths() Paths {
 		HostKeys:    []string{"/var/lib/sneakers/ssh/ssh_host_ed25519_key", "/var/lib/sneakers/ssh/ssh_host_rsa_key"},
 		RevokedKeys: "/var/lib/sneakers/ssh/revoked.krl",
 		UserCA:      "/var/lib/sneakers/ssh/user_ca.pub",
-		PidFile:     "/run/sneakers/sshd.pid",
+		PidFile:     "none", // sneakers-sshd-run keeps /run/sneakers/sshd.pid
 		Shell:       "/usr/bin/sneakers-shell",
 		Elevated:    "/usr/libexec/sneakers-elevated",
 		Enrol:       "/usr/libexec/sneakers-enrol",
@@ -85,6 +85,9 @@ type Input struct {
 	Principals []string
 	// Paths default to DefaultPaths when ConfigDir is empty.
 	Paths Paths
+	// Port is the listen port; 0 is 22. Tests running sshd unprivileged
+	// set a high one.
+	Port uint16
 }
 
 // The algorithms the box offers, the modern set only. Names come from the
@@ -150,8 +153,12 @@ func Render(in Input, dir string) error {
 		Ciphers:           Ciphers,
 		MACs:              MACs,
 	}
+	port := in.Port
+	if port == 0 {
+		port = 22
+	}
 	for _, a := range in.ListenAddrs {
-		v.ListenAddrs = append(v.ListenAddrs, netip.AddrPortFrom(a, 22).String())
+		v.ListenAddrs = append(v.ListenAddrs, netip.AddrPortFrom(a, port).String())
 	}
 	switch in.Mode {
 	case EnrolMode:

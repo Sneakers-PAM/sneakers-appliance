@@ -53,6 +53,14 @@ const (
 	NetworkServiceSetServicePortsProcedure = "/sneakers.appliance.netd.v1.NetworkService/SetServicePorts"
 	// NetworkServiceStatusProcedure is the fully-qualified name of the NetworkService's Status RPC.
 	NetworkServiceStatusProcedure = "/sneakers.appliance.netd.v1.NetworkService/Status"
+	// NetworkServiceListInterfacesProcedure is the fully-qualified name of the NetworkService's
+	// ListInterfaces RPC.
+	NetworkServiceListInterfacesProcedure = "/sneakers.appliance.netd.v1.NetworkService/ListInterfaces"
+	// NetworkServiceSetManagementPortsProcedure is the fully-qualified name of the NetworkService's
+	// SetManagementPorts RPC.
+	NetworkServiceSetManagementPortsProcedure = "/sneakers.appliance.netd.v1.NetworkService/SetManagementPorts"
+	// NetworkServiceWatchProcedure is the fully-qualified name of the NetworkService's Watch RPC.
+	NetworkServiceWatchProcedure = "/sneakers.appliance.netd.v1.NetworkService/Watch"
 )
 
 // NetworkServiceClient is a client for the sneakers.appliance.netd.v1.NetworkService service.
@@ -71,6 +79,15 @@ type NetworkServiceClient interface {
 	SetServicePorts(context.Context, *connect.Request[v1.SetServicePortsRequest]) (*connect.Response[v1.SetServicePortsResponse], error)
 	// Status returns the live addresses and the clock's sync state.
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
+	// ListInterfaces lists the NICs for the first-boot network step.
+	ListInterfaces(context.Context, *connect.Request[v1.ListInterfacesRequest]) (*connect.Response[v1.ListInterfacesResponse], error)
+	// SetManagementPorts opens or closes 22 and 8443 in the management
+	// firewall. First boot opens 22 at its SSH step and 8443 at its recovery
+	// key step; once setup is done netd keeps both open by itself.
+	SetManagementPorts(context.Context, *connect.Request[v1.SetManagementPortsRequest]) (*connect.Response[v1.SetManagementPortsResponse], error)
+	// Watch sends the live addresses once, then again on every change, so
+	// sshd and osadmin rebind.
+	Watch(context.Context, *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.WatchResponse], error)
 }
 
 // NewNetworkServiceClient constructs a client for the sneakers.appliance.netd.v1.NetworkService
@@ -120,17 +137,38 @@ func NewNetworkServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(networkServiceMethods.ByName("Status")),
 			connect.WithClientOptions(opts...),
 		),
+		listInterfaces: connect.NewClient[v1.ListInterfacesRequest, v1.ListInterfacesResponse](
+			httpClient,
+			baseURL+NetworkServiceListInterfacesProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("ListInterfaces")),
+			connect.WithClientOptions(opts...),
+		),
+		setManagementPorts: connect.NewClient[v1.SetManagementPortsRequest, v1.SetManagementPortsResponse](
+			httpClient,
+			baseURL+NetworkServiceSetManagementPortsProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("SetManagementPorts")),
+			connect.WithClientOptions(opts...),
+		),
+		watch: connect.NewClient[v1.WatchRequest, v1.WatchResponse](
+			httpClient,
+			baseURL+NetworkServiceWatchProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("Watch")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // networkServiceClient implements NetworkServiceClient.
 type networkServiceClient struct {
-	get             *connect.Client[v1.GetRequest, v1.GetResponse]
-	set             *connect.Client[v1.SetRequest, v1.SetResponse]
-	confirm         *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
-	checks          *connect.Client[v1.ChecksRequest, v1.ChecksResponse]
-	setServicePorts *connect.Client[v1.SetServicePortsRequest, v1.SetServicePortsResponse]
-	status          *connect.Client[v1.StatusRequest, v1.StatusResponse]
+	get                *connect.Client[v1.GetRequest, v1.GetResponse]
+	set                *connect.Client[v1.SetRequest, v1.SetResponse]
+	confirm            *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
+	checks             *connect.Client[v1.ChecksRequest, v1.ChecksResponse]
+	setServicePorts    *connect.Client[v1.SetServicePortsRequest, v1.SetServicePortsResponse]
+	status             *connect.Client[v1.StatusRequest, v1.StatusResponse]
+	listInterfaces     *connect.Client[v1.ListInterfacesRequest, v1.ListInterfacesResponse]
+	setManagementPorts *connect.Client[v1.SetManagementPortsRequest, v1.SetManagementPortsResponse]
+	watch              *connect.Client[v1.WatchRequest, v1.WatchResponse]
 }
 
 // Get calls sneakers.appliance.netd.v1.NetworkService.Get.
@@ -163,6 +201,21 @@ func (c *networkServiceClient) Status(ctx context.Context, req *connect.Request[
 	return c.status.CallUnary(ctx, req)
 }
 
+// ListInterfaces calls sneakers.appliance.netd.v1.NetworkService.ListInterfaces.
+func (c *networkServiceClient) ListInterfaces(ctx context.Context, req *connect.Request[v1.ListInterfacesRequest]) (*connect.Response[v1.ListInterfacesResponse], error) {
+	return c.listInterfaces.CallUnary(ctx, req)
+}
+
+// SetManagementPorts calls sneakers.appliance.netd.v1.NetworkService.SetManagementPorts.
+func (c *networkServiceClient) SetManagementPorts(ctx context.Context, req *connect.Request[v1.SetManagementPortsRequest]) (*connect.Response[v1.SetManagementPortsResponse], error) {
+	return c.setManagementPorts.CallUnary(ctx, req)
+}
+
+// Watch calls sneakers.appliance.netd.v1.NetworkService.Watch.
+func (c *networkServiceClient) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.WatchResponse], error) {
+	return c.watch.CallServerStream(ctx, req)
+}
+
 // NetworkServiceHandler is an implementation of the sneakers.appliance.netd.v1.NetworkService
 // service.
 type NetworkServiceHandler interface {
@@ -180,6 +233,15 @@ type NetworkServiceHandler interface {
 	SetServicePorts(context.Context, *connect.Request[v1.SetServicePortsRequest]) (*connect.Response[v1.SetServicePortsResponse], error)
 	// Status returns the live addresses and the clock's sync state.
 	Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error)
+	// ListInterfaces lists the NICs for the first-boot network step.
+	ListInterfaces(context.Context, *connect.Request[v1.ListInterfacesRequest]) (*connect.Response[v1.ListInterfacesResponse], error)
+	// SetManagementPorts opens or closes 22 and 8443 in the management
+	// firewall. First boot opens 22 at its SSH step and 8443 at its recovery
+	// key step; once setup is done netd keeps both open by itself.
+	SetManagementPorts(context.Context, *connect.Request[v1.SetManagementPortsRequest]) (*connect.Response[v1.SetManagementPortsResponse], error)
+	// Watch sends the live addresses once, then again on every change, so
+	// sshd and osadmin rebind.
+	Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.WatchResponse]) error
 }
 
 // NewNetworkServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -225,6 +287,24 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 		connect.WithSchema(networkServiceMethods.ByName("Status")),
 		connect.WithHandlerOptions(opts...),
 	)
+	networkServiceListInterfacesHandler := connect.NewUnaryHandler(
+		NetworkServiceListInterfacesProcedure,
+		svc.ListInterfaces,
+		connect.WithSchema(networkServiceMethods.ByName("ListInterfaces")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceSetManagementPortsHandler := connect.NewUnaryHandler(
+		NetworkServiceSetManagementPortsProcedure,
+		svc.SetManagementPorts,
+		connect.WithSchema(networkServiceMethods.ByName("SetManagementPorts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceWatchHandler := connect.NewServerStreamHandler(
+		NetworkServiceWatchProcedure,
+		svc.Watch,
+		connect.WithSchema(networkServiceMethods.ByName("Watch")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.netd.v1.NetworkService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NetworkServiceGetProcedure:
@@ -239,6 +319,12 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 			networkServiceSetServicePortsHandler.ServeHTTP(w, r)
 		case NetworkServiceStatusProcedure:
 			networkServiceStatusHandler.ServeHTTP(w, r)
+		case NetworkServiceListInterfacesProcedure:
+			networkServiceListInterfacesHandler.ServeHTTP(w, r)
+		case NetworkServiceSetManagementPortsProcedure:
+			networkServiceSetManagementPortsHandler.ServeHTTP(w, r)
+		case NetworkServiceWatchProcedure:
+			networkServiceWatchHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -270,4 +356,16 @@ func (UnimplementedNetworkServiceHandler) SetServicePorts(context.Context, *conn
 
 func (UnimplementedNetworkServiceHandler) Status(context.Context, *connect.Request[v1.StatusRequest]) (*connect.Response[v1.StatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Status is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) ListInterfaces(context.Context, *connect.Request[v1.ListInterfacesRequest]) (*connect.Response[v1.ListInterfacesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.ListInterfaces is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) SetManagementPorts(context.Context, *connect.Request[v1.SetManagementPortsRequest]) (*connect.Response[v1.SetManagementPortsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.SetManagementPorts is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.WatchResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Watch is not implemented"))
 }

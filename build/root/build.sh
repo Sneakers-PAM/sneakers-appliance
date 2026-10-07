@@ -57,7 +57,7 @@ gobuild() { # out package
   GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w ${PINS_LDFLAGS:-}" -o "$1" "$root/cmd/$2"
 }
 gobuild "$tree/sbin/init" sneakers-init
-for c in sneakers-accessd sneakers-osadmin sneakers-shell; do
+for c in sneakers-accessd sneakers-netd sneakers-osadmin sneakers-shell sneakers-sshd-run; do
   gobuild "$tree/usr/bin/$c" "$c"
 done
 # sshd runs these as forced commands and as the AuthorizedKeysCommand, so

@@ -23,7 +23,7 @@ LoginGraceTime 30
 ClientAliveInterval 60
 ClientAliveCountMax 3
 LogLevel VERBOSE
-PidFile /run/sneakers/sshd.pid
+PidFile none
 AllowUsers alice bob maint
 # No Subsystem lines: no sftp, no scp.
 
