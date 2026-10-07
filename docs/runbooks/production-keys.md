@@ -119,7 +119,9 @@ because each one reads it from the UKI it boots.
 - **The update key:** a box opens a `.bin` with the key in the UKI it's running, so a new key
   reaches boxes only through a transition release whose `.bin` is still encrypted to the old
   `update.pub` while its UKI carries the new key; the next release is encrypted to the new one.
-  The sign job builds both from one key today, so a rotation needs that workflow change first.
+  The sign job builds both from one key today, so a rotation needs that workflow change first;
+  that support is tracked in
+  [Sneakers-PAM/sneakers-appliance#72](https://github.com/Sneakers-PAM/sneakers-appliance/issues/72).
   The key is readable from any genuine image anyway, so a leak alone isn't a reason to rotate it.
 - GitHub secrets can't be read back, so losing the environment loses the keys; recover as above.
   The update key can also be read back out of any production UKI.
