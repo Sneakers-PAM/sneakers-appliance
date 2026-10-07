@@ -88,7 +88,7 @@ type Digest struct {
 	Size   int64  `json:"size"`
 }
 
-var versionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$`)
+var versionRE = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$`)
 
 // check validates everything but the payload digest.
 func (h Header) check() error {

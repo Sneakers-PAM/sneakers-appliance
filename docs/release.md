@@ -29,7 +29,7 @@ The header:
 | Field | Meaning |
 |---|---|
 | `format`, `name` | `1`, `sneakers-appliance` |
-| `version`, `arch` | the release version, `amd64` or `arm64` |
+| `version`, `arch` | the release version (SemVer, pre-release identifiers may hold hyphens, as a lab build number does: `0.0.0-lab.20261007d-g1a2b3c4`), `amd64` or `arm64` |
 | `kind` | `full`, or `patch` for a hotfix |
 | `bases` | a patch's exact base versions; a full version has none |
 | `channel` | `production` or `lab` |
