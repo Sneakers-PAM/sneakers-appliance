@@ -19,6 +19,8 @@
 #
 # Output: $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
 # signed OCI layout), $OUT/sneakers-kit (a kit pinned to this run's keys).
+# The signed UKI, $OUT/work/sneakers-<version>.efi, carries the lab update
+# key (internal/ukikey).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,7 +76,11 @@ INIT_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" K0S="$k0s" 
 echo "lab: UKI"
 KERNEL="$KERNEL" VERITYSETUP="$VERITYSETUP" VERITY_JSON="$work/root/verity.json" \
   VERSION="$version" OUT="$work/uki" UNAME="$KERNELRELEASE" bash "$root/build/uki/assemble.sh"
-sbsign --key "$KEYS/db.key" --cert "$KEYS/db.crt" --output "$work/sneakers-$version.efi" "$work/uki/sneakers-$version.efi" >/dev/null
+# The lab update key goes into the UKI before it's signed, as the release's
+# sign job does with the production one, so the box decrypts lab packages.
+go run "$root/cmd/sneakers-artifact" uki-add-key --uki "$work/uki/sneakers-$version.efi" \
+  --key "$KEYS/update.key" --recipient "$KEYS/update.pub" --out "$work/uki/sneakers-$version.keyed.efi" >/dev/null
+sbsign --key "$KEYS/db.key" --cert "$KEYS/db.crt" --output "$work/sneakers-$version.efi" "$work/uki/sneakers-$version.keyed.efi" >/dev/null
 stub=/usr/lib/systemd/boot/efi/systemd-bootx64.efi
 sbsign --key "$KEYS/db.key" --cert "$KEYS/db.crt" --output "$work/systemd-bootx64.efi" "$stub" >/dev/null
 systemd_version="$(dpkg-query -W -f='${Version}' systemd-boot-efi 2>/dev/null || echo unknown)"
