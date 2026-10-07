@@ -38,6 +38,7 @@ const (
 	ServiceUnknown      = 2102
 	ServiceNotOnDemand  = 2103
 	ServicePreStart     = 2104
+	ServiceWaiting      = 2105
 )
 
 // The Secure Boot codes.
@@ -94,6 +95,7 @@ var Entries = []apperr.Entry{
 	{Code: ServiceUnknown, Symbol: "SERVICE_UNKNOWN", Title: "init", Cause: "the service table has no service of that name"},
 	{Code: ServiceNotOnDemand, Symbol: "SERVICE_NOT_ON_DEMAND", Title: "init", Cause: "only on-demand services are started and stopped through the Services API"},
 	{Code: ServicePreStart, Symbol: "SERVICE_PRE_START", Title: "init", Cause: "the service's pre-start hook failed, so it wasn't started"},
+	{Code: ServiceWaiting, Symbol: "SERVICE_WAITING", Title: "init", Cause: "the service waits for a start-when path that doesn't exist yet"},
 	{Code: SBNoEfivarfs, Symbol: "SB_NO_EFIVARFS", Title: "secureboot", Cause: "efivarfs isn't mounted or can't be read, so the Secure Boot state is unknown"},
 	{Code: SBNotSetupMode, Symbol: "SB_NOT_SETUP_MODE", Title: "secureboot", Cause: "the firmware isn't in Setup Mode, so the org keys can't be enrolled; nothing was written"},
 	{Code: SBEnrolFailed, Symbol: "SB_ENROL_FAILED", Title: "secureboot", Cause: "writing a Secure Boot key variable failed or didn't read back"},

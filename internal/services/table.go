@@ -71,6 +71,13 @@ type Service struct {
 	// service starts only through Services.Start (osadmin waits for its
 	// first-boot step).
 	OnDemandIn []phase.Phase `yaml:"on-demand-in"`
+	// StartWhen lists absolute paths that must all exist before the
+	// service starts with its phase. Until they do it waits (Status says
+	// SERVICE_WAITING and names the missing path), and the supervisor
+	// starts it once they appear. Services.Start starts it at once,
+	// whatever the paths, and Services.Stop holds it stopped until the
+	// next Start. Only for start: always.
+	StartWhen []string `yaml:"start-when"`
 	// Console marks the program that owns the consoles in its phases (the
 	// dashboard, the setup wizard): its standard output goes to every
 	// console and everyone else's goes aside. At most one per phase; it
@@ -153,12 +160,19 @@ func parse(name string, b []byte) (*Service, error) {
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: pre-start %q must be an absolute path", name, s.PreStart[0])
 	case len(s.OnDemandIn) > 0 && s.Start != StartAlways:
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: on-demand-in needs start: always", name)
+	case len(s.StartWhen) > 0 && s.Start != StartAlways:
+		return nil, codes.New(codes.ServiceTableInvalid, "%s: start-when needs start: always", name)
 	case s.Console && s.User != "":
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: a console service runs as root", name)
 	}
 	if s.User != "" {
 		if _, ok := accounts.ServiceUser(s.User); !ok {
 			return nil, codes.New(codes.ServiceTableInvalid, "%s: user %q isn't a fixed unprivileged system account", name, s.User)
+		}
+	}
+	for _, p := range s.StartWhen {
+		if !path.IsAbs(p) {
+			return nil, codes.New(codes.ServiceTableInvalid, "%s: start-when %q must be an absolute path", name, p)
 		}
 	}
 	for _, p := range s.OnDemandIn {
@@ -256,6 +270,10 @@ func (t Table) order(names []string) ([]string, error) {
 func (s *Service) OnDemand(p phase.Phase) bool {
 	return s.Start == StartOnDemand || slices.Contains(s.OnDemandIn, p)
 }
+
+// Gated reports whether s waits for its start-when paths in p. A gated
+// service is also started and stopped through the Services API.
+func (s *Service) Gated(p phase.Phase) bool { return len(s.StartWhen) > 0 && !s.OnDemand(p) }
 
 // In reports whether s runs in p.
 func (s *Service) In(p phase.Phase) bool {

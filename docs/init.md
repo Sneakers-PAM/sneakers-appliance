@@ -38,6 +38,7 @@ on-demand-in: [firstboot]          # phases, among phases:, where it waits to be
 user: osadmin                      # a fixed unprivileged system account; default root
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
 stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
+start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist first
 ```
 
 - Entering a phase stops the services that don't run in it and starts the `start: always` ones that
@@ -45,6 +46,12 @@ stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 - `start: on-demand` services start and stop only when asked (the Services API), and only in
   their phases. `on-demand-in` makes an always-start service on-demand in the phases it lists
   (osadmin waits for its first-boot step and starts with the normal phase).
+- `start-when` holds a `start: always` service back until every path it lists exists. Entering the
+  phase, a service with a missing path isn't started: its status says `SERVICE_WAITING` and names
+  the path, and init looks again every 5 seconds and starts it once they all exist. The Services
+  API starts a waiting service at once, whatever its paths, and stops it; a service stopped that
+  way stays stopped until it's started again. k0s waits for `setup/done` (the first admin exists)
+  and an installed product bundle ([k0s.md](k0s.md)).
 - `user` runs the service as one of the fixed system accounts that has its own uid (`sshd`,
   `sshkeys`, `osadmin`), with no supplementary groups; any other name is `SERVICE_TABLE_INVALID`.
   Init never falls back to root for such an entry.
@@ -70,7 +77,7 @@ Init serves its local API (Connect, which also speaks the gRPC protocol) on `/ru
 ones whose bodies later work adds answer `Unimplemented` until then. `KeyCustodyService` serves
 `Mode`, `Protection`, `Seal`, `Unseal` and `Escrow` over the custody init unlocked
 ([key-custody.md](key-custody.md#the-keycustody-service)). `ServicesService` starts, stops and
-reports the table's on-demand services.
+reports the table's on-demand services and the ones with `start-when`.
 
 `PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also
 served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits

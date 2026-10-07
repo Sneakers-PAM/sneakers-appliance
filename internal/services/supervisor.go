@@ -68,6 +68,9 @@ type Options struct {
 	// Console gives console services the consoles; nil starts them like
 	// any other (the kernel's console is shared).
 	Console ConsoleOwner
+	// WaitPoll is how often a service waiting for its start-when paths
+	// looks again; zero is five seconds.
+	WaitPoll time.Duration
 }
 
 // State is what Status reports.
@@ -79,10 +82,14 @@ type State struct {
 }
 
 type unit struct {
-	svc      *Service
-	proc     Process
-	wanted   bool
-	ready    bool
+	svc    *Service
+	proc   Process
+	wanted bool
+	ready  bool
+	// held is set by a Services.Stop: a gated service then stays stopped
+	// until the next Start, whatever its paths.
+	held     bool
+	waiting  bool
 	restarts int
 	lastErr  string
 	done     chan struct{}
@@ -96,6 +103,9 @@ type Supervisor struct {
 
 	mu    sync.Mutex
 	phase phase.Phase
+	// ctx is the phase's context: what EnterPhase was given. Services
+	// started through the API run under it, not under the request's.
+	ctx   context.Context
 	units map[string]*unit
 }
 
@@ -116,6 +126,9 @@ func NewSupervisor(r Runner, table Table, o Options) *Supervisor {
 	if o.StopTimeout == 0 {
 		o.StopTimeout = 10 * time.Second
 	}
+	if o.WaitPoll == 0 {
+		o.WaitPoll = 5 * time.Second
+	}
 	units := map[string]*unit{}
 	for n, s := range table {
 		units[n] = &unit{svc: s}
@@ -128,7 +141,7 @@ func NewSupervisor(r Runner, table Table, o Options) *Supervisor {
 // is logged and retried by its restart policy; it doesn't stop the others.
 func (s *Supervisor) EnterPhase(ctx context.Context, p phase.Phase) error {
 	s.mu.Lock()
-	s.phase = p
+	s.phase, s.ctx = p, ctx
 	s.mu.Unlock()
 	s.o.Logger.Info("services: entering phase", log.F("phase", string(p)))
 	for _, n := range s.table.Names() {
@@ -138,7 +151,12 @@ func (s *Supervisor) EnterPhase(ctx context.Context, p phase.Phase) error {
 	}
 	var start []string
 	for _, n := range s.table.Names() {
-		if sv := s.table[n]; sv.In(p) && !sv.OnDemand(p) {
+		sv := s.table[n]
+		switch {
+		case !sv.In(p) || sv.OnDemand(p):
+		case sv.Gated(p) && s.missing(sv) != "":
+			s.wait(ctx, p, n)
+		default:
 			start = append(start, n)
 		}
 	}
@@ -155,27 +173,101 @@ func (s *Supervisor) EnterPhase(ctx context.Context, p phase.Phase) error {
 	return nil
 }
 
-// Start starts an on-demand service of the current phase.
+// missing is the first start-when path of sv that doesn't exist, or "".
+func (s *Supervisor) missing(sv *Service) string {
+	for _, p := range sv.StartWhen {
+		if !s.r.Exists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+// wait marks name waiting for its start-when paths and starts it once they
+// all exist, unless it's started or stopped through the API first or the
+// phase changes.
+func (s *Supervisor) wait(ctx context.Context, p phase.Phase, name string) {
+	sv := s.table[name]
+	s.mu.Lock()
+	u := s.units[name]
+	if u.waiting {
+		s.mu.Unlock()
+		return
+	}
+	u.waiting = true
+	u.lastErr = codes.Describe(codes.New(codes.ServiceWaiting, "%s waits for %s", name, s.missing(sv)))
+	s.mu.Unlock()
+	s.o.Logger.Info("services: waiting for start-when paths", log.F("service", name), log.F("paths", strings.Join(sv.StartWhen, ",")))
+	go func() {
+		t := time.NewTicker(s.o.WaitPoll)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+			s.mu.Lock()
+			stillWaiting := u.waiting && !u.held && !u.wanted && s.phase == p
+			if !stillWaiting {
+				u.waiting = false
+				s.mu.Unlock()
+				return
+			}
+			s.mu.Unlock()
+			if m := s.missing(sv); m != "" {
+				continue
+			}
+			s.mu.Lock()
+			u.waiting, u.lastErr = false, ""
+			s.mu.Unlock()
+			s.o.Logger.Info("services: start-when paths present; starting", log.F("service", name))
+			s.waitDeps(ctx, name)
+			if err := s.start(ctx, name); err != nil {
+				s.o.Logger.Error(err, "services: start failed", log.F("service", name))
+			}
+			return
+		}
+	}()
+}
+
+// Start starts an on-demand service of the current phase, or a gated one
+// at once, whatever its start-when paths.
 func (s *Supervisor) Start(ctx context.Context, name string) error {
 	sv, err := s.onDemand(name)
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
-	p := s.phase
+	u := s.units[name]
+	if u.waiting {
+		u.lastErr = ""
+	}
+	u.held, u.waiting = false, false
+	s.mu.Unlock()
+	s.mu.Lock()
+	p, run := s.phase, s.ctx
 	s.mu.Unlock()
 	if !sv.In(p) {
 		return codes.New(codes.ServiceNotOnDemand, "%s doesn't run in phase %s", name, p)
 	}
+	if run == nil {
+		run = ctx
+	}
 	s.waitDeps(ctx, name)
-	return s.start(ctx, name)
+	return s.start(run, name)
 }
 
-// Stop stops an on-demand service.
+// Stop stops an on-demand or a gated service; a gated one then stays
+// stopped until the next Start.
 func (s *Supervisor) Stop(name string) error {
 	if _, err := s.onDemand(name); err != nil {
 		return err
 	}
+	s.mu.Lock()
+	u := s.units[name]
+	u.held, u.waiting = true, false
+	s.mu.Unlock()
 	s.stop(name)
 	return nil
 }
@@ -205,7 +297,7 @@ func (s *Supervisor) onDemand(name string) (*Service, error) {
 	s.mu.Lock()
 	p := s.phase
 	s.mu.Unlock()
-	if !sv.OnDemand(p) {
+	if !sv.OnDemand(p) && !sv.Gated(p) {
 		return nil, codes.New(codes.ServiceNotOnDemand, "%s starts with its phase, not on demand", name)
 	}
 	return sv, nil
