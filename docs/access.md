@@ -208,12 +208,14 @@ uid is refused before a byte is read.
 
 | Peer | Gets | As |
 |---|---|---|
-| root | every method of `AccessService`, `NetworkService`, `SetupService` and `ElevationService`, and `LocalService` | the console, an owner named `console` |
+| root | every method of `AccessService`, `NetworkService`, `SetupService` and `ElevationService`, the console's `EnrolmentService` methods, and `LocalService` | the console (an owner named `console`), firstboot, or `sneakers-elevated` (the `maint` login is uid 0) |
 | an admin uid (a closed-shell login) | the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, elevation request/status/cert, and `LocalService` | that admin, with that admin's role |
 | `osadmin` | the :8443 API (`sneakers.appliance.osadmin.v1`), the upload and the audit export, and `BindingService` | the signed-in admin of the session each call carries |
+| `enrol` (uid 103) | `EnrolmentService.SubmitEnrolmentCode` and `GetEnrolmentKey` only | `sneakers-enrol`, during an enrolment window |
 
 - The console-only methods (`AddRecoveryKey`, `ResetAllowList`, `Complete`, `ApproveElevation`,
-  `DenyElevation`) refuse an admin uid with `ACCESS_FORBIDDEN`, even an owner's.
+  `DenyElevation`, `TerminateElevation`, `BeginElevatedSession`, `EndElevatedSession` and the
+  console's enrolment methods) refuse an admin uid with `ACCESS_FORBIDDEN`, even an owner's.
 - A uid in the admin range with no admin behind it is refused (`ACCESS_FORBIDDEN`).
 - A closed-shell login sends the fingerprint of the key sshd says signed it in
   (`Sneakers-Key-Fingerprint`) and its SSH client address (`Sneakers-Source`), for the audit entry.
@@ -228,15 +230,18 @@ uid is refused before a byte is read.
 
 On start and after every change to the store, accessd writes:
 
-- `/run/sneakers/accounts/{passwd,group,shadow}` and the empty homes under `/run/sneakers/home/`;
+- `/run/sneakers/accounts/{passwd,group,shadow}` and the empty homes under `/run/sneakers/home/`
+  (the `enrol` account only while an enrolment window is open);
 - `/run/sneakers/ssh/`: `sshd_config` (listening on netd's management addresses, link-local ones
-  left out; enrol mode until an owner has a key, then admin mode), `authorized_keys/<admin>` and
-  `principals/maint`. It renders into a new directory, has the pinned sshd check it (`sshd -t`), and
+  left out; enrol mode until an owner has a key, then admin mode, with the `enrol` block while a
+  window is open), `authorized_keys/<admin>` and `principals/maint` (the `elev-<id>` principal of
+  each approved, unused elevation certificate). It renders into a new directory, has the pinned sshd check it (`sshd -t`), and
   swaps it in whole; a config sshd refuses is never swapped in. When `sshd_config` changed (a new or
   removed admin, new addresses) it sends sshd a `SIGHUP`; a key change needs none, since sshd reads
   the key files at each login.
 
-It also creates `/var/lib/sneakers/osadmin/` owned by `osadmin` (the :8443 certificate) and the
+It renders again whenever an elevation is approved, used, revoked or expires, and when an enrolment
+window opens or closes. It also creates `/var/lib/sneakers/osadmin/` owned by `osadmin` (the :8443 certificate) and the
 root-only `/var/lib/sneakers/osadmin-api/` (the update policy, history and uploads, and the disk
 samples).
 
@@ -257,8 +262,11 @@ it moves there when that lands.
   with an `accessd` health entry saying it's down.
 - Init restarts accessd (`restart: always`).
 
-Elevation, the user CA and the enrolment window are accessd's in the design; they aren't built
-yet, so `ElevationService` answers "Not available in this release".
+Elevation and the enrolment window also live in accessd; see
+[ssh-and-elevation.md](ssh-and-elevation.md#one-time-elevation). Every minute accessd expires
+elevation requests and certificates whose time is up, ends the record of a session whose
+`sneakers-elevated` is gone, and closes an idle enrolment window. While accessd is down no
+elevation can start: `sneakers-elevated` needs accessd to use the certificate up first.
 
 Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`, `--init-socket`,
 `--netd-socket`, `--esp` (`/run/sneakers/esp`) and `--sshd` (`/usr/sbin/sshd`).

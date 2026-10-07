@@ -14,7 +14,7 @@ One file per UTC day, `log-<YYYY-MM-DD>.jsonl`, mode 0600. Each line is one entr
 | `keyFp` | the SHA-256 fingerprint of the key that signed in |
 | `source` | the client address |
 | `action`, `target` | what was done, to what |
-| `outcome` | `ok`, `refused`, or a reason (`exit`, `time box`, `terminated`) |
+| `outcome` | `ok`, `refused`, or a reason (`exit`, `time-box`, `terminated`, `expired`, `done`, `idle`, `attempts`) |
 | `code` | the error symbol when refused |
 | `detail` | action-specific fields |
 | `prev` | the hex SHA-256 of the line before, across day files |
@@ -37,6 +37,21 @@ An elevated session is recorded in full, both directions, as asciicast v2 in
 (`recording.chunk`, with the chunk's index, size and hash), and `recording.end` closes it with the
 chunk count. A session killed mid-way still leaves a prefix that verifies; a recording with more
 than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can view recordings.
+
+## Elevation and enrolment
+
+| Action | Written by | When |
+|---|---|---|
+| `elevation.request` | accessd | a closed-shell login asks; `detail` has the minutes and reason |
+| `elevation.approve`, `elevation.deny`, `elevation.terminate` | accessd (the :8443 or console call) | an owner decides; `detail.selfApproved` is `true` when the only owner approved their own |
+| `elevation.certificate` | accessd | the certificate is signed: its serial, `validBefore` and minutes |
+| `elevation.connect` | accessd | `sneakers-elevated` uses the certificate up (or is refused, with the code) |
+| `elevation.end` | accessd | the session ends: `outcome` `exit`, `time-box` or `terminated`, `detail.recordingSha256` the whole recording's hash |
+| `elevation.expire` | accessd | a request waited 30 minutes, a certificate's 10 minutes passed, or a session was lost |
+| `elevation.recording.view` | accessd | an owner reads a recording on :8443 |
+| `enrol.open`, `enrol.close` | accessd | the console opens the window; it closes as `done`, `idle` or `attempts` |
+| `enrol.code`, `enrol.submit` | accessd | a wrong code (refused, `ENROL_CODE`), or a key that gave the right one |
+| `enrol.accept`, `enrol.reject` | accessd | the console's typed `yes` stores the key, or it refuses it |
 
 ## Reboot and shutdown
 
