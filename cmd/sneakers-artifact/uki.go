@@ -47,7 +47,7 @@ func ukiAddKeyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(out, keyed, 0o600); err != nil {
+			if err := os.WriteFile(out, keyed, 0o600); err != nil { // #nosec G703 -- the output path the sign step names
 				return err
 			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), out)
