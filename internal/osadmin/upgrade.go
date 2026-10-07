@@ -33,6 +33,7 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
@@ -91,10 +92,55 @@ type historyEntry struct {
 	Detail  string    `json:"detail,omitempty"`
 }
 
+// MaintenanceBound is how long an apply or revert that went through holds
+// maintenance: the box is rebooting, and a reboot that never comes mustn't
+// block elevation for ever.
+const MaintenanceBound = 15 * time.Minute
+
 type upgrades struct {
 	mu sync.Mutex
 	// lastWindow is the day (local) the window last applied a release.
 	lastWindow string
+	// maintUntil is when the maintenance an apply or revert set ends.
+	maintUntil time.Time
+}
+
+// Maintenance reports an update being applied or reverted: the elevation
+// service refuses new elevated shells meanwhile (ELEV_MAINTENANCE).
+func (s *Server) Maintenance() bool {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	return s.o.Clock.Now().Before(s.upgrades.maintUntil)
+}
+
+// beginMaintenance sets maintenance, then refuses when an elevated shell
+// is already active, naming it: the owner ends it, or waits for it, first.
+// Setting maintenance before the check means none can start in between.
+func (s *Server) beginMaintenance(what string) error {
+	s.upgrades.mu.Lock()
+	s.upgrades.maintUntil = s.o.Clock.Now().Add(MaintenanceBound)
+	s.upgrades.mu.Unlock()
+	if s.o.Elevation == nil {
+		return nil
+	}
+	for _, r := range s.o.Elevation.List() {
+		if r.State == elevation.Active {
+			s.endMaintenance()
+			s.o.Logger.Warn("osadmin: an update waits for an elevated shell", log.F("what", what), log.F("elevation", r.ID), log.F("admin", r.Admin))
+			return codes.New(codes.UpgradeElevated, "%s has an elevated shell open (%s); it must end, or an owner terminates it, before the %s", r.Admin, r.ID, what)
+		}
+	}
+	s.o.Logger.Info("osadmin: maintenance on", log.F("what", what))
+	return nil
+}
+
+func (s *Server) endMaintenance() {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	if !s.upgrades.maintUntil.IsZero() {
+		s.upgrades.maintUntil = time.Time{}
+		s.o.Logger.Info("osadmin: maintenance off")
+	}
 }
 
 func (s *Server) ownPath(name string) string { return filepath.Join(s.o.Paths.APIDir(), name) }
@@ -445,10 +491,16 @@ func (s *Server) apply(ctx context.Context, actor string) (string, error) {
 		err = codes.New(codes.UpgradeNotStaged, "no release is staged; upload or fetch one and stage it first")
 	}
 	if err == nil {
+		err = s.beginMaintenance("update applies")
+	}
+	if err == nil {
 		_, err = s.o.Image.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{}))
 	}
 	if err == nil {
 		_, err = s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))
+	}
+	if err != nil {
+		s.endMaintenance()
 	}
 	s.history("apply", v, actor, err, "")
 	s.o.Logger.Info("osadmin: apply", log.F("version", v), log.F("by", actor), log.F("ok", err == nil))
@@ -458,9 +510,15 @@ func (s *Server) apply(ctx context.Context, actor string) (string, error) {
 func (h *upgradeSvc) RevertUpdate(ctx context.Context, _ *connect.Request[osadminv1.RevertUpdateRequest]) (*connect.Response[osadminv1.RevertUpdateResponse], error) {
 	c := callFrom(ctx)
 	c.note("box")
-	_, err := h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{}))
+	err := h.s.beginMaintenance("update reverts")
+	if err == nil {
+		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{}))
+	}
 	if err == nil {
 		_, err = h.s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))
+	}
+	if err != nil {
+		h.s.endMaintenance()
 	}
 	h.s.history("revert", "", c.session.Admin, err, "")
 	if err != nil {

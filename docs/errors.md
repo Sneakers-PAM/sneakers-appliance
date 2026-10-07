@@ -103,3 +103,4 @@ shell, the console and :8443 show the same sentence.
 | 2509 | `UPGRADE_AIR_GAPPED` | no mirror is configured, so the box fetches nothing; upload the `.bin` instead |
 | 2510 | `UPGRADE_UPLOAD` | the upload or fetch is unknown, too large, or failed |
 | 2511 | `UPGRADE_NOT_STAGED` | no release is staged to apply |
+| 2512 | `UPGRADE_ELEVATED` | an elevated shell is open (the refusal names it); it ends, or an owner terminates it, before an update applies or reverts |

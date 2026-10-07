@@ -88,6 +88,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		return err
 	}
 	var d *accessd.Server
+	var api *osadmin.Server
 	rerender := func() {
 		if d != nil {
 			d.Rerender()
@@ -114,6 +115,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Audit:       audit,
 		Logger:      lg,
 		OnChange:    rerender,
+		// An update being applied or reverted refuses new elevated shells.
+		Maintenance: func() bool { return api != nil && api.Maintenance() },
 		Signal: func(pid int) error {
 			return accessd.SignalElevated(pid, func(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) })
 		},
@@ -131,7 +134,6 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		AuditDir:   audit.Dir(),
 		Logger:     lg,
 	})
-	var api *osadmin.Server
 	store, err := access.Open(filepath.Join(c.state, "access"), access.Options{
 		Stage:    func() (bool, bool) { return true, api != nil && api.SetupDone() },
 		Logger:   lg,

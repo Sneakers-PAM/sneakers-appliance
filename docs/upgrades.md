@@ -39,7 +39,10 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    update key read from the booted UKI (by accessd, as root; [access.md](access.md#the-update-key)), the payload decrypted and unpacked, and the layout handed to
    `Image.Stage`.
 3. **Apply** (owner, step-up) activates the staged release and reboots into it (`UPGRADE_NOT_STAGED`
-   when nothing is staged). **Revert** rolls back to the previous release and reboots.
+   when nothing is staged). **Revert** rolls back to the previous release and reboots. Both are
+   refused while an elevated shell is open (`UPGRADE_ELEVATED`, naming it), and both put the box in
+   maintenance first, which refuses new elevated shells (`ELEV_MAINTENANCE`) until the reboot, or
+   at once again if the apply fails ([ssh-and-elevation.md](ssh-and-elevation.md)).
 
 **The policy** (owner, step-up): `automatic` applies a staged release once inside the daily window
 (default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. It's

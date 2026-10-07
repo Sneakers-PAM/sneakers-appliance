@@ -174,9 +174,12 @@ account, signed by the box's own user CA after an owner approves.
    `terminated`) and the SHA-256 of the whole recording. Owners read the recording on the page
    (`GetElevationRecording`), checked against the logged chunk hashes.
 
-While a session is active, the automatic update window waits for it to end. Approving during an
-upgrade (between its snapshot and `MarkGood`) is meant to be refused with `ELEV_MAINTENANCE`; the
-check is wired to the upgrade daemon, which isn't on the box yet, so it never blocks today.
+While a session is active, the automatic update window waits for it to end, and an owner's Apply or
+Revert on the Updates page is refused with `UPGRADE_ELEVATED`, naming the admin and the request:
+the session ends, or an owner terminates it, before the box goes down. While an update is being
+applied or reverted (from the moment the apply starts until the box reboots, at most 15 minutes if
+the reboot never comes; a failed apply ends it at once), a new request, an approval and the first
+connection with an approved certificate are refused with `ELEV_MAINTENANCE`.
 
 ### The user CA, the serials and the revocation list
 

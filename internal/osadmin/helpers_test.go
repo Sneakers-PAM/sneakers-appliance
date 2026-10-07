@@ -29,6 +29,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -73,6 +74,10 @@ type fakeInit struct {
 	stagedVer  string
 	activated  int
 	rollbacks  int
+	// activateErr fails Activate; duringActivate runs inside it, as the
+	// box is mid-apply.
+	activateErr    error
+	duringActivate func()
 }
 
 func (f *fakeInit) Protection(context.Context, *connect.Request[initv1.ProtectionRequest]) (*connect.Response[initv1.ProtectionResponse], error) {
@@ -173,12 +178,27 @@ func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageReque
 
 func (i fakeImage) Activate(context.Context, *connect.Request[initv1.ActivateRequest]) (*connect.Response[initv1.ActivateResponse], error) {
 	i.f.mu.Lock()
+	during, err := i.f.duringActivate, i.f.activateErr
+	i.f.mu.Unlock()
+	if during != nil {
+		during()
+	}
+	if err != nil {
+		return nil, err
+	}
+	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
 	i.f.activated++
 	return connect.NewResponse(&initv1.ActivateResponse{}), nil
 }
 
 func (i fakeImage) Rollback(context.Context, *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
+	i.f.mu.Lock()
+	during := i.f.duringActivate
+	i.f.mu.Unlock()
+	if during != nil {
+		during()
+	}
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
 	i.f.rollbacks++
@@ -249,8 +269,11 @@ type box struct {
 	netd  *fakeNetd
 	srv   *osadmin.Server
 	ts    *httptest.Server
-	keys  map[string]sshKey
-	done  bool
+	elev  *elevation.Service
+	// signals are the elevated sessions' pids the service was told to end.
+	signals []int
+	keys    map[string]sshKey
+	done    bool
 	// sign and enc are this test's production release and update keys.
 	mirror      *httptest.Server
 	mirrorFiles map[string][]byte
@@ -293,6 +316,15 @@ func newBox(t *testing.T, withBob bool) *box {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b.elev, err = elevation.Open(elevation.Options{
+		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"),
+		Clock:       b.clk,
+		Maintenance: func() bool { return b.srv != nil && b.srv.Maintenance() },
+		Signal:      func(pid int) error { b.signals = append(b.signals, pid); return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	b.mirrorFiles = map[string][]byte{}
 	mirrorClient := func() *http.Client { return b.mirror.Client() }
 	b.srv = osadmin.New(osadmin.Options{
@@ -307,6 +339,7 @@ func newBox(t *testing.T, withBob bool) *box {
 		Power:      initv1connect.NewPowerServiceClient(hc, daemons.URL),
 		Network:    netdv1connect.NewNetworkServiceClient(hc, daemons.URL),
 		Paths:      osadmin.Paths{State: b.state},
+		Elevation:  b.elev,
 		Cert:       osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
 	})
 	b.ts = httptest.NewTLSServer(b.srv.Handler())

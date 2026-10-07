@@ -123,8 +123,9 @@ type Options struct {
 	// Elevated is the certificate's force-command; empty is
 	// DefaultElevated.
 	Elevated string
-	// Maintenance reports an upgrade between its snapshot and MarkGood,
-	// which blocks approvals; nil is never.
+	// Maintenance reports an update being applied (sneakers-osadmin's
+	// apply or revert, until the box reboots), which refuses new requests,
+	// approvals and first connections; nil is never.
 	Maintenance func() bool
 	// Signal asks an active session's sneakers-elevated to end (SIGTERM).
 	Signal func(pid int) error
@@ -206,6 +207,9 @@ func (s *Service) Request(st access.State, c Caller, reason string, minutes int)
 }
 
 func (s *Service) request(st access.State, c Caller, reason string, minutes int) (Request, error) {
+	if s.maintenance() {
+		return Request{}, codes.New(codes.ElevMaintenance, "an update is being applied; ask again once it has finished")
+	}
 	if strings.TrimSpace(reason) == "" {
 		return Request{}, codes.New(codes.ShellParse, "give a reason: shell --reason \"...\"")
 	}
@@ -275,8 +279,8 @@ func (s *Service) approve(st access.State, approver, id string, minutes int) (Re
 	if r.State != Pending {
 		return Request{}, codes.New(codes.ElevUsed, "%s was already %s", id, r.State)
 	}
-	if s.o.Maintenance != nil && s.o.Maintenance() {
-		return Request{}, codes.New(codes.ElevMaintenance, "an upgrade is in progress; approve once it has finished")
+	if s.maintenance() {
+		return Request{}, codes.New(codes.ElevMaintenance, "an update is being applied; approve once it has finished")
 	}
 	self := false
 	by := approver
@@ -456,6 +460,9 @@ func (s *Service) begin(certificate string, pid int) (Request, time.Time, error)
 	c, ok := pk.(*ssh.Certificate)
 	if !ok || c.SignatureKey == nil || !slices.Equal(c.SignatureKey.Marshal(), s.ca.PublicKey().Marshal()) {
 		return Request{}, time.Time{}, codes.New(codes.ElevUnknown, "the login's certificate isn't one of this box's elevation certificates")
+	}
+	if s.maintenance() {
+		return Request{}, time.Time{}, codes.New(codes.ElevMaintenance, "an update is being applied; connect again once it has finished")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -780,6 +787,10 @@ func (s *Service) newID() string {
 		}
 	}
 }
+
+// maintenance reports an update being applied, which blocks new elevated
+// shells.
+func (s *Service) maintenance() bool { return s.o.Maintenance != nil && s.o.Maintenance() }
 
 func (s *Service) now() time.Time { return s.o.Clock.Now().UTC().Truncate(time.Second) }
 

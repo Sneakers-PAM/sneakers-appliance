@@ -289,6 +289,29 @@ func TestHoldsAndMaintenanceBlockApproval(t *testing.T) {
 	wantCode(t, err, codes.ElevMaintenance)
 }
 
+// While an update is applied, nobody gets a new elevated shell: a request,
+// an approval and the first use of an approved certificate are refused.
+func TestMaintenanceRefusesRequestsAndConnects(t *testing.T) {
+	f := newFixture(t, "alice")
+	approved := f.request("bob", 30)
+	a, err := f.svc.Approve(f.st, "alice", approved.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.maint = true
+	_, err = f.svc.Request(f.st, elevation.Caller{Admin: "bob", KeyFP: ssh.FingerprintSHA256(f.keys["bob"]), Source: "192.0.2.50"}, "investigate kubelet", 30)
+	wantCode(t, err, codes.ElevMaintenance)
+	if e, ok := f.audit.last("elevation.request"); !ok || e.Outcome != "refused" || e.Code != "ELEV_MAINTENANCE" {
+		t.Fatalf("%+v %v", e, ok)
+	}
+	_, _, err = f.svc.Begin(a.Certificate, 1)
+	wantCode(t, err, codes.ElevMaintenance)
+	f.maint = false
+	if _, _, err := f.svc.Begin(a.Certificate, 1); err != nil {
+		t.Fatalf("after the update the certificate still works in its window: %v", err)
+	}
+}
+
 func TestWithdraw(t *testing.T) {
 	f := newFixture(t, "alice")
 	r := f.request("bob", 30)
