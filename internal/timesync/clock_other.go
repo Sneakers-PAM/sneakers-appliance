@@ -1,6 +1,5 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
-// Copyright The CryptOS Authors.
 
 //go:build !linux
 
@@ -12,7 +11,7 @@ import (
 )
 
 // SystemClock returns a clock that reads the host time but refuses to adjust
-// it: only a CryptOS node (Linux) disciplines its clock.
+// it: only a Linux appliance disciplines its clock.
 func SystemClock() Clock { return otherClock{} }
 
 type otherClock struct{}
