@@ -111,6 +111,23 @@ func (h *elevationH) GetElevationCertificate(ctx context.Context, r *connect.Req
 	}), nil
 }
 
+// WithdrawElevation withdraws the caller's own pending request.
+func (h *elevationH) WithdrawElevation(ctx context.Context, r *connect.Request[accessv1.WithdrawElevationRequest]) (*connect.Response[accessv1.WithdrawElevationResponse], error) {
+	l, err := h.s.caller(ctx, r.Header(), accessv1connect.ElevationServiceWithdrawElevationProcedure)
+	if err != nil {
+		return nil, err
+	}
+	svc, err := h.svc()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := svc.Withdraw(l.Admin, r.Msg.GetId()); err != nil {
+		return nil, coded(err)
+	}
+	h.s.o.Logger.Info("accessd: elevation withdrawn", log.F("id", r.Msg.GetId()), log.F("admin", l.Admin))
+	return connect.NewResponse(&accessv1.WithdrawElevationResponse{}), nil
+}
+
 func (h *elevationH) ApproveElevation(ctx context.Context, r *connect.Request[accessv1.ApproveElevationRequest]) (*connect.Response[accessv1.ApproveElevationResponse], error) {
 	if _, err := run(ctx, h.s, r.Header(), accessv1connect.ElevationServiceApproveElevationProcedure, osadminv1connect.ElevationServiceApproveElevationProcedure, h.s.h.Elevation.ApproveElevation,
 		&osadminv1.ApproveElevationRequest{Id: r.Msg.GetId(), Minutes: r.Msg.GetMinutes()}); err != nil {

@@ -289,6 +289,27 @@ func TestHoldsAndMaintenanceBlockApproval(t *testing.T) {
 	wantCode(t, err, codes.ElevMaintenance)
 }
 
+func TestWithdraw(t *testing.T) {
+	f := newFixture(t, "alice")
+	r := f.request("bob", 30)
+	w, err := f.svc.Withdraw("bob", r.ID)
+	if err != nil || w.State != elevation.Withdrawn || w.EndReason != "withdrawn" {
+		t.Fatalf("%+v %v", w, err)
+	}
+	if e, ok := f.audit.last("elevation.withdraw"); !ok || e.Target != r.ID || e.Actor != "bob" {
+		t.Fatalf("%+v %v", e, ok)
+	}
+	// A withdrawn request can't be approved afterwards.
+	_, err = f.svc.Approve(f.st, "alice", r.ID, 0)
+	wantCode(t, err, codes.ElevUsed)
+	// Withdrawing it again, or a request that was never bob's, is refused.
+	_, err = f.svc.Withdraw("bob", r.ID)
+	wantCode(t, err, codes.ElevUsed)
+	r2 := f.request("bob", 30)
+	_, err = f.svc.Withdraw("alice", r2.ID)
+	wantCode(t, err, codes.ElevUnknown)
+}
+
 func TestDenyAndExpiry(t *testing.T) {
 	f := newFixture(t, "alice")
 	r := f.request("bob", 30)

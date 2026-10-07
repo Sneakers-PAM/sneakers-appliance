@@ -181,6 +181,7 @@ var shellMethods = map[string]bool{
 	accessv1connect.ElevationServiceRequestElevationProcedure:        true,
 	accessv1connect.ElevationServiceListElevationsProcedure:          true,
 	accessv1connect.ElevationServiceGetElevationCertificateProcedure: true,
+	accessv1connect.ElevationServiceWithdrawElevationProcedure:       true,
 }
 
 // SetEnrolment gives accessd the enrolment window, which needs the store

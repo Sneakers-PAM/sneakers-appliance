@@ -44,6 +44,9 @@ const (
 	Ended    State = "ended"
 	Denied   State = "denied"
 	Expired  State = "expired"
+	// Withdrawn is a pending request its own requester gave up on (the
+	// closed shell's Ctrl-C while it waits). It can't be approved.
+	Withdrawn State = "withdrawn"
 )
 
 // The time limits (spec 2, Section 2.8.1).
@@ -64,6 +67,7 @@ const (
 	ReasonTerminated = "terminated"
 	ReasonDenied     = "denied"
 	ReasonExpired    = "expired"
+	ReasonWithdrawn  = "withdrawn"
 	// ReasonLost is a session whose sneakers-elevated died without saying
 	// how it ended.
 	ReasonLost = "lost"
@@ -371,6 +375,38 @@ func (s *Service) Deny(id, by string) (Request, error) {
 		return Request{}, err
 	}
 	s.o.Logger.Info("elevation: denied", log.F("id", id), log.F("by", by))
+	return r, nil
+}
+
+// Withdraw withdraws admin's own pending request (the closed shell's
+// Ctrl-C while it waits for an approval). A withdrawn request can't be
+// approved afterwards.
+func (s *Service) Withdraw(admin, id string) (Request, error) {
+	r, err := s.withdraw(admin, id)
+	s.audit(osaudit.Entry{Actor: admin, Action: "elevation.withdraw", Target: id}, "ok", err)
+	return r, err
+}
+
+func (s *Service) withdraw(admin, id string) (Request, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i, err := s.live(id)
+	if err != nil {
+		return Request{}, err
+	}
+	r := s.cur.Requests[i]
+	if r.Admin != admin {
+		return Request{}, codes.New(codes.ElevUnknown, "%s isn't yours to withdraw", id)
+	}
+	if r.State != Pending {
+		return Request{}, codes.New(codes.ElevUsed, "%s was already %s", id, r.State)
+	}
+	now := s.now()
+	r.State, r.Ended, r.EndReason = Withdrawn, &now, ReasonWithdrawn
+	if err := s.put(i, r); err != nil {
+		return Request{}, err
+	}
+	s.o.Logger.Info("elevation: withdrawn", log.F("id", id), log.F("by", admin))
 	return r, nil
 }
 

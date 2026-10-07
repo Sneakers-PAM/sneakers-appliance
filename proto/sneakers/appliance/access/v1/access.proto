@@ -89,6 +89,10 @@ service ElevationService {
   rpc GetElevationCertificate(GetElevationCertificateRequest) returns (GetElevationCertificateResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // WithdrawElevation withdraws the caller's own pending request (the
+  // closed shell's Ctrl-C while it waits); a withdrawn request can't be
+  // approved afterwards.
+  rpc WithdrawElevation(WithdrawElevationRequest) returns (WithdrawElevationResponse);
   // ApproveElevation is the console's (root only); owners approve on :8443.
   rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse);
   // DenyElevation is the console's (root only); owners deny on :8443.
@@ -286,6 +290,12 @@ message GetElevationCertificateResponse {
   // login is how to use it: ssh -i <key> -o CertificateFile=<file> maint@<host>.
   string login = 3;
 }
+
+message WithdrawElevationRequest {
+  string id = 1;
+}
+
+message WithdrawElevationResponse {}
 
 message ApproveElevationRequest {
   string id = 1;

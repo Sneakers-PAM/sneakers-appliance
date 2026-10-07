@@ -137,9 +137,9 @@ account, signed by the box's own user CA after an owner approves.
 1. **Request.** `shell --minutes 30 --reason "investigate kubelet"` (15 to the policy's maximum,
    240 by default; 0 or no `--minutes` takes the default of 60) records the admin, the key the
    login signed in with, its SSH client address, the reason and the length, and prints a request id
-   such as `E-7K2Q`. The shell then waits and prints the certificate once it is approved; Ctrl-C on
-   a non-interactive call (`ssh alice@192.0.2.10 shell ...`) or closing the connection leaves the
-   request pending. A request nobody approves expires after 30 minutes (`ELEV_EXPIRED`).
+   such as `E-7K2Q`. The shell then waits and prints the certificate once it is approved; Ctrl-C
+   withdraws the request (audited, and it can't be approved afterwards), and so does closing the
+   connection while it waits. A request nobody approves expires after 30 minutes (`ELEV_EXPIRED`).
 2. **Approve.** An owner approves on the Shell elevation page (`ApproveElevation`, with a step-up)
    or on the console, optionally shortening it (never lengthening it, `ELEV_MINUTES`), or denies it.
    - With two or more owners, nobody approves their own request (`ELEV_SELF_APPROVAL`).

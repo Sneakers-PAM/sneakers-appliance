@@ -408,7 +408,7 @@ func runShellRequest(ctx context.Context, e *Env, _ *Command, _ []string, flags 
 		return res, nil
 	}
 	_, _ = fmt.Fprintln(e.Out, res.Text)
-	_, _ = fmt.Fprintln(e.Out, "Waiting for an owner to approve it; Ctrl-C leaves the request pending.")
+	_, _ = fmt.Fprintln(e.Out, "Waiting for an owner to approve it; Ctrl-C withdraws it.")
 	return waitForApproval(ctx, e, id, res)
 }
 
@@ -444,7 +444,16 @@ func waitForApproval(ctx context.Context, e *Env, id string, requested Result) (
 		}
 		select {
 		case <-ctx.Done():
-			return Result{Text: fmt.Sprintf("%s is still pending. Once it is approved, run: elevation cert %s", id, id), Data: map[string]string{"id": id, "state": "pending"}}, nil
+			// Ctrl-C (or the connection ending) withdraws the wait rather
+			// than leaving it dangling; ctx is already done, so the
+			// withdrawal itself runs on a fresh, short one.
+			wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			res, err := e.Backend.Call(wctx, Request{Action: "elevation.withdraw", Args: []string{id}})
+			cancel()
+			if err != nil {
+				return Result{}, err
+			}
+			return res, nil
 		case <-t.C:
 		}
 	}
