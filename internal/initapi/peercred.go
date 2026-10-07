@@ -78,3 +78,18 @@ func peerOf(c net.Conn) (Peer, error) {
 	}
 	return Peer{UID: cred.Uid, GID: cred.Gid, PID: cred.Pid}, nil
 }
+
+// PeerListener wraps ln so every accepted connection's peer is read with
+// SO_PEERCRED, and the connection closed before a byte is read unless allow
+// accepts its uid. Other daemons' sockets use it too.
+func PeerListener(ln net.Listener, allow func(uint32) bool, logf func(format string, args ...any)) net.Listener {
+	return peerListener{Listener: ln, allow: allow, logf: logf}
+}
+
+// PeerContext puts c's peer on ctx, for an http.Server's ConnContext.
+func PeerContext(ctx context.Context, c net.Conn) context.Context {
+	if pc, ok := c.(peerConn); ok {
+		return context.WithValue(ctx, peerKey{}, pc.peer)
+	}
+	return ctx
+}

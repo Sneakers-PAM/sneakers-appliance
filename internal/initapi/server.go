@@ -78,15 +78,10 @@ func Listen(path string, o Options) (*Server, error) {
 		Handler:           mux,
 		Protocols:         protocols,
 		ReadHeaderTimeout: 10 * time.Second,
-		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-			if pc, ok := c.(peerConn); ok {
-				return context.WithValue(ctx, peerKey{}, pc.peer)
-			}
-			return ctx
-		},
+		ConnContext:       PeerContext,
 	}
 	logf := func(format string, args ...any) { o.Logger.Warn(fmt.Sprintf(format, args...)) }
-	go func() { _ = srv.Serve(peerListener{Listener: ln, allow: o.Allow, logf: logf}) }()
+	go func() { _ = srv.Serve(PeerListener(ln, o.Allow, logf)) }()
 	o.Logger.Info("initapi: listening", log.F("socket", path))
 	return &Server{http: srv}, nil
 }
