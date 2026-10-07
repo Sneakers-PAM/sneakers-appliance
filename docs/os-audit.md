@@ -19,7 +19,9 @@ One file per UTC day, `log-<YYYY-MM-DD>.jsonl`, mode 0600. Each line is one entr
 | `detail` | action-specific fields |
 | `prev` | the hex SHA-256 of the line before, across day files |
 
-Every line is fsynced before the action it records is reported done. A clock stepped back (an NTP
+Every line is fsynced before the action it records is reported done. Init and osadmin both append
+to the log: each takes an flock on `.lock` in the log directory and reads the head again when the
+other has written since, so the two keep one chain. A clock stepped back (an NTP
 correction on a box that booted with the wrong time) keeps appending to the newest file, so the
 files always read in chain order.
 

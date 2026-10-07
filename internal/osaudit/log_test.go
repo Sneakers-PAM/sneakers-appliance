@@ -174,3 +174,26 @@ func TestRunRetentionPrunes(t *testing.T) {
 	cancel()
 	<-done
 }
+
+// Init and osadmin each hold the log open; their appends must keep one
+// chain.
+func TestTwoWritersKeepOneChain(t *testing.T) {
+	dir := t.TempDir()
+	a, err := osaudit.Open(dir, osaudit.Options{})
+	mustNoErr(t, err)
+	b, err := osaudit.Open(dir, osaudit.Options{})
+	mustNoErr(t, err)
+	for i := range 4 {
+		w := a
+		if i%2 == 1 {
+			w = b
+		}
+		mustNoErr(t, w.Append(osaudit.Entry{Actor: "alice", Action: fmt.Sprintf("a%d", i)}))
+	}
+	mustNoErr(t, a.Verify())
+	got, err := b.Entries()
+	mustNoErr(t, err)
+	if len(got) != 4 {
+		t.Fatalf("%d entries", len(got))
+	}
+}

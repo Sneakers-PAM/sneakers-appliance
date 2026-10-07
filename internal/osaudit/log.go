@@ -26,6 +26,7 @@ import (
 	"time"
 
 	log "github.com/Bugs5382/go-log"
+	"golang.org/x/sys/unix"
 )
 
 // The default retention (Logs and audit page settings).
@@ -77,7 +78,14 @@ type Log struct {
 	// newest is the newest day file. A clock stepped back (an NTP
 	// correction) keeps appending there, so the files stay in chain order.
 	newest string
+	// size is newest's length after this process's last append or read; a
+	// different length means another process (init and osadmin both
+	// write) appended since, so the head is read again.
+	size int64
 }
+
+// lockName is the file every writer holds an flock on while it appends.
+const lockName = ".lock"
 
 // Open opens the log in dir, creating it, and finds the chain's head.
 func Open(dir string, o Options) (*Log, error) {
@@ -110,6 +118,7 @@ func Open(dir string, o Options) (*Log, error) {
 			l.head = hashLine(last)
 		}
 		l.newest = files[len(files)-1]
+		l.size = fileSize(filepath.Join(dir, l.newest))
 	}
 	return l, nil
 }
@@ -137,6 +146,14 @@ func (l *Log) pathFor(t time.Time) string {
 func (l *Log) Append(e Entry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	unlock, err := l.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := l.refresh(); err != nil {
+		return err
+	}
 	if e.Time.IsZero() {
 		e.Time = l.o.Now()
 	}
@@ -167,6 +184,7 @@ func (l *Log) Append(e Entry) error {
 	}
 	l.head = hashLine(line)
 	l.newest = name
+	l.size = fileSize(filepath.Join(l.dir, name))
 	l.o.Logger.Debug("os audit: appended", log.F("action", e.Action), log.F("actor", e.Actor), log.F("outcome", e.Outcome))
 	return nil
 }
@@ -329,6 +347,56 @@ func lastLine(path string) ([]byte, error) {
 		return nil, fmt.Errorf("os audit: %w", err)
 	}
 	return last, nil
+}
+
+// lock takes the writers' flock on the log directory.
+func (l *Log) lock() (func(), error) {
+	f, err := os.OpenFile(filepath.Join(l.dir, lockName), os.O_RDWR|os.O_CREATE, 0o600) // #nosec G304 -- the lock file in the log directory
+	if err != nil {
+		return nil, fmt.Errorf("os audit: %w", err)
+	}
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil { // #nosec G115 -- a descriptor fits an int
+		_ = f.Close()
+		return nil, fmt.Errorf("os audit: lock: %w", err)
+	}
+	return func() {
+		_ = unix.Flock(int(f.Fd()), unix.LOCK_UN) // #nosec G115 -- as above
+		_ = f.Close()
+	}, nil
+}
+
+// refresh reads the head again when another writer has appended since.
+func (l *Log) refresh() error {
+	files, err := l.files()
+	if err != nil || len(files) == 0 {
+		return err
+	}
+	newest := files[len(files)-1]
+	if newest < l.newest {
+		newest = l.newest
+	}
+	size := fileSize(filepath.Join(l.dir, newest))
+	if newest == l.newest && size == l.size {
+		return nil
+	}
+	last, err := lastLine(filepath.Join(l.dir, newest))
+	if err != nil {
+		return err
+	}
+	if last != nil {
+		l.head = hashLine(last)
+	}
+	l.newest, l.size = newest, size
+	l.o.Logger.Debug("os audit: another writer appended; head read again", log.F("file", newest))
+	return nil
+}
+
+func fileSize(p string) int64 {
+	st, err := os.Stat(p)
+	if err != nil {
+		return 0
+	}
+	return st.Size()
 }
 
 func hashLine(line []byte) string {
