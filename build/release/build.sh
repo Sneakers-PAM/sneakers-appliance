@@ -32,7 +32,7 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 : "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
-: "${SIGNATURES:?sneakers-release publishes no image countersignatures yet; the bundle can't be built without them}"
+: "${SIGNATURES:?sneakers-release publishes no image countersignatures yet; the bundle cannot be built without them}"
 keys="${KEYS:-$root/keys/production}"
 arch=amd64
 # shellcheck source=build/release/pins.env
