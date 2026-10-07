@@ -46,7 +46,7 @@ func (h *accessSvc) ListAdmins(context.Context, *connect.Request[osadminv1.ListA
 	out.Quorum = &osadminv1.Quorum{Members: q.Members, Required: int32(min(q.Required, 1<<30)), Configured: q.Configured} // #nosec G115 -- clamped
 	for _, r := range st.RevokedKeys {
 		keyType, _, _ := strings.Cut(r.PublicKey, " ")
-		out.RevokedKeys = append(out.RevokedKeys, &osadminv1.RevokedKey{Fingerprint: r.Fingerprint, Type: keyType, Admin: r.Admin, Revoked: timestamppb.New(r.Revoked)})
+		out.RevokedKeys = append(out.RevokedKeys, &osadminv1.RevokedKey{Fingerprint: r.Fingerprint, Type: keyType, Admin: r.Admin, Revoked: timestamppb.New(r.Revoked), RevokedBy: r.By()})
 	}
 	return connect.NewResponse(out), nil
 }
@@ -135,7 +135,7 @@ func (h *accessSvc) RemoveAdmin(ctx context.Context, r *connect.Request[osadminv
 	c := callFrom(ctx)
 	name := r.Msg.GetName()
 	c.note(name)
-	err := h.s.o.Access.Update(func(st *access.State) error {
+	err := h.s.o.Access.UpdateAs(c.session.Admin, func(st *access.State) error {
 		i := slices.IndexFunc(st.Admins, func(a access.Admin) bool { return a.Name == name })
 		if i < 0 {
 			return codes.New(codes.AccessName, "there is no admin named %q", name)
@@ -216,7 +216,7 @@ func (h *accessSvc) RemoveKey(ctx context.Context, r *connect.Request[osadminv1.
 	if err := mayManageKeys(c, admin); err != nil {
 		return nil, err
 	}
-	err := h.s.o.Access.Update(func(st *access.State) error {
+	err := h.s.o.Access.UpdateAs(c.session.Admin, func(st *access.State) error {
 		a, ok := st.Admin(admin)
 		if !ok {
 			return codes.New(codes.AccessName, "there is no admin named %q", admin)

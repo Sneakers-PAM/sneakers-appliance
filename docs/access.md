@@ -31,7 +31,8 @@ discarded when the store opens.
   ],
   "elevationPolicy": { "maxMinutes": 240, "defaultMinutes": 60, "selfApprovalWhenSingleOwner": true },
   "revokedKeys": [
-    { "fingerprint": "SHA256:...", "publicKey": "ssh-ed25519 AAAA...", "admin": "bob", "revoked": "..." }
+    { "fingerprint": "SHA256:...", "publicKey": "ssh-ed25519 AAAA...", "admin": "bob", "revoked": "...",
+      "revokedBy": "alice" }
   ]
 }
 ```
@@ -68,8 +69,10 @@ removing the last two keys at once can't both succeed.
 ## Removed keys are revoked
 
 A login key that leaves the store, removed on its own or with its admin, by any surface (the page,
-the closed shell, the console), goes on `revokedKeys` in the same write, with its admin and the
-time. While it's there:
+the closed shell, the console), goes on `revokedKeys` in the same write, with its admin, the time
+and who removed it (`revokedBy`: the admin on the page or in the closed shell, or `console`). A key
+revoked before the store recorded this has no `revokedBy`, and `ListAdmins` reports it as
+`unknown`. While it's there:
 
 - it is on sshd's revocation list, `/var/lib/sneakers/ssh/revoked.krl`, as an explicit key, so sshd
   refuses it (and any certificate for it) even if a stale `authorized_keys` file still lists it.
@@ -81,7 +84,8 @@ time. While it's there:
   unused elevation certificate for it is revoked).
 
 An owner takes a key off the list with `AccessService.UnrevokeKey` (step-up, audited as
-`access.key.unrevoke`); `ListAdmins` returns the revoked keys. Only then can the key be added again.
+`access.key.unrevoke`); `ListAdmins` returns the revoked keys, each with
+`revoked_by`. Only then can the key be added again.
 
 ## Unix accounts
 

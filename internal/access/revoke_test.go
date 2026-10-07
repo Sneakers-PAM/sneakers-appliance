@@ -5,7 +5,10 @@ package access_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
@@ -152,5 +155,65 @@ func TestRevokedPublicKeysParse(t *testing.T) {
 	}
 	if len(keys) != 1 {
 		t.Fatalf("%d keys", len(keys))
+	}
+}
+
+func TestARevocationRecordsWhoRemovedTheKey(t *testing.T) {
+	st, _ := openStoreWithOwnerTwoKeys(t)
+	if err := st.UpdateAs("carol", removeKey(1)); err != nil {
+		t.Fatal(err)
+	}
+	got := st.Read().RevokedKeys
+	if len(got) != 1 || got[0].RevokedBy != "carol" || got[0].By() != "carol" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestAnAdminsRemovalRecordsWhoRemovedThem(t *testing.T) {
+	st, _ := openStoreWithOwnerTwoKeys(t)
+	if err := st.Update(func(s *access.State) error {
+		b := s.AddAdmin("bob", access.RoleAdmin, "alice", t0)
+		b.Keys = append(b.Keys, loginKey(t), loginKey(t))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateAs(access.ConsoleActor, func(s *access.State) error {
+		s.Admins = slices.DeleteFunc(s.Admins, func(a access.Admin) bool { return a.Name == "bob" })
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range st.Read().RevokedKeys {
+		if r.By() != access.ConsoleActor {
+			t.Fatalf("%+v", r)
+		}
+	}
+}
+
+// A store written before revocations named their actor reads cleanly, and
+// its revocations are by "unknown".
+func TestARevocationFromAnOlderStoreIsByUnknown(t *testing.T) {
+	st, dir := openStoreWithOwnerTwoKeys(t)
+	if err := st.Update(removeKey(1)); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, access.FileName)
+	b, err := os.ReadFile(p) // #nosec G304 -- the test's own store
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "revokedBy") {
+		t.Fatalf("a revocation with no actor wrote one:\n%s", b)
+	}
+	old, err := access.ReadState(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(old.RevokedKeys) != 1 || old.RevokedKeys[0].By() != access.UnknownActor {
+		t.Fatalf("%+v", old.RevokedKeys)
+	}
+	if _, err := access.Open(dir, access.Options{}); err != nil {
+		t.Fatalf("the older store doesn't open: %v", err)
 	}
 }
