@@ -23,6 +23,7 @@ import (
 	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
@@ -69,6 +70,7 @@ func (h *enrolmentH) wire(v enrol.View) *accessv1.Enrolment {
 	e := &accessv1.Enrolment{
 		Open: v.Open, Admin: v.Admin, Code: v.Code, AttemptsLeft: int32(min(v.AttemptsLeft, 1<<30)), // #nosec G115 -- clamped
 		Enrolled: int32(min(v.Enrolled, 1<<30)), ClosedReason: v.ClosedReason, // #nosec G115 -- clamped
+		Recovery: v.Recovery,
 	}
 	if !v.Opened.IsZero() {
 		e.Opened = timestamppb.New(v.Opened)
@@ -86,7 +88,7 @@ func (h *enrolmentH) wire(v enrol.View) *accessv1.Enrolment {
 }
 
 func keyToWire(k enrol.Key) *accessv1.EnrolmentKey {
-	return &accessv1.EnrolmentKey{Id: k.ID, Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment, SourceAddress: k.Source, State: string(k.State)}
+	return &accessv1.EnrolmentKey{Id: k.ID, Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment, SourceAddress: k.Source, State: string(k.State), Via: k.Via}
 }
 
 // OpenEnrolment opens the window, making the SSH host keys first if the
@@ -102,11 +104,29 @@ func (h *enrolmentH) OpenEnrolment(ctx context.Context, r *connect.Request[acces
 			return nil, err
 		}
 	}
-	v, err := svc.Open(r.Msg.GetAdmin())
+	v, err := svc.OpenWith(r.Msg.GetAdmin(), enrol.OpenOptions{Recovery: r.Msg.GetRecovery()})
 	if err != nil {
 		return nil, coded(err)
 	}
 	return connect.NewResponse(&accessv1.OpenEnrolmentResponse{Enrolment: h.wire(v)}), nil
+}
+
+// OfferEnrolmentKey takes a key typed or fetched on the console into the
+// open window.
+func (h *enrolmentH) OfferEnrolmentKey(ctx context.Context, r *connect.Request[accessv1.OfferEnrolmentKeyRequest]) (*connect.Response[accessv1.OfferEnrolmentKeyResponse], error) {
+	svc, err := h.console(ctx, accessv1connect.EnrolmentServiceOfferEnrolmentKeyProcedure)
+	if err != nil {
+		return nil, err
+	}
+	via := r.Msg.GetVia()
+	if via != access.ViaTyped && via != access.ViaURL {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("via is %s or %s", access.ViaTyped, access.ViaURL))
+	}
+	k, err := svc.Offer(r.Msg.GetPublicKey(), via, r.Msg.GetFrom())
+	if err != nil {
+		return nil, coded(err)
+	}
+	return connect.NewResponse(&accessv1.OfferEnrolmentKeyResponse{Key: keyToWire(k)}), nil
 }
 
 func (h *enrolmentH) GetEnrolment(ctx context.Context, _ *connect.Request[accessv1.GetEnrolmentRequest]) (*connect.Response[accessv1.GetEnrolmentResponse], error) {

@@ -72,6 +72,9 @@ service SetupService {
   }
   // SetRecoveryKey sets a recovery key during setup (an owner's shell).
   rpc SetRecoveryKey(SetRecoveryKeyRequest) returns (SetRecoveryKeyResponse);
+  // AcknowledgeSingleAdmin records, from the console (root only), that the
+  // operator confirmed the single-admin warning.
+  rpc AcknowledgeSingleAdmin(AcknowledgeSingleAdminRequest) returns (AcknowledgeSingleAdminResponse);
   // Complete checks every step and finishes setup (root only: firstboot).
   rpc Complete(CompleteRequest) returns (CompleteResponse);
 }
@@ -130,6 +133,10 @@ service EnrolmentService {
   rpc RejectEnrolmentKey(RejectEnrolmentKeyRequest) returns (RejectEnrolmentKeyResponse);
   // CloseEnrolment closes the window (root only): Done on the console.
   rpc CloseEnrolment(CloseEnrolmentRequest) returns (CloseEnrolmentResponse);
+  // OfferEnrolmentKey puts a key typed or fetched on the console into the
+  // open window (root only). It waits for the typed yes like a key that
+  // gave the code over SSH.
+  rpc OfferEnrolmentKey(OfferEnrolmentKeyRequest) returns (OfferEnrolmentKeyResponse);
   // SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
   // code the admin typed and the key sshd authenticated.
   rpc SubmitEnrolmentCode(SubmitEnrolmentCodeRequest) returns (SubmitEnrolmentCodeResponse);
@@ -258,6 +265,10 @@ message SetRecoveryKeyResponse {
   sneakers.appliance.osadmin.v1.RecoveryKey recovery_key = 1;
 }
 
+message AcknowledgeSingleAdminRequest {}
+
+message AcknowledgeSingleAdminResponse {}
+
 message CompleteRequest {}
 
 message CompleteResponse {
@@ -355,6 +366,9 @@ message Enrolment {
   int32 enrolled = 9;
   // closed_reason is done, idle, attempts or empty while open.
   string closed_reason = 10;
+  // recovery marks the console's Recover access window: each key stored is
+  // held from approving elevations for 24 hours.
+  bool recovery = 11;
 }
 
 // EnrolmentKey is a key that gave the right code.
@@ -366,10 +380,14 @@ message EnrolmentKey {
   string source_address = 5;
   // state is waiting, accepted or rejected.
   string state = 6;
+  // via is enrol (over SSH with the code), typed or url (on the console).
+  string via = 7;
 }
 
 message OpenEnrolmentRequest {
   string admin = 1;
+  // recovery opens the console's Recover access window (owners only).
+  bool recovery = 2;
 }
 
 message OpenEnrolmentResponse {
@@ -399,6 +417,19 @@ message RejectEnrolmentKeyRequest {
 message RejectEnrolmentKeyResponse {}
 
 message CloseEnrolmentRequest {}
+
+message OfferEnrolmentKeyRequest {
+  // public_key is one authorized_keys line.
+  string public_key = 1;
+  // via is typed or url.
+  string via = 2;
+  // from is the URL a fetched key came from.
+  string from = 3;
+}
+
+message OfferEnrolmentKeyResponse {
+  EnrolmentKey key = 1;
+}
 
 message CloseEnrolmentResponse {}
 

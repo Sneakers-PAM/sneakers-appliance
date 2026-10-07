@@ -123,6 +123,11 @@ CONFIG_TIMERFD=y
 CONFIG_MEMBARRIER=y
 CONFIG_RSEQ=y
 CONFIG_ADVISE_SYSCALLS=y
+# The POSIX timers and the itimers. The tiny base turns them off (it
+# selects EXPERT), and OpenSSH's sshd-session arms its login grace time with
+# setitimer: without them it drops every connection ("login grace time
+# setitimer failed") before sending its banner.
+CONFIG_POSIX_TIMERS=y
 # Serial console for the qemu-dev cmdline (`console=ttyS0`).
 CONFIG_TTY=y
 CONFIG_SERIAL_8250=y

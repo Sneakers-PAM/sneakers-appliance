@@ -6,6 +6,7 @@ package osadmin
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
@@ -58,6 +59,14 @@ func (h *signIn) PollSignIn(ctx context.Context, r *connect.Request[osadminv1.Po
 	}
 	sess := h.s.sessions.Create(ap.Admin, ap.KeyFP, ap.Source, ap.UserAgent)
 	h.s.write(osaudit.Entry{Actor: sess.Admin, KeyFP: sess.KeyFP, Source: c.source, Action: "signin.session.start"}, nil)
+	if !h.s.SetupDone() && !exists(filepath.Join(h.s.o.Paths.SetupDir(), SignedInMarker)) {
+		// First boot's step 5: the admin can reach and use :8443.
+		if err := h.s.mark(SignedInMarker); err != nil {
+			h.s.o.Logger.Error(err, "osadmin: the first sign-in wasn't recorded")
+		} else {
+			h.s.o.Logger.Info("osadmin: first sign-in recorded", log.F("admin", sess.Admin))
+		}
+	}
 	h.s.o.Logger.Info("osadmin: signed in", log.F("admin", sess.Admin), log.F("source", c.source))
 	resp := connect.NewResponse(&osadminv1.PollSignInResponse{State: osadminv1.SignInState_SIGN_IN_STATE_APPROVED, Session: h.s.toSession(sess, a.Role)})
 	resp.Header().Add("Set-Cookie", (&http.Cookie{

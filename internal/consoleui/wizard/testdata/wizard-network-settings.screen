@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Setup 1 of 5: network            sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
+    can change this box's software and read its data.
+    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
+
+ [>] 1 Network  [ ] 2 Protection  [ ] 3 Admin  [ ] 4 Recovery  [ ] 5 Sign-in
+
+ Management interface ens192; the product's traffic: the same interface.
+
+   1  IPv4       DHCP
+   2  IPv6       SLAAC (and RDNSS)
+   3  Host name  from DHCP
+   4  DNS        from DHCP and router advertisements
+   5  NTP        from DHCP
+
+ Type a number to change it, or press Enter to apply these settings.
+ They apply live, then the box checks the link, address, gateway, DNS and NTP.
+
+
+ ------------------------------------------------------------------------------
+ 1-5: change   Enter: apply
+ >
+ Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

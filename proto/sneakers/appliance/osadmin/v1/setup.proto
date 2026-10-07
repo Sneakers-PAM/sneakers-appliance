@@ -86,6 +86,9 @@ message GetSetupResponse {
   // product_setup_url is where the product's own /setup runs once the
   // platform is up.
   string product_setup_url = 8;
+  // signed_in is true once an admin has signed in to :8443: setup can't
+  // finish before.
+  bool signed_in = 9;
 }
 
 message AddRecoveryKeyRequest {

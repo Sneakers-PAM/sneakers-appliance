@@ -63,7 +63,10 @@ type Key struct {
 	Comment     string
 	Source      string
 	State       KeyState
-	line        string
+	// Via is how the key reached the window: access.ViaEnrol over SSH,
+	// or typed or fetched on the console.
+	Via  string
+	line string
 }
 
 // View is the window as the console shows it.
@@ -77,6 +80,19 @@ type View struct {
 	Keys         []Key
 	Enrolled     int
 	ClosedReason string
+	// Recovery marks the console's Recover access window.
+	Recovery bool
+}
+
+// RecoveryHold is how long a key added with Recover access can't approve
+// elevations (spec 2 Section 2.10); another owner can lift it sooner.
+const RecoveryHold = 24 * time.Hour
+
+// OpenOptions shape a window.
+type OpenOptions struct {
+	// Recovery is the console's Recover access: owners only, and each key
+	// stored is held from approving elevations for RecoveryHold.
+	Recovery bool
 }
 
 // Options wire a Service.
@@ -139,27 +155,41 @@ func (s *Service) view() View {
 }
 
 // Open opens a window for admin's keys, replacing an open one.
-func (s *Service) Open(admin string) (View, error) {
+func (s *Service) Open(admin string) (View, error) { return s.OpenWith(admin, OpenOptions{}) }
+
+// OpenWith opens a window shaped by o.
+func (s *Service) OpenWith(admin string, o OpenOptions) (View, error) {
 	st := s.o.Store.Read()
-	if _, ok := st.Admin(admin); !ok {
-		err := codes.New(codes.AccessName, "there is no admin named %q", admin)
+	a, ok := st.Admin(admin)
+	var err error
+	switch {
+	case !ok:
+		err = codes.New(codes.AccessName, "there is no admin named %q", admin)
+	case o.Recovery && a.Role != access.RoleOwner:
+		err = codes.New(codes.AccessForbidden, "Recover access adds keys to owners only; %s isn't one", admin)
+	}
+	if err != nil {
 		s.audit(osaudit.Entry{Action: "enrol.open", Target: admin}, "", err)
 		return View{}, err
 	}
 	s.mu.Lock()
-	v := s.open(admin)
+	v := s.open(admin, o.Recovery)
 	s.mu.Unlock()
 	s.changed()
 	return v, nil
 }
 
 // open starts a fresh window. Caller holds mu.
-func (s *Service) open(admin string) View {
+func (s *Service) open(admin string, recovery bool) View {
 	now := s.o.Clock.Now().UTC()
-	s.w = View{Open: true, Admin: admin, Code: s.o.NewCode(), Opened: now, AttemptsLeft: MaxAttempts}
+	s.w = View{Open: true, Admin: admin, Code: s.o.NewCode(), Opened: now, AttemptsLeft: MaxAttempts, Recovery: recovery}
 	s.lastSeen = now
-	s.o.Logger.Info("enrol: window open", log.F("admin", admin))
-	s.audit(osaudit.Entry{Action: "enrol.open", Target: admin}, "ok", nil)
+	s.o.Logger.Info("enrol: window open", log.F("admin", admin), log.F("recovery", recovery))
+	e := osaudit.Entry{Action: "enrol.open", Target: admin}
+	if recovery {
+		e.Detail = map[string]string{"recovery": "true"}
+	}
+	s.audit(e, "ok", nil)
 	return s.view()
 }
 
@@ -226,9 +256,9 @@ func (s *Service) submit(code, publicKey, source string) (Key, bool, error) {
 		}
 		err := codes.New(codes.EnrolCode, "wrong code three times; the window closed and the console shows a new code")
 		s.audit(e, "", err)
-		admin := s.w.Admin
+		admin, recovery := s.w.Admin, s.w.Recovery
 		s.close(ReasonAttempts)
-		s.open(admin)
+		s.open(admin, recovery)
 		return Key{}, true, err
 	}
 	pk, err := access.ParseLoginKey(publicKey)
@@ -241,12 +271,52 @@ func (s *Service) submit(code, publicKey, source string) (Key, bool, error) {
 		s.audit(e, "", err)
 		return Key{}, false, err
 	}
-	k := Key{ID: newID(), Fingerprint: pk.Fingerprint, Type: pk.Type, Comment: pk.Comment, Source: source, State: Waiting, line: pk.PublicKey}
+	k := Key{ID: newID(), Fingerprint: pk.Fingerprint, Type: pk.Type, Comment: pk.Comment, Source: source, State: Waiting, Via: access.ViaEnrol, line: pk.PublicKey}
 	s.w.Keys = append(s.w.Keys, k)
 	e.Action, e.KeyFP = "enrol.submit", k.Fingerprint
 	s.audit(e, "ok", nil)
 	s.o.Logger.Info("enrol: a key gave the right code", log.F("admin", s.w.Admin), log.F("fingerprint", k.Fingerprint))
 	return k, false, nil
+}
+
+// Offer puts a key typed or fetched on the console (via is access.ViaTyped
+// or access.ViaURL, from the URL it came from) into the open window. It
+// waits for the typed yes like a key offered over SSH, and uses no code
+// attempt: the console is where the code is shown.
+func (s *Service) Offer(publicKey, via, from string) (Key, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := osaudit.Entry{Actor: osaudit.SurfaceConsole, Source: "console", Action: "enrol.offer", Target: s.w.Admin, Detail: map[string]string{"via": via}}
+	if from != "" {
+		e.Detail["from"] = from
+	}
+	if !s.w.Open {
+		err := codes.New(codes.EnrolClosed, "the enrolment window is closed; open one on the console")
+		s.audit(e, "", err)
+		return Key{}, err
+	}
+	pk, err := access.ParseLoginKey(publicKey)
+	if err != nil {
+		s.audit(e, "", err)
+		return Key{}, err
+	}
+	e.KeyFP = pk.Fingerprint
+	if slices.ContainsFunc(s.w.Keys, func(k Key) bool { return k.Fingerprint == pk.Fingerprint && k.State != Rejected }) {
+		err := codes.New(codes.AccessKeyDuplicate, "key %s is already in this window", pk.Fingerprint)
+		s.audit(e, "", err)
+		return Key{}, err
+	}
+	if len(s.w.Keys) >= MaxKeys {
+		err := codes.New(codes.EnrolClosed, "this window already holds %d keys; press Done and open a new one", MaxKeys)
+		s.audit(e, "", err)
+		return Key{}, err
+	}
+	k := Key{ID: newID(), Fingerprint: pk.Fingerprint, Type: pk.Type, Comment: pk.Comment, Source: "console", State: Waiting, Via: via, line: pk.PublicKey}
+	s.w.Keys = append(s.w.Keys, k)
+	s.lastSeen = s.o.Clock.Now().UTC()
+	s.audit(e, "ok", nil)
+	s.o.Logger.Info("enrol: a key was offered on the console", log.F("admin", s.w.Admin), log.F("fingerprint", k.Fingerprint), log.F("via", via))
+	return k, nil
 }
 
 // Key returns submitted key id of the open window.
@@ -274,6 +344,10 @@ func (s *Service) find(id string) (int, error) {
 func (s *Service) Accept(id, confirm string) (access.AdminKey, error) {
 	s.mu.Lock()
 	e := osaudit.Entry{Actor: osaudit.SurfaceConsole, Action: "enrol.accept", Target: s.w.Admin}
+	recovery := s.w.Recovery
+	if recovery {
+		e.Action = "access.console-recovery"
+	}
 	i, err := s.find(id)
 	if err == nil && s.w.Keys[i].State != Waiting {
 		err = codes.New(codes.EnrolUnknown, "key %s was already %s", id, s.w.Keys[i].State)
@@ -294,7 +368,7 @@ func (s *Service) Accept(id, confirm string) (access.AdminKey, error) {
 		s.audit(e, "", err)
 		return access.AdminKey{}, err
 	}
-	ak, err := s.store(admin, k)
+	ak, err := s.store(admin, k, recovery)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if j := slices.IndexFunc(s.w.Keys, func(x Key) bool { return x.ID == id }); j >= 0 {
@@ -313,18 +387,30 @@ func (s *Service) Accept(id, confirm string) (access.AdminKey, error) {
 	return ak, nil
 }
 
-func (s *Service) store(admin string, k Key) (access.AdminKey, error) {
+func (s *Service) store(admin string, k Key, recovery bool) (access.AdminKey, error) {
 	pk, err := access.ParseLoginKey(k.line)
 	if err != nil {
 		return access.AdminKey{}, err
 	}
-	ak := access.AdminKey{Key: pk, Added: s.o.Clock.Now().UTC(), AddedBy: osaudit.SurfaceConsole, Via: access.ViaEnrol}
+	now := s.o.Clock.Now().UTC()
+	via := k.Via
+	if via == "" {
+		via = access.ViaEnrol
+	}
+	if recovery {
+		via = access.ViaConsoleRecovery
+	}
+	ak := access.AdminKey{Key: pk, Added: now, AddedBy: osaudit.SurfaceConsole, Via: via}
 	err = s.o.Store.Update(func(st *access.State) error {
 		a, ok := st.Admin(admin)
 		if !ok {
 			return codes.New(codes.AccessName, "there is no admin named %q any more", admin)
 		}
 		a.Keys = append(a.Keys, ak)
+		if recovery {
+			until := now.Add(RecoveryHold)
+			a.ApprovalHoldUntil = &until
+		}
 		return nil
 	})
 	return ak, err

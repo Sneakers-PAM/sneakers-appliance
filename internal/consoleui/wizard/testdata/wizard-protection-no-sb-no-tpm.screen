@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Setup 2 of 5: protection         sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (no Secure Boot, no TPM). Someone with the disk or SD
+    card can change this box's software and read its data.
+    Only firmware with Secure Boot can raise it, from the :8443 Status page.
+
+ [x] 1 Network  [>] 2 Protection  [ ] 3 Admin  [ ] 4 Recovery  [ ] 5 Sign-in
+
+ Protection: reduced (no Secure Boot, no TPM). Someone with the disk or SD
+ card can change this box's software and read its data.
+
+ At-rest key  key file on the disk
+
+ The Secure Boot choice and the key custody were made at boot, before this
+ wizard, and the state volumes are formatted for them. The custody is fixed
+ until a reinstall.
+
+ This firmware has no Secure Boot. Protection can be raised only on firmware
+ that has it (on a VM, EFI firmware with Secure Boot): then an owner turns
+ Secure Boot on from the :8443 Status page, with no reinstall.
+ ------------------------------------------------------------------------------
+ Enter: continue
+ >
+ Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

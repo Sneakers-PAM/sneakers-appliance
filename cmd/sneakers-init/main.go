@@ -41,6 +41,10 @@ import (
 const (
 	espMount  = "/run/sneakers/esp"
 	setupDone = "/var/lib/sneakers/setup/done"
+	// consoleLog holds the shared output while a program owns the
+	// consoles; the console's Recent messages screen reads it.
+	consoleLog    = "/run/sneakers/console.log"
+	consoleLogMax = 1 << 20
 )
 
 func main() {
@@ -179,7 +183,15 @@ func run(lg log.TraceLogger) error {
 	if err != nil {
 		return err
 	}
-	sup := services.NewSupervisor(r, tbl, services.Options{Logger: lg})
+	sopt := services.Options{Logger: lg}
+	if con != nil {
+		// While the dashboard or the setup wizard owns the consoles, the
+		// services' and init's own lines go to a file in /run instead of
+		// over their screen.
+		con.SetAside(&console.LogFile{Path: consoleLog, Max: consoleLogMax})
+		sopt.Console = con
+	}
+	sup := services.NewSupervisor(r, tbl, sopt)
 	pw := newPower(sup, lg, con)
 	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, SecureBoot: st, Logger: lg}
 	if opened {

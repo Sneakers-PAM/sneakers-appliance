@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Menu                             sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
+    can change this box's software and read its data.
+    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
+
+   1  status                             12  recovery-key add
+   2  network show                       13  tls show
+   3  network set                        14  backup
+   4  network confirm                    15  restore
+   5  network allow-list reset           16  upgrade
+   6  keys list                          17  mcp
+   7  keys add                           18  resources
+   8  keys remove                        19  reboot
+   9  admins list                        20  poweroff
+  10  admins add                         21  Recover access
+  11  admins remove                      22  Recent messages
+
+
+
+ ------------------------------------------------------------------------------
+ number: run it   Enter: back to the status
+ >
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced

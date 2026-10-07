@@ -155,8 +155,11 @@ type GetSetupResponse struct {
 	// product_setup_url is where the product's own /setup runs once the
 	// platform is up.
 	ProductSetupUrl string `protobuf:"bytes,8,opt,name=product_setup_url,json=productSetupUrl,proto3" json:"product_setup_url,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// signed_in is true once an admin has signed in to :8443: setup can't
+	// finish before.
+	SignedIn      bool `protobuf:"varint,9,opt,name=signed_in,json=signedIn,proto3" json:"signed_in,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetSetupResponse) Reset() {
@@ -243,6 +246,13 @@ func (x *GetSetupResponse) GetProductSetupUrl() string {
 		return x.ProductSetupUrl
 	}
 	return ""
+}
+
+func (x *GetSetupResponse) GetSignedIn() bool {
+	if x != nil {
+		return x.SignedIn
+	}
+	return false
 }
 
 type AddRecoveryKeyRequest struct {
@@ -674,7 +684,7 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12,\n" +
 	"\x03set\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03set\x12\x15\n" +
 	"\x06set_by\x18\x05 \x01(\tR\x05setBy\"\x11\n" +
-	"\x0fGetSetupRequest\"\xff\x02\n" +
+	"\x0fGetSetupRequest\"\x9c\x03\n" +
 	"\x10GetSetupResponse\x12\x12\n" +
 	"\x04done\x18\x01 \x01(\bR\x04done\x12O\n" +
 	"\rrecovery_keys\x18\x02 \x03(\v2*.sneakers.appliance.osadmin.v1.RecoveryKeyR\frecoveryKeys\x12*\n" +
@@ -685,7 +695,8 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x19single_admin_acknowledged\x18\x06 \x01(\bR\x17singleAdminAcknowledged\x12\x1f\n" +
 	"\vescrow_file\x18\a \x01(\tR\n" +
 	"escrowFile\x12*\n" +
-	"\x11product_setup_url\x18\b \x01(\tR\x0fproductSetupUrl\"L\n" +
+	"\x11product_setup_url\x18\b \x01(\tR\x0fproductSetupUrl\x12\x1b\n" +
+	"\tsigned_in\x18\t \x01(\bR\bsignedIn\"L\n" +
 	"\x15AddRecoveryKeyRequest\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x14\n" +

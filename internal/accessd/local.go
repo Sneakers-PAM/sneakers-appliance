@@ -247,6 +247,13 @@ func (h *setupH) SetRecoveryKey(ctx context.Context, r *connect.Request[accessv1
 	return connect.NewResponse(&accessv1.SetRecoveryKeyResponse{RecoveryKey: out.GetRecoveryKey()}), nil
 }
 
+func (h *setupH) AcknowledgeSingleAdmin(ctx context.Context, r *connect.Request[accessv1.AcknowledgeSingleAdminRequest]) (*connect.Response[accessv1.AcknowledgeSingleAdminResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.SetupServiceAcknowledgeSingleAdminProcedure, osadminv1connect.SetupServiceAcknowledgeSingleAdminProcedure, h.s.h.Setup.AcknowledgeSingleAdmin, &osadminv1.AcknowledgeSingleAdminRequest{}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.AcknowledgeSingleAdminResponse{}), nil
+}
+
 func (h *setupH) Complete(ctx context.Context, r *connect.Request[accessv1.CompleteRequest]) (*connect.Response[accessv1.CompleteResponse], error) {
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.SetupServiceCompleteProcedure, osadminv1connect.SetupServiceFinishProcedure, h.s.h.Setup.Finish, &osadminv1.FinishRequest{})
 	if err != nil {

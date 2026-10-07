@@ -96,6 +96,9 @@ const (
 	// SetupServiceSetRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// SetRecoveryKey RPC.
 	SetupServiceSetRecoveryKeyProcedure = "/sneakers.appliance.access.v1.SetupService/SetRecoveryKey"
+	// SetupServiceAcknowledgeSingleAdminProcedure is the fully-qualified name of the SetupService's
+	// AcknowledgeSingleAdmin RPC.
+	SetupServiceAcknowledgeSingleAdminProcedure = "/sneakers.appliance.access.v1.SetupService/AcknowledgeSingleAdmin"
 	// SetupServiceCompleteProcedure is the fully-qualified name of the SetupService's Complete RPC.
 	SetupServiceCompleteProcedure = "/sneakers.appliance.access.v1.SetupService/Complete"
 	// ElevationServiceRequestElevationProcedure is the fully-qualified name of the ElevationService's
@@ -140,6 +143,9 @@ const (
 	// EnrolmentServiceCloseEnrolmentProcedure is the fully-qualified name of the EnrolmentService's
 	// CloseEnrolment RPC.
 	EnrolmentServiceCloseEnrolmentProcedure = "/sneakers.appliance.access.v1.EnrolmentService/CloseEnrolment"
+	// EnrolmentServiceOfferEnrolmentKeyProcedure is the fully-qualified name of the EnrolmentService's
+	// OfferEnrolmentKey RPC.
+	EnrolmentServiceOfferEnrolmentKeyProcedure = "/sneakers.appliance.access.v1.EnrolmentService/OfferEnrolmentKey"
 	// EnrolmentServiceSubmitEnrolmentCodeProcedure is the fully-qualified name of the
 	// EnrolmentService's SubmitEnrolmentCode RPC.
 	EnrolmentServiceSubmitEnrolmentCodeProcedure = "/sneakers.appliance.access.v1.EnrolmentService/SubmitEnrolmentCode"
@@ -580,6 +586,9 @@ type SetupServiceClient interface {
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
 	// SetRecoveryKey sets a recovery key during setup (an owner's shell).
 	SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error)
+	// AcknowledgeSingleAdmin records, from the console (root only), that the
+	// operator confirmed the single-admin warning.
+	AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error)
 	// Complete checks every step and finishes setup (root only: firstboot).
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 }
@@ -608,6 +617,12 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("SetRecoveryKey")),
 			connect.WithClientOptions(opts...),
 		),
+		acknowledgeSingleAdmin: connect.NewClient[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse](
+			httpClient,
+			baseURL+SetupServiceAcknowledgeSingleAdminProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("AcknowledgeSingleAdmin")),
+			connect.WithClientOptions(opts...),
+		),
 		complete: connect.NewClient[v1.CompleteRequest, v1.CompleteResponse](
 			httpClient,
 			baseURL+SetupServiceCompleteProcedure,
@@ -619,9 +634,10 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // setupServiceClient implements SetupServiceClient.
 type setupServiceClient struct {
-	getSetup       *connect.Client[v1.GetSetupRequest, v1.GetSetupResponse]
-	setRecoveryKey *connect.Client[v1.SetRecoveryKeyRequest, v1.SetRecoveryKeyResponse]
-	complete       *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
+	getSetup               *connect.Client[v1.GetSetupRequest, v1.GetSetupResponse]
+	setRecoveryKey         *connect.Client[v1.SetRecoveryKeyRequest, v1.SetRecoveryKeyResponse]
+	acknowledgeSingleAdmin *connect.Client[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse]
+	complete               *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
 }
 
 // GetSetup calls sneakers.appliance.access.v1.SetupService.GetSetup.
@@ -632,6 +648,11 @@ func (c *setupServiceClient) GetSetup(ctx context.Context, req *connect.Request[
 // SetRecoveryKey calls sneakers.appliance.access.v1.SetupService.SetRecoveryKey.
 func (c *setupServiceClient) SetRecoveryKey(ctx context.Context, req *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error) {
 	return c.setRecoveryKey.CallUnary(ctx, req)
+}
+
+// AcknowledgeSingleAdmin calls sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin.
+func (c *setupServiceClient) AcknowledgeSingleAdmin(ctx context.Context, req *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error) {
+	return c.acknowledgeSingleAdmin.CallUnary(ctx, req)
 }
 
 // Complete calls sneakers.appliance.access.v1.SetupService.Complete.
@@ -645,6 +666,9 @@ type SetupServiceHandler interface {
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
 	// SetRecoveryKey sets a recovery key during setup (an owner's shell).
 	SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error)
+	// AcknowledgeSingleAdmin records, from the console (root only), that the
+	// operator confirmed the single-admin warning.
+	AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error)
 	// Complete checks every step and finishes setup (root only: firstboot).
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
 }
@@ -669,6 +693,12 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("SetRecoveryKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	setupServiceAcknowledgeSingleAdminHandler := connect.NewUnaryHandler(
+		SetupServiceAcknowledgeSingleAdminProcedure,
+		svc.AcknowledgeSingleAdmin,
+		connect.WithSchema(setupServiceMethods.ByName("AcknowledgeSingleAdmin")),
+		connect.WithHandlerOptions(opts...),
+	)
 	setupServiceCompleteHandler := connect.NewUnaryHandler(
 		SetupServiceCompleteProcedure,
 		svc.Complete,
@@ -681,6 +711,8 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceGetSetupHandler.ServeHTTP(w, r)
 		case SetupServiceSetRecoveryKeyProcedure:
 			setupServiceSetRecoveryKeyHandler.ServeHTTP(w, r)
+		case SetupServiceAcknowledgeSingleAdminProcedure:
+			setupServiceAcknowledgeSingleAdminHandler.ServeHTTP(w, r)
 		case SetupServiceCompleteProcedure:
 			setupServiceCompleteHandler.ServeHTTP(w, r)
 		default:
@@ -698,6 +730,10 @@ func (UnimplementedSetupServiceHandler) GetSetup(context.Context, *connect.Reque
 
 func (UnimplementedSetupServiceHandler) SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.SetupService.SetRecoveryKey is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin is not implemented"))
 }
 
 func (UnimplementedSetupServiceHandler) Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error) {
@@ -1037,6 +1073,10 @@ type EnrolmentServiceClient interface {
 	RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error)
 	// CloseEnrolment closes the window (root only): Done on the console.
 	CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error)
+	// OfferEnrolmentKey puts a key typed or fetched on the console into the
+	// open window (root only). It waits for the typed yes like a key that
+	// gave the code over SSH.
+	OfferEnrolmentKey(context.Context, *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error)
 	// SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
 	// code the admin typed and the key sshd authenticated.
 	SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error)
@@ -1088,6 +1128,12 @@ func NewEnrolmentServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(enrolmentServiceMethods.ByName("CloseEnrolment")),
 			connect.WithClientOptions(opts...),
 		),
+		offerEnrolmentKey: connect.NewClient[v1.OfferEnrolmentKeyRequest, v1.OfferEnrolmentKeyResponse](
+			httpClient,
+			baseURL+EnrolmentServiceOfferEnrolmentKeyProcedure,
+			connect.WithSchema(enrolmentServiceMethods.ByName("OfferEnrolmentKey")),
+			connect.WithClientOptions(opts...),
+		),
 		submitEnrolmentCode: connect.NewClient[v1.SubmitEnrolmentCodeRequest, v1.SubmitEnrolmentCodeResponse](
 			httpClient,
 			baseURL+EnrolmentServiceSubmitEnrolmentCodeProcedure,
@@ -1111,6 +1157,7 @@ type enrolmentServiceClient struct {
 	acceptEnrolmentKey  *connect.Client[v1.AcceptEnrolmentKeyRequest, v1.AcceptEnrolmentKeyResponse]
 	rejectEnrolmentKey  *connect.Client[v1.RejectEnrolmentKeyRequest, v1.RejectEnrolmentKeyResponse]
 	closeEnrolment      *connect.Client[v1.CloseEnrolmentRequest, v1.CloseEnrolmentResponse]
+	offerEnrolmentKey   *connect.Client[v1.OfferEnrolmentKeyRequest, v1.OfferEnrolmentKeyResponse]
 	submitEnrolmentCode *connect.Client[v1.SubmitEnrolmentCodeRequest, v1.SubmitEnrolmentCodeResponse]
 	getEnrolmentKey     *connect.Client[v1.GetEnrolmentKeyRequest, v1.GetEnrolmentKeyResponse]
 }
@@ -1140,6 +1187,11 @@ func (c *enrolmentServiceClient) CloseEnrolment(ctx context.Context, req *connec
 	return c.closeEnrolment.CallUnary(ctx, req)
 }
 
+// OfferEnrolmentKey calls sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey.
+func (c *enrolmentServiceClient) OfferEnrolmentKey(ctx context.Context, req *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error) {
+	return c.offerEnrolmentKey.CallUnary(ctx, req)
+}
+
 // SubmitEnrolmentCode calls sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode.
 func (c *enrolmentServiceClient) SubmitEnrolmentCode(ctx context.Context, req *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error) {
 	return c.submitEnrolmentCode.CallUnary(ctx, req)
@@ -1165,6 +1217,10 @@ type EnrolmentServiceHandler interface {
 	RejectEnrolmentKey(context.Context, *connect.Request[v1.RejectEnrolmentKeyRequest]) (*connect.Response[v1.RejectEnrolmentKeyResponse], error)
 	// CloseEnrolment closes the window (root only): Done on the console.
 	CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error)
+	// OfferEnrolmentKey puts a key typed or fetched on the console into the
+	// open window (root only). It waits for the typed yes like a key that
+	// gave the code over SSH.
+	OfferEnrolmentKey(context.Context, *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error)
 	// SubmitEnrolmentCode is sneakers-enrol's (the enrol uid only): the
 	// code the admin typed and the key sshd authenticated.
 	SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error)
@@ -1211,6 +1267,12 @@ func NewEnrolmentServiceHandler(svc EnrolmentServiceHandler, opts ...connect.Han
 		connect.WithSchema(enrolmentServiceMethods.ByName("CloseEnrolment")),
 		connect.WithHandlerOptions(opts...),
 	)
+	enrolmentServiceOfferEnrolmentKeyHandler := connect.NewUnaryHandler(
+		EnrolmentServiceOfferEnrolmentKeyProcedure,
+		svc.OfferEnrolmentKey,
+		connect.WithSchema(enrolmentServiceMethods.ByName("OfferEnrolmentKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	enrolmentServiceSubmitEnrolmentCodeHandler := connect.NewUnaryHandler(
 		EnrolmentServiceSubmitEnrolmentCodeProcedure,
 		svc.SubmitEnrolmentCode,
@@ -1236,6 +1298,8 @@ func NewEnrolmentServiceHandler(svc EnrolmentServiceHandler, opts ...connect.Han
 			enrolmentServiceRejectEnrolmentKeyHandler.ServeHTTP(w, r)
 		case EnrolmentServiceCloseEnrolmentProcedure:
 			enrolmentServiceCloseEnrolmentHandler.ServeHTTP(w, r)
+		case EnrolmentServiceOfferEnrolmentKeyProcedure:
+			enrolmentServiceOfferEnrolmentKeyHandler.ServeHTTP(w, r)
 		case EnrolmentServiceSubmitEnrolmentCodeProcedure:
 			enrolmentServiceSubmitEnrolmentCodeHandler.ServeHTTP(w, r)
 		case EnrolmentServiceGetEnrolmentKeyProcedure:
@@ -1267,6 +1331,10 @@ func (UnimplementedEnrolmentServiceHandler) RejectEnrolmentKey(context.Context, 
 
 func (UnimplementedEnrolmentServiceHandler) CloseEnrolment(context.Context, *connect.Request[v1.CloseEnrolmentRequest]) (*connect.Response[v1.CloseEnrolmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment is not implemented"))
+}
+
+func (UnimplementedEnrolmentServiceHandler) OfferEnrolmentKey(context.Context, *connect.Request[v1.OfferEnrolmentKeyRequest]) (*connect.Response[v1.OfferEnrolmentKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey is not implemented"))
 }
 
 func (UnimplementedEnrolmentServiceHandler) SubmitEnrolmentCode(context.Context, *connect.Request[v1.SubmitEnrolmentCodeRequest]) (*connect.Response[v1.SubmitEnrolmentCodeResponse], error) {

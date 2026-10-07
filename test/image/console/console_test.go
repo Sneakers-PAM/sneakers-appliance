@@ -27,6 +27,9 @@ const (
 	// a TPM; Enter goes on with the key file.
 	keyfile = `Press Enter to continue`
 	booted  = `services: entering phase phase=firstboot`
+	// wizard is the first-boot wizard, which owns the consoles once the
+	// services run.
+	wizard = `Setup 1 of 5: network`
 )
 
 func boot(t *testing.T, o harness.Options) *harness.VM {
@@ -40,7 +43,10 @@ func boot(t *testing.T, o harness.Options) *harness.VM {
 
 // No serial port, Secure Boot off, no TPM: the VMware VM the lab first ran
 // on, whose screen stayed black because init's console was a serial port
-// that wasn't there.
+// that wasn't there. Once the services run, the setup wizard owns the
+// screen: it shows the reduced protection, lists the NIC, takes keys typed
+// on the screen's keyboard, and says plainly that the network can't be
+// applied while netd isn't in the build.
 func TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer(t *testing.T) {
 	vm := boot(t, harness.Options{NoSerial: true})
 	vm.ExpectScreen(banner, 5*time.Minute)
@@ -49,7 +55,13 @@ func TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer(t *testing.T) {
 	vm.ExpectScreen(chosen, time.Minute)
 	vm.ExpectScreen(keyfile, time.Minute)
 	vm.Press("\r")
-	vm.ExpectScreen(booted, 3*time.Minute)
+	vm.ExpectScreen(wizard, 3*time.Minute)
+	vm.ExpectScreen(`!! Protection: reduced \(Secure Boot off\)`, time.Minute)
+	vm.ExpectScreen(`1 eth0 `, time.Minute)
+	vm.Press("1\r")
+	vm.ExpectScreen(`Management interface eth0`, time.Minute)
+	vm.Press("\r")
+	vm.ExpectScreen(`The network service isn't installed in this build yet`, time.Minute)
 }
 
 // No display: the serial line alone carries the banner, the choice and the

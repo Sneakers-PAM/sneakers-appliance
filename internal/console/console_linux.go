@@ -7,6 +7,7 @@ package console
 
 import (
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -100,3 +101,19 @@ func (t *Taken) Flush(timeout time.Duration) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Claim gives the consoles to a program: the write end of a pipe for its
+// standard output. The caller closes its own copy once the program has
+// started, so the claim ends with the program.
+func (t *Taken) Claim() (*os.File, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	t.mux.Attach(r)
+	return w, nil
+}
+
+// SetAside sets where the shared output goes while a program owns the
+// consoles.
+func (t *Taken) SetAside(w io.Writer) { t.mux.SetAside(w) }

@@ -1,0 +1,9 @@
+# The console in normal operation: the status view, the menu of console
+# commands and Recover access. It owns the consoles (the screen and the
+# serial line): the other services' lines go to /run/sneakers/console.log
+# meanwhile. Root; init restarts it whenever it stops.
+exec: /usr/bin/sneakers-console
+phases: [normal]
+after: [accessd]
+console: true
+restart: always

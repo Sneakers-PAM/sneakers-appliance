@@ -28,3 +28,20 @@ func ProtectionText(p keycustody.Protection, mode keycustody.Mode) string {
 	}
 	return "Protection: reduced. " + tail
 }
+
+// RaiseText says how a reduced level can be raised later; empty for full
+// protection.
+func RaiseText(p keycustody.Protection) string {
+	if p.Level == keycustody.LevelFull {
+		return ""
+	}
+	switch p.Reason {
+	case keycustody.ReasonSecureBootOff:
+		return "To raise it: an owner turns Secure Boot on from the :8443 Status page, then the box enrols the org keys and asks for Secure Boot to be switched on in the firmware. It reseals its key in place: no reinstall, the data stays."
+	case keycustody.ReasonNoSecureBootFirmware:
+		return "This firmware has no Secure Boot. Protection can be raised only on firmware that has it (on a VM, EFI firmware with Secure Boot): then an owner turns Secure Boot on from the :8443 Status page, with no reinstall."
+	case keycustody.ReasonNoTPM:
+		return "The state key is in a key file, fixed until a reinstall. To raise it, reinstall on hardware with a TPM (or a VM with a vTPM) and restore from a backup."
+	}
+	return ""
+}

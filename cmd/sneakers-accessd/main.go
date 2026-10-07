@@ -41,6 +41,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/setup"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
 )
 
@@ -81,6 +83,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	netd := netdv1connect.NewNetworkServiceClient(nc, "http://netd.sock")
 	paths := osadmin.Paths{State: c.state}
 	if err := dirs(paths); err != nil {
+		return err
+	}
+	// accessd checks every sshd config it renders with sshd -t, which needs
+	// sshd's privilege-separation directory.
+	if err := sshconfig.EnsurePrivsepDir(sshconfig.PrivsepDir); err != nil {
 		return err
 	}
 	audit, err := osaudit.Open(filepath.Join(c.state, "os-audit"), osaudit.Options{Logger: lg})
@@ -136,7 +143,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Logger:     lg,
 	})
 	store, err := access.Open(filepath.Join(c.state, "access"), access.Options{
-		Stage:    func() (bool, bool) { return true, api != nil && api.SetupDone() },
+		Stage:    accessd.SetupStage(setup.BoxPaths, func() bool { return api != nil && api.SetupDone() }),
 		Logger:   lg,
 		OnChange: d.Changed,
 		Revoke:   elev.RevokeLoginKeys,
@@ -203,7 +210,20 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 // dirs makes osadmin's own directory (its certificate, written as the
 // osadmin user; a certificate an earlier root osadmin left there is handed
 // over) and the API's root-only one.
+// stateDirMode lets every uid pass through the state directory, but not
+// list it.
+const stateDirMode = 0o711
+
 func dirs(p osadmin.Paths) error {
+	// The state directory is searchable by the services that run
+	// unprivileged (osadmin keeps its certificate in its own directory under
+	// it); MkdirAll of a subdirectory would otherwise make it 0700.
+	if err := os.MkdirAll(p.State, stateDirMode); err != nil {
+		return err
+	}
+	if err := os.Chmod(p.State, stateDirMode); err != nil { // #nosec G302 -- search only: every entry under it has its own mode
+		return err
+	}
 	if err := os.MkdirAll(p.APIDir(), 0o700); err != nil {
 		return err
 	}

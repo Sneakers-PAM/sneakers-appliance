@@ -25,8 +25,10 @@ const (
 	prompt  = `type "` + screens.TypedNoSecureBoot + `" and press Enter`
 	keyfile = `Press Enter to continue`
 	booted  = `services: entering phase phase=firstboot`
-	// QEMU's user network hands the first guest its first lease.
-	leased = `sneakers-netd: management addresses [^\n]*10\.0\.2\.15/24` // scrub:allow=private-ip -- QEMU's user network
+	// QEMU's user network hands the first guest its first lease. netd logs
+	// it, and the setup wizard, which owns the console once it runs, shows
+	// it; whichever comes first is on the serial line.
+	leased = `10\.0\.2\.15/24` // scrub:allow=private-ip -- QEMU's user network
 )
 
 func freePort(t *testing.T) int {

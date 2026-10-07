@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Setup 4 and 5: continue on :8443 sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
+    can change this box's software and read its data.
+    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
+
+ [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [x] 4 Recovery  [>] 5 Sign-in
+
+ This box has one admin. One admin means no quorum: a factory reset then means
+ re-creating the box, never resetting it in place.
+
+ To have a quorum, add a second admin on :8443 now. To go on with one admin,
+ type one admin and press Enter.
+
+
+
+
+
+
+
+ ------------------------------------------------------------------------------
+ type one admin to confirm
+ >
+ Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

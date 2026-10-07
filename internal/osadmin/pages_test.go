@@ -6,6 +6,7 @@ package osadmin_test
 import (
 	"bufio"
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -190,4 +191,29 @@ func TestAuditListAndExport(t *testing.T) {
 		t.Fatalf("export needs a session: %v %v", anon, err)
 	}
 	_ = anon.Body.Close()
+}
+
+// Reduced protection on Status is said in plain words, with how to raise
+// it later: the same text as the console's.
+func TestStatusSaysHowToRaiseReducedProtection(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.init.level = initv1.ProtectionLevel_PROTECTION_LEVEL_REDUCED
+	s, err := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL).GetStatus(context.Background(), connect.NewRequest(&osadminv1.GetStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range s.Msg.GetWarnings() {
+		if w.GetKind() != osadminv1.WarningKind_WARNING_KIND_REDUCED_PROTECTION {
+			continue
+		}
+		for _, want := range []string{"At-rest protection: reduced (no TPM).", "fixed until a reinstall"} {
+			if !strings.Contains(w.GetDetail(), want) {
+				t.Errorf("the warning %q lacks %q", w.GetDetail(), want)
+			}
+		}
+		return
+	}
+	t.Fatalf("no reduced-protection warning in %v", s.Msg.GetWarnings())
 }

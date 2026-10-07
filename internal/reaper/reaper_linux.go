@@ -105,10 +105,20 @@ func (r *Reaper) StartAs(argv []string, uid, gid uint32) (services.Process, erro
 	return r.start(argv, &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}})
 }
 
+// StartConsole starts argv with stdout, a claim on the consoles, as its
+// standard output; its standard error stays on init's shared output.
+func (r *Reaper) StartConsole(argv []string, stdout *os.File) (services.Process, error) {
+	return r.startWith(argv, stdout, nil)
+}
+
 func (r *Reaper) start(argv []string, sys *syscall.SysProcAttr) (services.Process, error) {
+	return r.startWith(argv, os.Stdout, sys)
+}
+
+func (r *Reaper) startWith(argv []string, stdout *os.File, sys *syscall.SysProcAttr) (services.Process, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	p, err := os.StartProcess(argv[0], argv, &os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}, Sys: sys})
+	p, err := os.StartProcess(argv[0], argv, &os.ProcAttr{Files: []*os.File{os.Stdin, stdout, os.Stderr}, Sys: sys})
 	if err != nil {
 		return nil, err
 	}

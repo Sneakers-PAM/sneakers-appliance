@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Status
+ ------------------------------------------------------------------------------
+ !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
+    can change this box's software and read its data.
+    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
+
+ Version      0.0.0-lab.20261007d (lab channel), slot A
+ Secure Boot  off, by choice                   At rest   key file
+ Platform     not installed yet                Nodes     1
+ Upgrades     none staged
+ Management   no address: the network service isn't installed in this build yet
+ :8443        not running yet
+ SSH host     no host keys yet (setup's admin step makes them)
+
+
+
+
+
+
+
+ ------------------------------------------------------------------------------
+ Enter: menu, or type a console command such as "keys list"
+ >
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP unknown

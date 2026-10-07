@@ -185,3 +185,13 @@ func TestThePowerSocketServesOnlyPower(t *testing.T) {
 		t.Fatal("the power socket admits root and admin uids only")
 	}
 }
+
+// The dashboard and the setup wizard reboot and power off as the console,
+// with the closed shell's rules (graceful by default, never a reset).
+func TestTheConsoleProgramsAreShellCallers(t *testing.T) {
+	for _, exe := range []string{initapi.ConsolePath, initapi.FirstbootPath} {
+		if initapi.DefaultCallers[exe] != power.KindShell {
+			t.Errorf("%s: %v", exe, initapi.DefaultCallers[exe])
+		}
+	}
+}

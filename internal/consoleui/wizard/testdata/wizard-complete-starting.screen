@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Setup complete                   sneakers.example.org
+ ------------------------------------------------------------------------------
+ [x] 1 Network  [x] 2 Protection  [x] 3 Admin  [x] 4 Recovery  [x] 5 Sign-in
+
+ Setup is complete.
+
+ The appliance admin is ready on :8443. The product's own first-run page comes
+ once the platform runs:
+     https://sneakers.example.org/setup
+
+ Starting the platform ...
+
+
+
+
+
+
+
+
+
+ ------------------------------------------------------------------------------
+
+
+ Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

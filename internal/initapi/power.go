@@ -23,10 +23,19 @@ import (
 // sneakers-osadmin itself runs unprivileged and can't reach init.
 const AccessdPath = "/usr/bin/sneakers-accessd"
 
+// The console's programs: the dashboard and the setup wizard. Run by init
+// as root, they reboot and power off as the console.
+const (
+	ConsolePath   = "/usr/bin/sneakers-console"
+	FirstbootPath = "/usr/bin/sneakers-firstboot"
+)
+
 // DefaultCallers are the programs PowerService answers.
 var DefaultCallers = map[string]power.Kind{
 	AccessdPath:        power.KindOsadmin,
 	accounts.ShellPath: power.KindShell,
+	ConsolePath:        power.KindShell,
+	FirstbootPath:      power.KindShell,
 }
 
 func procExe(pid int32) (string, error) {

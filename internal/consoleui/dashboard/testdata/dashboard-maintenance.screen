@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Maintenance                      sneakers.example.org
+ ------------------------------------------------------------------------------
+ Upgrading to 0.1.1
+ Step    staging the release into slot B
+
+ The product is stopped while the box upgrades. Leave it powered on: if the
+ new release doesn't come up, it boots the previous one by itself.
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ------------------------------------------------------------------------------
+
+
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced

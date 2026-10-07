@@ -38,6 +38,18 @@ type UserRunner interface {
 	StartAs(argv []string, uid, gid uint32) (Process, error)
 }
 
+// ConsoleRunner starts a program with its standard output on stdout (a
+// claim on the consoles) and its standard error on the shared output.
+type ConsoleRunner interface {
+	StartConsole(argv []string, stdout *os.File) (Process, error)
+}
+
+// ConsoleOwner hands out claims on the consoles: the write end of a pipe
+// whose output the consoles show while it's open.
+type ConsoleOwner interface {
+	Claim() (*os.File, error)
+}
+
 // Process is one running program.
 type Process interface {
 	Wait() error
@@ -53,6 +65,9 @@ type Options struct {
 	ReadyTimeout time.Duration
 	// StopTimeout is how long a service gets after SIGTERM before SIGKILL.
 	StopTimeout time.Duration
+	// Console gives console services the consoles; nil starts them like
+	// any other (the kernel's console is shared).
+	Console ConsoleOwner
 }
 
 // State is what Status reports.
@@ -233,6 +248,17 @@ func (s *Supervisor) start(ctx context.Context, name string) error {
 // exec starts sv, as its user when it names one.
 func (s *Supervisor) exec(sv *Service) (Process, error) {
 	argv := append([]string{sv.Exec}, sv.Args...)
+	if cr, ok := s.r.(ConsoleRunner); ok && sv.Console && s.o.Console != nil {
+		w, err := s.o.Console.Claim()
+		if err != nil {
+			return nil, fmt.Errorf("%s: claim the console: %w", sv.Name, err)
+		}
+		// The program has its own copy; closing this one means the
+		// console's claim ends when the program does.
+		defer func() { _ = w.Close() }()
+		s.o.Logger.Debug("services: starting with the console", log.F("service", sv.Name))
+		return cr.StartConsole(argv, w)
+	}
 	if sv.User == "" {
 		return s.r.Start(argv)
 	}

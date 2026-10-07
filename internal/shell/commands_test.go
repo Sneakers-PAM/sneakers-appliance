@@ -329,3 +329,30 @@ func TestShellWithdrawsOnCtrlC(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+// The console's menu lists the console's commands, each with what it
+// takes, from the same table the shell runs.
+func TestCommandsDescribesTheConsoleSet(t *testing.T) {
+	got := map[string]shell.Info{}
+	for _, c := range shell.Commands(shell.OriginConsole) {
+		got[c.Path] = c
+	}
+	if _, ok := got["login"]; ok {
+		t.Fatal("login isn't a console command")
+	}
+	if c := got["network allow-list reset"]; c.Confirm != "reset" || c.Args {
+		t.Fatalf("allow-list reset: %+v", c)
+	}
+	if c := got["keys add"]; !c.Stdin || len(c.Flags) != 1 || c.Flags[0] != "admin" {
+		t.Fatalf("keys add: %+v", c)
+	}
+	if c := got["keys remove"]; !c.Args || c.Use != "remove <fingerprint>" {
+		t.Fatalf("keys remove: %+v", c)
+	}
+	if c := got["backup"]; !c.Later {
+		t.Fatalf("backup: %+v", c)
+	}
+	if len(got) != len(shell.Names(shell.OriginConsole)) {
+		t.Fatalf("%d commands, %d names", len(got), len(shell.Names(shell.OriginConsole)))
+	}
+}

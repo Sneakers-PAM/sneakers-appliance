@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Setup 2 of 5: protection         sneakers.example.org
+ ------------------------------------------------------------------------------
+ !! At-rest protection: reduced (no TPM). Someone with a copy of the whole
+    disk can read its data.
+    Fixed until a reinstall on hardware with a TPM (or a VM with a vTPM).
+
+ [x] 1 Network  [>] 2 Protection  [ ] 3 Admin  [ ] 4 Recovery  [ ] 5 Sign-in
+
+ At-rest protection: reduced (no TPM). Someone with a copy of the whole disk
+ can read its data.
+
+ At-rest key  key file on the disk
+
+ The Secure Boot choice and the key custody were made at boot, before this
+ wizard, and the state volumes are formatted for them. The custody is fixed
+ until a reinstall.
+
+ The state key is in a key file, fixed until a reinstall. To raise it,
+ reinstall on hardware with a TPM (or a VM with a vTPM) and restore from a
+ backup.
+ ------------------------------------------------------------------------------
+ Enter: continue
+ >
+ Sneakers-PAM 0.1.0 | firstboot | 2026-10-07 18:03 UTC | NTP unknown

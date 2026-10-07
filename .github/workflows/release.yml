@@ -327,6 +327,8 @@ jobs:
           VERITYSETUP=build/out/veritysetup-amd64 \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
           KEYS="$keys" OUT="$lab" bash build/lab/build.sh
+          # The lab build appends the build number (g<short commit>).
+          VERSION="$(cat "$lab/version")"
           go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
           tool="$work/sneakers-artifact"
           "$tool" bin-pack --layout "$lab/artifact" --recipient "$keys/update.pub" \

@@ -1,0 +1,24 @@
+ Sneakers-PAM appliance  Menu                             sneakers.example.org
+ ------------------------------------------------------------------------------
+ > admins list
+ alice  owner  2 keys
+ carol  owner  1 key
+ bob    admin  1 key
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ ------------------------------------------------------------------------------
+ Enter: back to the menu
+ >
+ Sneakers-PAM 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced
