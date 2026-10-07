@@ -41,6 +41,10 @@ const (
 	// vendor's) but enforcement off, so the firmware isn't in Setup Mode:
 	// a VMware VM with Secure Boot turned off in its settings.
 	OffWithKeys
+	// NoSecureBoot: firmware built without Secure Boot (OVMFCodeNoSB), so
+	// the box sees no Secure Boot variables at all, like the first lab
+	// target.
+	NoSecureBoot
 )
 
 // Disk is one disk attached to the VM.
@@ -71,6 +75,8 @@ type Options struct {
 var (
 	OVMFCode = envOr("SNEAKERS_OVMF_CODE", "/usr/share/OVMF/OVMF_CODE_4M.secboot.fd")
 	OVMFVars = envOr("SNEAKERS_OVMF_VARS", "/usr/share/OVMF/OVMF_VARS_4M.fd")
+	// OVMFCodeNoSB is OVMF built without Secure Boot, for NoSecureBoot.
+	OVMFCodeNoSB = envOr("SNEAKERS_OVMF_CODE_NOSB", "/usr/share/OVMF/OVMF_CODE_4M.fd")
 )
 
 func envOr(k, def string) string {
@@ -144,6 +150,11 @@ func Boot(t testing.TB, o Options) *VM {
 	default:
 		copyFile(t, OVMFVars, vars)
 	}
+	code := OVMFCode
+	if o.SecureBoot == NoSecureBoot {
+		code = OVMFCodeNoSB
+		Need(t, nil, code)
+	}
 	mem := o.MemMiB
 	if mem == 0 {
 		mem = 2048
@@ -182,7 +193,7 @@ func Boot(t testing.TB, o Options) *VM {
 	args := []string{
 		"-machine", "q35,smm=on", "-m", fmt.Sprint(mem), "-smp", "2", "-nographic", "-no-reboot",
 		"-global", "driver=cfi.pflash01,property=secure,value=on",
-		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + OVMFCode,
+		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + code,
 		"-drive", "if=pflash,format=raw,unit=1,file=" + vars,
 		"-monitor", "none", "-qmp", "unix:" + qmpSock + ",server=on,wait=off",
 		"-netdev", "user,id=n0,restrict=on", "-device", "virtio-net-pci,netdev=n0",

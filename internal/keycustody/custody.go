@@ -151,9 +151,9 @@ func (c *Custody) Initialize(ctx context.Context, mode Mode, sb SB) error {
 	if err := c.d.Rand(key); err != nil {
 		return err
 	}
-	for name, v := range map[string]Volume{"state": state, "backup": backup} {
-		if err := v.Format(ctx, key); err != nil {
-			return fmt.Errorf("keycustody: format %s: %w", name, err)
+	for _, v := range ordered(state, backup) {
+		if err := v.vol.Format(ctx, key); err != nil {
+			return fmt.Errorf("keycustody: format %s: %w", v.name, err)
 		}
 	}
 	h := Header{Mode: mode, SecureBoot: sb}
@@ -173,9 +173,9 @@ func (c *Custody) Initialize(ctx context.Context, mode Mode, sb SB) error {
 	if err := writeHeader(ctx, state, h); err != nil {
 		return err
 	}
-	for name, v := range map[string]Volume{"state": state, "backup": backup} {
-		if err := v.Unlock(ctx, key, true); err != nil {
-			return fmt.Errorf("keycustody: unlock %s: %w", name, err)
+	for _, v := range ordered(state, backup) {
+		if err := v.vol.Unlock(ctx, key, true); err != nil {
+			return fmt.Errorf("keycustody: unlock %s: %w", v.name, err)
 		}
 	}
 	if c.d.ClearESPChoice != nil {
@@ -217,9 +217,9 @@ func (c *Custody) Unlock(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for name, v := range map[string]Volume{"state": c.state, "backup": c.backup} {
-		if err := v.Unlock(ctx, key, false); err != nil {
-			return codes.New(codes.KeyCustodyLocked, "the %s volume doesn't open with the recovered key: %v", name, err)
+	for _, v := range ordered(c.state, c.backup) {
+		if err := v.vol.Unlock(ctx, key, false); err != nil {
+			return codes.New(codes.KeyCustodyLocked, "the %s volume doesn't open with the recovered key: %v", v.name, err)
 		}
 	}
 	c.key = key
@@ -251,6 +251,16 @@ func (c *Custody) recoverKey(ctx context.Context) ([]byte, error) {
 		}
 	}
 	return nil, codes.New(codes.KeyCustodyLocked, "no sealed copy unseals: PCR 7 or 11 (or 4) changed")
+}
+
+type namedVolume struct {
+	name string
+	vol  Volume
+}
+
+// ordered is state then backup: backup is mounted inside the state volume.
+func ordered(state, backup Volume) []namedVolume {
+	return []namedVolume{{"state", state}, {"backup", backup}}
 }
 
 // Mode returns the fixed custody mode.

@@ -7,8 +7,10 @@
 package reaper
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"sync"
@@ -131,6 +133,68 @@ func (r *Reaper) Run(ctx context.Context, argv []string) error {
 		_ = p.Signal(syscall.SIGKILL)
 		<-done
 		return ctx.Err()
+	}
+}
+
+// Output runs argv to completion with stdin (nil for none) as its input
+// and returns what it wrote to stdout and stderr, killing it if ctx ends
+// first: os/exec's Output, with the reaper collecting the child.
+func (r *Reaper) Output(ctx context.Context, stdin io.Reader, argv []string) (stdout, stderr []byte, err error) {
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		return nil, nil, err
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		closeAll(inR, inW)
+		return nil, nil, err
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		closeAll(inR, inW, outR, outW)
+		return nil, nil, err
+	}
+	r.mu.Lock()
+	p, err := os.StartProcess(argv[0], argv, &os.ProcAttr{Files: []*os.File{inR, outW, errW}})
+	var done chan error
+	if err == nil {
+		done = make(chan error, 1)
+		r.waiting[p.Pid] = done
+	}
+	r.mu.Unlock()
+	// The child holds its own copies now.
+	closeAll(inR, outW, errW)
+	if err != nil {
+		closeAll(inW, outR, errR)
+		return nil, nil, err
+	}
+	go func() {
+		if stdin != nil {
+			_, _ = io.Copy(inW, stdin)
+		}
+		_ = inW.Close()
+	}()
+	var outBuf, errBuf bytes.Buffer
+	var copies sync.WaitGroup
+	copies.Add(2)
+	go func() { defer copies.Done(); _, _ = io.Copy(&outBuf, outR) }()
+	go func() { defer copies.Done(); _, _ = io.Copy(&errBuf, errR) }()
+	var res error
+	select {
+	case res = <-done:
+	case <-ctx.Done():
+		_ = p.Signal(syscall.SIGKILL)
+		<-done
+		res = ctx.Err()
+	}
+	copies.Wait()
+	closeAll(outR, errR)
+	return outBuf.Bytes(), errBuf.Bytes(), res
+}
+
+func closeAll(fs ...*os.File) {
+	for _, f := range fs {
+		_ = f.Close()
 	}
 }
 

@@ -144,7 +144,7 @@ func newBox(t *testing.T) *box {
 		}
 	}
 	b.elev, err = elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"),
+		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"), Sealer: newMemSealer(),
 		Audit: b.log, OnChange: rerender,
 		Signal: func(pid int) error {
 			b.sigMu.Lock()
@@ -263,4 +263,26 @@ func lastEntry(t *testing.T, l *osaudit.Log, action string) osaudit.Entry {
 	}
 	t.Fatalf("no %s entry", action)
 	return osaudit.Entry{}
+}
+
+// memSealer stands in for init's KeyCustody.
+type memSealer struct {
+	mu    sync.Mutex
+	items map[string][]byte
+}
+
+func newMemSealer() *memSealer { return &memSealer{items: map[string][]byte{}} }
+
+func (m *memSealer) Seal(name string, secret []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.items[name] = slices.Clone(secret)
+	return nil
+}
+
+func (m *memSealer) Unseal(name string) ([]byte, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.items[name]
+	return slices.Clone(b), ok, nil
 }

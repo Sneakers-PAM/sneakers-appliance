@@ -114,8 +114,11 @@ type Caller struct {
 
 // Options wire a Service.
 type Options struct {
-	// SSHDir holds the user CA, the revocation list and the serial counter.
+	// SSHDir holds the user CA's public key, the revocation list and the
+	// serial counter.
 	SSHDir string
+	// Sealer keeps the user CA's private key. Required.
+	Sealer Sealer
 	// StateFile is elevation.json.
 	StateFile string
 	Clock     clock.Clock
@@ -168,7 +171,10 @@ func Open(o Options) (*Service, error) {
 	if o.Elevated == "" {
 		o.Elevated = DefaultElevated
 	}
-	ca, err := loadCA(o.SSHDir)
+	if o.Sealer == nil {
+		return nil, errors.New("elevation: no sealer for the user CA")
+	}
+	ca, err := loadCA(o.SSHDir, o.Sealer, o.Logger)
 	if err != nil {
 		return nil, err
 	}
