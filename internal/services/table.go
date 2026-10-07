@@ -12,12 +12,14 @@ import (
 	"io/fs"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 )
@@ -62,6 +64,13 @@ type Service struct {
 	// SIGKILL; zero means the supervisor's default. k0s needs longer than
 	// most to stop its workloads cleanly.
 	StopTimeout time.Duration `yaml:"stop-timeout"`
+	// User is a fixed system account (accounts' table) to run as; empty
+	// runs as root. A runner that can't change user refuses to start it.
+	User string `yaml:"user"`
+	// OnDemandIn lists phases, among Phases, in which an always-start
+	// service starts only through Services.Start (osadmin waits for its
+	// first-boot step).
+	OnDemandIn []phase.Phase `yaml:"on-demand-in"`
 }
 
 // Readiness is one probe: a file that appears, or a command that exits 0.
@@ -137,6 +146,18 @@ func parse(name string, b []byte) (*Service, error) {
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: stop-timeout %v", name, s.StopTimeout)
 	case len(s.PreStart) > 0 && !path.IsAbs(s.PreStart[0]):
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: pre-start %q must be an absolute path", name, s.PreStart[0])
+	case len(s.OnDemandIn) > 0 && s.Start != StartAlways:
+		return nil, codes.New(codes.ServiceTableInvalid, "%s: on-demand-in needs start: always", name)
+	}
+	if s.User != "" {
+		if _, ok := accounts.ServiceUser(s.User); !ok {
+			return nil, codes.New(codes.ServiceTableInvalid, "%s: user %q isn't a fixed unprivileged system account", name, s.User)
+		}
+	}
+	for _, p := range s.OnDemandIn {
+		if !s.In(p) {
+			return nil, codes.New(codes.ServiceTableInvalid, "%s: on-demand-in %q isn't one of its phases", name, p)
+		}
 	}
 	for _, p := range s.Phases {
 		switch p {
@@ -210,6 +231,11 @@ func (t Table) order(names []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// OnDemand reports whether s starts only through Services.Start in p.
+func (s *Service) OnDemand(p phase.Phase) bool {
+	return s.Start == StartOnDemand || slices.Contains(s.OnDemandIn, p)
 }
 
 // In reports whether s runs in p.

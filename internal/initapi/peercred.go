@@ -93,3 +93,9 @@ func PeerContext(ctx context.Context, c net.Conn) context.Context {
 	}
 	return ctx
 }
+
+// WithPeer puts p on ctx as the connection's peer. Servers in the same
+// process (and tests) use it where there is no socket to read.
+func WithPeer(ctx context.Context, p Peer) context.Context {
+	return context.WithValue(ctx, peerKey{}, p)
+}

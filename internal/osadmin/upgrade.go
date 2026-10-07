@@ -40,7 +40,7 @@ import (
 // MaxUpload caps an uploaded or fetched .bin.
 const MaxUpload = 8 << 30
 
-// The upgrade files in Paths.OwnDir.
+// The upgrade files in Paths.APIDir.
 const (
 	policyFile  = "upgrade-policy.json"
 	historyFile = "upgrade-history.jsonl"
@@ -97,7 +97,7 @@ type upgrades struct {
 	lastWindow string
 }
 
-func (s *Server) ownPath(name string) string { return filepath.Join(s.o.Paths.OwnDir(), name) }
+func (s *Server) ownPath(name string) string { return filepath.Join(s.o.Paths.APIDir(), name) }
 
 func (s *Server) policy() Policy {
 	p := DefaultPolicy()
@@ -119,7 +119,7 @@ func (s *Server) history(action, version, actor string, err error, detail string
 	if merr != nil {
 		return
 	}
-	if err := os.MkdirAll(s.o.Paths.OwnDir(), 0o700); err != nil {
+	if err := os.MkdirAll(s.o.Paths.APIDir(), 0o700); err != nil {
 		s.o.Logger.Error(err, "osadmin: upgrade history not written")
 		return
 	}
@@ -159,7 +159,7 @@ func (s *Server) uploadPath(id string) (string, error) {
 	if !uploadIDRE.MatchString(id) {
 		return "", codes.New(codes.UpgradeUpload, "%q isn't an upload this box made", id)
 	}
-	p := filepath.Join(s.o.Paths.OwnDir(), uploadsDir, id+".bin")
+	p := filepath.Join(s.o.Paths.APIDir(), uploadsDir, id+".bin")
 	if _, err := os.Stat(p); err != nil {
 		return "", codes.New(codes.UpgradeUpload, "there is no upload %s; upload or fetch the .bin again", id)
 	}
@@ -169,7 +169,7 @@ func (s *Server) uploadPath(id string) (string, error) {
 // saveUpload copies r (at most MaxUpload bytes) into a new upload and
 // returns its id.
 func (s *Server) saveUpload(r io.Reader) (string, int64, error) {
-	dir := filepath.Join(s.o.Paths.OwnDir(), uploadsDir)
+	dir := filepath.Join(s.o.Paths.APIDir(), uploadsDir)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", 0, fmt.Errorf("upload: %w", err)
 	}
@@ -270,7 +270,7 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(h.s.o.Paths.OwnDir(), 0o700); err != nil {
+	if err := os.MkdirAll(h.s.o.Paths.APIDir(), 0o700); err != nil {
 		return nil, err
 	}
 	if err := writeAtomic(h.s.ownPath(policyFile), b); err != nil {

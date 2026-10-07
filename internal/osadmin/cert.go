@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"os"
@@ -21,6 +22,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 // The certificate files in Paths.OwnDir.
@@ -110,6 +113,29 @@ func loadCert(dir string) (tls.Certificate, CertInfo, error) {
 	}
 	c.Leaf = leaf
 	return c, CertInfo{Fingerprint: Fingerprint(leaf.Raw), Expires: leaf.NotAfter, SelfSigned: leaf.Subject.String() == leaf.Issuer.String()}, nil
+}
+
+// ReadCertInfo describes the certificate in dir without reading its key.
+// The directory is sneakers-osadmin's, so a link there isn't followed.
+func ReadCertInfo(dir string) (CertInfo, error) {
+	f, err := os.OpenFile(filepath.Join(dir, certFile), os.O_RDONLY|unix.O_NOFOLLOW, 0) // #nosec G304 -- the certificate under osadmin's own directory, links refused
+	if err != nil {
+		return CertInfo{}, fmt.Errorf("tls: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	b, err := io.ReadAll(io.LimitReader(f, 64<<10))
+	if err != nil {
+		return CertInfo{}, fmt.Errorf("tls: %w", err)
+	}
+	blk, _ := pem.Decode(b)
+	if blk == nil || blk.Type != "CERTIFICATE" {
+		return CertInfo{}, fmt.Errorf("tls: %s holds no certificate", certFile)
+	}
+	leaf, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return CertInfo{}, fmt.Errorf("tls: %w", err)
+	}
+	return CertInfo{Fingerprint: Fingerprint(leaf.Raw), Expires: leaf.NotAfter, SelfSigned: leaf.Subject.String() == leaf.Issuer.String()}, nil
 }
 
 // Fingerprint is a certificate's SHA-256 as colon-separated hex, the form

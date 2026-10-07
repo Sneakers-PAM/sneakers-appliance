@@ -49,3 +49,27 @@ func TestEnsureCert(t *testing.T) {
 		t.Fatal("a certificate near its end is replaced")
 	}
 }
+
+// accessd describes the certificate for Status without reading the key,
+// and doesn't follow a link sneakers-osadmin could plant.
+func TestReadCertInfo(t *testing.T) {
+	dir := t.TempDir()
+	_, info, err := osadmin.EnsureCert(dir, "box1.sneakers.example.org", []string{"192.0.2.10"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(dir, "tls.key")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := osadmin.ReadCertInfo(dir)
+	if err != nil || got != info {
+		t.Fatalf("%+v %v, want %+v", got, err, info)
+	}
+	other := t.TempDir()
+	if err := os.Symlink(filepath.Join(dir, "tls.crt"), filepath.Join(other, "tls.crt")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := osadmin.ReadCertInfo(other); err == nil {
+		t.Fatal("followed a link")
+	}
+}

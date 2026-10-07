@@ -1,8 +1,11 @@
 # The appliance admin API
 
 `sneakers-osadmin` serves the :8443 appliance admin: the static admin pages and a Connect API
-(gRPC, gRPC-Web and JSON over HTTP) generated from `proto/sneakers/appliance/osadmin/v1`. Sign-in,
-sessions, roles and step-up are described in [access.md](access.md#the-8443-sign-in).
+(gRPC, gRPC-Web and JSON over HTTP) generated from `proto/sneakers/appliance/osadmin/v1`. It runs
+unprivileged and forwards the API to `sneakers-accessd`, which checks the session, role and step-up
+of every call and carries it out ([access.md](access.md#accessd)). Sign-in, sessions, roles and
+step-up are described in [access.md](access.md#the-8443-sign-in). While accessd is down every call
+answers Connect `unavailable` ("the appliance services are unavailable").
 
 ## Calling it
 
@@ -107,9 +110,10 @@ The pages for these services show "Not available in this release" until their ba
 
 ## The local socket
 
-`/run/sneakers/osadmin.sock` serves `LocalService` to the closed shell and the console. Every
-connection's peer is read with `SO_PEERCRED`: root and admin uids (20000 and up) are let in, anyone
-else is closed before a byte is read. Root may act as any admin; an admin uid only as itself.
+accessd serves `LocalService` on `/run/sneakers/access.sock` to the closed shell and the console
+(root and the admin uids, read with `SO_PEERCRED`; `sneakers-osadmin` never forwards it). Root may
+act as any admin; an admin uid only as itself. The rest of that socket's API is in
+[access.md](access.md#accesssock).
 
 | Method | What it does |
 |---|---|

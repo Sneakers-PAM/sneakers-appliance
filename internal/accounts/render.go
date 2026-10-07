@@ -46,13 +46,27 @@ var system = []Account{
 	{"maint", 0, 0, "elevated session", HomeRoot + "/maint", ElevatedSh},
 	{"sshd", 100, 100, "sshd privilege separation", privsepHome, NoLogin},
 	{"sshkeys", 101, 101, "sshd keys command", "/", NoLogin},
-	{"osadmin", 102, 102, "appliance admin on 8443", "/", NoLogin},
+	{"osadmin", OsadminUID, OsadminUID, "appliance admin on 8443", "/", NoLogin},
 }
 
 var (
 	enrol  = Account{"enrol", 103, 103, "SSH key enrolment", HomeRoot + "/enrol", EnrolShell}
 	nobody = Account{"nobody", 65534, 65534, "nobody", "/", NoLogin}
 )
+
+// ServiceUser returns the fixed system account a service may run as: one
+// with its own uid, so never root or maint (uid 0).
+func ServiceUser(name string) (Account, bool) {
+	for _, a := range system {
+		if a.Name == name && a.UID != 0 {
+			return a, true
+		}
+	}
+	return Account{}, false
+}
+
+// OsadminUID is the uid sneakers-osadmin runs as.
+const OsadminUID = 102
 
 // Accounts returns every account for s, in file order.
 func Accounts(s access.State, enrolOpen bool) []Account {

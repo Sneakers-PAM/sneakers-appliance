@@ -16,7 +16,6 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 )
 
 // The local socket reads the caller's uid: this test process is neither
@@ -46,7 +45,4 @@ func TestLocalSocketUsesThePeerUID(t *testing.T) {
 	}
 	_, err = lc.ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{Code: begin.Msg.GetCode(), Admin: "alice", KeyFingerprint: b.keys["alice"].fp}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
-	if !osadmin.LocalPeerAllowed(0) || !osadmin.LocalPeerAllowed(20000) || osadmin.LocalPeerAllowed(1000) {
-		t.Fatal("the socket admits root and admin uids only")
-	}
 }

@@ -34,6 +34,8 @@ readiness:                         # a file that appears, or a command that exit
   file: /run/sneakers/k0s.ready
   timeout: 2m
 start: always                      # always (default) or on-demand
+on-demand-in: [firstboot]          # phases, among phases:, where it waits to be asked
+user: osadmin                      # a fixed unprivileged system account; default root
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
 stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 ```
@@ -41,7 +43,13 @@ stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 - Entering a phase stops the services that don't run in it and starts the `start: always` ones that
   do, in `after:` order, each once its dependencies are ready.
 - `start: on-demand` services start and stop only when asked (the Services API), and only in
-  their phases.
+  their phases. `on-demand-in` makes an always-start service on-demand in the phases it lists
+  (osadmin waits for its first-boot step and starts with the normal phase).
+- `user` runs the service as one of the fixed system accounts that has its own uid (`sshd`,
+  `sshkeys`, `osadmin`), with no supplementary groups; any other name is `SERVICE_TABLE_INVALID`.
+  Init never falls back to root for such an entry.
+- The root image's table lives in `os/rootfs/services.d/` (accessd as root, osadmin as `osadmin`;
+  see [access.md](access.md#accessd)).
 - `pre-start` runs to completion before every start; a non-zero exit keeps the service from
   starting (`SERVICE_PRE_START`) and its restart policy decides whether it's tried again.
 - A service that exits is restarted by its policy with a backoff from 1 to 30 seconds. Stopping
@@ -65,8 +73,9 @@ stops and reports the table's on-demand services.
 `PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also
 served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits
 root and the admin uids, so the
-closed shell's logins can reboot. On both sockets it answers only `sneakers-osadmin` and
-`sneakers-shell`, told apart by the peer's executable, and the factory reset only osadmin. See
+closed shell's logins can reboot. On both sockets it answers only `sneakers-accessd` (the :8443
+API's backend; `sneakers-osadmin` runs unprivileged and can't reach either socket) and
+`sneakers-shell`, told apart by the peer's executable, and the factory reset only accessd. See
 [factory-reset.md](factory-reset.md) for what each request does.
 
 ## PID 1

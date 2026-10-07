@@ -110,7 +110,7 @@ func (h *accessSvc) AddAdmin(ctx context.Context, r *connect.Request[osadminv1.A
 		}
 		a := st.AddAdmin(r.Msg.GetName(), role, c.session.Admin, now)
 		if key != nil {
-			a.Keys = append(a.Keys, access.AdminKey{Key: *key, Added: now, AddedBy: c.session.Admin, Via: access.ViaOSAdmin})
+			a.Keys = append(a.Keys, access.AdminKey{Key: *key, Added: now, AddedBy: c.session.Admin, Via: c.via()})
 		}
 		added = *a
 		return nil
@@ -183,7 +183,7 @@ func (h *accessSvc) AddKey(ctx context.Context, r *connect.Request[osadminv1.Add
 		return nil, err
 	}
 	c.note(r.Msg.GetAdmin(), "key", k.Fingerprint)
-	ak := access.AdminKey{Key: k, Added: h.s.o.Clock.Now().UTC(), AddedBy: c.session.Admin, Via: access.ViaOSAdmin}
+	ak := access.AdminKey{Key: k, Added: h.s.o.Clock.Now().UTC(), AddedBy: c.session.Admin, Via: c.via()}
 	err = h.s.o.Access.Update(func(st *access.State) error {
 		a, ok := st.Admin(r.Msg.GetAdmin())
 		if !ok {

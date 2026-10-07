@@ -16,6 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 )
 
@@ -447,4 +448,4 @@ func (e ranError) Error() string { return e.err.Error() }
 func (e ranError) Unwrap() error { return e.err }
 
 // ErrUnavailable is what a backend returns when accessd doesn't answer.
-var ErrUnavailable = codes.Wrap(codes.NotAvailable, errors.New("the appliance services are unavailable; try again shortly"))
+var ErrUnavailable = codes.Wrap(codes.NotAvailable, errors.New(accessapi.Unavailable))

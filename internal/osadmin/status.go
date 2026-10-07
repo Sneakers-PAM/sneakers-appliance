@@ -149,7 +149,7 @@ func (s *Server) disk() *osadminv1.Disk {
 	bs := uint64(fs.Bsize) // #nosec G115 -- a block size is positive
 	total, used := fs.Blocks*bs, (fs.Blocks-fs.Bfree)*bs
 	d := &osadminv1.Disk{Path: s.o.Paths.State, UsedBytes: used, TotalBytes: total}
-	p := filepath.Join(s.o.Paths.OwnDir(), diskSamplesFile)
+	p := filepath.Join(s.o.Paths.APIDir(), diskSamplesFile)
 	var samples []diskSample
 	if b, err := os.ReadFile(p); err == nil { // #nosec G304 -- osadmin's own file
 		_ = json.Unmarshal(b, &samples)
@@ -161,7 +161,7 @@ func (s *Server) disk() *osadminv1.Disk {
 			samples = samples[len(samples)-8:]
 		}
 		if b, err := json.Marshal(samples); err == nil {
-			if err := os.MkdirAll(s.o.Paths.OwnDir(), 0o700); err == nil {
+			if err := os.MkdirAll(s.o.Paths.APIDir(), 0o700); err == nil {
 				if err := writeAtomic(p, b); err != nil {
 					s.o.Logger.Warn("osadmin: disk sample not saved", log.F("error", err.Error()))
 				}

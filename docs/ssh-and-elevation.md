@@ -66,8 +66,8 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `admins list`, `admins add <name>`, `admins remove <name>` | yes | yes | accessd; owners only |
 | `recovery-key add` | yes | no | accessd |
 | `setup recovery-key` | no | yes | accessd; first boot only |
-| `login <code>` | no | yes | osadmin: approves a :8443 sign-in |
-| `shell --minutes N --reason "..."`, `elevation status [<id>]`, `elevation cert <id>` | no | yes | accessd |
+| `login <code>` | no | yes | accessd: approves a :8443 sign-in |
+| `shell --minutes N --reason "..."`, `elevation status [<id>]`, `elevation cert <id>` | no | yes | accessd; Not available in this release |
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `mcp ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
@@ -75,12 +75,16 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` and isn't listed by
 `help` or completed. `-o json` prints a command's result, or its error as
 `{"error": {"code", "number", "message"}}`. The commands of later specs answer `NOT_AVAILABLE`
-("Not available in this release.") until their services are on the box. The accessd commands answer
-`NOT_AVAILABLE` ("the appliance services are unavailable") until accessd's socket is there.
+("Not available in this release.") until their services are on the box. The accessd commands go to
+`/run/sneakers/access.sock`, which knows the login by its uid ([access.md](access.md#accesssock));
+`network set` takes `hostname`, `dns`, `search`, `ntp`, `allow-list` (comma-separated lists),
+`time-zone` and `https-proxy` on top of the current settings. While accessd is down they answer
+`NOT_AVAILABLE` ("the appliance services are unavailable"), and `status` shows the last status
+accessd kept, with the time it was taken.
 
 ### Signing in to :8443
 
-`login XXXX-XXXX` asks osadmin (`LocalService.DescribeSignIn` on `/run/sneakers/osadmin.sock`)
+`login XXXX-XXXX` asks accessd (`LocalService.DescribeSignIn` on `/run/sneakers/access.sock`)
 which browser is waiting on the code and asks:
 
 ```text

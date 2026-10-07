@@ -1,0 +1,271 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The local API of sneakers-accessd on /run/sneakers/access.sock. The peer
+// uid (SO_PEERCRED) is the caller's identity, never a field of a request:
+// root is the console (and firstboot), and gets every method here; an
+// admin uid is a closed-shell login, acting as that admin with that
+// admin's role, and gets only the methods the shell needs; the osadmin uid
+// gets BindingService here and the :8443 API of
+// sneakers.appliance.osadmin.v1, where every call carries the signed-in
+// admin's session.
+//
+// A closed-shell login may send the SHA256: fingerprint of the key that
+// signed it in, in the Sneakers-Key-Fingerprint header, and its SSH client
+// address in Sneakers-Source; accessd refuses a fingerprint that isn't one
+// of the peer uid's admin's keys.
+syntax = "proto3";
+
+package sneakers.appliance.access.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/netd/v1/netd.proto";
+import "sneakers/appliance/osadmin/v1/access.proto";
+import "sneakers/appliance/osadmin/v1/elevation.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/setup.proto";
+import "sneakers/appliance/osadmin/v1/status.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1;accessv1";
+// The default, set so the raw descriptor's option bytes don't print as
+// letters glued onto go_package, which the org's host-name scan reads as
+// one name.
+option optimize_for = SPEED;
+
+// AccessService is the status, the admins, their keys and the recovery
+// keys. An admin manages their own keys; owners manage everyone.
+service AccessService {
+  // GetStatus is the status page's data. accessd also keeps the last one
+  // in /run/sneakers/access/status.json, for when it is down.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ListAdmins(ListAdminsRequest) returns (ListAdminsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddAdmin is owners only.
+  rpc AddAdmin(AddAdminRequest) returns (AddAdminResponse);
+  // RemoveAdmin is owners only.
+  rpc RemoveAdmin(RemoveAdminRequest) returns (RemoveAdminResponse);
+  // ListKeys lists an admin's login keys; empty admin means the caller.
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc AddKey(AddKeyRequest) returns (AddKeyResponse);
+  rpc RemoveKey(RemoveKeyRequest) returns (RemoveKeyResponse);
+  // AddRecoveryKey is the console's (root only).
+  rpc AddRecoveryKey(AddRecoveryKeyRequest) returns (AddRecoveryKeyResponse);
+}
+
+// NetworkService relays the network settings to netd, whose socket is
+// root's only.
+service NetworkService {
+  rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SetNetwork(SetNetworkRequest) returns (SetNetworkResponse);
+  rpc ConfirmNetwork(ConfirmNetworkRequest) returns (ConfirmNetworkResponse);
+  // ResetAllowList is the console's (root only).
+  rpc ResetAllowList(ResetAllowListRequest) returns (ResetAllowListResponse);
+}
+
+// SetupService is the first-boot steps accessd owns.
+service SetupService {
+  rpc GetSetup(GetSetupRequest) returns (GetSetupResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetRecoveryKey sets a recovery key during setup (an owner's shell).
+  rpc SetRecoveryKey(SetRecoveryKeyRequest) returns (SetRecoveryKeyResponse);
+  // Complete checks every step and finishes setup (root only: firstboot).
+  rpc Complete(CompleteRequest) returns (CompleteResponse);
+}
+
+// ElevationService is the one-time root shells.
+service ElevationService {
+  // RequestElevation asks for an elevated shell for the caller's key.
+  rpc RequestElevation(RequestElevationRequest) returns (RequestElevationResponse);
+  rpc ListElevations(ListElevationsRequest) returns (ListElevationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetElevationCertificate returns the certificate of an approved
+  // request, for its requester.
+  rpc GetElevationCertificate(GetElevationCertificateRequest) returns (GetElevationCertificateResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ApproveElevation is the console's (root only); owners approve on :8443.
+  rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse);
+  // DenyElevation is the console's (root only); owners deny on :8443.
+  rpc DenyElevation(DenyElevationRequest) returns (DenyElevationResponse);
+}
+
+// BindingService tells sneakers-osadmin where to listen (the osadmin uid
+// only): netd's socket is root's.
+service BindingService {
+  rpc GetBinding(GetBindingRequest) returns (GetBindingResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message GetStatusRequest {}
+
+message GetStatusResponse {
+  sneakers.appliance.osadmin.v1.GetStatusResponse status = 1;
+}
+
+message ListAdminsRequest {}
+
+message ListAdminsResponse {
+  repeated sneakers.appliance.osadmin.v1.Admin admins = 1;
+}
+
+message AddAdminRequest {
+  string name = 1;
+  sneakers.appliance.osadmin.v1.Role role = 2;
+  // public_key is an optional first login key.
+  string public_key = 3;
+}
+
+message AddAdminResponse {
+  sneakers.appliance.osadmin.v1.Admin admin = 1;
+}
+
+message RemoveAdminRequest {
+  string name = 1;
+}
+
+message RemoveAdminResponse {}
+
+message ListKeysRequest {
+  string admin = 1;
+}
+
+message ListKeysResponse {
+  string admin = 1;
+  repeated sneakers.appliance.osadmin.v1.Key keys = 2;
+}
+
+message AddKeyRequest {
+  // admin empty means the caller.
+  string admin = 1;
+  string public_key = 2;
+}
+
+message AddKeyResponse {
+  sneakers.appliance.osadmin.v1.Key key = 1;
+}
+
+message RemoveKeyRequest {
+  // admin empty means the caller.
+  string admin = 1;
+  string fingerprint = 2;
+}
+
+message RemoveKeyResponse {}
+
+message AddRecoveryKeyRequest {
+  string public_key = 1;
+  string label = 2;
+}
+
+message AddRecoveryKeyResponse {
+  sneakers.appliance.osadmin.v1.RecoveryKey recovery_key = 1;
+}
+
+message GetNetworkRequest {}
+
+message GetNetworkResponse {
+  sneakers.appliance.netd.v1.Settings settings = 1;
+  repeated string management_addresses = 2;
+  bool ntp_synced = 3;
+}
+
+message SetNetworkRequest {
+  sneakers.appliance.netd.v1.Settings settings = 1;
+}
+
+message SetNetworkResponse {
+  string token = 1;
+  int32 revert_after_seconds = 2;
+}
+
+message ConfirmNetworkRequest {
+  string token = 1;
+}
+
+message ConfirmNetworkResponse {}
+
+message ResetAllowListRequest {}
+
+message ResetAllowListResponse {
+  string token = 1;
+  int32 revert_after_seconds = 2;
+}
+
+message GetSetupRequest {}
+
+message GetSetupResponse {
+  sneakers.appliance.osadmin.v1.GetSetupResponse setup = 1;
+}
+
+message SetRecoveryKeyRequest {
+  string public_key = 1;
+  string label = 2;
+}
+
+message SetRecoveryKeyResponse {
+  sneakers.appliance.osadmin.v1.RecoveryKey recovery_key = 1;
+}
+
+message CompleteRequest {}
+
+message CompleteResponse {
+  string product_setup_url = 1;
+}
+
+message RequestElevationRequest {
+  int32 minutes = 1;
+  string reason = 2;
+}
+
+message RequestElevationResponse {
+  sneakers.appliance.osadmin.v1.Elevation elevation = 1;
+}
+
+message ListElevationsRequest {}
+
+message ListElevationsResponse {
+  repeated sneakers.appliance.osadmin.v1.Elevation elevations = 1;
+}
+
+message GetElevationCertificateRequest {
+  string id = 1;
+}
+
+message GetElevationCertificateResponse {
+  // certificate is the OpenSSH certificate, one authorized_keys-style line.
+  string certificate = 1;
+  google.protobuf.Timestamp valid_before = 2;
+  // login is how to use it: ssh -i <key> -o CertificateFile=<file> maint@<host>.
+  string login = 3;
+}
+
+message ApproveElevationRequest {
+  string id = 1;
+  int32 minutes = 2;
+}
+
+message ApproveElevationResponse {}
+
+message DenyElevationRequest {
+  string id = 1;
+}
+
+message DenyElevationResponse {}
+
+message GetBindingRequest {}
+
+message GetBindingResponse {
+  string hostname = 1;
+  // management_addresses are the addresses :8443 binds (no link-local).
+  repeated string management_addresses = 2;
+}
