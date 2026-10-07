@@ -1,0 +1,122 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package osadmin_test
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
+)
+
+func TestSetupFlow(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	su := osadminv1connect.NewSetupServiceClient(alice.hc, b.ts.URL)
+
+	g, err := su.GetSetup(ctx, connect.NewRequest(&osadminv1.GetSetupRequest{}))
+	if err != nil || g.Msg.GetDone() || !g.Msg.GetSingleAdminWarning() || g.Msg.GetMaxRecoveryKeys() != 3 {
+		t.Fatalf("%v %v", g, err)
+	}
+	if g.Msg.GetProductSetupUrl() != "https://box1.sneakers.example.org/setup" {
+		t.Fatal(g.Msg.GetProductSetupUrl())
+	}
+	_, err = su.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "SETUP_INCOMPLETE")
+	_, err = su.DownloadEscrow(ctx, connect.NewRequest(&osadminv1.DownloadEscrowRequest{}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "SETUP_INCOMPLETE")
+
+	_, err = su.AddRecoveryKey(ctx, connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: b.keys["alice"].line}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "ACCESS_KEY_DUPLICATE")
+
+	var rks []sshKey
+	for i := range 3 {
+		k := newKey(t)
+		rks = append(rks, k)
+		if _, err := su.AddRecoveryKey(ctx, connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: k.line, Label: "safe"})); err != nil {
+			t.Fatal(err)
+		}
+		if len(b.init.escrowFor) != i+1 {
+			t.Fatalf("the escrow goes to every recovery key: %d", len(b.init.escrowFor))
+		}
+		b.clk.Advance(1e9)
+	}
+	_, err = su.AddRecoveryKey(ctx, connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: newKey(t).line}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "ACCESS_RECOVERY_KEY_LIMIT")
+
+	esc, err := su.DownloadEscrow(ctx, connect.NewRequest(&osadminv1.DownloadEscrowRequest{}))
+	if err != nil || len(esc.Msg.GetContent()) == 0 {
+		t.Fatalf("%v %v", esc, err)
+	}
+	if e := lastEntry(t, b.log, "setup.escrow.download"); e.Outcome != "ok" {
+		t.Fatal("download audited")
+	}
+
+	_, err = su.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "single-admin")
+	if _, err := su.AcknowledgeSingleAdmin(ctx, connect.NewRequest(&osadminv1.AcknowledgeSingleAdminRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	fin, err := su.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{}))
+	if err != nil || fin.Msg.GetProductSetupUrl() == "" {
+		t.Fatalf("%v %v", fin, err)
+	}
+	if _, err := os.Stat(filepath.Join(b.state, "setup", osadmin.DoneMarker)); err != nil {
+		t.Fatal("done marker")
+	}
+	b.done = b.srv.SetupDone()
+
+	for _, k := range rks[:2] {
+		if _, err := su.RemoveRecoveryKey(ctx, connect.NewRequest(&osadminv1.RemoveRecoveryKeyRequest{Fingerprint: k.fp})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err = su.RemoveRecoveryKey(ctx, connect.NewRequest(&osadminv1.RemoveRecoveryKeyRequest{Fingerprint: rks[2].fp}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "ACCESS_LAST_RECOVERY_KEY")
+}
+
+func TestAFailedEscrowChangesNothing(t *testing.T) {
+	b := newBox(t, false)
+	b.init.escrowErr = connect.NewError(connect.CodeUnavailable, errors.New("init is busy"))
+	alice := b.browser()
+	alice.signIn("alice")
+	su := osadminv1connect.NewSetupServiceClient(alice.hc, b.ts.URL)
+	if _, err := su.AddRecoveryKey(context.Background(), connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: newKey(t).line})); connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("got %v", err)
+	}
+	if n := len(b.store.Read().RecoveryKeys); n != 0 {
+		t.Fatalf("%d recovery keys", n)
+	}
+}
+
+func TestTwoAdminsNeedNoSingleAdminWarning(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	su := osadminv1connect.NewSetupServiceClient(alice.hc, b.ts.URL)
+	if _, err := su.AddRecoveryKey(ctx, connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: newKey(t).line})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := su.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{})); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnAdminCantFinishSetup(t *testing.T) {
+	b := newBox(t, true)
+	bob := b.browser()
+	bob.signIn("bob")
+	_, err := osadminv1connect.NewSetupServiceClient(bob.hc, b.ts.URL).Finish(context.Background(), connect.NewRequest(&osadminv1.FinishRequest{}))
+	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+}

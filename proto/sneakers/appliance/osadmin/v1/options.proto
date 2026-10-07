@@ -1,0 +1,43 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The :8443 appliance admin API of sneakers-osadmin, served with Connect
+// (gRPC, gRPC-Web and JSON over HTTP) next to the static admin pages. Every
+// method carries a Rule: the least role that may call it, whether it needs
+// a step-up, and the OS audit action it writes. osadmin enforces the rule
+// from this descriptor, so the proto is the one place it is declared.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// Role is an appliance admin's role.
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  // ROLE_ADMIN can use every page except managing other admins and
+  // approving elevations.
+  ROLE_ADMIN = 1;
+  // ROLE_OWNER can do everything.
+  ROLE_OWNER = 2;
+}
+
+// Rule guards one method.
+message Rule {
+  // public methods need no session (the sign-in methods only).
+  bool public = 1;
+  // role is the least role that may call the method.
+  Role role = 2;
+  // step_up: the session's sign-in must be no older than 5 minutes
+  // (ACCESS_STEPUP_REQUIRED).
+  bool step_up = 3;
+  // audit is the OS audit action written for every call, allowed or
+  // refused. Empty for reads.
+  string audit = 4;
+}
+
+extend google.protobuf.MethodOptions {
+  Rule rule = 51000;
+}

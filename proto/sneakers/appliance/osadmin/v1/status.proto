@@ -1,0 +1,112 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Status page (home).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/power.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// StatusService is the box at a glance.
+service StatusService {
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // SetSecureBoot turns the Secure Boot setting off, or on again without a
+  // reinstall. The typed confirmation is the box's host name.
+  rpc SetSecureBoot(SetSecureBootRequest) returns (SetSecureBootResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "status.secure-boot.set"
+    };
+  }
+}
+
+message GetStatusRequest {}
+
+// Protection is the at-rest protection level.
+enum Protection {
+  PROTECTION_UNSPECIFIED = 0;
+  PROTECTION_FULL = 1;
+  PROTECTION_REDUCED = 2;
+}
+
+// WarningKind is one of the Status warnings.
+enum WarningKind {
+  WARNING_KIND_UNSPECIFIED = 0;
+  // WARNING_KIND_EXPOSURE: a public management address and a wide
+  // allow-list.
+  WARNING_KIND_EXPOSURE = 1;
+  WARNING_KIND_REDUCED_PROTECTION = 2;
+  WARNING_KIND_SELF_SIGNED_TLS = 3;
+  WARNING_KIND_NTP_UNSYNCED = 4;
+  // WARNING_KIND_CONSOLE_RECOVERY: a key was added through the console's
+  // Recover access and is still under its 24-hour hold.
+  WARNING_KIND_CONSOLE_RECOVERY = 5;
+  WARNING_KIND_FACTORY_RESET = 6;
+}
+
+message Warning {
+  WarningKind kind = 1;
+  // detail is one plain sentence.
+  string detail = 2;
+}
+
+// Component is one OS-layer service osadmin talks to.
+message Component {
+  string name = 1;
+  bool ok = 2;
+  string detail = 3;
+}
+
+message Disk {
+  // path is the state volume's mount point.
+  string path = 1;
+  uint64 used_bytes = 2;
+  uint64 total_bytes = 3;
+  // growth_bytes_per_day is the average daily growth over the last week of
+  // daily samples; 0 until two days are sampled.
+  int64 growth_bytes_per_day = 4;
+}
+
+message GetStatusResponse {
+  string version = 1;
+  string channel = 2;
+  string hostname = 3;
+  // phase is firstboot or normal.
+  string phase = 4;
+  string running_version = 5;
+  string staged_version = 6;
+  string failed_version = 7;
+  Protection protection = 8;
+  // protection_reason is empty for full, else no-secure-boot-firmware,
+  // secure-boot-off or no-tpm.
+  string protection_reason = 9;
+  // custody_mode is tpm or keyfile.
+  string custody_mode = 10;
+  repeated string management_addresses = 11;
+  bool ntp_synced = 12;
+  Disk disk = 13;
+  repeated Component health = 14;
+  // tls_fingerprint is the SHA-256 of :8443's own certificate.
+  string tls_fingerprint = 15;
+  google.protobuf.Timestamp tls_expires = 16;
+  bool tls_self_signed = 17;
+  repeated Warning warnings = 18;
+  // factory_reset is set while one is pending or counting down.
+  FactoryReset factory_reset = 19;
+}
+
+message SetSecureBootRequest {
+  bool on = 1;
+  string confirm_hostname = 2;
+}
+
+message SetSecureBootResponse {}

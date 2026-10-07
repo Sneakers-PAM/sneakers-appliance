@@ -1,0 +1,144 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Updates page. A .bin is uploaded with POST /upload (the session
+// cookie and the X-CSRF-Token header, the file as the body), which answers
+// {"uploadId": "..."}; or fetched from the configured mirror. Either way
+// its signature, channel and hash are verified before anything is
+// unpacked.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// UpgradeService verifies, stages, applies and reverts releases.
+service UpgradeService {
+  rpc GetUpgrades(GetUpgradesRequest) returns (GetUpgradesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // FetchUpdate downloads a .bin from the mirror. Refused when no mirror
+  // is configured (air-gap: upload only).
+  rpc FetchUpdate(FetchUpdateRequest) returns (FetchUpdateResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "upgrade.fetch"
+    };
+  }
+  // StageUpdate verifies an uploaded or fetched .bin, then decrypts,
+  // unpacks and stages it into the inactive slot.
+  rpc StageUpdate(StageUpdateRequest) returns (StageUpdateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "upgrade.stage"
+    };
+  }
+  // ApplyUpdate boots the staged release.
+  rpc ApplyUpdate(ApplyUpdateRequest) returns (ApplyUpdateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "upgrade.apply"
+    };
+  }
+  // RevertUpdate goes back to the previous release.
+  rpc RevertUpdate(RevertUpdateRequest) returns (RevertUpdateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "upgrade.revert"
+    };
+  }
+  rpc SetUpgradePolicy(SetUpgradePolicyRequest) returns (SetUpgradePolicyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "upgrade.policy.set"
+    };
+  }
+}
+
+// UpgradePolicy is when updates apply and where they come from.
+message UpgradePolicy {
+  // mode is automatic (in the window) or manual.
+  string mode = 1;
+  // window_start is HH:MM local; window_minutes its length.
+  string window_start = 2;
+  int32 window_minutes = 3;
+  // mirror_url is the HTTPS base the .bin files are fetched from. Empty
+  // means air-gapped: the box never fetches.
+  string mirror_url = 4;
+}
+
+// UpdatePackage is a verified .bin's signed header.
+message UpdatePackage {
+  string upload_id = 1;
+  string version = 2;
+  string arch = 3;
+  // kind is full or patch.
+  string kind = 4;
+  repeated string bases = 5;
+  string channel = 6;
+  string sha256 = 7;
+  int64 size = 8;
+}
+
+message UpgradeEvent {
+  google.protobuf.Timestamp time = 1;
+  // action is fetch, stage, apply or revert.
+  string action = 2;
+  string version = 3;
+  string actor = 4;
+  // outcome is ok or failed.
+  string outcome = 5;
+  string code = 6;
+  string detail = 7;
+}
+
+message GetUpgradesRequest {}
+
+message GetUpgradesResponse {
+  string running_version = 1;
+  string staged_version = 2;
+  string failed_version = 3;
+  UpgradePolicy policy = 4;
+  bool air_gapped = 5;
+  repeated UpgradeEvent history = 6;
+}
+
+message FetchUpdateRequest {
+  // file_name is the .bin's name on the mirror, such as
+  // sneakers-appliance-0.2.0-amd64.bin.
+  string file_name = 1;
+}
+
+message FetchUpdateResponse {
+  string upload_id = 1;
+}
+
+message StageUpdateRequest {
+  string upload_id = 1;
+}
+
+message StageUpdateResponse {
+  UpdatePackage package = 1;
+}
+
+message ApplyUpdateRequest {}
+
+message ApplyUpdateResponse {}
+
+message RevertUpdateRequest {}
+
+message RevertUpdateResponse {}
+
+message SetUpgradePolicyRequest {
+  UpgradePolicy policy = 1;
+}
+
+message SetUpgradePolicyResponse {}

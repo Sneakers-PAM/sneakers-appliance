@@ -1,0 +1,53 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The local API of sneakers-osadmin on /run/sneakers/osadmin.sock, for the
+// closed shell and the console. A root peer may act as any admin; an admin
+// uid (a closed-shell login) only as itself (SO_PEERCRED).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// LocalService approves sign-ins and cancels a factory reset from the box.
+service LocalService {
+  // DescribeSignIn returns what the approval prompt shows for a code.
+  rpc DescribeSignIn(DescribeSignInRequest) returns (DescribeSignInResponse);
+  // ApproveSignIn binds the waiting browser to the admin and the key that
+  // authenticated the SSH session.
+  rpc ApproveSignIn(ApproveSignInRequest) returns (ApproveSignInResponse);
+  // LocalCancelFactoryReset stops a factory reset during its delay (the
+  // console).
+  rpc LocalCancelFactoryReset(LocalCancelFactoryResetRequest) returns (LocalCancelFactoryResetResponse);
+}
+
+message DescribeSignInRequest {
+  string code = 1;
+}
+
+message DescribeSignInResponse {
+  string source_address = 1;
+  string user_agent = 2;
+  google.protobuf.Timestamp expires = 3;
+}
+
+message ApproveSignInRequest {
+  string code = 1;
+  string admin = 2;
+  // key_fingerprint is the SHA256: fingerprint of the session's key.
+  string key_fingerprint = 3;
+  // source_address is the SSH client's address, for the audit log.
+  string source_address = 4;
+}
+
+message ApproveSignInResponse {}
+
+message LocalCancelFactoryResetRequest {
+  // actor is "console" or the admin's name.
+  string actor = 1;
+}
+
+message LocalCancelFactoryResetResponse {}

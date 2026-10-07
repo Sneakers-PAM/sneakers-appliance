@@ -1,0 +1,42 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The MCP page.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// McpService switches the product's MCP and machine API.
+service McpService {
+  rpc GetMcp(GetMcpRequest) returns (GetMcpResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  rpc SetMcp(SetMcpRequest) returns (SetMcpResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "mcp.set"
+    };
+  }
+}
+
+message GetMcpRequest {}
+
+message GetMcpResponse {
+  bool mcp_enabled = 1;
+  bool machine_api_enabled = 2;
+  // state is the MCP service's state, such as running or stopped.
+  string state = 3;
+}
+
+message SetMcpRequest {
+  bool mcp_enabled = 1;
+  bool machine_api_enabled = 2;
+}
+
+message SetMcpResponse {}

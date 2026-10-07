@@ -1,0 +1,54 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The Logs and audit page. The whole log downloads from GET
+// /export/audit-log (JSON lines, the session cookie, no CSRF needed).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "google/protobuf/timestamp.proto";
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// AuditService reads the OS audit log.
+service AuditService {
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+}
+
+message AuditEvent {
+  google.protobuf.Timestamp time = 1;
+  // actor is an admin's name or console.
+  string actor = 2;
+  string key_fingerprint = 3;
+  string source_address = 4;
+  string action = 5;
+  string target = 6;
+  // outcome is ok or refused.
+  string outcome = 7;
+  // code is the error symbol when refused.
+  string code = 8;
+  map<string, string> detail = 9;
+}
+
+message ListEventsRequest {
+  // limit is at most 500; 0 means 100.
+  int32 limit = 1;
+  // page_token is a previous response's next_page_token.
+  string page_token = 2;
+  // action filters by an action prefix, such as access.
+  string action = 3;
+}
+
+message ListEventsResponse {
+  // events are newest first.
+  repeated AuditEvent events = 1;
+  string next_page_token = 2;
+  // chain_ok is false when a line doesn't chain to the one before it.
+  bool chain_ok = 3;
+  string chain_error = 4;
+}

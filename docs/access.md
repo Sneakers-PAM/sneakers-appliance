@@ -81,3 +81,88 @@ start and after every change, each through a tmp file and a rename.
 
 Every account's shell is its forced command, so sshd never passes a line to `/bin/sh`. Every
 `/etc/shadow` entry is `*`: no account has a password, so none can be set or guessed.
+
+## The :8443 sign-in
+
+`sneakers-osadmin` serves the appliance admin on port 8443 of the management addresses only. The
+browser never takes a password or a key; the admin's SSH key vouches for it.
+
+1. The sign-in page asks for a code (`SignInService.BeginSignIn`) and shows it, `XXXX-XXXX`, with the
+   source address and browser the box sees. A code lasts 5 minutes and works once; at most 64 wait
+   at a time.
+2. The admin runs `ssh alice@<address> login XXXX-XXXX`. The closed shell shows the browser's address
+   and user agent and asks to confirm, then calls `LocalService.ApproveSignIn` on
+   `/run/sneakers/osadmin.sock` with the admin and the fingerprint of the key that signed in. The
+   approval is refused when the key isn't that admin's or an admin uid approves as someone else.
+3. The waiting page (`PollSignIn`) gets the session cookie and its CSRF token.
+
+The approval and the session start are both written to the OS audit log (`signin.approve`,
+`signin.session.start`).
+
+### Sessions
+
+| Rule | Value |
+|---|---|
+| Cookie | `__Host-osadmin-session`: `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, no `Domain` (host-only) |
+| CSRF | the session's token in `X-CSRF-Token` on every call that changes something |
+| Idle timeout | 15 minutes; every call moves it |
+| Absolute limit | 8 hours |
+| Per admin | at most 5; a sixth sign-in ends the oldest |
+| Storage | memory only: a restart of `sneakers-osadmin` signs everyone out |
+
+A session is bound to its admin and key. Every call checks both still exist, so removing a key ends
+the sessions it signed in, and removing an admin ends all of theirs. A role change applies to live
+sessions at once.
+
+### Roles and step-up
+
+| Role | Can |
+|---|---|
+| `owner` | everything, including admins, roles, the elevation policy, the recovery keys, setup and Secure Boot |
+| `admin` | every page and action except managing other admins and the owner-only actions; manages their own keys |
+
+The first admin is an owner, and the last owner can't be demoted or removed (`ACCESS_LAST_OWNER`).
+
+Sensitive actions need a sign-in from the last 5 minutes (`ACCESS_STEPUP_REQUIRED`): adding or
+removing admins and keys, roles, the elevation policy, the network settings, the recovery keys,
+finishing setup, the Secure Boot setting and power actions. The page asks for a fresh code; the new
+session replaces the old one in that browser. [osadmin-api.md](osadmin-api.md) lists the role,
+step-up and audit action of every method.
+
+## The Setup page
+
+On first boot, after the first admin's key is enrolled, the Setup page finishes the appliance setup:
+
+- **Recovery keys,** one to three (`ssh-ed25519`, or `ssh-rsa` of 3072 bits or more). Each change asks
+  init for a new escrow encrypted to the whole set and writes it to
+  `/var/lib/sneakers/backup/escrow/escrow-<time>.age`; when the escrow fails, the keys don't change.
+  The newest escrow can be downloaded from the page.
+- **The single-admin warning.** With one admin there is no quorum, so a factory reset means deleting
+  and re-creating or re-flashing the box. The operator confirms the warning, or adds a second admin,
+  before Finish.
+- **Finish** checks every step (`SETUP_INCOMPLETE` names the open one), writes
+  `/var/lib/sneakers/setup/done` and links to the product's own `/setup`, which runs once the
+  platform is up. After setup the last recovery key can't be removed (`ACCESS_LAST_RECOVERY_KEY`).
+
+## Status, Network, Logs and Power
+
+- **Status:** the version and slots, the protection level and custody mode, the management
+  addresses, the state volume's use and daily growth, the :8443 certificate, and the warnings:
+  exposure (a public management address with an allow-list open to any source), reduced protection,
+  the self-signed certificate, an unsynced clock, and a key added with the console's Recover access.
+  The Secure Boot setting is changed here (owner, step-up, the host name typed to confirm).
+- **Network:** reads and changes netd's settings. A change is undone unless `ConfirmNetwork` comes
+  within 120 seconds from a session that still works.
+- **Logs and audit:** the OS audit log, newest first, filtered by action, with its chain state, and the
+  whole log as a download.
+- **Power:** reboot and shut down, graceful by default; the page lists the signed-in sessions first.
+
+## Running sneakers-osadmin
+
+`sneakers-osadmin` reads the management addresses and host name from netd, makes or reuses its
+certificate in `/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when netd
+reports new addresses or a new host name it rebinds with a matching certificate, keeping the
+sessions. Until accessd lands it opens the access store and the OS audit log itself. Flags:
+`--state` (`/var/lib/sneakers`), `--assets` (`/usr/share/sneakers/osadmin`), `--init-socket`,
+`--netd-socket` and `--socket` (`/run/sneakers/osadmin.sock`). `LOG_LEVEL` and `LOG_FORMAT` set the
+logging; the defaults are `error` and JSON.
