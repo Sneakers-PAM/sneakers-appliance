@@ -18,6 +18,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
@@ -173,7 +174,7 @@ func TestAnOsadminCallWithASession(t *testing.T) {
 	hc, url := b.osadmin()
 	si := osadminv1connect.NewSignInServiceClient(hc, url)
 	begin := connect.NewRequest(&osadminv1.BeginSignInRequest{})
-	begin.Header().Set(accessd.ClientHeader, "203.0.113.9")
+	begin.Header().Set(accessapi.ClientHeader, "203.0.113.9")
 	code, err := si.BeginSignIn(ctx, begin)
 	if err != nil || code.Msg.GetSourceAddress() != "203.0.113.9" {
 		t.Fatalf("%v %v", code, err)
@@ -222,7 +223,7 @@ func TestStatusIsCachedForWhenAccessdIsDown(t *testing.T) {
 	if err := json.Unmarshal(raw, &cached); err != nil {
 		t.Fatal(err)
 	}
-	st, err := accessd.ReadStatusCache(filepath.Join(b.run, "access", "status.json"))
+	st, err := accessapi.ReadStatusCache(filepath.Join(b.run, "access", "status.json"))
 	if err != nil || st.Status.GetHostname() != "box1.sneakers.example.org" || st.Saved.IsZero() {
 		t.Fatalf("%+v %v", st, err)
 	}

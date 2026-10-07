@@ -24,6 +24,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
@@ -186,8 +187,8 @@ func (b *box) osadminAccess() osadminv1connect.AccessServiceClient {
 func keyHeader(fp string) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, r connect.AnyRequest) (connect.AnyResponse, error) {
-			r.Header().Set(accessd.KeyHeader, fp)
-			r.Header().Set(accessd.SourceHeader, "192.0.2.50")
+			r.Header().Set(accessapi.KeyHeader, fp)
+			r.Header().Set(accessapi.SourceHeader, "192.0.2.50")
 			return next(ctx, r)
 		}
 	}

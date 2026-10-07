@@ -34,30 +34,12 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 )
-
-// SocketPath is where accessd listens.
-const SocketPath = "/run/sneakers/access.sock"
-
-// ReadyFile appears once accessd serves its socket (init's readiness
-// probe for osadmin's after: accessd).
-const ReadyFile = "/run/sneakers/access.ready"
-
-// The headers a closed-shell login sends with each call. Both are only
-// for the audit entry: the identity is the peer uid, and a fingerprint
-// that isn't one of that admin's keys is refused.
-const (
-	KeyHeader    = "Sneakers-Key-Fingerprint"
-	SourceHeader = "Sneakers-Source"
-)
-
-// ClientHeader carries the browser's address from sneakers-osadmin.
-// accessd reads it from the osadmin uid only.
-const ClientHeader = "Sneakers-Client-Address"
 
 // Paths are where accessd renders under /run.
 type Paths struct {
@@ -151,7 +133,7 @@ func (s *Server) Handler() http.Handler {
 		case p.UID == accounts.OsadminUID:
 			r2 := r.Clone(r.Context())
 			r2.RemoteAddr = "unknown"
-			if a, err := netip.ParseAddr(r.Header.Get(ClientHeader)); err == nil {
+			if a, err := netip.ParseAddr(r.Header.Get(accessapi.ClientHeader)); err == nil {
 				r2.RemoteAddr = a.String()
 			}
 			front.ServeHTTP(w, r2)
@@ -201,7 +183,7 @@ func (s *Server) caller(ctx context.Context, h http.Header, procedure string) (o
 		s.o.Logger.Warn("accessd: a uid in the admin range with no admin; refused", log.F("uid", p.UID))
 		return osadmin.Local{}, refuse(codes.New(codes.AccessForbidden, "this login isn't an admin"))
 	}
-	return osadmin.Local{Admin: a.Name, KeyFP: h.Get(KeyHeader), Source: h.Get(SourceHeader)}, nil
+	return osadmin.Local{Admin: a.Name, KeyFP: h.Get(accessapi.KeyHeader), Source: h.Get(accessapi.SourceHeader)}, nil
 }
 
 // refuse is a refusal as the Connect error the shell reads.
