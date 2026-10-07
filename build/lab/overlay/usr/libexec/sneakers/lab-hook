@@ -32,6 +32,11 @@ wait_for() {
       say "still waiting for $what"
       k get pods -A -o wide
       k -n kube-system logs ds/kube-router --all-containers --tail=40
+      k -n kube-system logs ds/kube-proxy --tail=20
+      say "routes:"; ip -4 route show table all
+      say "addresses:"; ip -4 addr
+      say "nat for the kubernetes Service:"
+      /var/lib/k0s/bin/iptables-save -t nat 2>&1 | grep -E '10\.96\.0\.1|^\*|KUBE-SERVICES -' | head -20
     fi
     if [ "${#i}" -ge 240 ]; then
       say "gave up waiting for $what"

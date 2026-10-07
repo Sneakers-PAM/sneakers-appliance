@@ -17,6 +17,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/services"
 )
@@ -38,6 +39,10 @@ type clusterConfig struct {
 				CNIInstaller *imageSpec `yaml:"cniInstaller"`
 			} `yaml:"kuberouter"`
 		} `yaml:"images"`
+		Network struct {
+			PodCIDR     string `yaml:"podCIDR"`
+			ServiceCIDR string `yaml:"serviceCIDR"`
+		} `yaml:"network"`
 		Telemetry struct {
 			Enabled bool `yaml:"enabled"`
 		} `yaml:"telemetry"`
@@ -214,5 +219,25 @@ func TestServiceTableRunsK0sInNormalOnly(t *testing.T) {
 	}
 	if h := tbl["lab-hook"]; h == nil || h.Restart != services.RestartNever {
 		t.Errorf("the lab hook entry is %+v; want restart never", h)
+	}
+}
+
+// Without a route that covers the Service range, connect() to a ClusterIP
+// fails with "network is unreachable" before kube-proxy's DNAT applies,
+// which is what kube-router saw on a management network with no gateway.
+func TestServiceCIDRIsRoutedOnSneakers0(t *testing.T) {
+	n := config(t).Spec.Network
+	if n.PodCIDR != network.DefaultPods.String() || n.ServiceCIDR != network.DefaultServices.String() {
+		t.Fatalf("spec.network has pods %q and services %q; want the box's defaults %s and %s", n.PodCIDR, n.ServiceCIDR, network.DefaultPods, network.DefaultServices)
+	}
+	b, err := os.ReadFile("k0s-interim")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`(?m)^service_cidr=` + regexp.QuoteMeta(n.ServiceCIDR) + `(\s|$)`).Match(b) {
+		t.Errorf("k0s-interim doesn't set service_cidr=%s", n.ServiceCIDR)
+	}
+	if want := `ip route replace "$service_cidr" dev sneakers0 src "$node_ip"`; !strings.Contains(string(b), want) {
+		t.Errorf("k0s-interim doesn't have %q", want)
 	}
 }

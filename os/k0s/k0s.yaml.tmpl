@@ -41,6 +41,10 @@ spec:
         version: v1.9.1-k0s.1@sha256:2d1bf841d4773aa00cc4b2e5efcf39f2a026996dc6355ea6641a8672cdce8371
   network:
     provider: kuberouter
+    # k0s's defaults and internal/network's, named because os/k0s/k0s-interim
+    # routes the Service range on sneakers0 (os/k0s/config_test.go).
+    podCIDR: 10.244.0.0/16 # scrub:allow=private-ip -- the k0s default
+    serviceCIDR: 10.96.0.0/12 # scrub:allow=private-ip -- the k0s default
     kubeProxy:
       mode: iptables
       nodePortAddresses: [0.0.0.0/0]

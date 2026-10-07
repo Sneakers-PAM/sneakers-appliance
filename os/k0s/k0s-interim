@@ -18,6 +18,8 @@ name_file=/var/lib/sneakers/k0s/node-name
 # DHCP change on a real interface never changes it, its certificates or
 # etcd's peer address. RFC 2544 space, never routed.
 node_ip=198.18.0.1
+# spec.network.serviceCIDR in k0s.yaml.tmpl (os/k0s/config_test.go).
+service_cidr=10.96.0.0/12 # scrub:allow=private-ip -- the k0s default
 say() { echo "k0s-interim: $*"; }
 
 prepare() {
@@ -55,6 +57,12 @@ prepare() {
   if ! ip -4 addr show dev sneakers0 | grep -q "inet $node_ip/"; then
     ip addr add "$node_ip/32" dev sneakers0
   fi
+  # A ClusterIP is only rewritten by kube-proxy's DNAT after the kernel has
+  # found a route for it; with none (a management network with no gateway)
+  # connect() fails with "network is unreachable", and kube-router can't
+  # reach the API through the kubernetes Service. Routing the Service range on sneakers0 keeps
+  # the cluster off the management network's gateway, like its address.
+  ip route replace "$service_cidr" dev sneakers0 src "$node_ip"
 
   mkdir -p /run/sneakers/k0s
   sed "s/@NODE_NAME@/$name/g" /etc/k0s/k0s.yaml.tmpl > /run/sneakers/k0s/k0s.yaml

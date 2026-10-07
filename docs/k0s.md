@@ -15,8 +15,8 @@ renders the config and deploys the real platform; the hello stack goes then.
 | Piece | Where | What |
 |---|---|---|
 | Service entry | `os/rootfs/services.d/k0s.yaml` | `k0s-interim run` (`exec`s `k0s controller --enable-worker --no-taints --config /run/sneakers/k0s/k0s.yaml --data-dir /var/lib/k0s`), root, `restart: always`, `stop-timeout: 2m`, after netd, phase `normal` only (the data directory is on the state volume). konnectivity, metrics-server, autopilot and the update prober are disabled: none is bundled, and the prober would reach the internet. While the console service owns the consoles, k0s's output goes to `/run/sneakers/console.log`. |
-| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | mounts cgroup2 on `/sys/fs/cgroup` when it isn't; makes the box's node name once (below); gives the kernel a host name when it has none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface; renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories; writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one; links the bundled images into `/var/lib/k0s/images/`; copies each stack in `/usr/share/sneakers/manifests/<name>/` to `/var/lib/k0s/manifests/<name>/` |
-| Cluster config | `/etc/k0s/k0s.yaml.tmpl` (`os/k0s/k0s.yaml.tmpl`) | the API, etcd peer and node address `198.18.0.1`; every system image pinned by `<tag>@sha256:<digest>`; `default_pull_policy: Never`; NodePorts on every address; telemetry off; etcd storage named `@NODE_NAME@`, the one field rendered |
+| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | mounts cgroup2 on `/sys/fs/cgroup` when it isn't; makes the box's node name once (below); gives the kernel a host name when it has none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface and routes the Service range there (below); renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories; writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one; links the bundled images into `/var/lib/k0s/images/`; copies each stack in `/usr/share/sneakers/manifests/<name>/` to `/var/lib/k0s/manifests/<name>/` |
+| Cluster config | `/etc/k0s/k0s.yaml.tmpl` (`os/k0s/k0s.yaml.tmpl`) | the API, etcd peer and node address `198.18.0.1`; the pod range `10.244.0.0/16` and the Service range `10.96.0.0/12` (k0s's defaults, named, and the defaults of the box's network settings, [network.md](network.md)); every system image pinned by `<tag>@sha256:<digest>`; `default_pull_policy: Never`; NodePorts on every address; telemetry off; etcd storage named `@NODE_NAME@`, the one field rendered <!-- scrub:allow=private-ip --> |
 | containerd config | `/etc/k0s/containerd.toml` (`os/k0s/containerd.toml`) | what k0s would write, with the sandbox (pause) image pinned by digest. It isn't marked `k0s_managed`, so k0s uses it as it is instead of writing into the read-only `/etc`. Drop-ins: `/etc/k0s/containerd.d/` (empty). |
 | Host paths in the root | the root | `/etc/cni -> /var/lib/cni-conf` and `/opt -> /var/lib/opt` (kube-router installs the CNI config and plugins there), `/var/run -> /run` (containerd's NRI socket), `/var/log -> /var/lib/log` (pod logs), `/etc/machine-id -> /var/lib/sneakers/machine-id`, `/etc/hosts` (localhost), `/bin/mount` and `/bin/umount` (busybox; the kubelet mounts tmpfs volumes with them), `/lib/modules` (empty: the kernel has no loadable modules), `/usr/libexec/k0s/kubelet-plugins/volume/exec` (empty) |
 
@@ -34,6 +34,15 @@ or the node's address. Its name, `sneakers-<8 hex>`, is made once from a random 
 `/var/lib/sneakers/k0s/node-name`. It's the kubelet's node name (`--hostname-override`) and the
 etcd member name, and it doesn't follow the host name netd sets, so it stays the same across
 reboots and upgrades and is unique when more boxes join.
+
+The Service range is routed on `sneakers0` too. kube-proxy reaches a ClusterIP by rewriting it
+(DNAT) on the way out, but the kernel looks up a route before that rewrite, so a host with no
+route covering the ClusterIP fails `connect()` with "network is unreachable". kube-router talks to
+the API through the `kubernetes` Service, so on a management network with no gateway
+(a static address without one, or QEMU's restricted user network in the image suite) it never
+started, and with it the pod network: pods stayed in ContainerCreating on the bridge CNI's "no IP
+ranges". With the route the cluster doesn't depend on the management network's gateway, the same
+as its address.
 
 ### Multi-node later (spec 3, Section 2.12)
 
@@ -97,7 +106,8 @@ Boot or a TPM, through first boot, and then in normal operation. The lab image's
 the suite writes: then it marks setup done in first boot, and in normal operation it waits for the
 API, the node to be Ready and the hello pod to be Ready, then fetches the NodePort from inside the
 pod and prints what it got, on the serial line (the console service owns the consoles). After
-three minutes of waiting it prints the pods and kube-router's log once. The test checks those
+three minutes of waiting it prints, once, the pods, kube-router's and kube-proxy's logs, the
+routes, the addresses and kube-proxy's NAT rules for the `kubernetes` Service. The test checks those
 lines, fetches the NodePort from the host through QEMU's port forward, and checks that k0s doesn't
 crash-loop; it skips the general crash-loop check, since services that need the skipped first-boot
 steps (sshd with no owner key) keep failing there. It needs KVM: under software emulation k0s
