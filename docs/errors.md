@@ -23,6 +23,8 @@ network and 35xx the setup steps. The shell, the console and :8443 show the same
 | 3010 | `ACCESS_STEPUP_REQUIRED` | a sign-in no older than 5 minutes is needed |
 | 3011 | `ACCESS_NO_ADMIN_KEY` | sshd or osadmin was asked to start in admin mode with no owner key |
 | 3012 | `ACCESS_STORE_INVALID` | the access store doesn't parse |
+| 3013 | `ACCESS_SESSION` | no :8443 session: signed out, idle for 15 minutes, past 8 hours, or its key or admin was removed |
+| 3014 | `ACCESS_CONFIRM` | the typed confirmation (the host name) doesn't match |
 | 3101 | `ENROL_CODE` | wrong enrolment code (the attempts left are shown) |
 | 3102 | `ENROL_CLOSED` | the enrolment window is closed |
 | 3201 | `LOGIN_CODE` | unknown, used or expired sign-in code |

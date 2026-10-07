@@ -20,6 +20,8 @@ const (
 	AccessStepUpRequired   = 3010
 	AccessNoAdminKey       = 3011
 	AccessStoreInvalid     = 3012
+	AccessSession          = 3013
+	AccessConfirm          = 3014
 	EnrolCode              = 3101
 	EnrolClosed            = 3102
 	LoginCode              = 3201
@@ -51,6 +53,8 @@ var accessEntries = []apperr.Entry{
 	{Code: AccessStepUpRequired, Symbol: "ACCESS_STEPUP_REQUIRED", Title: "access", Cause: "a sign-in no older than 5 minutes is needed"},
 	{Code: AccessNoAdminKey, Symbol: "ACCESS_NO_ADMIN_KEY", Title: "access", Cause: "sshd or osadmin was asked to start in admin mode with no owner key"},
 	{Code: AccessStoreInvalid, Symbol: "ACCESS_STORE_INVALID", Title: "access", Cause: "the access store doesn't parse"},
+	{Code: AccessSession, Symbol: "ACCESS_SESSION", Title: "access", Cause: "no session: signed out, idle for 15 minutes, past 8 hours, or its key or admin was removed"},
+	{Code: AccessConfirm, Symbol: "ACCESS_CONFIRM", Title: "access", Cause: "the typed confirmation doesn't match"},
 	{Code: EnrolCode, Symbol: "ENROL_CODE", Title: "enrol", Cause: "wrong enrolment code"},
 	{Code: EnrolClosed, Symbol: "ENROL_CLOSED", Title: "enrol", Cause: "the enrolment window is closed"},
 	{Code: LoginCode, Symbol: "LOGIN_CODE", Title: "login", Cause: "unknown, used or expired sign-in code"},
