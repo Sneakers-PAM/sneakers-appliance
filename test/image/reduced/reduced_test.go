@@ -5,8 +5,8 @@
 
 // Package reduced_test is the image suite's run without Secure Boot and
 // without a TPM: the Secure Boot choice, the typed "no secure boot", first
-// boot in reduced-protection mode, and the same on the next boot without
-// asking again.
+// boot in reduced-protection mode with key-file custody, and the same on
+// the next boot without asking again.
 package reduced_test
 
 import (
@@ -53,14 +53,17 @@ func TestNoSecureBootNoTPMBootsReduced(t *testing.T) {
 			}
 			vm.Type(screens.TypedNoSecureBoot + "\r")
 			vm.Expect(`Secure Boot choice off recorded on the ESP`, time.Minute)
+			vm.Expect(`This box has no TPM`, time.Minute)
+			vm.Type("\r")
+			vm.Expect(`custody fixed \(key file\); state and backup formatted and mounted`, 3*time.Minute)
 			vm.Expect(`services: entering phase phase=firstboot`, time.Minute)
 			vm.Stop()
 
 			next := harness.Boot(t, harness.Options{SecureBoot: c.sb, Keys: keys, Disks: []harness.Disk{{Image: vm.Disk(0)}}})
 			next.Expect(`sneakers-init: phase=firstboot protection=reduced \(Secure Boot off\)`, 5*time.Minute)
 			next.Expect(`services: entering phase phase=firstboot`, time.Minute)
-			if strings.Contains(next.Console(), "phase=enrol") {
-				t.Fatal("the next boot asked for the Secure Boot choice again")
+			if c := next.Console(); strings.Contains(c, "phase=enrol") || strings.Contains(c, "This box has no TPM") {
+				t.Fatal("the next boot asked for the Secure Boot or custody choice again")
 			}
 		})
 	}

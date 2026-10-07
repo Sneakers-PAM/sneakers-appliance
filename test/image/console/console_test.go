@@ -23,7 +23,10 @@ const (
 	banner = `sneakers-init: phase=enrol protection=pending`
 	prompt = `type "` + screens.TypedNoSecureBoot + `" and press Enter`
 	chosen = `Secure Boot choice off recorded on the ESP`
-	booted = `services: entering phase phase=firstboot`
+	// keyfile is the end of first boot's protection step on a box without
+	// a TPM; Enter goes on with the key file.
+	keyfile = `Press Enter to continue`
+	booted  = `services: entering phase phase=firstboot`
 )
 
 func boot(t *testing.T, o harness.Options) *harness.VM {
@@ -44,7 +47,9 @@ func TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer(t *testing.T) {
 	vm.ExpectScreen(prompt, time.Minute)
 	vm.Press(screens.TypedNoSecureBoot + "\r")
 	vm.ExpectScreen(chosen, time.Minute)
-	vm.ExpectScreen(booted, time.Minute)
+	vm.ExpectScreen(keyfile, time.Minute)
+	vm.Press("\r")
+	vm.ExpectScreen(booted, 3*time.Minute)
 }
 
 // No display: the serial line alone carries the banner, the choice and the
@@ -55,7 +60,9 @@ func TestTheSerialLineAloneShowsTheChoiceAndTakesTheAnswer(t *testing.T) {
 	vm.Expect(prompt, time.Minute)
 	vm.Type(screens.TypedNoSecureBoot + "\r")
 	vm.Expect(chosen, time.Minute)
-	vm.Expect(booted, time.Minute)
+	vm.Expect(keyfile, time.Minute)
+	vm.Type("\r")
+	vm.Expect(booted, 3*time.Minute)
 }
 
 // Both: each shows the choice, and an answer typed on the screen's
@@ -67,5 +74,7 @@ func TestBothConsolesShowTheChoiceAndTheScreenCanAnswer(t *testing.T) {
 	vm.Press(screens.TypedNoSecureBoot + "\r")
 	vm.Expect(chosen, time.Minute)
 	vm.ExpectScreen(chosen, time.Minute)
-	vm.Expect(booted, time.Minute)
+	vm.ExpectScreen(keyfile, time.Minute)
+	vm.Press("\r")
+	vm.Expect(booted, 3*time.Minute)
 }

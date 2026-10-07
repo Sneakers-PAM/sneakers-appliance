@@ -13,6 +13,10 @@
 #   OPENSSH      directory with the static sshd, sshd-session, sshd-auth and
 #                ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX      the static busybox (build/busybox/build.sh)
+#   STATIC       directory with cryptsetup-amd64, veritysetup-amd64,
+#                mke2fs-amd64 and sgdisk-amd64 (build/static), which go into
+#                the root; first boot needs cryptsetup and mkfs.ext4 to make
+#                the state volumes
 #   KEYS         an empty directory for the lab keys (CI passes a tmpfs one)
 #   OUT          the output directory
 #   VERSION      the lab version (default 0.0.1)
@@ -81,7 +85,7 @@ RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" SIGNATURES="$work/im
   bash "$root/build/bundle/build.sh"
 
 echo "lab: root"
-PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" K0S="$k0s" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
+STATIC="${STATIC:-}" PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" K0S="$k0s" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
   IMAGES="$work/images" OUT="$work/root" bash "$root/build/root/build.sh"
 
 echo "lab: UKI"

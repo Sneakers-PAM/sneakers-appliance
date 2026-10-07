@@ -67,8 +67,10 @@ Init serves its local API (Connect, which also speaks the gRPC protocol) on `/ru
 `scripts/proto-generate.sh`). The socket is mode 0600, and every connection's peer is read with
 `SO_PEERCRED`: anyone but root is refused before a request is read. The services are
 `KeyCustodyService`, `PlatformService`, `ImageService`, `PowerService` and `ServicesService`; the
-ones whose bodies later work adds answer `Unimplemented` until then. `ServicesService` starts,
-stops and reports the table's on-demand services.
+ones whose bodies later work adds answer `Unimplemented` until then. `KeyCustodyService` serves
+`Mode`, `Protection`, `Seal`, `Unseal` and `Escrow` over the custody init unlocked
+([key-custody.md](key-custody.md#the-keycustody-service)). `ServicesService` starts, stops and
+reports the table's on-demand services.
 
 `PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also
 served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits
@@ -81,8 +83,14 @@ API's backend; `sneakers-osadmin` runs unprivileged and can't reach either socke
 ## PID 1
 
 Init mounts `/proc`, `/sys`, `/dev`, `/run`, `/tmp` and efivarfs, and mounts the ESP at
-`/run/sneakers/esp`. One loop reaps every child (init inherits every orphan) and hands each exit
-status to whatever started it, so services run without `os/exec`'s own waiting. On the console it
+`/run/sneakers/esp`. Unless it booted from the install medium or is finishing a factory reset, it
+then reads the custody header on the state volume, unlocks and mounts state and backup (or, on
+first boot, runs the protection step and makes them), all before the service table
+([key-custody.md](key-custody.md#at-boot)); a state that doesn't unlock stops the boot with the
+reason on the console. One loop reaps every child (init inherits every orphan) and hands each exit
+status to whatever started it, so services run without `os/exec`'s own waiting. The tools init
+runs itself (cryptsetup and mkfs.ext4 for the state volumes) go through it too, with their input
+and output on pipes: `os/exec`'s wait would race the loop and fail with `ECHILD`. On the console it
 prints `sneakers-init: phase=<phase> protection=<level>`. In `enrol` it runs the Secure Boot screens
 ([secure-boot.md](secure-boot.md)): on QEMU and Proxmox it reboots by itself after enrolling; on
 VMware and bare metal it waits for the admin's power cycle. In `mismatch` it shows the mismatch

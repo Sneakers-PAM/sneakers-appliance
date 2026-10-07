@@ -21,7 +21,6 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/console"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/disk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/factoryreset"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/luks"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/power"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/services"
@@ -160,7 +159,7 @@ func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken) *powe
 	}
 	roster := func() (access.State, error) { return access.ReadState(filepath.Join(stateDir, "access")) }
 	return power.New(power.Options{
-		Machine: flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: &luks.ExecRunner{Binary: cryptsetup}, Logger: lg}, con: con},
+		Machine: flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: reaperRunner{binary: cryptsetup}, Logger: lg}, con: con},
 		Drainer: sup,
 		Audit:   (&lazyAudit{lg: lg}).open,
 		Roster:  roster,

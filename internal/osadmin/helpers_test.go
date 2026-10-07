@@ -11,6 +11,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -320,7 +321,7 @@ func newBox(t *testing.T, withBob bool) *box {
 		t.Fatal(err)
 	}
 	b.elev, err = elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"),
+		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"), Sealer: newMemSealer(),
 		Clock:       b.clk,
 		Maintenance: func() bool { return b.srv != nil && b.srv.Maintenance() },
 		Signal: func(pid int) error {
@@ -469,4 +470,26 @@ type lazyTransport struct{ get func() *http.Client }
 
 func (l lazyTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return l.get().Transport.RoundTrip(r)
+}
+
+// memSealer stands in for init's KeyCustody.
+type memSealer struct {
+	mu    sync.Mutex
+	items map[string][]byte
+}
+
+func newMemSealer() *memSealer { return &memSealer{items: map[string][]byte{}} }
+
+func (m *memSealer) Seal(name string, secret []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.items[name] = slices.Clone(secret)
+	return nil
+}
+
+func (m *memSealer) Unseal(name string) ([]byte, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.items[name]
+	return slices.Clone(b), ok, nil
 }

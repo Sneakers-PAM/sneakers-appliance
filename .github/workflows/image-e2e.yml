@@ -69,6 +69,22 @@ jobs:
       - name: Build the static cryptsetup
         if: steps.static.outputs.cache-hit != 'true'
         run: bash build/static/cryptsetup.sh amd64
+      # First boot formats the state volumes with cryptsetup and mkfs.ext4,
+      # so the root carries the static tools (build/root/build.sh installs
+      # all four).
+      - name: Cache the static e2fsprogs and gptfdisk
+        id: fstools
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/out/mke2fs-amd64
+            build/out/sgdisk-amd64
+          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/ci/versions.env') }}
+      - name: Build the static e2fsprogs and gptfdisk
+        if: steps.fstools.outputs.cache-hit != 'true'
+        run: |
+          bash build/static/e2fsprogs.sh amd64
+          bash build/static/gptfdisk.sh amd64
       # The same cache key as the Static tools workflow, so a run of either
       # restores what the other built.
       - name: Cache the static OpenSSH and busybox
@@ -89,7 +105,7 @@ jobs:
           sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
-          VERITYSETUP=build/out/veritysetup-amd64 \
+          VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
           KEYS="$keys" OUT="$RUNNER_TEMP/lab" bash build/lab/build.sh
           {

@@ -166,7 +166,7 @@ func TestTheFirstListCarriesTheKeysAlreadyRevoked(t *testing.T) {
 	f := newFixture(t, "alice")
 	dir := t.TempDir()
 	if _, err := elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"),
+		SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"), Sealer: newMemSealer(),
 		RevokedKeys: []ssh.PublicKey{f.keys["bob"]},
 	}); err != nil {
 		t.Fatal(err)

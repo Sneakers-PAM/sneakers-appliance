@@ -27,7 +27,9 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/power"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/services"
 )
 
@@ -53,7 +55,12 @@ type Options struct {
 	ExeOf func(pid int32) (string, error)
 	// AdminName names the admin a uid belongs to.
 	AdminName func(uid uint32) (string, bool)
-	Logger    log.Logger
+	// KeyCustody is the custody init unlocked at boot; nil leaves
+	// KeyCustodyService Unimplemented.
+	KeyCustody *keycustody.Custody
+	// SecureBoot is what the firmware reported at boot, for Protection.
+	SecureBoot secureboot.State
+	Logger     log.Logger
 }
 
 // Server is the running API.
@@ -69,7 +76,11 @@ func Listen(path string, o Options) (*Server, error) {
 	}
 	o = o.defaults()
 	mux := http.NewServeMux()
-	mux.Handle(initv1connect.NewKeyCustodyServiceHandler(initv1connect.UnimplementedKeyCustodyServiceHandler{}))
+	if o.KeyCustody != nil {
+		mux.Handle(initv1connect.NewKeyCustodyServiceHandler(&custodyHandler{c: o.KeyCustody, sb: o.SecureBoot, log: o.Logger}))
+	} else {
+		mux.Handle(initv1connect.NewKeyCustodyServiceHandler(initv1connect.UnimplementedKeyCustodyServiceHandler{}))
+	}
 	mux.Handle(initv1connect.NewPlatformServiceHandler(initv1connect.UnimplementedPlatformServiceHandler{}))
 	mux.Handle(initv1connect.NewImageServiceHandler(initv1connect.UnimplementedImageServiceHandler{}))
 	mux.Handle(powerHandlerFor(o))

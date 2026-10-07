@@ -198,7 +198,9 @@ func TestAResetFinishesAtBootThenFirstBootIsFresh(t *testing.T) {
 	// The next boot is first boot, once: no reset phase, no loop back.
 	next := harness.Boot(t, harness.Options{SecureBoot: harness.Enrolled, TPM: true, Keys: keys, Disks: []harness.Disk{{Image: after}}})
 	next.Expect(`sneakers-init: phase=firstboot`, 5*time.Minute)
-	next.Expect(`services: entering phase phase=firstboot`, time.Minute)
+	next.Expect(`Use the TPM \(recommended\)`, time.Minute)
+	next.Type("\r")
+	next.Expect(`services: entering phase phase=firstboot`, 3*time.Minute)
 	if c := next.Console(); strings.Contains(c, "phase=reset") || strings.Contains(c, "factory reset is unfinished") {
 		t.Fatal("the boot after the reset went back to the reset phase")
 	}
