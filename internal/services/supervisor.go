@@ -6,6 +6,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"strings"
@@ -15,12 +16,14 @@ import (
 
 	log "github.com/Bugs5382/go-log"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 )
 
 // Runner starts processes. The supervisor only speaks to it, so tests run
-// the real sequencing against a fake.
+// the real sequencing against a fake. A service with a user needs a Runner
+// that is also a UserRunner.
 type Runner interface {
 	// Start starts argv and returns at once.
 	Start(argv []string) (Process, error)
@@ -28,6 +31,11 @@ type Runner interface {
 	Run(ctx context.Context, argv []string) error
 	// Exists reports whether a readiness file is present.
 	Exists(path string) bool
+}
+
+// UserRunner starts a program under another uid and gid.
+type UserRunner interface {
+	StartAs(argv []string, uid, gid uint32) (Process, error)
 }
 
 // Process is one running program.
@@ -115,7 +123,7 @@ func (s *Supervisor) EnterPhase(ctx context.Context, p phase.Phase) error {
 	}
 	var start []string
 	for _, n := range s.table.Names() {
-		if sv := s.table[n]; sv.In(p) && sv.Start == StartAlways {
+		if sv := s.table[n]; sv.In(p) && !sv.OnDemand(p) {
 			start = append(start, n)
 		}
 	}
@@ -179,7 +187,10 @@ func (s *Supervisor) onDemand(name string) (*Service, error) {
 	if !ok {
 		return nil, codes.New(codes.ServiceUnknown, "no service %s", name)
 	}
-	if sv.Start != StartOnDemand {
+	s.mu.Lock()
+	p := s.phase
+	s.mu.Unlock()
+	if !sv.OnDemand(p) {
 		return nil, codes.New(codes.ServiceNotOnDemand, "%s starts with its phase, not on demand", name)
 	}
 	return sv, nil
@@ -219,6 +230,21 @@ func (s *Supervisor) start(ctx context.Context, name string) error {
 	return s.launch(ctx, u, s.o.Backoff)
 }
 
+// exec starts sv, as its user when it names one.
+func (s *Supervisor) exec(sv *Service) (Process, error) {
+	argv := append([]string{sv.Exec}, sv.Args...)
+	if sv.User == "" {
+		return s.r.Start(argv)
+	}
+	a, _ := accounts.ServiceUser(sv.User)
+	ur, ok := s.r.(UserRunner)
+	if !ok {
+		return nil, fmt.Errorf("%s runs as %s, and this runner can't change user", sv.Name, sv.User)
+	}
+	s.o.Logger.Debug("services: starting as a system user", log.F("service", sv.Name), log.F("user", sv.User), log.F("uid", a.UID))
+	return ur.StartAs(argv, uint32(a.UID), uint32(a.GID)) // #nosec G115 -- fixed system ids below 65536
+}
+
 func (s *Supervisor) launch(ctx context.Context, u *unit, backoff time.Duration) error {
 	sv := u.svc
 	if len(sv.PreStart) > 0 {
@@ -229,7 +255,7 @@ func (s *Supervisor) launch(ctx context.Context, u *unit, backoff time.Duration)
 			return err
 		}
 	}
-	proc, err := s.r.Start(append([]string{sv.Exec}, sv.Args...))
+	proc, err := s.exec(sv)
 	if err != nil {
 		s.o.Logger.Error(err, "services: exec failed", log.F("service", sv.Name))
 		s.exited(ctx, u, err, backoff)

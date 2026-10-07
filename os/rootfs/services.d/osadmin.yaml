@@ -1,0 +1,8 @@
+# The :8443 appliance admin: TLS, the static pages and a forwarder to
+# accessd. Unprivileged; during first boot it starts at its setup step.
+exec: /usr/bin/sneakers-osadmin
+phases: [firstboot, normal]
+on-demand-in: [firstboot]
+after: [accessd]
+restart: always
+user: osadmin

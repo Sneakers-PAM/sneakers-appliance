@@ -94,9 +94,19 @@ func (p *reaped) Signal(sig os.Signal) error { return p.p.Signal(sig) }
 
 // Start starts argv with init's console as its output.
 func (r *Reaper) Start(argv []string) (services.Process, error) {
+	return r.start(argv, nil)
+}
+
+// StartAs starts argv like Start, under uid and gid with no supplementary
+// groups.
+func (r *Reaper) StartAs(argv []string, uid, gid uint32) (services.Process, error) {
+	return r.start(argv, &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}})
+}
+
+func (r *Reaper) start(argv []string, sys *syscall.SysProcAttr) (services.Process, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	p, err := os.StartProcess(argv[0], argv, &os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}})
+	p, err := os.StartProcess(argv[0], argv, &os.ProcAttr{Files: []*os.File{os.Stdin, os.Stdout, os.Stderr}, Sys: sys})
 	if err != nil {
 		return nil, err
 	}
@@ -130,4 +140,7 @@ func (r *Reaper) Exists(path string) bool {
 	return err == nil
 }
 
-var _ services.Runner = (*Reaper)(nil)
+var (
+	_ services.Runner     = (*Reaper)(nil)
+	_ services.UserRunner = (*Reaper)(nil)
+)
