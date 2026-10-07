@@ -7,7 +7,7 @@ import apperr "github.com/Bugs5382/go-apperr"
 
 // The first-boot and access codes (spec 2, Section 4.4). 3xxx: 30xx access,
 // 31xx enrolment, 32xx sign-in, 33xx elevation, 34xx network, 35xx setup,
-// 36xx factory reset and power.
+// 36xx factory reset and power, 37xx the closed shell.
 const (
 	AccessKeyType          = 3001
 	AccessKeyWeak          = 3002
@@ -43,6 +43,9 @@ const (
 	ResetApproved          = 3602
 	ResetCancelled         = 3603
 	PowerForcedConfirm     = 3604
+	ShellParse             = 3701
+	ShellUnknown           = 3702
+	NotAvailable           = 3703
 )
 
 var accessEntries = []apperr.Entry{
@@ -80,6 +83,9 @@ var accessEntries = []apperr.Entry{
 	{Code: ResetApproved, Symbol: "RESET_APPROVED", Title: "reset", Cause: "this admin's approval is already counted, or they aren't on the roster"},
 	{Code: ResetCancelled, Symbol: "RESET_CANCELLED", Title: "reset", Cause: "the factory reset was cancelled, expired or never started"},
 	{Code: PowerForcedConfirm, Symbol: "POWER_FORCED_CONFIRM", Title: "power", Cause: "a forced reboot or shutdown needs its second, explicit confirmation"},
+	{Code: ShellParse, Symbol: "SHELL_PARSE", Title: "shell", Cause: "the command line doesn't parse: an open quote, a control character, or longer than 64 KiB"},
+	{Code: ShellUnknown, Symbol: "SHELL_UNKNOWN", Title: "shell", Cause: "there is no such command; help lists them"},
+	{Code: NotAvailable, Symbol: "NOT_AVAILABLE", Title: "shell", Cause: "not available in this release, or the appliance services aren't answering"},
 }
 
 func init() { Entries = append(Entries, accessEntries...) }
