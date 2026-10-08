@@ -54,6 +54,13 @@ enum WarningKind {
   // WARNING_KIND_SELF_APPROVED_ELEVATION: the only owner approved their
   // own elevation, and it is approved or active.
   WARNING_KIND_SELF_APPROVED_ELEVATION = 7;
+  // WARNING_KIND_TLS_EXPIRING: an endpoint's assigned certificate expires
+  // in 30, 14 or 7 days or fewer (nothing renews it).
+  WARNING_KIND_TLS_EXPIRING = 8;
+  WARNING_KIND_TLS_EXPIRED = 9;
+  // WARNING_KIND_TLS_NAMES: an endpoint's certificate no longer covers any
+  // of the names it answers on.
+  WARNING_KIND_TLS_NAMES = 10;
 }
 
 message Warning {

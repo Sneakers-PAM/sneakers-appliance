@@ -48,6 +48,31 @@ const (
 	// TlsServiceSetAdminCertificateProcedure is the fully-qualified name of the TlsService's
 	// SetAdminCertificate RPC.
 	TlsServiceSetAdminCertificateProcedure = "/sneakers.appliance.osadmin.v1.TlsService/SetAdminCertificate"
+	// TlsServiceGetCertificateStoreProcedure is the fully-qualified name of the TlsService's
+	// GetCertificateStore RPC.
+	TlsServiceGetCertificateStoreProcedure = "/sneakers.appliance.osadmin.v1.TlsService/GetCertificateStore"
+	// TlsServiceGenerateCsrProcedure is the fully-qualified name of the TlsService's GenerateCsr RPC.
+	TlsServiceGenerateCsrProcedure = "/sneakers.appliance.osadmin.v1.TlsService/GenerateCsr"
+	// TlsServiceCompleteCsrProcedure is the fully-qualified name of the TlsService's CompleteCsr RPC.
+	TlsServiceCompleteCsrProcedure = "/sneakers.appliance.osadmin.v1.TlsService/CompleteCsr"
+	// TlsServiceDiscardCsrProcedure is the fully-qualified name of the TlsService's DiscardCsr RPC.
+	TlsServiceDiscardCsrProcedure = "/sneakers.appliance.osadmin.v1.TlsService/DiscardCsr"
+	// TlsServiceImportCertificateProcedure is the fully-qualified name of the TlsService's
+	// ImportCertificate RPC.
+	TlsServiceImportCertificateProcedure = "/sneakers.appliance.osadmin.v1.TlsService/ImportCertificate"
+	// TlsServiceDeleteCertificateProcedure is the fully-qualified name of the TlsService's
+	// DeleteCertificate RPC.
+	TlsServiceDeleteCertificateProcedure = "/sneakers.appliance.osadmin.v1.TlsService/DeleteCertificate"
+	// TlsServiceAssignCertificateProcedure is the fully-qualified name of the TlsService's
+	// AssignCertificate RPC.
+	TlsServiceAssignCertificateProcedure = "/sneakers.appliance.osadmin.v1.TlsService/AssignCertificate"
+	// TlsServiceRevertToSelfSignedProcedure is the fully-qualified name of the TlsService's
+	// RevertToSelfSigned RPC.
+	TlsServiceRevertToSelfSignedProcedure = "/sneakers.appliance.osadmin.v1.TlsService/RevertToSelfSigned"
+	// TlsServiceSetAcmeProcedure is the fully-qualified name of the TlsService's SetAcme RPC.
+	TlsServiceSetAcmeProcedure = "/sneakers.appliance.osadmin.v1.TlsService/SetAcme"
+	// TlsServiceRenewNowProcedure is the fully-qualified name of the TlsService's RenewNow RPC.
+	TlsServiceRenewNowProcedure = "/sneakers.appliance.osadmin.v1.TlsService/RenewNow"
 )
 
 // TlsServiceClient is a client for the sneakers.appliance.osadmin.v1.TlsService service.
@@ -58,6 +83,36 @@ type TlsServiceClient interface {
 	// SetAdminCertificate chooses whether :8443 also uses the product's
 	// certificate (its own stays the default).
 	SetAdminCertificate(context.Context, *connect.Request[v1.SetAdminCertificateRequest]) (*connect.Response[v1.SetAdminCertificateResponse], error)
+	// GetCertificateStore lists the store's certificates, the pending CSRs,
+	// the endpoints and what each serves, and the ACME state.
+	GetCertificateStore(context.Context, *connect.Request[v1.GetCertificateStoreRequest]) (*connect.Response[v1.GetCertificateStoreResponse], error)
+	// GenerateCsr makes a key on the box, seals it, and returns a CSR for the
+	// host name, the management addresses and one extra name.
+	GenerateCsr(context.Context, *connect.Request[v1.GenerateCsrRequest]) (*connect.Response[v1.GenerateCsrResponse], error)
+	// CompleteCsr takes the signed certificate and chain for a pending CSR,
+	// validates it against that CSR's key and adds it to the store.
+	CompleteCsr(context.Context, *connect.Request[v1.CompleteCsrRequest]) (*connect.Response[v1.CompleteCsrResponse], error)
+	// DiscardCsr drops a pending CSR and its key.
+	DiscardCsr(context.Context, *connect.Request[v1.DiscardCsrRequest]) (*connect.Response[v1.DiscardCsrResponse], error)
+	// ImportCertificate adds a key and certificate made elsewhere: a PFX
+	// (PKCS#12) with its password, the main path, or PEM.
+	ImportCertificate(context.Context, *connect.Request[v1.ImportCertificateRequest]) (*connect.Response[v1.ImportCertificateResponse], error)
+	// DeleteCertificate removes a certificate no endpoint uses.
+	DeleteCertificate(context.Context, *connect.Request[v1.DeleteCertificateRequest]) (*connect.Response[v1.DeleteCertificateResponse], error)
+	// AssignCertificate makes an endpoint serve a store certificate, live:
+	// :8443 swaps without a restart and is checked by a handshake, and the
+	// previous certificate is put back if the new one isn't served.
+	AssignCertificate(context.Context, *connect.Request[v1.AssignCertificateRequest]) (*connect.Response[v1.AssignCertificateResponse], error)
+	// RevertToSelfSigned puts an endpoint back on the box's own self-signed
+	// certificate.
+	RevertToSelfSigned(context.Context, *connect.Request[v1.RevertToSelfSignedRequest]) (*connect.Response[v1.RevertToSelfSignedResponse], error)
+	// SetAcme chooses the ACME issuer, account and challenge for cert-manager.
+	// It answers TLS_ACME_UNAVAILABLE until the product bundle brings
+	// cert-manager (spec 3, Section 2.7.2).
+	SetAcme(context.Context, *connect.Request[v1.SetAcmeRequest]) (*connect.Response[v1.SetAcmeResponse], error)
+	// RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
+	// TLS_ACME_UNAVAILABLE until then.
+	RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error)
 }
 
 // NewTlsServiceClient constructs a client for the sneakers.appliance.osadmin.v1.TlsService service.
@@ -96,6 +151,67 @@ func NewTlsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(tlsServiceMethods.ByName("SetAdminCertificate")),
 			connect.WithClientOptions(opts...),
 		),
+		getCertificateStore: connect.NewClient[v1.GetCertificateStoreRequest, v1.GetCertificateStoreResponse](
+			httpClient,
+			baseURL+TlsServiceGetCertificateStoreProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("GetCertificateStore")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		generateCsr: connect.NewClient[v1.GenerateCsrRequest, v1.GenerateCsrResponse](
+			httpClient,
+			baseURL+TlsServiceGenerateCsrProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("GenerateCsr")),
+			connect.WithClientOptions(opts...),
+		),
+		completeCsr: connect.NewClient[v1.CompleteCsrRequest, v1.CompleteCsrResponse](
+			httpClient,
+			baseURL+TlsServiceCompleteCsrProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("CompleteCsr")),
+			connect.WithClientOptions(opts...),
+		),
+		discardCsr: connect.NewClient[v1.DiscardCsrRequest, v1.DiscardCsrResponse](
+			httpClient,
+			baseURL+TlsServiceDiscardCsrProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("DiscardCsr")),
+			connect.WithClientOptions(opts...),
+		),
+		importCertificate: connect.NewClient[v1.ImportCertificateRequest, v1.ImportCertificateResponse](
+			httpClient,
+			baseURL+TlsServiceImportCertificateProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("ImportCertificate")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteCertificate: connect.NewClient[v1.DeleteCertificateRequest, v1.DeleteCertificateResponse](
+			httpClient,
+			baseURL+TlsServiceDeleteCertificateProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("DeleteCertificate")),
+			connect.WithClientOptions(opts...),
+		),
+		assignCertificate: connect.NewClient[v1.AssignCertificateRequest, v1.AssignCertificateResponse](
+			httpClient,
+			baseURL+TlsServiceAssignCertificateProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("AssignCertificate")),
+			connect.WithClientOptions(opts...),
+		),
+		revertToSelfSigned: connect.NewClient[v1.RevertToSelfSignedRequest, v1.RevertToSelfSignedResponse](
+			httpClient,
+			baseURL+TlsServiceRevertToSelfSignedProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("RevertToSelfSigned")),
+			connect.WithClientOptions(opts...),
+		),
+		setAcme: connect.NewClient[v1.SetAcmeRequest, v1.SetAcmeResponse](
+			httpClient,
+			baseURL+TlsServiceSetAcmeProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("SetAcme")),
+			connect.WithClientOptions(opts...),
+		),
+		renewNow: connect.NewClient[v1.RenewNowRequest, v1.RenewNowResponse](
+			httpClient,
+			baseURL+TlsServiceRenewNowProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("RenewNow")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -105,6 +221,16 @@ type tlsServiceClient struct {
 	createCsr           *connect.Client[v1.CreateCsrRequest, v1.CreateCsrResponse]
 	uploadCertificate   *connect.Client[v1.UploadCertificateRequest, v1.UploadCertificateResponse]
 	setAdminCertificate *connect.Client[v1.SetAdminCertificateRequest, v1.SetAdminCertificateResponse]
+	getCertificateStore *connect.Client[v1.GetCertificateStoreRequest, v1.GetCertificateStoreResponse]
+	generateCsr         *connect.Client[v1.GenerateCsrRequest, v1.GenerateCsrResponse]
+	completeCsr         *connect.Client[v1.CompleteCsrRequest, v1.CompleteCsrResponse]
+	discardCsr          *connect.Client[v1.DiscardCsrRequest, v1.DiscardCsrResponse]
+	importCertificate   *connect.Client[v1.ImportCertificateRequest, v1.ImportCertificateResponse]
+	deleteCertificate   *connect.Client[v1.DeleteCertificateRequest, v1.DeleteCertificateResponse]
+	assignCertificate   *connect.Client[v1.AssignCertificateRequest, v1.AssignCertificateResponse]
+	revertToSelfSigned  *connect.Client[v1.RevertToSelfSignedRequest, v1.RevertToSelfSignedResponse]
+	setAcme             *connect.Client[v1.SetAcmeRequest, v1.SetAcmeResponse]
+	renewNow            *connect.Client[v1.RenewNowRequest, v1.RenewNowResponse]
 }
 
 // GetTls calls sneakers.appliance.osadmin.v1.TlsService.GetTls.
@@ -127,6 +253,56 @@ func (c *tlsServiceClient) SetAdminCertificate(ctx context.Context, req *connect
 	return c.setAdminCertificate.CallUnary(ctx, req)
 }
 
+// GetCertificateStore calls sneakers.appliance.osadmin.v1.TlsService.GetCertificateStore.
+func (c *tlsServiceClient) GetCertificateStore(ctx context.Context, req *connect.Request[v1.GetCertificateStoreRequest]) (*connect.Response[v1.GetCertificateStoreResponse], error) {
+	return c.getCertificateStore.CallUnary(ctx, req)
+}
+
+// GenerateCsr calls sneakers.appliance.osadmin.v1.TlsService.GenerateCsr.
+func (c *tlsServiceClient) GenerateCsr(ctx context.Context, req *connect.Request[v1.GenerateCsrRequest]) (*connect.Response[v1.GenerateCsrResponse], error) {
+	return c.generateCsr.CallUnary(ctx, req)
+}
+
+// CompleteCsr calls sneakers.appliance.osadmin.v1.TlsService.CompleteCsr.
+func (c *tlsServiceClient) CompleteCsr(ctx context.Context, req *connect.Request[v1.CompleteCsrRequest]) (*connect.Response[v1.CompleteCsrResponse], error) {
+	return c.completeCsr.CallUnary(ctx, req)
+}
+
+// DiscardCsr calls sneakers.appliance.osadmin.v1.TlsService.DiscardCsr.
+func (c *tlsServiceClient) DiscardCsr(ctx context.Context, req *connect.Request[v1.DiscardCsrRequest]) (*connect.Response[v1.DiscardCsrResponse], error) {
+	return c.discardCsr.CallUnary(ctx, req)
+}
+
+// ImportCertificate calls sneakers.appliance.osadmin.v1.TlsService.ImportCertificate.
+func (c *tlsServiceClient) ImportCertificate(ctx context.Context, req *connect.Request[v1.ImportCertificateRequest]) (*connect.Response[v1.ImportCertificateResponse], error) {
+	return c.importCertificate.CallUnary(ctx, req)
+}
+
+// DeleteCertificate calls sneakers.appliance.osadmin.v1.TlsService.DeleteCertificate.
+func (c *tlsServiceClient) DeleteCertificate(ctx context.Context, req *connect.Request[v1.DeleteCertificateRequest]) (*connect.Response[v1.DeleteCertificateResponse], error) {
+	return c.deleteCertificate.CallUnary(ctx, req)
+}
+
+// AssignCertificate calls sneakers.appliance.osadmin.v1.TlsService.AssignCertificate.
+func (c *tlsServiceClient) AssignCertificate(ctx context.Context, req *connect.Request[v1.AssignCertificateRequest]) (*connect.Response[v1.AssignCertificateResponse], error) {
+	return c.assignCertificate.CallUnary(ctx, req)
+}
+
+// RevertToSelfSigned calls sneakers.appliance.osadmin.v1.TlsService.RevertToSelfSigned.
+func (c *tlsServiceClient) RevertToSelfSigned(ctx context.Context, req *connect.Request[v1.RevertToSelfSignedRequest]) (*connect.Response[v1.RevertToSelfSignedResponse], error) {
+	return c.revertToSelfSigned.CallUnary(ctx, req)
+}
+
+// SetAcme calls sneakers.appliance.osadmin.v1.TlsService.SetAcme.
+func (c *tlsServiceClient) SetAcme(ctx context.Context, req *connect.Request[v1.SetAcmeRequest]) (*connect.Response[v1.SetAcmeResponse], error) {
+	return c.setAcme.CallUnary(ctx, req)
+}
+
+// RenewNow calls sneakers.appliance.osadmin.v1.TlsService.RenewNow.
+func (c *tlsServiceClient) RenewNow(ctx context.Context, req *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error) {
+	return c.renewNow.CallUnary(ctx, req)
+}
+
 // TlsServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.TlsService service.
 type TlsServiceHandler interface {
 	GetTls(context.Context, *connect.Request[v1.GetTlsRequest]) (*connect.Response[v1.GetTlsResponse], error)
@@ -135,6 +311,36 @@ type TlsServiceHandler interface {
 	// SetAdminCertificate chooses whether :8443 also uses the product's
 	// certificate (its own stays the default).
 	SetAdminCertificate(context.Context, *connect.Request[v1.SetAdminCertificateRequest]) (*connect.Response[v1.SetAdminCertificateResponse], error)
+	// GetCertificateStore lists the store's certificates, the pending CSRs,
+	// the endpoints and what each serves, and the ACME state.
+	GetCertificateStore(context.Context, *connect.Request[v1.GetCertificateStoreRequest]) (*connect.Response[v1.GetCertificateStoreResponse], error)
+	// GenerateCsr makes a key on the box, seals it, and returns a CSR for the
+	// host name, the management addresses and one extra name.
+	GenerateCsr(context.Context, *connect.Request[v1.GenerateCsrRequest]) (*connect.Response[v1.GenerateCsrResponse], error)
+	// CompleteCsr takes the signed certificate and chain for a pending CSR,
+	// validates it against that CSR's key and adds it to the store.
+	CompleteCsr(context.Context, *connect.Request[v1.CompleteCsrRequest]) (*connect.Response[v1.CompleteCsrResponse], error)
+	// DiscardCsr drops a pending CSR and its key.
+	DiscardCsr(context.Context, *connect.Request[v1.DiscardCsrRequest]) (*connect.Response[v1.DiscardCsrResponse], error)
+	// ImportCertificate adds a key and certificate made elsewhere: a PFX
+	// (PKCS#12) with its password, the main path, or PEM.
+	ImportCertificate(context.Context, *connect.Request[v1.ImportCertificateRequest]) (*connect.Response[v1.ImportCertificateResponse], error)
+	// DeleteCertificate removes a certificate no endpoint uses.
+	DeleteCertificate(context.Context, *connect.Request[v1.DeleteCertificateRequest]) (*connect.Response[v1.DeleteCertificateResponse], error)
+	// AssignCertificate makes an endpoint serve a store certificate, live:
+	// :8443 swaps without a restart and is checked by a handshake, and the
+	// previous certificate is put back if the new one isn't served.
+	AssignCertificate(context.Context, *connect.Request[v1.AssignCertificateRequest]) (*connect.Response[v1.AssignCertificateResponse], error)
+	// RevertToSelfSigned puts an endpoint back on the box's own self-signed
+	// certificate.
+	RevertToSelfSigned(context.Context, *connect.Request[v1.RevertToSelfSignedRequest]) (*connect.Response[v1.RevertToSelfSignedResponse], error)
+	// SetAcme chooses the ACME issuer, account and challenge for cert-manager.
+	// It answers TLS_ACME_UNAVAILABLE until the product bundle brings
+	// cert-manager (spec 3, Section 2.7.2).
+	SetAcme(context.Context, *connect.Request[v1.SetAcmeRequest]) (*connect.Response[v1.SetAcmeResponse], error)
+	// RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
+	// TLS_ACME_UNAVAILABLE until then.
+	RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error)
 }
 
 // NewTlsServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -169,6 +375,67 @@ func NewTlsServiceHandler(svc TlsServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(tlsServiceMethods.ByName("SetAdminCertificate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tlsServiceGetCertificateStoreHandler := connect.NewUnaryHandler(
+		TlsServiceGetCertificateStoreProcedure,
+		svc.GetCertificateStore,
+		connect.WithSchema(tlsServiceMethods.ByName("GetCertificateStore")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceGenerateCsrHandler := connect.NewUnaryHandler(
+		TlsServiceGenerateCsrProcedure,
+		svc.GenerateCsr,
+		connect.WithSchema(tlsServiceMethods.ByName("GenerateCsr")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceCompleteCsrHandler := connect.NewUnaryHandler(
+		TlsServiceCompleteCsrProcedure,
+		svc.CompleteCsr,
+		connect.WithSchema(tlsServiceMethods.ByName("CompleteCsr")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceDiscardCsrHandler := connect.NewUnaryHandler(
+		TlsServiceDiscardCsrProcedure,
+		svc.DiscardCsr,
+		connect.WithSchema(tlsServiceMethods.ByName("DiscardCsr")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceImportCertificateHandler := connect.NewUnaryHandler(
+		TlsServiceImportCertificateProcedure,
+		svc.ImportCertificate,
+		connect.WithSchema(tlsServiceMethods.ByName("ImportCertificate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceDeleteCertificateHandler := connect.NewUnaryHandler(
+		TlsServiceDeleteCertificateProcedure,
+		svc.DeleteCertificate,
+		connect.WithSchema(tlsServiceMethods.ByName("DeleteCertificate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceAssignCertificateHandler := connect.NewUnaryHandler(
+		TlsServiceAssignCertificateProcedure,
+		svc.AssignCertificate,
+		connect.WithSchema(tlsServiceMethods.ByName("AssignCertificate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceRevertToSelfSignedHandler := connect.NewUnaryHandler(
+		TlsServiceRevertToSelfSignedProcedure,
+		svc.RevertToSelfSigned,
+		connect.WithSchema(tlsServiceMethods.ByName("RevertToSelfSigned")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceSetAcmeHandler := connect.NewUnaryHandler(
+		TlsServiceSetAcmeProcedure,
+		svc.SetAcme,
+		connect.WithSchema(tlsServiceMethods.ByName("SetAcme")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceRenewNowHandler := connect.NewUnaryHandler(
+		TlsServiceRenewNowProcedure,
+		svc.RenewNow,
+		connect.WithSchema(tlsServiceMethods.ByName("RenewNow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.TlsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TlsServiceGetTlsProcedure:
@@ -179,6 +446,26 @@ func NewTlsServiceHandler(svc TlsServiceHandler, opts ...connect.HandlerOption) 
 			tlsServiceUploadCertificateHandler.ServeHTTP(w, r)
 		case TlsServiceSetAdminCertificateProcedure:
 			tlsServiceSetAdminCertificateHandler.ServeHTTP(w, r)
+		case TlsServiceGetCertificateStoreProcedure:
+			tlsServiceGetCertificateStoreHandler.ServeHTTP(w, r)
+		case TlsServiceGenerateCsrProcedure:
+			tlsServiceGenerateCsrHandler.ServeHTTP(w, r)
+		case TlsServiceCompleteCsrProcedure:
+			tlsServiceCompleteCsrHandler.ServeHTTP(w, r)
+		case TlsServiceDiscardCsrProcedure:
+			tlsServiceDiscardCsrHandler.ServeHTTP(w, r)
+		case TlsServiceImportCertificateProcedure:
+			tlsServiceImportCertificateHandler.ServeHTTP(w, r)
+		case TlsServiceDeleteCertificateProcedure:
+			tlsServiceDeleteCertificateHandler.ServeHTTP(w, r)
+		case TlsServiceAssignCertificateProcedure:
+			tlsServiceAssignCertificateHandler.ServeHTTP(w, r)
+		case TlsServiceRevertToSelfSignedProcedure:
+			tlsServiceRevertToSelfSignedHandler.ServeHTTP(w, r)
+		case TlsServiceSetAcmeProcedure:
+			tlsServiceSetAcmeHandler.ServeHTTP(w, r)
+		case TlsServiceRenewNowProcedure:
+			tlsServiceRenewNowHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -202,4 +489,44 @@ func (UnimplementedTlsServiceHandler) UploadCertificate(context.Context, *connec
 
 func (UnimplementedTlsServiceHandler) SetAdminCertificate(context.Context, *connect.Request[v1.SetAdminCertificateRequest]) (*connect.Response[v1.SetAdminCertificateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.SetAdminCertificate is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) GetCertificateStore(context.Context, *connect.Request[v1.GetCertificateStoreRequest]) (*connect.Response[v1.GetCertificateStoreResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.GetCertificateStore is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) GenerateCsr(context.Context, *connect.Request[v1.GenerateCsrRequest]) (*connect.Response[v1.GenerateCsrResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.GenerateCsr is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) CompleteCsr(context.Context, *connect.Request[v1.CompleteCsrRequest]) (*connect.Response[v1.CompleteCsrResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.CompleteCsr is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) DiscardCsr(context.Context, *connect.Request[v1.DiscardCsrRequest]) (*connect.Response[v1.DiscardCsrResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.DiscardCsr is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) ImportCertificate(context.Context, *connect.Request[v1.ImportCertificateRequest]) (*connect.Response[v1.ImportCertificateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.ImportCertificate is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) DeleteCertificate(context.Context, *connect.Request[v1.DeleteCertificateRequest]) (*connect.Response[v1.DeleteCertificateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.DeleteCertificate is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) AssignCertificate(context.Context, *connect.Request[v1.AssignCertificateRequest]) (*connect.Response[v1.AssignCertificateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.AssignCertificate is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) RevertToSelfSigned(context.Context, *connect.Request[v1.RevertToSelfSignedRequest]) (*connect.Response[v1.RevertToSelfSignedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.RevertToSelfSigned is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) SetAcme(context.Context, *connect.Request[v1.SetAcmeRequest]) (*connect.Response[v1.SetAcmeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.SetAcme is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.RenewNow is not implemented"))
 }

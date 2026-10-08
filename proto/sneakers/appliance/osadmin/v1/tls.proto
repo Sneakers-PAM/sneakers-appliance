@@ -39,6 +39,98 @@ service TlsService {
       audit: "tls.admin-certificate.set"
     };
   }
+
+  // The certificate store (spec 3, Section 2.7.1). The four methods above
+  // are the earlier product-certificate model; they answer Not available
+  // and the store methods below replace them.
+
+  // GetCertificateStore lists the store's certificates, the pending CSRs,
+  // the endpoints and what each serves, and the ACME state.
+  rpc GetCertificateStore(GetCertificateStoreRequest) returns (GetCertificateStoreResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // GenerateCsr makes a key on the box, seals it, and returns a CSR for the
+  // host name, the management addresses and one extra name.
+  rpc GenerateCsr(GenerateCsrRequest) returns (GenerateCsrResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.csr.generate"
+    };
+  }
+  // CompleteCsr takes the signed certificate and chain for a pending CSR,
+  // validates it against that CSR's key and adds it to the store.
+  rpc CompleteCsr(CompleteCsrRequest) returns (CompleteCsrResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.csr.complete"
+    };
+  }
+  // DiscardCsr drops a pending CSR and its key.
+  rpc DiscardCsr(DiscardCsrRequest) returns (DiscardCsrResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.csr.discard"
+    };
+  }
+  // ImportCertificate adds a key and certificate made elsewhere: a PFX
+  // (PKCS#12) with its password, the main path, or PEM.
+  rpc ImportCertificate(ImportCertificateRequest) returns (ImportCertificateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.certificate.import"
+    };
+  }
+  // DeleteCertificate removes a certificate no endpoint uses.
+  rpc DeleteCertificate(DeleteCertificateRequest) returns (DeleteCertificateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.certificate.delete"
+    };
+  }
+  // AssignCertificate makes an endpoint serve a store certificate, live:
+  // :8443 swaps without a restart and is checked by a handshake, and the
+  // previous certificate is put back if the new one isn't served.
+  rpc AssignCertificate(AssignCertificateRequest) returns (AssignCertificateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.endpoint.assign"
+    };
+  }
+  // RevertToSelfSigned puts an endpoint back on the box's own self-signed
+  // certificate.
+  rpc RevertToSelfSigned(RevertToSelfSignedRequest) returns (RevertToSelfSignedResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.endpoint.revert"
+    };
+  }
+  // SetAcme chooses the ACME issuer, account and challenge for cert-manager.
+  // It answers TLS_ACME_UNAVAILABLE until the product bundle brings
+  // cert-manager (spec 3, Section 2.7.2).
+  rpc SetAcme(SetAcmeRequest) returns (SetAcmeResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.acme.set"
+    };
+  }
+  // RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
+  // TLS_ACME_UNAVAILABLE until then.
+  rpc RenewNow(RenewNowRequest) returns (RenewNowResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "tls.acme.renew"
+    };
+  }
 }
 
 message Certificate {
@@ -80,3 +172,269 @@ message SetAdminCertificateRequest {
 }
 
 message SetAdminCertificateResponse {}
+
+// CertificateSource is where a store certificate came from.
+enum CertificateSource {
+  CERTIFICATE_SOURCE_UNSPECIFIED = 0;
+  // CERTIFICATE_SOURCE_SELF_SIGNED: the box's own, made and renewed by it.
+  CERTIFICATE_SOURCE_SELF_SIGNED = 1;
+  // CERTIFICATE_SOURCE_CSR_SIGNED: signed for a CSR whose key the box made.
+  CERTIFICATE_SOURCE_CSR_SIGNED = 2;
+  // CERTIFICATE_SOURCE_UPLOADED: a key and certificate made elsewhere.
+  CERTIFICATE_SOURCE_UPLOADED = 3;
+  // CERTIFICATE_SOURCE_ACME: issued through cert-manager.
+  CERTIFICATE_SOURCE_ACME = 4;
+}
+
+// KeyType is the key GenerateCsr makes. Nothing weaker than RSA 3072 is
+// made or accepted.
+enum KeyType {
+  // KEY_TYPE_UNSPECIFIED is RSA 4096, the default.
+  KEY_TYPE_UNSPECIFIED = 0;
+  KEY_TYPE_ECDSA_P256 = 1;
+  KEY_TYPE_RSA_3072 = 2;
+  KEY_TYPE_RSA_4096 = 3;
+  KEY_TYPE_ECDSA_P384 = 4;
+}
+
+// EndpointSource is where an endpoint's certificate comes from: exactly
+// one of these.
+enum EndpointSource {
+  ENDPOINT_SOURCE_UNSPECIFIED = 0;
+  // ENDPOINT_SOURCE_SELF_SIGNED: the box's own (:8443 only).
+  ENDPOINT_SOURCE_SELF_SIGNED = 1;
+  // ENDPOINT_SOURCE_ASSIGNED: a store certificate (certificate_id).
+  ENDPOINT_SOURCE_ASSIGNED = 2;
+  // ENDPOINT_SOURCE_ACME: cert-manager.
+  ENDPOINT_SOURCE_ACME = 3;
+}
+
+// EndpointState is an endpoint's certificate health.
+enum EndpointState {
+  ENDPOINT_STATE_UNSPECIFIED = 0;
+  ENDPOINT_STATE_OK = 1;
+  ENDPOINT_STATE_SELF_SIGNED = 2;
+  // ENDPOINT_STATE_EXPIRING: 30 days or fewer left.
+  ENDPOINT_STATE_EXPIRING = 3;
+  ENDPOINT_STATE_EXPIRED = 4;
+  // ENDPOINT_STATE_NAMES_NOT_COVERED: the certificate covers none of the
+  // names the endpoint answers on (a changed host name or address).
+  ENDPOINT_STATE_NAMES_NOT_COVERED = 5;
+  // ENDPOINT_STATE_UNAVAILABLE: the endpoint isn't on this box yet.
+  ENDPOINT_STATE_UNAVAILABLE = 6;
+}
+
+// StoredCertificate is one certificate in the store, with its chain. The
+// key is sealed on the box and never returned.
+message StoredCertificate {
+  string id = 1;
+  CertificateSource source = 2;
+  string subject = 3;
+  string issuer = 4;
+  // names are the SANs: DNS names, then IP addresses.
+  repeated string names = 5;
+  google.protobuf.Timestamp not_before = 6;
+  google.protobuf.Timestamp not_after = 7;
+  // fingerprint is the leaf's SHA-256 as colon-separated upper-case hex.
+  string fingerprint = 8;
+  // key_type is for people: "RSA 4096", "ECDSA P-256".
+  string key_type = 9;
+  // chain is each certificate's subject, the leaf first.
+  repeated string chain = 10;
+  // used_by are the endpoint ids that serve it.
+  repeated string used_by = 11;
+  // csr_id is the CSR it was signed for (CSR-signed only).
+  string csr_id = 12;
+  google.protobuf.Timestamp added = 13;
+  // certificate_pem is the leaf and chain as PEM (public).
+  string certificate_pem = 14;
+}
+
+// PendingCsr is a CSR whose signed certificate hasn't been uploaded.
+message PendingCsr {
+  string id = 1;
+  string subject = 2;
+  repeated string names = 3;
+  string key_type = 4;
+  google.protobuf.Timestamp created = 5;
+  string csr_pem = 6;
+}
+
+// Endpoint is a TLS listener the box hosts.
+message Endpoint {
+  // id is admin (:8443) or product (443, every product route).
+  string id = 1;
+  // name is for people: ":8443 admin", "Product (443)".
+  string name = 2;
+  bool available = 3;
+  // unavailable_reason is one sentence when available is false.
+  string unavailable_reason = 4;
+  EndpointSource source = 5;
+  // certificate_id is the store certificate it serves.
+  string certificate_id = 6;
+  // names are what the endpoint answers on; its certificate must cover at
+  // least one.
+  repeated string names = 7;
+  EndpointState state = 8;
+  // state_detail is one plain sentence.
+  string state_detail = 9;
+  // serving_fingerprint is what a handshake gets now (:8443: the live file).
+  string serving_fingerprint = 10;
+  google.protobuf.Timestamp expires = 11;
+}
+
+// AcmeState is whether ACME through cert-manager can be used here.
+message AcmeState {
+  bool available = 1;
+  // reason is one sentence when available is false.
+  string reason = 2;
+}
+
+// ValidationCheck is one check a certificate passed or failed.
+message ValidationCheck {
+  // name is chain, key, names, validity or usage.
+  string name = 1;
+  bool passed = 2;
+  // detail is one plain sentence.
+  string detail = 3;
+}
+
+// ValidationReport rides a refused CompleteCsr or ImportCertificate as an
+// error detail, so the page can list every check.
+message ValidationReport {
+  repeated ValidationCheck checks = 1;
+}
+
+message GetCertificateStoreRequest {}
+
+message GetCertificateStoreResponse {
+  repeated StoredCertificate certificates = 1;
+  repeated PendingCsr csrs = 2;
+  repeated Endpoint endpoints = 3;
+  AcmeState acme = 4;
+}
+
+message GenerateCsrRequest {
+  // names is at most one extra name, a DNS name or an IP address: a CSR is
+  // for a single-name certificate. Wildcards are refused (a wildcard key is
+  // shared across servers; it comes in with ImportCertificate as a PFX).
+  // The host name and the management addresses are always included.
+  repeated string names = 1;
+  // common_name defaults to the host name.
+  string common_name = 2;
+  string organization = 3;
+  string organizational_unit = 4;
+  string locality = 5;
+  string province = 6;
+  // country is two letters.
+  string country = 7;
+  KeyType key_type = 8;
+}
+
+message GenerateCsrResponse {
+  PendingCsr csr = 1;
+}
+
+message CompleteCsrRequest {
+  string csr_id = 1;
+  string certificate_pem = 2;
+  // chain_pem is the intermediates, and the root if the CA gave it.
+  string chain_pem = 3;
+  // root_pem is the root, when the chain doesn't end at one.
+  string root_pem = 4;
+}
+
+message CompleteCsrResponse {
+  StoredCertificate certificate = 1;
+  repeated ValidationCheck checks = 2;
+}
+
+message DiscardCsrRequest {
+  string csr_id = 1;
+}
+
+message DiscardCsrResponse {}
+
+message ImportCertificateRequest {
+  // PEM: the certificate (it may carry the chain after it), the chain and
+  // the key.
+  string certificate_pem = 1;
+  string chain_pem = 2;
+  string key_pem = 3;
+  // Or PKCS#12 with its password. It is never stored; only the key (sealed)
+  // and the chain are.
+  bytes pkcs12 = 4;
+  string pkcs12_password = 5;
+  // root_pem is the root, when the chain doesn't end at one.
+  string root_pem = 6;
+}
+
+message ImportCertificateResponse {
+  StoredCertificate certificate = 1;
+  repeated ValidationCheck checks = 2;
+}
+
+message DeleteCertificateRequest {
+  string certificate_id = 1;
+}
+
+message DeleteCertificateResponse {}
+
+message AssignCertificateRequest {
+  string endpoint_id = 1;
+  string certificate_id = 2;
+}
+
+message AssignCertificateResponse {
+  Endpoint endpoint = 1;
+}
+
+message RevertToSelfSignedRequest {
+  string endpoint_id = 1;
+}
+
+message RevertToSelfSignedResponse {
+  Endpoint endpoint = 1;
+}
+
+// AcmeIssuer is the ACME directory cert-manager uses.
+enum AcmeIssuer {
+  ACME_ISSUER_UNSPECIFIED = 0;
+  // ACME_ISSUER_LETSENCRYPT_STAGING is the default for a first test.
+  ACME_ISSUER_LETSENCRYPT_STAGING = 1;
+  ACME_ISSUER_LETSENCRYPT_PRODUCTION = 2;
+  // ACME_ISSUER_CUSTOM is directory_url.
+  ACME_ISSUER_CUSTOM = 3;
+}
+
+// AcmeChallenge is how the CA checks the names.
+enum AcmeChallenge {
+  ACME_CHALLENGE_UNSPECIFIED = 0;
+  ACME_CHALLENGE_HTTP01 = 1;
+  ACME_CHALLENGE_DNS01 = 2;
+}
+
+message SetAcmeRequest {
+  AcmeIssuer issuer = 1;
+  string directory_url = 2;
+  string email = 3;
+  AcmeChallenge challenge = 4;
+  // dns_provider names the DNS-01 provider (cloudflare first).
+  string dns_provider = 5;
+  // dns_token is write-only: sealed on the box, never returned. Empty keeps
+  // the one already set.
+  string dns_token = 6;
+  // External Account Binding, for a custom directory that needs it.
+  string eab_key_id = 7;
+  string eab_hmac_key = 8;
+  // endpoint_ids are the endpoints whose source becomes ACME.
+  repeated string endpoint_ids = 9;
+}
+
+message SetAcmeResponse {}
+
+message RenewNowRequest {
+  string endpoint_id = 1;
+}
+
+message RenewNowResponse {}
