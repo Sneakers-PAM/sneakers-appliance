@@ -15,7 +15,6 @@
 package k0s_test
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -358,19 +357,6 @@ func freePort(t *testing.T) int {
 	}
 	defer func() { _ = ln.Close() }()
 	return ln.Addr().(*net.TCPAddr).Port
-}
-
-// banner is what answers on the forwarded port: QEMU accepts the
-// connection itself, so a closed guest port shows as no banner.
-func banner(addr string) string {
-	c, err := net.DialTimeout("tcp", addr, 2*time.Second)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = c.Close() }()
-	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
-	line, _ := bufio.NewReader(c).ReadString('\n')
-	return line
 }
 
 func key(t *testing.T, name string) string {
