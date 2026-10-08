@@ -208,3 +208,54 @@ func TestImageStatusNamesWhatTheNextStageRemoves(t *testing.T) {
 		t.Fatalf("next stage removes %v; want %s", r, previous)
 	}
 }
+
+// heldSlots reads one chunk of the root image, says so, and waits to be
+// let go before reading the rest.
+type heldSlots struct {
+	read, release chan struct{}
+}
+
+func (h heldSlots) WriteInactive(_ context.Context, r io.Reader, _ int64, _ string) error {
+	if _, err := io.CopyN(io.Discard, r, 1); err != nil {
+		return err
+	}
+	close(h.read)
+	<-h.release
+	_, err := io.Copy(io.Discard, r)
+	return err
+}
+
+// Status answers while a Stage writes the slot, with how much it wrote.
+func TestImageStatusReportsAStageWriting(t *testing.T) {
+	dir, pins := fixtures.Build(t, fixtures.Options{})
+	const running = "0.0.0-lab.20261007e-gabc1234"
+	esp := espDir(t.TempDir())
+	if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(running)), strings.NewReader("running")); err != nil {
+		t.Fatal(err)
+	}
+	held := heldSlots{read: make(chan struct{}), release: make(chan struct{})}
+	s := &imageupgrade.Stager{ESP: esp, Slots: held, Sealer: noSeal{}, Pins: pins, Running: running, InitVersion: running, WorkDir: t.TempDir()}
+	c := serveImages(t, s)
+	ctx := context.Background()
+	staged := make(chan error, 1)
+	go func() {
+		_, err := c.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir}))
+		staged <- err
+	}()
+	<-held.read
+	st, err := c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	close(held.release)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w, total := st.Msg.GetStageWrittenBytes(), st.Msg.GetStageTotalBytes(); w <= 0 || total <= 0 || w > total {
+		t.Fatalf("while writing: %d of %d", w, total)
+	}
+	if err := <-staged; err != nil {
+		t.Fatal(err)
+	}
+	st, err = c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil || st.Msg.GetStageTotalBytes() != 0 {
+		t.Fatalf("after the stage: %v %v", st, err)
+	}
+}

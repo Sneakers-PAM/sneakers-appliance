@@ -316,3 +316,54 @@ func TestStatusNamesThePreviousRelease(t *testing.T) {
 		t.Fatalf("after a revert: %+v", st)
 	}
 }
+
+// progressSlots reads the root image a chunk at a time and records what
+// the stager reports written after each.
+type progressSlots struct {
+	s    *imageupgrade.Stager
+	seen [][2]int64
+}
+
+func (p *progressSlots) WriteInactive(_ context.Context, r io.Reader, _ int64, _ string) error {
+	buf := make([]byte, 4096)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			done, total := p.s.Writing()
+			p.seen = append(p.seen, [2]int64{done, total})
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// While a stage writes the root image, Writing reports how much of it is
+// written; before and after, nothing.
+func TestStageReportsTheBytesWritten(t *testing.T) {
+	s, dir, _, _, _ := stager(t, "0.0.9")
+	p := &progressSlots{s: s}
+	s.Slots = p
+	if done, total := s.Writing(); done != 0 || total != 0 {
+		t.Fatalf("before a stage: %d of %d", done, total)
+	}
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.seen) == 0 {
+		t.Fatal("the slot read nothing")
+	}
+	last := p.seen[len(p.seen)-1]
+	if last[1] <= 0 || last[0] != last[1] {
+		t.Fatalf("at the end of the write: %d of %d", last[0], last[1])
+	}
+	if first := p.seen[0]; first[0] <= 0 || first[0] > first[1] {
+		t.Fatalf("after the first read: %d of %d", first[0], first[1])
+	}
+	if done, total := s.Writing(); done != 0 || total != 0 {
+		t.Fatalf("after the stage: %d of %d", done, total)
+	}
+}

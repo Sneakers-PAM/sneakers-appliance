@@ -1308,8 +1308,13 @@ type ImageServiceStatusResponse struct {
 	// next_stage_removes are the releases the next Stage removes to keep the
 	// box at its release count: the previous release, or a staged one.
 	NextStageRemoves []string `protobuf:"bytes,8,rep,name=next_stage_removes,json=nextStageRemoves,proto3" json:"next_stage_removes,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// stage_written_bytes of stage_total_bytes is how much of a release's
+	// root image a Stage under way has written into the inactive slot; both
+	// are 0 when no Stage is writing.
+	StageWrittenBytes int64 `protobuf:"varint,9,opt,name=stage_written_bytes,json=stageWrittenBytes,proto3" json:"stage_written_bytes,omitempty"`
+	StageTotalBytes   int64 `protobuf:"varint,10,opt,name=stage_total_bytes,json=stageTotalBytes,proto3" json:"stage_total_bytes,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ImageServiceStatusResponse) Reset() {
@@ -1396,6 +1401,20 @@ func (x *ImageServiceStatusResponse) GetNextStageRemoves() []string {
 		return x.NextStageRemoves
 	}
 	return nil
+}
+
+func (x *ImageServiceStatusResponse) GetStageWrittenBytes() int64 {
+	if x != nil {
+		return x.StageWrittenBytes
+	}
+	return 0
+}
+
+func (x *ImageServiceStatusResponse) GetStageTotalBytes() int64 {
+	if x != nil {
+		return x.StageTotalBytes
+	}
+	return 0
 }
 
 type RebootRequest struct {
@@ -2175,7 +2194,7 @@ const file_sneakers_appliance_init_v1_init_proto_rawDesc = "" +
 	"\x0fRollbackRequest\x12\x0e\n" +
 	"\x02by\x18\x01 \x01(\tR\x02by\"\x12\n" +
 	"\x10RollbackResponse\"\x1b\n" +
-	"\x19ImageServiceStatusRequest\"\xf5\x02\n" +
+	"\x19ImageServiceStatusRequest\"\xd1\x03\n" +
 	"\x1aImageServiceStatusResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
@@ -2186,7 +2205,10 @@ const file_sneakers_appliance_init_v1_init_proto_rawDesc = "" +
 	"\vreverted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revertedAt\x12)\n" +
 	"\x10previous_version\x18\a \x01(\tR\x0fpreviousVersion\x12,\n" +
-	"\x12next_stage_removes\x18\b \x03(\tR\x10nextStageRemoves\"'\n" +
+	"\x12next_stage_removes\x18\b \x03(\tR\x10nextStageRemoves\x12.\n" +
+	"\x13stage_written_bytes\x18\t \x01(\x03R\x11stageWrittenBytes\x12*\n" +
+	"\x11stage_total_bytes\x18\n" +
+	" \x01(\x03R\x0fstageTotalBytes\"'\n" +
 	"\rRebootRequest\x12\x16\n" +
 	"\x06forced\x18\x01 \x01(\bR\x06forced\"\x10\n" +
 	"\x0eRebootResponse\")\n" +
