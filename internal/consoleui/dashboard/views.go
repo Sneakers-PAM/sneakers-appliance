@@ -144,7 +144,7 @@ func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 	}
 	if err := d.Status.Err; err != nil {
 		if d.Status.Status != nil {
-			add(tui.Alert, "The appliance services aren't answering; this is the status from "+d.Status.Saved.In(time.Local).Format("15:04 MST")+".")
+			add(tui.Alert, "The appliance services aren't answering; this is the status from "+d.Status.Saved.In(now.Location()).Format("15:04 MST")+".")
 		} else {
 			add(tui.Alert, "The appliance services aren't answering yet; there's no status to show.")
 		}
@@ -167,7 +167,7 @@ func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 		if r.InUse {
 			add(tui.Warn, "A Recover access code is in use from "+r.Source+".")
 		} else {
-			add(tui.Warn, "A Recover access code is out until "+r.Expires.In(time.Local).Format("15:04")+".")
+			add(tui.Warn, "A Recover access code is out until "+r.Expires.In(now.Location()).Format("15:04")+".")
 		}
 	}
 	for _, w := range st.GetWarnings() {
