@@ -63,8 +63,11 @@ it strictly: an unknown field, a missing Secure Boot file on amd64, a Secure Boo
 - `spec.kitMin` is at most the kit's version, compared as semantic versions (`KIT_KIT_TOO_OLD`).
   The same check runs in init when a box stages an update, against the running init's version.
   `sneakers-artifact assemble --kit-min` sets it; the default is `0.0.0-0`, the lowest version, so
-  any kit or init that reads the manifest format accepts the release. Raise it only when a release
-  needs a newer verifier (`build/lab/build.sh` takes `KIT_MIN`);
+  any kit or init that reads the manifest format accepts the release. The release workflow takes
+  the floor from `KIT_MIN` in `build/release/pins.env` (`0.0.0-0`) and passes it to the production
+  assemble and to the lab job's `build/lab/build.sh`, which takes `KIT_MIN` too;
+  `build/release/kitmin_test.sh` checks both. Raise the pin only when a release needs a newer
+  verifier;
 - the PK, KEK and db fingerprints equal the kit's pins (`KIT_WRONG_SIGNER`).
 
 ## Error codes
