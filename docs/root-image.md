@@ -27,7 +27,7 @@ owner.
 | `/etc/cni -> /var/lib/cni-conf`, `/opt -> /var/lib/opt`, `/var/run -> /run`, `/var/log -> /var/lib/log`, `/etc/machine-id`, `/etc/hosts`, `/bin/{mount,umount}`, `/lib/modules`, `/usr/libexec/k0s/kubelet-plugins/volume/exec` | what k0s, containerd and the kubelet expect on the host ([k0s.md](k0s.md)) |
 | `/usr/lib/sneakers/services.d/` | the service table, from `os/rootfs/services.d/` |
 | `/usr/share/sneakers/release/release.yaml` | the release the root was built for |
-| `/usr/share/sneakers/osadmin/` | the :8443 static pages (`OSADMIN_ASSETS`; empty until sneakers-web ships them) |
+| `/usr/share/sneakers/osadmin/` | the :8443 static pages from sneakers-web (`OSADMIN_ASSETS`; a lab build makes them from `WEB`, [testing.md](testing.md)) |
 | `/etc/{passwd,group,shadow}` | links into `/run/sneakers/accounts/`, which accessd renders |
 | `/etc/resolv.conf` | a link to `/run/sneakers/resolv.conf` |
 | `/usr/sbin/{cryptsetup,veritysetup,mkfs.ext4,sgdisk}` | the static tools, when `STATIC` is given |
