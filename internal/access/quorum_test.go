@@ -59,7 +59,8 @@ func TestValidateQuorum(t *testing.T) {
 	}{
 		{[]string{"alice", "bob"}, 2, true},
 		{[]string{"alice", "bob", "carol"}, 2, true},
-		{[]string{"alice"}, 1, false},
+		{[]string{"alice"}, 1, true},
+		{nil, 0, false},
 		{[]string{"alice", "bob"}, 1, false},
 		{[]string{"alice", "bob"}, 3, false},
 		{[]string{"alice", "alice"}, 2, false},
@@ -69,6 +70,14 @@ func TestValidateQuorum(t *testing.T) {
 		if (err == nil) != tc.ok {
 			t.Errorf("%v of %v: %v", tc.required, tc.members, err)
 		}
+	}
+}
+
+func TestRootOperatorsAreTheRoster(t *testing.T) {
+	s := admins("alice", "bob")
+	s.Quorum = &access.QuorumRoster{Members: []string{"alice"}, Required: 1}
+	if !s.IsRootOperator("alice") || s.IsRootOperator("bob") {
+		t.Fatalf("root operators %v", s.RootOperators())
 	}
 }
 

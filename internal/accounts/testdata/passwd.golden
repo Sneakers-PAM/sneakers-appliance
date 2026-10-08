@@ -1,5 +1,4 @@
 root:x:0:0:root:/:/usr/sbin/nologin
-maint:x:0:0:elevated session:/run/sneakers/home/maint:/usr/libexec/sneakers-elevated
 sshd:x:100:100:sshd privilege separation:/run/sneakers/sshd-empty:/usr/sbin/nologin
 sshkeys:x:101:101:sshd keys command:/:/usr/sbin/nologin
 osadmin:x:102:102:appliance admin on 8443:/:/usr/sbin/nologin

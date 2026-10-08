@@ -87,7 +87,7 @@ func loginKey(t *testing.T) access.AdminKey {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return access.AdminKey{Key: k, Added: t0, AddedBy: "console", Via: access.ViaEnrol}
+	return access.AdminKey{Key: k, Added: t0, AddedBy: "alice", Via: access.ViaIssued}
 }
 
 func recoveryKeys(t *testing.T, n int) []access.RecoveryKey {
@@ -104,8 +104,19 @@ func recoveryKeys(t *testing.T, n int) []access.RecoveryKey {
 }
 
 func stateWithOwner(name string, keys ...access.AdminKey) access.State {
-	s := access.State{NextUID: access.FirstUID, ElevationPolicy: access.DefaultPolicy()}
-	a := s.AddAdmin(name, access.RoleOwner, "console", t0)
+	s := access.State{NextUID: access.FirstUID, AccessPolicy: access.DefaultPolicy()}
+	a := s.AddAdmin(name, access.RoleOwner, "setup", t0)
 	a.Keys = append(a.Keys, keys...)
+	a.Password = &access.Password{Hash: "$argon2id$test", Changed: t0}
+	a.TOTP = &access.TOTP{Sealed: "test", Added: t0}
+	s.Quorum = &access.QuorumRoster{Members: []string{name}, Required: 1}
 	return s
+}
+
+// signIn gives an admin a password and a TOTP secret, so the store counts
+// them as able to sign in.
+func signIn(a *access.Admin) *access.Admin {
+	a.Password = &access.Password{Hash: "$argon2id$test", Changed: t0}
+	a.TOTP = &access.TOTP{Sealed: "test", Added: t0}
+	return a
 }

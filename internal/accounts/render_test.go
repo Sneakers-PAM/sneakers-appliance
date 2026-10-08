@@ -50,7 +50,7 @@ func golden(t *testing.T, got, want string) {
 func TestRender(t *testing.T) {
 	dir := t.TempDir()
 	s := stateWithAdmins("alice:owner", "bob:admin")
-	if err := accounts.Render(s, false, dir); err != nil {
+	if err := accounts.Render(s, dir); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []string{"passwd", "group", "shadow"} {
@@ -67,8 +67,13 @@ func TestRender(t *testing.T) {
 			t.Fatalf("account has a password field: %q", line)
 		}
 	}
-	if strings.Contains(readFile(t, filepath.Join(dir, "passwd")), "enrol:") {
-		t.Fatal("enrol rendered outside the window")
+	for _, gone := range []string{"enrol:", "maint:"} {
+		if strings.Contains(readFile(t, filepath.Join(dir, "passwd")), gone) {
+			t.Fatalf("%s is rendered", gone)
+		}
+	}
+	if n := strings.Count(readFile(t, filepath.Join(dir, "passwd")), ":0:0:"); n != 1 {
+		t.Fatalf("%d uid 0 accounts; only root, which can't log in", n)
 	}
 	for f, mode := range map[string]os.FileMode{"passwd": 0o644, "group": 0o644, "shadow": 0o600} {
 		fi, err := os.Stat(filepath.Join(dir, f))
@@ -81,36 +86,12 @@ func TestRender(t *testing.T) {
 	}
 }
 
-func TestRenderEnrolWindow(t *testing.T) {
-	dir := t.TempDir()
-	if err := accounts.Render(stateWithAdmins(), true, dir); err != nil {
-		t.Fatal(err)
-	}
-	passwd := readFile(t, filepath.Join(dir, "passwd"))
-	if !strings.Contains(passwd, "enrol:x:103:103:SSH key enrolment:/run/sneakers/home/enrol:/usr/libexec/sneakers-enrol\n") {
-		t.Fatalf("no enrol account in the window:\n%s", passwd)
-	}
-	if !strings.Contains(readFile(t, filepath.Join(dir, "shadow")), "enrol:*:") {
-		t.Fatal("no shadow entry for enrol")
-	}
-	// Closing the window takes the account away again.
-	if err := accounts.Render(stateWithAdmins(), false, dir); err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(readFile(t, filepath.Join(dir, "passwd")), "enrol:") {
-		t.Fatal("enrol survived the window")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "passwd.tmp")); !os.IsNotExist(err) {
-		t.Fatal("a tmp file was left")
-	}
-}
-
 func TestMakeHomes(t *testing.T) {
 	root := t.TempDir()
-	if err := accounts.MakeHomes(stateWithAdmins("alice:owner"), false, root); err != nil {
+	if err := accounts.MakeHomes(stateWithAdmins("alice:owner"), root); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"alice", "maint"} {
+	for _, name := range []string{"alice"} {
 		fi, err := os.Stat(filepath.Join(root, name))
 		if err != nil {
 			t.Fatal(err)
@@ -119,7 +100,9 @@ func TestMakeHomes(t *testing.T) {
 			t.Fatalf("%s: %v", name, fi.Mode())
 		}
 	}
-	if _, err := os.Stat(filepath.Join(root, "enrol")); !os.IsNotExist(err) {
-		t.Fatal("enrol home made outside the window")
+	for _, gone := range []string{"enrol", "maint"} {
+		if _, err := os.Stat(filepath.Join(root, gone)); !os.IsNotExist(err) {
+			t.Fatalf("a %s home was made", gone)
+		}
 	}
 }
