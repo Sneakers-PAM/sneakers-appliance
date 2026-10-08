@@ -94,7 +94,9 @@ Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s
   `NET_BIND_SERVICE`. It serves `https://<box>/` on 443 from the hello NodePort, and 80 redirects to
   https. TLS uses the box's own self-signed :8443 certificate, which `k0s-interim prepare` writes
   as the `box-tls` Secret at each start (Traefik falls back to its own self-signed default without
-  it).
+  it). Traefik's ping has its own entry point on `127.0.0.1:9000`, as spec 3 has it, and the
+  readiness probe gets `http://127.0.0.1:9000/ping` there. Ping can't share 443: Traefik's ping
+  router has no TLS, so over HTTPS the hello route's `PathPrefix(/)` took `/ping` and answered 404.
 - Once a bundle is installed, accessd opens 80 and 443 on the service interface (the management
   one when the box has only one) through netd's `SetServicePorts`, after each product apply and
   revert and when it starts. 22 and 8443 are as before. Before a bundle is installed nothing
