@@ -48,8 +48,9 @@ type candidate struct {
 type equaler interface{ Equal(crypto.PublicKey) bool }
 
 // validate runs every check and returns the chain, leaf first and ending
-// at its root. names are the box's management names; one must be covered.
-func validate(c candidate, names []string, now time.Time) ([]*x509.Certificate, []Check, error) {
+// at its root. host and addrs are the box's management names; one must be
+// covered.
+func validate(c candidate, host string, addrs []string, now time.Time) ([]*x509.Certificate, []Check, error) {
 	var checks []Check
 	var first error
 	fail := func(name string, err error) {
@@ -89,9 +90,8 @@ func validate(c candidate, names []string, now time.Time) ([]*x509.Certificate, 
 		pass("chain", strings.Join(subjects, " > "))
 	}
 
-	covered := coveredNames(c.leaf, names)
-	if len(covered) == 0 {
-		fail("names", codes.New(codes.TLSNames, "the certificate covers %s only, not any of %s", strings.Join(sans(c.leaf), ", "), strings.Join(names, ", ")))
+	if covered := coveredNames(c.leaf, boxNames(host, addrs)); len(covered) == 0 {
+		fail("names", namesError(c.leaf, host, addrs))
 	} else {
 		pass("names", "covers "+strings.Join(covered, ", "))
 	}
@@ -208,6 +208,25 @@ func sans(c *x509.Certificate) []string {
 		out = append(out, ip.String())
 	}
 	return out
+}
+
+// namesError is the refusal of a certificate that covers none of the
+// box's names: what the box checked and what the certificate covers. With
+// no host name the box can only check its addresses, so it says how to
+// set one.
+func namesError(leaf *x509.Certificate, host string, addrs []string) error {
+	has := "no names"
+	if s := sans(leaf); len(s) > 0 {
+		has = strings.Join(s, ", ")
+	}
+	if host == "" {
+		checked := "no address"
+		if len(addrs) > 0 {
+			checked = strings.Join(addrs, ", ")
+		}
+		return codes.New(codes.TLSNoHostname, "this box has no host name yet, so the certificate is checked against %s only, and it covers %s; set the host name on Network (a fully qualified name such as appliance.example.org), then try again", checked, has)
+	}
+	return codes.New(codes.TLSNames, "the certificate covers %s, but none of the names this box checks: %s", has, strings.Join(boxNames(host, addrs), ", "))
 }
 
 func coveredNames(leaf *x509.Certificate, names []string) []string {

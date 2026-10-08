@@ -709,7 +709,7 @@ func (s *Store) add(ctx context.Context, c candidate, sc storedCert, key ...byte
 	if err != nil {
 		return Certificate{}, nil, err
 	}
-	built, checks, err := validate(c, boxNames(host, addrs), s.o.Now())
+	built, checks, err := validate(c, host, addrs, s.o.Now())
 	if err != nil {
 		s.o.Logger.Info("tls: certificate refused", log.F("source", string(sc.Source)), log.F("reason", sentence(err)))
 		return Certificate{}, checks, err
@@ -812,8 +812,8 @@ func (s *Store) Assign(ctx context.Context, endpoint, id string) (Endpoint, erro
 	if now.After(c.Leaf.NotAfter) {
 		return Endpoint{}, codes.New(codes.TLSValidity, "the certificate expired on %s", c.Leaf.NotAfter.UTC().Format(time.DateOnly))
 	}
-	if names := boxNames(host, addrs); len(coveredNames(c.Leaf, names)) == 0 {
-		return Endpoint{}, codes.New(codes.TLSNames, "the certificate covers %s only, not any of %s", strings.Join(sans(c.Leaf), ", "), strings.Join(names, ", "))
+	if len(coveredNames(c.Leaf, boxNames(host, addrs))) == 0 {
+		return Endpoint{}, namesError(c.Leaf, host, addrs)
 	}
 	key, ok, err := s.o.Sealer.Unseal(sc.KeyItem)
 	if err != nil {

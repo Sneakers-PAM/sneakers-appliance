@@ -744,3 +744,47 @@ func TestTheSelfSignedCertificateNamesTheAppliance(t *testing.T) {
 		t.Fatalf("organization %q", got)
 	}
 }
+
+func TestAWildcardPFXIsRefusedUntilTheBoxHasAHostNameAndThenCoversItWithoutTheAddress(t *testing.T) {
+	f := newFixtureFor(t, "")
+	ctx := context.Background()
+	l := f.ca.Issue(t, testpki.LeafOptions{Names: []string{"*.example.org"}})
+	p12, err := pkcs12.Modern.Encode(l.Key, l.Cert, []*x509.Certificate{f.ca.Intermediate, f.ca.Root}, "test-only-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := certstore.ImportRequest{PKCS12: p12, PKCS12Password: "test-only-password"}
+	_, _, err = f.s.Import(ctx, req)
+	wantCode(t, err, codes.TLSNoHostname, "this box has no host name yet, so the certificate is checked against 192.0.2.10 only")
+	for _, want := range []string{"*.example.org", "set the host name on Network"} {
+		wantCode(t, err, codes.TLSNoHostname, want)
+	}
+
+	f.host = "appliance.example.org"
+	c, checks, err := f.s.Import(ctx, req)
+	if err != nil {
+		t.Fatalf("*.example.org covers appliance.example.org, and the address isn't needed: %v", err)
+	}
+	for _, ch := range checks {
+		if ch.Name == "names" && ch.Detail != "covers appliance.example.org" {
+			t.Fatalf("names check: %+v", ch)
+		}
+	}
+	if _, err := f.s.Assign(ctx, certstore.EndpointAdmin, c.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	f.host = ""
+	if _, err := f.s.Revert(ctx, certstore.EndpointAdmin); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.s.Assign(ctx, certstore.EndpointAdmin, c.ID)
+	wantCode(t, err, codes.TLSNoHostname, "192.0.2.10")
+}
+
+func TestANamesRefusalSaysWhichNamesWereCheckedAndWhichTheCertificateCovers(t *testing.T) {
+	f := newFixture(t)
+	l := f.ca.Issue(t, testpki.LeafOptions{Names: []string{"www.example.org", "mail.example.org"}})
+	_, _, err := f.s.Import(context.Background(), certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: f.chain(), KeyPEM: string(l.KeyPEM)})
+	wantCode(t, err, codes.TLSNames, "the certificate covers www.example.org, mail.example.org, but none of the names this box checks: "+host+", 192.0.2.10")
+}
