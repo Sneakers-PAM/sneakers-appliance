@@ -9,12 +9,13 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitEmptyPasswords no
 PermitRootLogin no
+AuthorizedKeysFile none
+TrustedUserCAKeys /var/lib/sneakers/ssh/root_key.pub
 DisableForwarding yes
 PermitTunnel no
 PermitUserRC no
 PermitUserEnvironment no
 StrictModes yes
-AuthorizedKeysFile /run/sneakers/ssh/authorized_keys/%u
 RevokedKeys /var/lib/sneakers/ssh/revoked.krl
 ExposeAuthInfo yes
 ForceCommand /usr/bin/sneakers-shell
@@ -24,13 +25,5 @@ ClientAliveInterval 60
 ClientAliveCountMax 3
 LogLevel VERBOSE
 PidFile none
-AllowUsers alice bob maint
+AllowUsers alice bob
 # No Subsystem lines: no sftp, no scp.
-
-Match User maint
-    PermitRootLogin forced-commands-only
-    AuthorizedKeysFile none
-    TrustedUserCAKeys /var/lib/sneakers/ssh/user_ca.pub
-    AuthorizedPrincipalsFile /run/sneakers/ssh/principals/maint
-    ForceCommand /usr/libexec/sneakers-elevated
-    MaxSessions 1

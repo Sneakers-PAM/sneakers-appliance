@@ -55,6 +55,25 @@ func TestSessionFromSSH(t *testing.T) {
 	}
 }
 
+// A certificate login is named by the issued key inside it.
+func TestSessionFromSSHWithACertificate(t *testing.T) {
+	pk := pubKey(t)
+	_, caPriv, _ := ed25519.GenerateKey(rand.Reader)
+	ca, _ := ssh.NewSignerFromKey(caPriv)
+	c := &ssh.Certificate{Key: pk, Serial: 3, CertType: ssh.UserCert, ValidPrincipals: []string{"alice"}, ValidBefore: ssh.CertTimeInfinity}
+	if err := c.SignCert(rand.Reader, ca); err != nil {
+		t.Fatal(err)
+	}
+	line := "publickey " + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(c)))
+	s, err := shell.SessionFromSSH(envOf(map[string]string{"SSH_USER_AUTH": authFile(t, line+"\n"), "SSH_CONNECTION": "192.0.2.50 51234 192.0.2.10 22"}), "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.KeyFingerprint != ssh.FingerprintSHA256(pk) {
+		t.Fatalf("the certificate login is named %s, not its key %s", s.KeyFingerprint, ssh.FingerprintSHA256(pk))
+	}
+}
+
 func TestSessionFromSSHRefuses(t *testing.T) {
 	pk := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(pubKey(t))))
 	conn := "192.0.2.50 51234 192.0.2.10 22"

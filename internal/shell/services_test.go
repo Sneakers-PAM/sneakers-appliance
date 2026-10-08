@@ -14,45 +14,70 @@ import (
 
 	"connectrpc.com/connect"
 
+	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
-	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
-	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
-// fakeLocal is osadmin's LocalService as the shell sees it.
-type fakeLocal struct {
-	osadminv1connect.UnimplementedLocalServiceHandler
-	ua       string
-	approved []*osadminv1.ApproveSignInRequest
-	refuse   error
+// fakeSSHLogin is accessd's SshLoginService as the shell sees it.
+type fakeSSHLogin struct {
+	accessv1connect.UnimplementedSshLoginServiceHandler
+	codes []string
+	keys  []string
+	ended []string
 }
 
-func (f *fakeLocal) DescribeSignIn(_ context.Context, r *connect.Request[osadminv1.DescribeSignInRequest]) (*connect.Response[osadminv1.DescribeSignInResponse], error) {
-	if r.Msg.GetCode() != "ABCD-EFGH" {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("LOGIN_CODE (3201): unknown, used or expired sign-in code"))
+func (f *fakeSSHLogin) VerifyTotp(_ context.Context, r *connect.Request[accessv1.VerifyTotpRequest]) (*connect.Response[accessv1.VerifyTotpResponse], error) {
+	f.codes = append(f.codes, r.Msg.GetTotpCode())
+	f.keys = append(f.keys, r.Header().Get("Sneakers-Key-Fingerprint"))
+	if r.Msg.GetTotpCode() != "123456" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("ACCESS_CREDENTIALS (3017): the authenticator code is wrong or was used already; 2 tries left"))
 	}
-	return connect.NewResponse(&osadminv1.DescribeSignInResponse{SourceAddress: "192.0.2.50", UserAgent: f.ua}), nil
+	return connect.NewResponse(&accessv1.VerifyTotpResponse{Admin: "alice", LoginId: "L-1"}), nil
 }
 
-func (f *fakeLocal) ApproveSignIn(_ context.Context, r *connect.Request[osadminv1.ApproveSignInRequest]) (*connect.Response[osadminv1.ApproveSignInResponse], error) {
-	if f.refuse != nil {
-		return nil, f.refuse
-	}
-	f.approved = append(f.approved, r.Msg)
-	return connect.NewResponse(&osadminv1.ApproveSignInResponse{}), nil
+func (f *fakeSSHLogin) EndSshLogin(_ context.Context, r *connect.Request[accessv1.EndSshLoginRequest]) (*connect.Response[accessv1.EndSshLoginResponse], error) {
+	f.ended = append(f.ended, r.Msg.GetLoginId())
+	return connect.NewResponse(&accessv1.EndSshLoginResponse{}), nil
 }
 
-func services(t *testing.T, f *fakeLocal) *shell.Services {
+func withLogin(t *testing.T, f *fakeSSHLogin, fp string) *shell.Services {
 	t.Helper()
-	_, h := osadminv1connect.NewLocalServiceHandler(f)
-	srv := httptest.NewServer(h)
+	mux := http.NewServeMux()
+	mux.Handle(accessv1connect.NewSshLoginServiceHandler(f))
+	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return &shell.Services{
-		Session: shell.Session{Admin: "alice", KeyFingerprint: "SHA256:abc", Source: "192.0.2.60"},
-		Local:   osadminv1connect.NewLocalServiceClient(http.DefaultClient, srv.URL),
+	s := &shell.Services{Session: shell.Session{Admin: "alice", KeyFingerprint: fp, Source: "192.0.2.60"}}
+	s.UseAccessd(http.DefaultClient, srv.URL)
+	return s
+}
+
+// The login's first act is the TOTP check, with the key sshd authenticated;
+// a refusal is the login's end.
+func TestTheLoginChecksTheTOTPCodeFirst(t *testing.T) {
+	f := &fakeSSHLogin{}
+	s := withLogin(t, f, "SHA256:abc")
+	id, err := s.VerifyTotp(context.Background(), "123456")
+	if err != nil || id != "L-1" || f.keys[0] != "SHA256:abc" {
+		t.Fatalf("%q %v %v", id, err, f.keys)
+	}
+	if _, err := s.VerifyTotp(context.Background(), "000000"); !codes.Is(err, codes.AccessCredentials) || !strings.Contains(err.Error(), "tries left") {
+		t.Fatalf("a wrong code: %v", err)
+	}
+	s.EndLogin(context.Background(), id)
+	if len(f.ended) != 1 || f.ended[0] != "L-1" {
+		t.Fatalf("ended %v", f.ended)
+	}
+}
+
+func TestALoginWithoutItsKeyIsRefused(t *testing.T) {
+	f := &fakeSSHLogin{}
+	s := withLogin(t, f, "")
+	if _, err := s.VerifyTotp(context.Background(), "123456"); !codes.Is(err, codes.AccessForbidden) || len(f.codes) != 0 {
+		t.Fatalf("%v %v", err, f.codes)
 	}
 }
 
@@ -62,75 +87,6 @@ func runWith(t *testing.T, b shell.Backend, line, stdin string) (string, string,
 	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(stdin), Out: &out, Err: &errb}
 	err := shell.Run(context.Background(), e, line)
 	return out.String(), errb.String(), err
-}
-
-func TestLoginApprovesThroughOsadmin(t *testing.T) {
-	f := &fakeLocal{ua: "Mozilla/5.0 (X11; Linux x86_64) Firefox/140.0"}
-	out, _, err := runWith(t, services(t, f), "login ABCD-EFGH", "y\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "Sign in the browser at 192.0.2.50 (Mozilla/5.0 (X11; Linux x86_64) Firefox/140.0) as alice? [y/N] "
-	if !strings.Contains(out, want) {
-		t.Fatalf("prompt %q", out)
-	}
-	if len(f.approved) != 1 {
-		t.Fatalf("approvals %d", len(f.approved))
-	}
-	a := f.approved[0]
-	if a.GetCode() != "ABCD-EFGH" || a.GetAdmin() != "alice" || a.GetKeyFingerprint() != "SHA256:abc" || a.GetSourceAddress() != "192.0.2.60" {
-		t.Fatalf("%+v", a)
-	}
-	if !strings.Contains(out, "Signed in") {
-		t.Fatalf("out %q", out)
-	}
-}
-
-func TestLoginDefaultsToNo(t *testing.T) {
-	for _, answer := range []string{"\n", "", "n\n", "yes please\n", "Y es\n"} {
-		f := &fakeLocal{ua: "test-agent"}
-		_, _, err := runWith(t, services(t, f), "login ABCD-EFGH", answer)
-		if err != nil || len(f.approved) != 0 {
-			t.Fatalf("answer %q: %v, %d approvals", answer, err, len(f.approved))
-		}
-	}
-}
-
-func TestLoginPromptNeutralisesTheUserAgent(t *testing.T) {
-	f := &fakeLocal{ua: "evil\x1b[2J\x1b]0;title\x07\r\nSign in? [y/N] y" + strings.Repeat("A", 1000)}
-	out, _, err := runWith(t, services(t, f), "login ABCD-EFGH", "n\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.ContainsAny(out, "\x1b\x07\r") || strings.Count(out, "\n") > 1 {
-		t.Fatalf("control characters reached the terminal: %q", out)
-	}
-	if len(out) > 400 {
-		t.Fatalf("the user agent isn't shortened: %d bytes", len(out))
-	}
-}
-
-func TestLoginUnknownCode(t *testing.T) {
-	_, stderr, err := runWith(t, services(t, &fakeLocal{}), "login ZZZZ-ZZZZ", "y\n")
-	if err == nil || !strings.Contains(stderr, "LOGIN_CODE") {
-		t.Fatalf("%v %q", err, stderr)
-	}
-}
-
-func TestLoginRefusedByOsadmin(t *testing.T) {
-	f := &fakeLocal{ua: "a", refuse: connect.NewError(connect.CodePermissionDenied, errors.New("ACCESS_FORBIDDEN (3009): that key isn't one of alice's keys"))}
-	_, stderr, err := runWith(t, services(t, f), "login ABCD-EFGH", "y\n")
-	if err == nil || !strings.Contains(stderr, "ACCESS_FORBIDDEN") {
-		t.Fatalf("%v %q", err, stderr)
-	}
-}
-
-func TestLoginOsadminDown(t *testing.T) {
-	s := &shell.Services{Session: shell.Session{Admin: "alice", KeyFingerprint: "SHA256:abc"}, Local: osadminv1connect.NewLocalServiceClient(http.DefaultClient, "http://127.0.0.1:1")}
-	_, stderr, err := runWith(t, s, "login ABCD-EFGH", "y\n")
-	if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "appliance services are unavailable") {
-		t.Fatalf("%v %q", err, stderr)
-	}
 }
 
 func TestLaterSpecCommandsAreNotAvailable(t *testing.T) {
@@ -145,7 +101,7 @@ func TestLaterSpecCommandsAreNotAvailable(t *testing.T) {
 
 func TestAccessdCommandsSayServicesUnavailable(t *testing.T) {
 	s := &shell.Services{}
-	for _, line := range []string{"status", "keys list", "admins list", "network show", "elevation status"} {
+	for _, line := range []string{"status", "keys list", "admins list", "network show"} {
 		_, stderr, err := runWith(t, s, line, "")
 		if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "appliance services are unavailable") {
 			t.Errorf("%q: %v %q", line, err, stderr)

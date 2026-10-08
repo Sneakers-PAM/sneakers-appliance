@@ -9,7 +9,6 @@ import (
 	"crypto/rsa"
 	"encoding/pem"
 	"flag"
-	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -69,10 +68,12 @@ func twoAdmins(t *testing.T) access.State {
 	s := access.State{NextUID: access.FirstUID}
 	now := time.Date(2026, 10, 5, 14, 0, 0, 0, time.UTC)
 	for _, n := range []string{"alice", "bob"} {
-		a := s.AddAdmin(n, access.RoleOwner, "console", now)
+		a := s.AddAdmin(n, access.RoleOwner, "setup", now)
 		k, err := access.ParseLoginKey(edKeyLine(t))
 		mustNoErr(t, err)
-		a.Keys = append(a.Keys, access.AdminKey{Key: k, Added: now, AddedBy: "console", Via: access.ViaEnrol})
+		a.Keys = append(a.Keys, access.AdminKey{Key: k, Added: now, AddedBy: n, Via: access.ViaIssued, Serial: 1})
+		a.Password = &access.Password{Hash: "$argon2id$test", Changed: now}
+		a.TOTP = &access.TOTP{Sealed: "test", Added: now}
 	}
 	return s
 }
@@ -129,63 +130,44 @@ func golden(t *testing.T, got, path string) {
 }
 
 func TestRenderGolden(t *testing.T) {
-	for _, c := range []struct {
-		name      string
-		mode      sshconfig.Mode
-		enrolOpen bool
-	}{
-		{"enrol", sshconfig.EnrolMode, false},
-		{"admin", sshconfig.AdminMode, false},
-		{"admin-enrol-open", sshconfig.AdminMode, true},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			dir := t.TempDir()
-			in := sshconfig.Input{ListenAddrs: addrs("192.0.2.10", "2001:db8::10"), Mode: c.mode, EnrolOpen: c.enrolOpen,
-				State: twoAdmins(t), Principals: []string{"elev-E-7K2Q"}}
-			mustNoErr(t, sshconfig.Render(in, dir))
-			golden(t, withoutAlgorithms(t, readFile(t, filepath.Join(dir, "sshd_config"))), "testdata/"+c.name+".golden")
-		})
-	}
+	dir := t.TempDir()
+	in := sshconfig.Input{ListenAddrs: addrs("192.0.2.10", "2001:db8::10"), State: twoAdmins(t)}
+	mustNoErr(t, sshconfig.Render(in, dir))
+	golden(t, withoutAlgorithms(t, readFile(t, filepath.Join(dir, "sshd_config"))), "testdata/admin.golden")
 }
 
-func TestNoSubsystemNoPassword(t *testing.T) {
+func TestOnlyRootKeyCertificatesAndNoPasswords(t *testing.T) {
 	dir := t.TempDir()
-	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), Mode: sshconfig.AdminMode, State: twoAdmins(t)}, dir))
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), State: twoAdmins(t)}, dir))
 	cfg := readFile(t, filepath.Join(dir, "sshd_config"))
-	for _, banned := range []string{"\nSubsystem", "PasswordAuthentication yes", "KbdInteractiveAuthentication yes", "DisableForwarding no", "Match User enrol"} {
+	for _, banned := range []string{"\nSubsystem", "PasswordAuthentication yes", "KbdInteractiveAuthentication yes", "DisableForwarding no", "Match User", "AuthorizedKeysCommand"} {
 		if strings.Contains(cfg, banned) {
 			t.Fatalf("config contains %q", banned)
 		}
 	}
-	for _, want := range []string{"AuthenticationMethods publickey\n", "PermitRootLogin no\n", "ExposeAuthInfo yes\n", "AllowUsers alice bob maint\n"} {
+	for _, want := range []string{"AuthenticationMethods publickey\n", "AuthorizedKeysFile none\n", "TrustedUserCAKeys /var/lib/sneakers/ssh/root_key.pub\n",
+		"RevokedKeys /var/lib/sneakers/ssh/revoked.krl\n", "PermitRootLogin no\n", "ExposeAuthInfo yes\n", "ForceCommand /usr/bin/sneakers-shell\n", "AllowUsers alice bob\n"} {
 		if !strings.Contains(cfg, want) {
 			t.Fatalf("config lacks %q", want)
 		}
 	}
+	if ents, _ := os.ReadDir(dir); len(ents) != 1 {
+		t.Fatalf("Render wrote more than sshd_config: %v", ents)
+	}
 }
 
-func TestAuthorizedKeysAreRestricted(t *testing.T) {
-	dir := t.TempDir()
+func TestOnlyAdminsWhoCanSignInMayLogIn(t *testing.T) {
 	s := twoAdmins(t)
-	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), Mode: sshconfig.AdminMode, State: s}, dir))
-	for _, a := range s.Admins {
-		got := readFile(t, filepath.Join(dir, "authorized_keys", a.Name))
-		if got != "restrict,pty "+a.Keys[0].PublicKey+"\n" {
-			t.Fatalf("%s: %q", a.Name, got)
-		}
-	}
-	if readFile(t, filepath.Join(dir, "principals", "maint")) != "" {
-		t.Fatal("principals without an open elevation")
-	}
-}
-
-func TestEnrolModeRendersNoAdminKeys(t *testing.T) {
+	s.Admins[1].TOTP = nil
 	dir := t.TempDir()
-	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), Mode: sshconfig.EnrolMode, State: twoAdmins(t)}, dir))
-	ents, err := os.ReadDir(filepath.Join(dir, "authorized_keys"))
-	mustNoErr(t, err)
-	if len(ents) != 0 {
-		t.Fatalf("enrol mode rendered admin keys: %v", ents)
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), State: s}, dir))
+	if cfg := readFile(t, filepath.Join(dir, "sshd_config")); !strings.Contains(cfg, "AllowUsers alice\n") {
+		t.Fatalf("an invited admin may log in:\n%s", cfg)
+	}
+	s.Admins[0].TOTP = nil
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), State: s}, dir))
+	if cfg := readFile(t, filepath.Join(dir, "sshd_config")); !strings.Contains(cfg, "DenyUsers *\n") || strings.Contains(cfg, "AllowUsers") {
+		t.Fatalf("with nobody able to sign in:\n%s", cfg)
 	}
 }
 
@@ -206,32 +188,30 @@ func testPaths(t *testing.T, sshd, dir string) sshconfig.Paths {
 		mustNoErr(t, os.WriteFile(p, pem.EncodeToMemory(block), 0o600))
 		hostKeys = append(hostKeys, p)
 	}
-	ca := filepath.Join(keys, "user_ca.pub")
+	ca := filepath.Join(keys, "root_key.pub")
 	mustNoErr(t, os.WriteFile(ca, []byte(edKeyLine(t)+"\n"), 0o644))
 	krl := filepath.Join(keys, "revoked.krl")
 	mustNoErr(t, os.WriteFile(krl, nil, 0o644))
 	bin := filepath.Dir(sshd)
 	return sshconfig.Paths{
 		ConfigDir: filepath.Join(dir, "ssh"), HostKeys: hostKeys, RevokedKeys: krl, UserCA: ca,
-		PidFile: filepath.Join(dir, "sshd.pid"), Shell: "/bin/true", Elevated: "/bin/true", Enrol: "/bin/true", EnrolKeys: "/bin/true",
+		PidFile: filepath.Join(dir, "sshd.pid"), Shell: "/bin/true",
 		SessionPath: filepath.Join(bin, "sshd-session"), AuthPath: filepath.Join(bin, "sshd-auth"),
 	}
 }
 
 func TestRenderPassesSshdT(t *testing.T) {
 	sshd := requireSshd(t)
-	base := t.TempDir()
-	paths := testPaths(t, sshd, base)
-	for _, c := range []struct {
-		mode      sshconfig.Mode
-		enrolOpen bool
-	}{{sshconfig.EnrolMode, false}, {sshconfig.AdminMode, false}, {sshconfig.AdminMode, true}} {
-		t.Run(fmt.Sprintf("%s-%v", c.mode, c.enrolOpen), func(t *testing.T) {
+	paths := testPaths(t, sshd, t.TempDir())
+	none := twoAdmins(t)
+	for i := range none.Admins {
+		none.Admins[i].TOTP = nil
+	}
+	for name, st := range map[string]access.State{"admins": twoAdmins(t), "nobody": none} {
+		t.Run(name, func(t *testing.T) {
 			dir := paths.ConfigDir
 			mustNoErr(t, os.RemoveAll(dir))
-			in := sshconfig.Input{ListenAddrs: addrs("192.0.2.10", "2001:db8::10"), Mode: c.mode, EnrolOpen: c.enrolOpen,
-				State: twoAdmins(t), Principals: []string{"elev-E-7K2Q"}, Paths: paths}
-			mustNoErr(t, sshconfig.Render(in, dir))
+			mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10", "2001:db8::10"), State: st, Paths: paths}, dir))
 			mustNoErr(t, sshconfig.Check(sshd, dir))
 		})
 	}

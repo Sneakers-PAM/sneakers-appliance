@@ -111,11 +111,11 @@ func (r *rig) failCheck(err error) {
 	r.check = err
 }
 
-func (r *rig) options(mode sshdrun.Mode) sshdrun.Options {
+func (r *rig) options() sshdrun.Options {
 	p := sshconfig.DefaultPaths()
 	p.ConfigDir = filepath.Join(r.run, "ssh")
 	return sshdrun.Options{
-		Mode: mode, Paths: p, StateDir: r.state, AccountsDir: filepath.Join(r.run, "accounts"),
+		Paths: p, StateDir: r.state,
 		Addresses: func(context.Context) ([]netip.Addr, error) {
 			r.mu.Lock()
 			defer r.mu.Unlock()
@@ -141,10 +141,10 @@ func (r *rig) options(mode sshdrun.Mode) sshdrun.Options {
 	}
 }
 
-// start prepares and runs sshd-run in mode; it stops with the test.
-func (r *rig) start(mode sshdrun.Mode) *sshdrun.Runner {
+// start prepares and runs sshd-run; it stops with the test.
+func (r *rig) start() *sshdrun.Runner {
 	r.t.Helper()
-	run := sshdrun.New(r.options(mode))
+	run := sshdrun.New(r.options())
 	ctx, cancel := context.WithCancel(context.Background())
 	if err := run.Prepare(ctx); err != nil {
 		cancel()
@@ -186,7 +186,8 @@ func (r *rig) kick(run *sshdrun.Runner) {
 	waitFor(r.t, func() bool { return run.Reloads() > before })
 }
 
-// writeStore writes the access store with owners holding a key each.
+// writeStore writes the access store with owners who can sign in, holding
+// a key each.
 func (r *rig) writeStore(owners ...string) {
 	r.t.Helper()
 	st := access.State{NextUID: access.FirstUID}
@@ -205,7 +206,9 @@ func (r *rig) writeStore(owners ...string) {
 		if err != nil {
 			r.t.Fatal(err)
 		}
-		a.Keys = append(a.Keys, access.AdminKey{Key: k, Added: now, AddedBy: "console", Via: access.ViaEnrol})
+		a.Keys = append(a.Keys, access.AdminKey{Key: k, Added: now, AddedBy: n, Via: access.ViaIssued, Serial: 1})
+		a.Password = &access.Password{Hash: "$argon2id$test", Changed: now}
+		a.TOTP = &access.TOTP{Sealed: "test", Added: now}
 	}
 	b, err := json.Marshal(st)
 	if err != nil {
