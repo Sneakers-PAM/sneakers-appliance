@@ -22,6 +22,9 @@ import (
 
 func (b *box) finishSetup() {
 	b.t.Helper()
+	if err := os.MkdirAll(filepath.Join(b.state, "setup"), 0o700); err != nil {
+		b.t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(b.state, "setup", osadmin.DoneMarker), nil, 0o600); err != nil {
 		b.t.Fatal(err)
 	}

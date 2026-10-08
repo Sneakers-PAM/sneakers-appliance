@@ -45,6 +45,10 @@ message Rule {
   // console's Recover access code), before that admin can sign in. When
   // role is also set, a signed-in admin of that role may call it too.
   bool code_session = 5;
+  // setup_only methods are refused with SETUP_DONE once setup is done.
+  // Every call made with a setup code's session is refused the same way,
+  // whatever its method.
+  bool setup_only = 6;
 }
 
 extend google.protobuf.MethodOptions {
