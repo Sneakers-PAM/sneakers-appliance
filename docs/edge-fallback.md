@@ -47,7 +47,9 @@ It never serves product content and never proxies. The page has a strict CSP (`d
 browser that lands on it goes back to the product by itself.
 
 - **Loopback, always:** `127.0.0.1:9180`, plain HTTP. A product edge routes `/_box/` there and uses
-  it for its error pages (`502` to `504`), so an open tab gets the state from the same origin.
+  it for its error pages (`502` to `504`), so an open tab gets the state from the same origin. The
+  lab edge stack does both (`build/lab/stacks/edge/edge.yaml`, [k0s.md](k0s.md)), and the lab hello
+  page loads the poller.
 - **80 and 443, while k0s doesn't run:** on a box with a product bundle installed, edgefall holds
   `:443` (TLS 1.2 and up, the box's certificate) and `:80` (a redirect to https, as Traefik's 80
   does) while `GetPhase` says the product doesn't run, and from a reboot or a shutdown on. Both or

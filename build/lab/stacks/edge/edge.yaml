@@ -11,6 +11,10 @@
 # product bundle is installed (docs/k0s.md). Ping has its own entry point
 # on 127.0.0.1:9000 (spec 3), where the kubelet probes it: Traefik's ping
 # router has no TLS, so over HTTPS on 443 the hello route would take it.
+# /_box/ goes to sneakers-edgefall on 127.0.0.1:9180 (the host's loopback:
+# Traefik is on the host network), and when the hello pod doesn't answer
+# (502 to 504) the edge serves edgefall's box-state page instead of its
+# own error (docs/edge-fallback.md).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -25,12 +29,29 @@ data:
   dynamic.yaml: |
     http:
       routers:
+        box:
+          rule: PathPrefix(`/_box/`)
+          priority: 1000
+          entryPoints: [websecure]
+          service: box
+          tls: {}
         hello:
           rule: PathPrefix(`/`)
           entryPoints: [websecure]
           service: hello
+          middlewares: [box-page]
           tls: {}
+      middlewares:
+        box-page:
+          errors:
+            status: ["502-504"]
+            service: box
+            query: /_box/page
       services:
+        box:
+          loadBalancer:
+            servers:
+              - url: http://127.0.0.1:9180
         hello:
           loadBalancer:
             servers:

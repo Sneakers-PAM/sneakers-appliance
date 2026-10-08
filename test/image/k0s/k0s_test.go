@@ -125,6 +125,17 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 		time.Sleep(3 * time.Second)
 	}
 	t.Logf("the hello page answered on 443 %s after the apply", time.Since(started).Round(time.Second))
+	// The edge routes /_box/ to sneakers-edgefall, which says the box runs.
+	for {
+		body, err := httpsGetPath(httpsPort, "/_box/state")
+		if err == nil && strings.Contains(body, `"state":"running"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("https://<box>/_box/state from the host: %q, %v", body, err)
+		}
+		time.Sleep(time.Second)
+	}
 	c := http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := c.Get(fmt.Sprintf("http://127.0.0.1:%d/", httpPort))
 	if err != nil {
@@ -336,11 +347,13 @@ func (a *admin) upload(t *testing.T, file string) string {
 }
 
 // httpsGet fetches https://<box>/ through the forwarded 443.
-func httpsGet(port int) (string, error) {
+func httpsGet(port int) (string, error) { return httpsGetPath(port, "/") }
+
+func httpsGetPath(port int, path string) (string, error) {
 	c := http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 -- the box's self-signed certificate
 	}}
-	resp, err := c.Get(fmt.Sprintf("https://127.0.0.1:%d/", port))
+	resp, err := c.Get(fmt.Sprintf("https://127.0.0.1:%d%s", port, path))
 	if err != nil {
 		return "", err
 	}
