@@ -44,6 +44,7 @@ const (
 	NetReverted            = 3407
 	SetupIncomplete        = 3501
 	SetupCode              = 3502
+	SetupDone              = 3503
 	ResetUnavailable       = 3601
 	ResetApproved          = 3602
 	ResetCancelled         = 3603
@@ -95,6 +96,7 @@ var accessEntries = []apperr.Entry{
 	{Code: NetReverted, Symbol: "NET_REVERTED", Title: "network", Cause: "a change wasn't confirmed in 120 seconds and was undone"},
 	{Code: SetupIncomplete, Symbol: "SETUP_INCOMPLETE", Title: "setup", Cause: "a setup step is still open (the error names it)"},
 	{Code: SetupCode, Symbol: "SETUP_CODE", Title: "setup", Cause: "a wrong, used or expired one-time code (setup, invitation or Recover access)"},
+	{Code: SetupDone, Symbol: "SETUP_DONE", Title: "setup", Cause: "setup is done: a setup-only call, or a call with a setup code's session"},
 	{Code: ResetUnavailable, Symbol: "RESET_UNAVAILABLE", Title: "reset", Cause: "no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress"},
 	{Code: ResetApproved, Symbol: "RESET_APPROVED", Title: "reset", Cause: "this admin's approval is already counted, or they aren't on the roster"},
 	{Code: ResetCancelled, Symbol: "RESET_CANCELLED", Title: "reset", Cause: "the factory reset was cancelled, expired or never started"},

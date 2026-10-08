@@ -101,6 +101,11 @@ func (s *Server) interceptor() connect.UnaryInterceptorFunc {
 					return nil, toConnect(err)
 				}
 			}
+			if err := s.setupGate(c, rule); err != nil {
+				s.o.Logger.Warn("osadmin: a setup call after setup; refused", log.F("procedure", c.procedure), log.F("admin", c.session.Admin), log.F("source", c.source))
+				s.audit(c, rule, err)
+				return nil, toConnect(err)
+			}
 			s.o.Logger.Debug("osadmin: call", log.F("procedure", c.procedure), log.F("admin", c.session.Admin), log.F("source", c.source))
 			resp, err := next(ctx, req)
 			if err != nil && connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -114,6 +119,20 @@ func (s *Server) interceptor() connect.UnaryInterceptorFunc {
 			return resp, nil
 		}
 	}
+}
+
+// setupGate is the one setup-done check: once setup is done a
+// setup_only method, and any call made with a setup code's session, is
+// refused.
+func (s *Server) setupGate(c *call, rule *osadminv1.Rule) error {
+	setupCode := c.code != nil && c.code.Kind == osadminv1.CodeKind_CODE_KIND_SETUP
+	if !rule.GetSetupOnly() && !setupCode {
+		return nil
+	}
+	if !s.SetupDone() {
+		return nil
+	}
+	return codes.New(codes.SetupDone, "setup is done; this is a setup step")
 }
 
 // authorize checks the session (or, for a code_session method, the

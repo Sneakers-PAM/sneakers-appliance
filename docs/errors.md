@@ -47,6 +47,7 @@ shell, the console and :8443 show the same sentence.
 | 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
 | 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
 | 3502 | `SETUP_CODE` | a wrong, used or expired one-time code (setup, invitation or Recover access) |
+| 3503 | `SETUP_DONE` | setup is done: a setup-only call, or a call with a setup code's session |
 | 3601 | `RESET_UNAVAILABLE` | no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress |
 | 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
 | 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |

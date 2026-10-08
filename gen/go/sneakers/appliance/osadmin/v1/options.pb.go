@@ -105,7 +105,11 @@ type Rule struct {
 	// code gives (the first-boot setup code, an admin's invitation or the
 	// console's Recover access code), before that admin can sign in. When
 	// role is also set, a signed-in admin of that role may call it too.
-	CodeSession   bool `protobuf:"varint,5,opt,name=code_session,json=codeSession,proto3" json:"code_session,omitempty"`
+	CodeSession bool `protobuf:"varint,5,opt,name=code_session,json=codeSession,proto3" json:"code_session,omitempty"`
+	// setup_only methods are refused with SETUP_DONE once setup is done.
+	// Every call made with a setup code's session is refused the same way,
+	// whatever its method.
+	SetupOnly     bool `protobuf:"varint,6,opt,name=setup_only,json=setupOnly,proto3" json:"setup_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -175,6 +179,13 @@ func (x *Rule) GetCodeSession() bool {
 	return false
 }
 
+func (x *Rule) GetSetupOnly() bool {
+	if x != nil {
+		return x.SetupOnly
+	}
+	return false
+}
+
 var file_sneakers_appliance_osadmin_v1_options_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
@@ -196,13 +207,15 @@ var File_sneakers_appliance_osadmin_v1_options_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"\n" +
-	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\xa9\x01\n" +
+	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\xc8\x01\n" +
 	"\x04Rule\x12\x16\n" +
 	"\x06public\x18\x01 \x01(\bR\x06public\x127\n" +
 	"\x04role\x18\x02 \x01(\x0e2#.sneakers.appliance.osadmin.v1.RoleR\x04role\x12\x17\n" +
 	"\astep_up\x18\x03 \x01(\bR\x06stepUp\x12\x14\n" +
 	"\x05audit\x18\x04 \x01(\tR\x05audit\x12!\n" +
-	"\fcode_session\x18\x05 \x01(\bR\vcodeSession*<\n" +
+	"\fcode_session\x18\x05 \x01(\bR\vcodeSession\x12\x1d\n" +
+	"\n" +
+	"setup_only\x18\x06 \x01(\bR\tsetupOnly*<\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

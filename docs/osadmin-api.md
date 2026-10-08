@@ -46,6 +46,12 @@ session` is the session a redeemed one-time code gives (the setup code, an invit
 access code). Step-up means a sign-in or a fresh TOTP code (`SignInService.StepUp`) from the last 5
 minutes.
 
+Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin` and
+`SetupService.Finish` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
+and so is every call made with a setup code's session, so a stepper left open can't go on. The
+refusal is audited under the method's action. The recovery keys and the escrow stay an owner's
+after setup, and invitations and Recover access codes still use the code pages.
+
 ### Available in this release
 
 | Method | Role | Step-up | Audit action |

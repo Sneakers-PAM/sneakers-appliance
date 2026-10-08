@@ -181,6 +181,12 @@ The stepper's six steps (`GetSetup` reports them and the current one; calls out 
    checks every step, writes `/var/lib/sneakers/setup/done` and links to the product's own `/setup`.
    Product services list `setup/done` in their `start-when` paths, so none starts before.
 
+Once setup is done the stepper is closed, from one gate in the rules table: `AcknowledgeStep`,
+`AcknowledgeSingleAdmin` and `Finish` are refused with `SETUP_DONE`, and so is every call made with
+a setup code's session (the setup code itself is used up already). Each refusal is audited. The
+recovery keys (`AddRecoveryKey`, `RemoveRecoveryKey`, `DownloadEscrow`) stay available to owners,
+under step-up where they need it. `/setup` then only takes an invitation or a Recover access code.
+
 **Invitations.** An owner's `AddAdmin` returns a one-time invitation code (24 hours); the new admin
 redeems it on :8443 and sets their own password and TOTP secret the same way. `ReinviteAdmin` clears
 an admin's credentials, ends their sessions and gives a new code.
