@@ -125,3 +125,20 @@ to every console, while init's and every other service's output goes to
 `/run/sneakers/console.log` instead (1 MiB, then `console.log.1`). At most one service per phase may
 own the console, and it runs as root. When it stops, the consoles get a fresh line with the colours
 reset and the shared output again.
+
+#### The screen stays quiet
+
+The screen (a VT: `tty0`) never shows the kernel's, init's or the services' lines; the serial line
+still does, and they all go to `/run/sneakers/console.log` too. The UKI's command line has
+`quiet loglevel=1`, and init writes `1 4 1 7` to `/proc/sys/kernel/printk` right after the early
+mounts, so only the kernel's emergencies reach a console (the rest stay in the kernel log). Then
+init puts a branded page on the screen, the mark with "Sneakers-PAM is starting", and keeps the
+shared output off it. Its own screens that ask on the console (the Secure Boot choice, the
+protection step, "State locked", the mismatch screen, a fatal error) clear the screen and show as
+before; once they're answered the starting page comes back. A console program draws over it as
+soon as it owns the consoles.
+
+When a reboot or a shutdown is accepted, before the drain, init puts "Sneakers-PAM is rebooting" or
+"Sneakers-PAM is shutting down" on the screen and holds it there: nothing else reaches the screen,
+not even the console program's last frames, until the power goes. The finished factory reset at
+boot, and the enrol phase's reboot on QEMU, show the rebooting page the same way.

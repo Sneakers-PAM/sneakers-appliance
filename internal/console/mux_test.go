@@ -225,3 +225,91 @@ func TestLogFileRollsOver(t *testing.T) {
 		t.Fatalf("current %q, previous %q", cur, old)
 	}
 }
+
+// The screen is a VT (tty0, tty1 ...); a serial line (ttyS0, ttyAMA0,
+// ttyUSB0) isn't.
+func TestIsScreen(t *testing.T) {
+	for name, want := range map[string]bool{"tty0": true, "tty1": true, "tty12": true, "ttyS0": false, "ttyAMA0": false, "ttyUSB0": false, "tty": false, "console": false} {
+		if got := console.IsScreen(name); got != want {
+			t.Errorf("IsScreen(%q) = %v", name, got)
+		}
+	}
+}
+
+// waitAside waits until aside holds want.
+func waitAside(t *testing.T, aside *syncBuf, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for aside.String() != want {
+		if time.Now().After(deadline) {
+			t.Fatalf("aside holds %q, want %q", aside.String(), want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Quiet puts a page on the screen and keeps init's and the services'
+// lines off it: they go to the serial line and the log file. Loud clears
+// the screen for init's own questions and lets the lines through again.
+func TestQuietKeepsTheLinesOffTheScreen(t *testing.T) {
+	vga, serial := newTTY(), newTTY()
+	out, outW := io.Pipe()
+	m := console.Join(out, io.Discard, []console.Console{{Name: "tty0", RW: vga}, {Name: "ttyS0", RW: serial}}, t.Logf)
+	var aside syncBuf
+	m.SetAside(&aside)
+	m.Quiet([]byte("[starting]"))
+	waitShows(t, "tty0", vga, "[starting]")
+	if _, err := io.WriteString(outW, "init: phase decided\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitShows(t, "ttyS0", serial, "init: phase decided\n")
+	waitAside(t, &aside, "init: phase decided\n")
+	if got := vga.shows(); got != "[starting]" {
+		t.Fatalf("the screen shows %q", got)
+	}
+	m.Quiet([]byte("[starting]"))
+	m.Loud()
+	if _, err := io.WriteString(outW, "Secure Boot?\n"); err != nil {
+		t.Fatal(err)
+	}
+	m.Loud()
+	if _, err := io.WriteString(outW, "Type 1 or 2\n"); err != nil {
+		t.Fatal(err)
+	}
+	// Quiet and Loud again draw and clear nothing.
+	waitShows(t, "tty0", vga, "[starting]\x1b[0m\x1b[H\x1b[2J\x1b[?25hSecure Boot?\nType 1 or 2\n")
+	waitShows(t, "ttyS0", serial, "init: phase decided\nSecure Boot?\nType 1 or 2\n")
+}
+
+// Hold puts a page on the screen and keeps everything else off it, the
+// owner's output too: the rebooting and shutting down screens stay while
+// the services stop.
+func TestHoldKeepsEverythingOffTheScreen(t *testing.T) {
+	vga, serial := newTTY(), newTTY()
+	out, outW := io.Pipe()
+	m := console.Join(out, io.Discard, []console.Console{{Name: "tty0", RW: vga}, {Name: "ttyS0", RW: serial}}, t.Logf)
+	m.SetAside(io.Discard)
+	owner, ownerW := io.Pipe()
+	m.Attach(owner)
+	m.Hold([]byte("[rebooting]"))
+	waitShows(t, "tty0", vga, "[rebooting]")
+	if _, err := io.WriteString(ownerW, "dashboard"); err != nil {
+		t.Fatal(err)
+	}
+	waitShows(t, "ttyS0", serial, "dashboard")
+	_ = ownerW.Close()
+	deadline := time.Now().Add(5 * time.Second)
+	for m.Owned() {
+		if time.Now().After(deadline) {
+			t.Fatal("still owned after the owner's output ended")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := io.WriteString(outW, "power: rebooting\n"); err != nil {
+		t.Fatal(err)
+	}
+	waitShows(t, "ttyS0", serial, "dashboard\x1b[0m\r\npower: rebooting\n")
+	if got := vga.shows(); got != "[rebooting]" {
+		t.Fatalf("the screen shows %q", got)
+	}
+}

@@ -29,6 +29,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/reaper"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -53,8 +54,22 @@ func main() {
 		lg.Error(nil, "sneakers-init must run as PID 1")
 		os.Exit(1)
 	}
-	if err := run(lg); err != nil {
+	mountEarly(lg)
+	if err := quietKernel(printkPath); err != nil {
+		lg.Warn("init: the kernel's console loglevel wasn't set", log.F("error", err.Error()))
+	}
+	con := takeConsole(lg)
+	if con != nil {
+		// While the screen shows the starting page, or the dashboard or the
+		// setup wizard owns the consoles, the services' and init's own
+		// lines go to a file in /run instead of over the screen.
+		con.SetAside(&console.LogFile{Path: consoleLog, Max: consoleLogMax})
+	}
+	screen := newBootScreen(con)
+	screen.starting()
+	if err := run(lg, con, screen); err != nil {
 		lg.Error(err, "init: fatal")
+		screen.loud()
 		_, _ = fmt.Fprintln(os.Stderr, "sneakers-init:", codes.Describe(err))
 	}
 	// PID 1 must never exit: halt here so the console keeps the error.
@@ -65,9 +80,7 @@ func main() {
 // console.
 const flushWait = 2 * time.Second
 
-func run(lg log.TraceLogger) error {
-	mountEarly(lg)
-	con := takeConsole(lg)
+func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 	r := reaper.NewReaper()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
@@ -101,7 +114,7 @@ func run(lg log.TraceLogger) error {
 	// The custody header fixes the Secure Boot choice once first boot has
 	// run; the state it unlocks holds setup/done.
 	var kc *keycustody.Custody
-	state := stateDeps{sb: st, in: os.Stdin, out: os.Stderr, logf: func(format string, a ...any) { lg.Info(fmt.Sprintf(format, a...)) }}
+	state := stateDeps{sb: st, in: os.Stdin, out: &asking{w: os.Stderr, loud: screen.loud}, logf: func(format string, a ...any) { lg.Info(fmt.Sprintf(format, a...)) }}
 	initialized, opened := false, false
 	if !f.BootedFromISO && !f.ResetPending {
 		dev := bootDisk()
@@ -112,6 +125,7 @@ func run(lg log.TraceLogger) error {
 		state.custody = kc
 		h, ok, err := readHeader(ctx, kc)
 		if err != nil {
+			screen.loud()
 			_, _ = fmt.Fprint(os.Stderr, screens.StateLocked(codes.Describe(err)))
 			return err
 		}
@@ -136,8 +150,9 @@ func run(lg log.TraceLogger) error {
 
 	switch p {
 	case phase.Reset:
-		return finishReset(ctx, lg, con)
+		return finishReset(ctx, lg, con, screen)
 	case phase.Mismatch:
+		screen.loud()
 		_, _ = fmt.Fprint(os.Stderr, screens.Mismatch)
 		<-ctx.Done()
 		return nil
@@ -149,7 +164,7 @@ func run(lg log.TraceLogger) error {
 			setChoice: func(c string) error { return secureboot.WriteChoice(espMount, c) },
 			platform:  screens.DetectPlatform(readFile("/sys/class/dmi/id/sys_vendor")),
 			in:        os.Stdin,
-			out:       os.Stderr,
+			out:       &asking{w: os.Stderr, loud: screen.loud},
 			logf:      func(format string, a ...any) { lg.Info(fmt.Sprintf(format, a...)) },
 		})
 		if err != nil {
@@ -157,6 +172,7 @@ func run(lg log.TraceLogger) error {
 		}
 		if out == enrolReboot {
 			if screens.DetectPlatform(readFile("/sys/class/dmi/id/sys_vendor")) == screens.QEMU {
+				screen.stopping(osaudit.ActionReboot)
 				con.Flush(flushWait)
 				unix.Sync()
 				return unix.Reboot(unix.LINUX_REBOOT_CMD_RESTART)
@@ -178,6 +194,8 @@ func run(lg log.TraceLogger) error {
 			p = phase.Normal
 		}
 	}
+	// Back to the starting page if one of init's own screens asked.
+	screen.starting()
 
 	tbl, err := services.Load(os.DirFS("/"), services.Dir)
 	if err != nil {
@@ -185,14 +203,10 @@ func run(lg log.TraceLogger) error {
 	}
 	sopt := services.Options{Logger: lg}
 	if con != nil {
-		// While the dashboard or the setup wizard owns the consoles, the
-		// services' and init's own lines go to a file in /run instead of
-		// over their screen.
-		con.SetAside(&console.LogFile{Path: consoleLog, Max: consoleLogMax})
 		sopt.Console = con
 	}
 	sup := services.NewSupervisor(r, tbl, sopt)
-	pw := newPower(sup, lg, con)
+	pw := newPower(sup, lg, con, screen)
 	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, SecureBoot: st, Logger: lg}
 	if opened {
 		api.KeyCustody = kc

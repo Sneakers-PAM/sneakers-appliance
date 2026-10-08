@@ -14,8 +14,12 @@ the console in turn:
 Both run as root, after accessd, with `console: true` in their entry: their output reaches every
 console while every other service's lines (and init's own) go to `/run/sneakers/console.log`
 (1 MiB, then `console.log.1`). When the program stops, the shared output comes back on the
-consoles; init restarts it. Before either runs, init's own screens (the Secure Boot choice in
-`enrol`, the at-rest protection step, "State locked") are unchanged.
+consoles; init restarts it. Before either runs, the screen shows init's starting page ("Sneakers-PAM
+is starting") and none of the kernel's, init's or the services' lines; init's own screens (the
+Secure Boot choice in `enrol`, the at-rest protection step, "State locked") clear it and show as
+before. A reboot or a shutdown puts "Sneakers-PAM is rebooting" or "Sneakers-PAM is shutting down"
+on the screen until the power goes ([init.md](init.md#the-screen-stays-quiet)). The serial line
+still shows every line.
 
 The only inputs left are:
 

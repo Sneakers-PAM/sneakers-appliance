@@ -130,3 +130,32 @@ func (t *Taken) Claim() (*os.File, error) {
 // SetAside sets where the shared output goes while a program owns the
 // consoles.
 func (t *Taken) SetAside(w io.Writer) { t.mux.SetAside(w) }
+
+// Quiet draws page on the screens and keeps init's and the services'
+// lines off them (they go to the serial lines and aside). Nil-safe.
+func (t *Taken) Quiet(page []byte) {
+	if t != nil {
+		t.mux.Quiet(page)
+	}
+}
+
+// Loud clears the screens for init's own screens, which ask on the
+// console, once the lines written so far have gone their way. Nil-safe.
+func (t *Taken) Loud() {
+	if t == nil {
+		return
+	}
+	t.Flush(loudWait)
+	t.mux.Loud()
+}
+
+// Hold draws page on the screens and keeps everything else off them until
+// the box stops. Nil-safe.
+func (t *Taken) Hold(page []byte) {
+	if t != nil {
+		t.mux.Hold(page)
+	}
+}
+
+// loudWait bounds how long Loud waits for the quiet lines to go their way.
+const loudWait = 500 * time.Millisecond

@@ -393,3 +393,33 @@ func TestAResetWhoseCheckFailsDoesntReboot(t *testing.T) {
 		t.Fatal("a reset whose check failed rebooted")
 	}
 }
+
+// The screen says what's happening before anything stops: Announce runs
+// with the action before the drain, graceful or forced.
+func TestTheActionIsAnnouncedBeforeTheDrain(t *testing.T) {
+	for _, tc := range []struct {
+		off, forced bool
+		want        string
+	}{{false, false, osaudit.ActionReboot}, {true, false, osaudit.ActionShutdown}, {false, true, osaudit.ActionReboot}, {true, true, osaudit.ActionShutdown}} {
+		b := &box{}
+		c := power.New(power.Options{
+			Machine: b, Drainer: b, Audit: func() (power.Auditor, error) { return b, nil },
+			Roster: roster, Reset: &resetter{b: b}, Clock: clock.NewFake(),
+			Go:       func(fn func()) { fn() },
+			Announce: func(action string) { b.add("announce " + action) },
+		})
+		var err error
+		if tc.off {
+			err = c.PowerOff(ctx, osadmin, tc.forced)
+		} else {
+			err = c.Reboot(ctx, osadmin, tc.forced)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := b.log()
+		if len(got) < 2 || got[1] != "announce "+tc.want {
+			t.Fatalf("off=%v forced=%v: %v", tc.off, tc.forced, got)
+		}
+	}
+}

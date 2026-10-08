@@ -47,13 +47,17 @@ func boot(t *testing.T, o harness.Options) *harness.VM {
 
 // No serial port, Secure Boot off, no TPM: the VMware VM the lab first ran
 // on, whose screen stayed black because init's console was a serial port
-// that wasn't there. Once the services run, first boot owns the screen and
-// asks nothing: it shows the :8443 address on the DHCP lease, the one-time
-// setup code and the reduced protection, in the large font.
+// that wasn't there. The screen shows the starting page, not the kernel's
+// or init's lines (the banner goes to the serial line and the console
+// log), then the choice. Once the services run, first boot owns the
+// screen and asks nothing: it shows the :8443 address on the DHCP lease,
+// the one-time setup code and the reduced protection, in the large font.
 func TestTheScreenAloneShowsTheChoiceThenTheSetupInfo(t *testing.T) {
 	vm := boot(t, harness.Options{NoSerial: true})
-	vm.ExpectScreen(banner, 5*time.Minute)
-	vm.ExpectScreen(prompt, time.Minute)
+	vm.ExpectScreen(prompt, 5*time.Minute)
+	if s := strings.Join(vm.Screen(), "\n"); strings.Contains(s, "sneakers-init:") || strings.Contains(s, "services:") {
+		t.Fatalf("init's lines are on the screen:\n%s", s)
+	}
 	vm.Press(screens.TypedNoSecureBoot + "\r")
 	vm.ExpectScreen(chosen, time.Minute)
 	vm.ExpectScreen(keyfile, time.Minute)

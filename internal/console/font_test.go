@@ -73,3 +73,15 @@ func TestTheUKISetsTheApprovedPalette(t *testing.T) {
 		t.Fatalf("the accent slot is #%s, not the approved orange #E8742A", tui.Palette[3])
 	}
 }
+
+// The kernel's messages stay off the consoles but its emergencies:
+// quiet alone leaves the console loglevel at 4, so errors still print.
+func TestTheUKIKeepsTheKernelQuiet(t *testing.T) {
+	uki, err := os.ReadFile("../../build/uki/assemble.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(uki), " quiet loglevel=1 ") {
+		t.Error("the UKI command line doesn't set loglevel=1 after quiet")
+	}
+}

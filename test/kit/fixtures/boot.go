@@ -26,7 +26,7 @@ var Owner = [16]byte{0x5d, 0x4c, 0x8e, 0x4b, 0x3b, 0x9b, 0x4b, 0x58, 0x9e, 0x2c,
 
 // Cmdline is the UKI command line of spec 1 Section 3.3.
 func Cmdline(rootHash string, hashOffset int64) string {
-	return fmt.Sprintf("sneakers.roothash=%s sneakers.hashoffset=%d sneakers.version=%s quiet console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity",
+	return fmt.Sprintf("sneakers.roothash=%s sneakers.hashoffset=%d sneakers.version=%s quiet loglevel=1 console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity",
 		rootHash, hashOffset, Version)
 }
 
