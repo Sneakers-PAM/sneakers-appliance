@@ -8,7 +8,9 @@
 # box-tls Secret; without it Traefik's own self-signed default) and on 80,
 # which redirects to https. It forwards to the hello NodePort on the node
 # address. accessd opens 80 and 443 on the service interface once the
-# product bundle is installed (docs/k0s.md).
+# product bundle is installed (docs/k0s.md). Ping has its own entry point
+# on 127.0.0.1:9000 (spec 3), where the kubelet probes it: Traefik's ping
+# router has no TLS, so over HTTPS on 443 the hello route would take it.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -72,16 +74,18 @@ spec:
             - --entryPoints.web.http.redirections.entryPoint.to=websecure
             - --entryPoints.web.http.redirections.entryPoint.scheme=https
             - --entryPoints.websecure.address=:443
+            - --entryPoints.traefik.address=127.0.0.1:9000
             - --providers.file.filename=/etc/traefik/dynamic.yaml
             - --global.checkNewVersion=false
             - --global.sendAnonymousUsage=false
             - --ping=true
-            - --ping.entryPoint=websecure
+            - --ping.entryPoint=traefik
           readinessProbe:
             httpGet:
+              host: 127.0.0.1
               path: /ping
-              port: 443
-              scheme: HTTPS
+              port: 9000
+              scheme: HTTP
           securityContext:
             # Root only to bind 80 and 443 on the host network; every other
             # capability is dropped.

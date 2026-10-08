@@ -98,7 +98,9 @@ Default routes have metric 100 on the management interface and 200 on the servic
 The settings win where they say something; otherwise netd uses what DHCP and router advertisements
 offer, management interface first. `/run/sneakers/resolv.conf` (which `/etc/resolv.conf` links to)
 lists at most three servers, link-local ones left out, and at most six search domains. The host
-name is the setting, else the DHCP host name joined to its domain.
+name is the setting, else the DHCP host name joined to its domain. With no DNS server set or
+offered the file names none, and the box still runs; k0s's cluster DNS falls back as
+[k0s.md](k0s.md#cluster-dns-with-no-dns-server) describes.
 
 The clock is kept by SNTP (`internal/timesync`, IPv4 and IPv6 servers, up to
 four): one bounded sync, then polls. A large offset is stepped once at the

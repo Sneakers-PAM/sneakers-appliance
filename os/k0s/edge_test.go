@@ -1,0 +1,98 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package k0s_test
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
+
+type edgeDeployment struct {
+	Kind string `yaml:"kind"`
+	Spec struct {
+		Template struct {
+			Spec struct {
+				Containers []struct {
+					Name           string   `yaml:"name"`
+					Args           []string `yaml:"args"`
+					ReadinessProbe *struct {
+						HTTPGet *struct {
+							Host   string `yaml:"host"`
+							Path   string `yaml:"path"`
+							Port   int    `yaml:"port"`
+							Scheme string `yaml:"scheme"`
+						} `yaml:"httpGet"`
+					} `yaml:"readinessProbe"`
+				} `yaml:"containers"`
+			} `yaml:"spec"`
+		} `yaml:"template"`
+	} `yaml:"spec"`
+}
+
+// Traefik serves ping as its own router with no TLS, so on an entry point
+// that isn't TLS by itself an HTTPS probe reaches the product routes
+// instead (the hello route's PathPrefix(/) answered 404). Spec 3 gives ping
+// its own entry point on loopback, which the probe reaches over plain HTTP
+// and clients never see.
+func TestTheEdgeProbesTraefiksPingOnItsOwnLoopbackEntryPoint(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "stacks", "edge", "edge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	var found bool
+	for {
+		var d edgeDeployment
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind != "Deployment" {
+			continue
+		}
+		for _, c := range d.Spec.Template.Spec.Containers {
+			if c.Name != "traefik" {
+				continue
+			}
+			found = true
+			flags := map[string]string{}
+			for _, a := range c.Args {
+				k, v, _ := strings.Cut(a, "=")
+				flags[k] = v
+			}
+			ep := flags["--ping.entryPoint"]
+			if ep == "" || ep == "web" || ep == "websecure" {
+				t.Fatalf("ping is on the entry point %q; want its own", ep)
+			}
+			host, port, err := net.SplitHostPort(flags["--entryPoints."+ep+".address"])
+			if err != nil || host != "127.0.0.1" {
+				t.Fatalf("the ping entry point %s listens on %q; want 127.0.0.1:<port>", ep, flags["--entryPoints."+ep+".address"])
+			}
+			if _, tls := flags["--entryPoints."+ep+".http.tls"]; tls {
+				t.Errorf("the ping entry point %s has TLS; the probe speaks plain HTTP", ep)
+			}
+			p := c.ReadinessProbe
+			if p == nil || p.HTTPGet == nil {
+				t.Fatal("the edge has no HTTP readiness probe")
+			}
+			g := p.HTTPGet
+			if g.Host != host || strconv.Itoa(g.Port) != port || g.Path != "/ping" || (g.Scheme != "" && g.Scheme != "HTTP") {
+				t.Errorf("the readiness probe gets %s://%s:%d%s; want http://%s:%s/ping", g.Scheme, g.Host, g.Port, g.Path, host, port)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("edge.yaml has no traefik container")
+	}
+}
