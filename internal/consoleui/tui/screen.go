@@ -26,6 +26,7 @@ type Screen struct {
 	prev        []string
 	cursor      [2]int
 	cursorStale bool
+	shown       bool
 }
 
 // NewScreen draws on w, a cols x rows terminal.
@@ -75,17 +76,20 @@ func (s *Screen) Draw(f Frame) error {
 				fmt.Fprintf(&b, "\x1b[%d;1H%s", i+1, r)
 			}
 		}
-		fmt.Fprintf(&b, "\x1b[%d;%dH", cursor[0]+1, cursor[1]+1)
+		fmt.Fprintf(&b, "\x1b[%d;%dH%s", cursor[0]+1, cursor[1]+1, visibility(f.Cursor))
 	} else {
 		moved := cursor != s.cursor || s.cursorStale
 		for i, r := range rows {
 			if r != s.prev[i] {
-				fmt.Fprintf(&b, "\x1b[%d;1H%s\x1b[K", i+1, r)
+				// Every row is the full width, so it overwrites the old
+				// one entirely; an erase to the end of the line would clear
+				// the frame's right edge from the last column.
+				fmt.Fprintf(&b, "\x1b[%d;1H%s", i+1, r)
 			}
 		}
 		switch {
-		case moved:
-			fmt.Fprintf(&b, "\x1b[%d;%dH", cursor[0]+1, cursor[1]+1)
+		case moved || f.Cursor != s.shown:
+			fmt.Fprintf(&b, "\x1b[%d;%dH%s", cursor[0]+1, cursor[1]+1, visibility(f.Cursor))
 		case b.Len() > 0:
 			// Keep the typing position: an answer typed half-way stays.
 			b.WriteString("\x1b8")
@@ -94,10 +98,19 @@ func (s *Screen) Draw(f Frame) error {
 			b.WriteString(out)
 		}
 	}
-	s.prev, s.cursor, s.drawn, s.cursorStale = rows, cursor, true, false
+	s.prev, s.cursor, s.drawn, s.cursorStale, s.shown = rows, cursor, true, false, f.Cursor
 	if b.Len() == 0 {
 		return nil
 	}
 	_, err := io.WriteString(s.w, b.String())
 	return err
+}
+
+// visibility shows the cursor where there's something to type, and hides
+// it on a page that only shows.
+func visibility(shown bool) string {
+	if shown {
+		return "\x1b[?25h"
+	}
+	return "\x1b[?25l"
 }

@@ -5,8 +5,9 @@
 
 // Package setup_test is the image suite's whole first boot, on the box a
 // VMware VM is: a screen and no serial port, Secure Boot off, no TPM, and
-// a NIC on QEMU's user network with 22 and 8443 forwarded. The wizard gets
-// the DHCP address and shows the setup code; on :8443 the code makes the
+// a NIC on QEMU's user network with 22 and 8443 forwarded. First boot
+// asks nothing: it takes the DHCP address and shows the setup code; on
+// :8443 the code makes the
 // first admin with a password and a TOTP secret, sshd comes on, the box
 // issues an SSH key, a recovery key is set, one sign-in finishes setup,
 // and after a reboot the box is in normal operation with SSH (the issued
@@ -44,7 +45,7 @@ const (
 	prompt  = `type "` + screens.TypedNoSecureBoot + `" and press Enter`
 	keyfile = `Press Enter to continue`
 	// QEMU's user network hands the first guest its first lease.
-	leased = `10\.0\.2\.15/24` // scrub:allow=private-ip -- QEMU's user network
+	leasedHost = `10\.0\.2\.15` // scrub:allow=private-ip -- QEMU's user network
 )
 
 func freePort(t *testing.T) int {
@@ -118,7 +119,7 @@ func connectCall(t *testing.T, hc *http.Client, base, csrf, procedure string, in
 	}
 }
 
-var codeOnScreen = regexp.MustCompile(`setup code ([0-9A-Z]{4}-[0-9A-Z]{4})`)
+var codeOnScreen = regexp.MustCompile(`Setup code ([0-9A-Z]{4}(?:-[0-9A-Z]{4}){3})`)
 
 // totp hands out TOTP codes for steps not used yet: the box takes each
 // step's code once.
@@ -155,25 +156,16 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 	vm.ExpectScreen(keyfile, 2*time.Minute)
 	vm.Press("\r")
 
-	// 1. The wizard shows the address netd took by DHCP; it's kept once
-	// the checks have run (DNS and NTP fail on a network with no way out,
-	// and can be skipped; the address can't).
-	vm.ExpectScreen(`The box took an address by itself.*`+leased, 5*time.Minute)
+	// 1. First boot asks nothing: netd takes the DHCP address, and the
+	// info screen shows the :8443 address on it, with no SSH yet.
+	vm.ExpectScreen(`Open this address in your browser: .*https://`+leasedHost+`:8443`, 5*time.Minute)
 	if b := banner(sshAddr); strings.HasPrefix(b, "SSH-") {
-		t.Fatalf("SSH answered before the first-boot SSH step: %q", b)
+		t.Fatalf("SSH answered before the first admin: %q", b)
 	}
-	vm.Press("\r")
-	if m := vm.ExpectScreen(`Every check passed|c: continue anyway`, 3*time.Minute); strings.Contains(m, "continue anyway") {
-		vm.Press("c\r")
-	} else {
-		vm.Press("\r")
-	}
-	vm.ExpectScreen(`Setup 2 of 5: protection.*Protection: reduced \(Secure Boot off\)`, time.Minute)
-	vm.Press("\r")
 
 	// 2. The setup code on the screen opens the :8443 setup page; no SSH
 	// yet.
-	m := vm.ExpectScreen(`setup code [0-9A-Z]{4}-[0-9A-Z]{4}`, 3*time.Minute)
+	m := vm.ExpectScreen(`Setup code [0-9A-Z]{4}(?:-[0-9A-Z]{4}){3}`, 3*time.Minute)
 	code := codeOnScreen.FindStringSubmatch(m)[1]
 	if b := banner(sshAddr); strings.HasPrefix(b, "SSH-") {
 		t.Fatalf("SSH answered before the first admin: %q", b)
@@ -253,28 +245,28 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 		t.Fatal(err)
 	}
 	connectCall(t, hc, base, csrf, api+"SetupService/AddRecoveryKey", map[string]any{"publicKey": strings.TrimSpace(string(recovery)), "label": "safe"}, &struct{}{})
-	vm.ExpectScreen(`\[x\] 4 Recovery`, 2*time.Minute)
 	var out string
 	if out, err = ssh(ctx, sshPort, "alice", alice, "000000\n", "status"); err == nil {
 		t.Fatalf("a wrong TOTP code let the login through: %s", out)
 	}
 
 	// 5. The network and protection steps, one admin confirmed, one
-	// sign-in, and the wizard completes setup.
+	// sign-in, and first boot completes setup.
 	for _, step := range []string{"SETUP_STEP_KIND_NETWORK", "SETUP_STEP_KIND_PROTECTION"} {
 		connectCall(t, hc, base, csrf, api+"SetupService/AcknowledgeStep", map[string]any{"step": step}, &struct{}{})
 	}
 	connectCall(t, hc, base, csrf, api+"SetupService/AcknowledgeSingleAdmin", map[string]any{}, &struct{}{})
 	connectCall(t, hc, base, "", api+"SignInService/SignIn", map[string]any{"admin": "alice", "password": password, "totpCode": codes.next()}, &session)
-	vm.ExpectScreen(`Setup is complete.*Restart to start normal operation`, 2*time.Minute)
-	vm.Press("reboot\r")
+	// The console completes setup and restarts into normal operation by
+	// itself.
+	vm.ExpectScreen(`Setup is done`, 2*time.Minute)
 	vm.WaitExit(5 * time.Minute)
 
 	// 6. Normal operation: the dashboard, SSH into the closed shell, and
 	// :8443 with the certificate the status names.
 	next := harness.Boot(t, opts(vm.Disk(0)))
-	next.ExpectScreen(`Sneakers-PAM appliance Status`, 5*time.Minute)
-	next.ExpectScreen(`Management 10\.0\.2\.15/24`, 3*time.Minute)
+	next.ExpectScreen(`Health `, 5*time.Minute)
+	next.ExpectScreen(`Admin https://`+leasedHost+`:8443`, 3*time.Minute)
 	deadline = time.Now().Add(3 * time.Minute)
 	for {
 		if out, err = ssh(ctx, sshPort, "alice", alice, codes.next()+"\n", "status", "-o", "json"); err == nil && strings.Contains(out, `"normal"`) {

@@ -6,6 +6,8 @@ package tui_test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -15,38 +17,104 @@ import (
 
 func page() tui.Page {
 	return tui.Page{
-		Title:  "Sneakers-PAM appliance",
-		Right:  "sneakers.example.org",
-		Banner: []tui.Line{tui.Styled(tui.Alert, "Protection: reduced (Secure Boot off).")},
-		Body:   []tui.Line{tui.Text("Version  0.1.0"), tui.Text(""), tui.Text("Management  192.0.2.10")},
-		Keys:   "Enter: menu",
-		Prompt: "> ",
-		Footer: "sneakers 0.1.0 | normal | 2026-10-07 18:03 UTC | NTP synced",
+		Name:    "Sneakers-PAM appliance",
+		Version: "0.1.0",
+		Info:    "slot A  1 node",
+		Body:    []tui.Line{tui.Styled(tui.Alert, "Protection reduced"), tui.Text(""), tui.Text("Address  192.0.2.10")},
+		Keys:    tui.Line{{Text: "R", Style: tui.Strong}, {Text: "  Recover access"}},
+		Prompt:  "> ",
 	}
 }
 
-// The page fills the rows it's given, and no row reaches the last column,
-// so writing it can never scroll the screen.
-func TestThePageFitsTheScreen(t *testing.T) {
-	for _, size := range [][2]int{{80, 24}, {80, 25}, {132, 43}} {
+// The frame fills the terminal it's given, every row the same width; the
+// body block is centred in it.
+func TestTheFrameFitsTheTerminal(t *testing.T) {
+	for _, size := range [][2]int{{64, 24}, {80, 24}, {80, 25}, {128, 48}} {
 		f := page().Frame(size[0], size[1])
 		if len(f.Rows) != size[1] {
 			t.Fatalf("%v: %d rows", size, len(f.Rows))
 		}
 		for i, r := range f.Rows {
-			if n := r.Len(); n > size[0]-1 {
-				t.Errorf("%v: row %d is %d wide", size, i, n)
+			if n := r.Len(); n != size[0] {
+				t.Errorf("%v: row %d is %d wide, want %d", size, i, n, size[0])
+			}
+		}
+		rows := strings.Split(strings.TrimSuffix(f.Text(), "\n"), "\n")
+		if !strings.HasPrefix(rows[0], "+--") || !strings.HasPrefix(rows[size[1]-1], "+--") {
+			t.Errorf("%v: no top and bottom border:\n%s", size, f.Text())
+		}
+		for i := 1; i < size[1]-1; i++ {
+			bars := strings.HasPrefix(rows[i], "|") && strings.HasSuffix(rows[i], "|")
+			rule := strings.HasPrefix(rows[i], "+") && strings.HasSuffix(rows[i], "+")
+			if !bars && !rule {
+				t.Errorf("%v: row %d has no side bars: %q", size, i, rows[i])
 			}
 		}
 		text := f.Text()
-		for _, want := range []string{"Sneakers-PAM appliance", "sneakers.example.org", "Protection: reduced", "Management  192.0.2.10", "Enter: menu", "NTP synced"} {
+		for _, want := range []string{"Sneakers-PAM appliance", "0.1.0", "slot A  1 node", "Protection reduced", "Address  192.0.2.10", "R  Recover access"} {
 			if !strings.Contains(text, want) {
 				t.Errorf("%v: the frame lacks %q:\n%s", size, want, text)
 			}
 		}
-		if f.CursorRow != size[1]-2 || f.CursorCol != 3 {
-			t.Errorf("%v: cursor at %d,%d", size, f.CursorRow, f.CursorCol)
+		// The block is centred: the body starts as far from the left bar
+		// as the widest block line ends from the right one, give or take one.
+		var body string
+		for _, r := range rows {
+			if strings.Contains(r, "Address  192.0.2.10") {
+				body = r
+			}
 		}
+		left := strings.Index(body, "Address") - 1
+		right := len(body) - 1 - (left + 1 + tui.BlockWidth(size[0]))
+		if d := left - right; d < -1 || d > 1 || tui.BlockWidth(size[0]) > tui.Width {
+			t.Errorf("%v: the block isn't centred: left %d right %d (block %d)", size, left, right, tui.BlockWidth(size[0]))
+		}
+		if !f.Cursor || f.CursorRow >= size[1]-1 || f.CursorCol != left+1+2 {
+			t.Errorf("%v: cursor %v at %d,%d", size, f.Cursor, f.CursorRow, f.CursorCol)
+		}
+	}
+}
+
+// The block is never wider than the large font's 64 columns allow.
+func TestTheBlockFitsTheLargeFont(t *testing.T) {
+	if got := tui.BlockWidth(64); got != tui.Width || tui.Width+2+2 > 64 {
+		t.Fatalf("block %d at 64 columns, Width %d", got, tui.Width)
+	}
+	if got := tui.BlockWidth(40); got > 40-2-2 {
+		t.Fatalf("block %d at 40 columns", got)
+	}
+}
+
+// The boot and info screens carry the mark and the wordmark, centred
+// above the body; the others a one-row header.
+func TestTheMarkIsOnTheBigPagesOnly(t *testing.T) {
+	p := page()
+	p.Big = true
+	big := p.Frame(64, 24).Text()
+	for _, want := range tui.MarkLines() {
+		if !strings.Contains(big, want) {
+			t.Fatalf("the big page lacks the mark line %q:\n%s", want, big)
+		}
+	}
+	small := page().Frame(64, 24).Text()
+	if strings.Contains(small, tui.MarkLines()[0]) {
+		t.Fatalf("the small page has the mark:\n%s", small)
+	}
+}
+
+// Short of room, a one-row-header page gives up the blank under the
+// header before it cuts the body.
+func TestAFullBodyMovesUpBeforeItIsCut(t *testing.T) {
+	p := page()
+	p.Body = nil
+	// 24 rows: the borders, the header and its rule, the prompt, the keys
+	// and their rule leave 17.
+	for i := 0; i < 17; i++ {
+		p.Body = append(p.Body, tui.Text(fmt.Sprintf("line %d", i)))
+	}
+	text := p.Frame(64, 24).Text()
+	if strings.Contains(text, "...") || !strings.Contains(text, "line 0") || !strings.Contains(text, "line 16") {
+		t.Fatalf("frame:\n%s", text)
 	}
 }
 
@@ -55,9 +123,40 @@ func TestALongBodyIsCutWithANote(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		p.Body = append(p.Body, tui.Text("line"))
 	}
-	text := p.Frame(80, 24).Text()
-	if !strings.Contains(text, "(more below the screen: menu, status)") || !strings.Contains(text, "Enter: menu") {
+	text := p.Frame(64, 24).Text()
+	if !strings.Contains(text, "...") || !strings.Contains(text, "R  Recover access") {
 		t.Fatalf("frame:\n%s", text)
+	}
+}
+
+// A page with nothing to type hides the cursor; with keys but no prompt
+// the cursor waits after the keys.
+func TestKeysWithoutAPromptTakeTheCursor(t *testing.T) {
+	p := page()
+	p.Prompt = ""
+	f := p.Frame(64, 24)
+	row := f.Rows[f.CursorRow].String()
+	if !f.Cursor || !strings.Contains(row, "R  Recover access") || f.CursorCol != strings.Index(row, "access")+len("access")+3 {
+		t.Fatalf("cursor %v at %d,%d on %q", f.Cursor, f.CursorRow, f.CursorCol, row)
+	}
+}
+
+func TestNoPromptHidesTheCursor(t *testing.T) {
+	p := page()
+	p.Prompt, p.Keys = "", nil
+	if f := p.Frame(64, 24); f.Cursor {
+		t.Fatalf("cursor shown at %d,%d", f.CursorRow, f.CursorCol)
+	}
+	var out bytes.Buffer
+	s := tui.NewScreen(&out, 64, 24, false)
+	_ = s.Draw(p.Frame(64, 24))
+	if !strings.Contains(out.String(), "\x1b[?25l") {
+		t.Fatalf("the cursor wasn't hidden: %q", out.String())
+	}
+	out.Reset()
+	_ = s.Draw(page().Frame(64, 24))
+	if !strings.Contains(out.String(), "\x1b[?25h") {
+		t.Fatalf("the cursor wasn't shown again: %q", out.String())
 	}
 }
 
@@ -79,29 +178,30 @@ func TestWrap(t *testing.T) {
 // nothing flickers and a half-typed answer stays where it is.
 func TestTheScreenRedrawsOnlyWhatChanged(t *testing.T) {
 	var out bytes.Buffer
-	s := tui.NewScreen(&out, 80, 24, false)
+	s := tui.NewScreen(&out, 64, 24, false)
 	p := page()
-	if err := s.Draw(p.Frame(80, 24)); err != nil {
+	f := p.Frame(64, 24)
+	if err := s.Draw(f); err != nil {
 		t.Fatal(err)
 	}
 	first := out.String()
-	if !strings.HasPrefix(first, "\x1b[0m\x1b[H\x1b[2J") || !strings.HasSuffix(first, "\x1b[23;4H") {
+	if !strings.HasPrefix(first, "\x1b[0m\x1b[H\x1b[2J") || !strings.HasSuffix(first, fmt.Sprintf("\x1b[%d;%dH\x1b[?25h", f.CursorRow+1, f.CursorCol+1)) {
 		t.Fatalf("first draw: %q", first)
 	}
 	out.Reset()
-	if err := s.Draw(p.Frame(80, 24)); err != nil {
+	if err := s.Draw(p.Frame(64, 24)); err != nil {
 		t.Fatal(err)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("an unchanged frame wrote %q", out.String())
 	}
-	p.Footer = "sneakers 0.1.0 | normal | 2026-10-07 18:04 UTC | NTP synced"
-	if err := s.Draw(p.Frame(80, 24)); err != nil {
+	p.Body[2] = tui.Text("Address  192.0.2.11")
+	if err := s.Draw(p.Frame(64, 24)); err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
-	if !strings.HasPrefix(got, "\x1b7\x1b[24;1H") || !strings.HasSuffix(got, "\x1b[K\x1b8") || strings.Contains(got, "\x1b[2J") || strings.Contains(got, "Management") {
-		t.Fatalf("the clock tick wrote %q", got)
+	if !strings.HasPrefix(got, "\x1b7\x1b[") || !strings.HasSuffix(got, "\x1b8") || strings.Contains(got, "\x1b[2J") || strings.Contains(got, "Protection") || !strings.Contains(got, "192.0.2.11") {
+		t.Fatalf("the change wrote %q", got)
 	}
 }
 
@@ -110,13 +210,13 @@ func TestTheScreenRedrawsOnlyWhatChanged(t *testing.T) {
 // screen, which only a full redraw puts right.
 func TestTypingMakesThePromptRowStale(t *testing.T) {
 	var out bytes.Buffer
-	s := tui.NewScreen(&out, 80, 24, false)
-	f := page().Frame(80, 24)
+	s := tui.NewScreen(&out, 64, 24, false)
+	f := page().Frame(64, 24)
 	_ = s.Draw(f)
 	out.Reset()
 	s.Typed(len("yes"))
 	_ = s.Draw(f)
-	if got := out.String(); !strings.Contains(got, "\x1b[23;1H") || strings.Contains(got, "\x1b[2J") {
+	if got := out.String(); !strings.Contains(got, fmt.Sprintf("\x1b[%d;1H", f.CursorRow+1)) || strings.Contains(got, "\x1b[2J") {
 		t.Fatalf("after a short line: %q", got)
 	}
 	out.Reset()
@@ -140,13 +240,17 @@ func TestColourAndPlain(t *testing.T) {
 		if hasColour != color {
 			t.Errorf("color=%v: wrote alert colour %v: %q", color, hasColour, got)
 		}
-		for _, bad := range []string{"\x1b[7m", "\x1b[4", "\x1b[10"} {
-			if strings.Contains(got, bad) {
-				t.Errorf("color=%v: wrote %q", color, bad)
+		for _, m := range sgrCodes.FindAllStringSubmatch(got, -1) {
+			for _, code := range strings.Split(m[1], ";") {
+				if code == "7" || code == "4" || len(code) == 2 && code[0] == '4' || len(code) == 3 && code[:2] == "10" {
+					t.Errorf("color=%v: wrote SGR %q", color, m[0])
+				}
 			}
 		}
 	}
 }
+
+var sgrCodes = regexp.MustCompile(`\x1b\[([0-9;]*)m`)
 
 func TestColourWanted(t *testing.T) {
 	cases := []struct {
@@ -216,5 +320,28 @@ func TestReadLines(t *testing.T) {
 	}
 	if strings.Join(got, "|") != "no secure boot|1|last" {
 		t.Fatalf("lines %q", got)
+	}
+}
+
+// A wake redraws the page between ticks.
+func TestWakeRedraws(t *testing.T) {
+	wake := make(chan struct{})
+	lines := make(chan string)
+	drawn := make(chan string, 4)
+	u := &tui.UI{Screen: tui.NewScreen(&bytes.Buffer{}, 64, 24, false), Lines: lines, Wake: wake, Cols: 64, Rows: 24,
+		OnFrame: func(f tui.Frame) { drawn <- f.Text() }}
+	n := 0
+	go func() {
+		_, _, _ = u.Ask(context.Background(), func() (tui.Page, bool) {
+			n++
+			p := page()
+			p.Body = []tui.Line{tui.Text(fmt.Sprintf("draw %d", n))}
+			return p, false
+		})
+	}()
+	<-drawn
+	wake <- struct{}{}
+	if f := <-drawn; !strings.Contains(f, "draw 2") {
+		t.Fatalf("after the wake:\n%s", f)
 	}
 }

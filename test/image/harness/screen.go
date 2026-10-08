@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -26,26 +25,31 @@ import (
 // the font compiled into it.
 var Kernel = envOr("SNEAKERS_KERNEL", "")
 
-// The kernel console's cell: fbcon's built-in 8x16 font.
-const (
-	cellW = 8
-	cellH = 16
-)
+// glyphs is one of fbcon's built-in fonts: its cell, and each printable
+// character's bitmap (a row a byte, or two for a 16-wide cell).
+type glyphs struct {
+	w, h int
+	char map[string]byte
+}
 
-// glyphs maps each printable character's bitmap to the character.
-type glyphs map[[cellH]byte]byte
+// The built-in fonts the screen may be drawn in: the large Terminus the
+// UKI selects, and the 8x16 the console falls back to on a small screen.
+var builtIn = []struct {
+	name string
+	w, h int
+}{{"TER16x32", 16, 32}, {"VGA8x16", 8, 16}}
 
 var (
 	fontMu    sync.Mutex
-	fontCache = map[string]glyphs{}
+	fontCache = map[string][]glyphs{}
 )
 
-// font reads fbcon's 8x16 font out of the kernel the image boots: the
-// payload is xz (with the x86 filter, so the xz tool unpacks it), and the
-// font is the 4096-byte table that follows its header {0, 0, 4096, 0}.
-// Reading it from the kernel keeps the test on the exact glyphs the screen
-// is drawn with, without a copy of the font in this repo.
-func font(t testing.TB) glyphs {
+// fonts reads fbcon's built-in fonts out of the kernel the image boots:
+// the payload is xz (with the x86 filter, so the xz tool unpacks it), and
+// each font is the table that follows its header {0, 0, size, 0}. Reading
+// them from the kernel keeps the test on the exact glyphs the screen is
+// drawn with, without a copy of a font in this repo.
+func fonts(t testing.TB) []glyphs {
 	t.Helper()
 	Need(t, []string{"xz"}, Kernel)
 	fontMu.Lock()
@@ -67,47 +71,57 @@ func font(t testing.TB) glyphs {
 	if err != nil {
 		t.Fatalf("%s: unpack the payload: %v", Kernel, err)
 	}
-	g, err := findFont(vmlinux)
-	if err != nil {
-		t.Fatalf("%s: %v", Kernel, err)
+	var out []glyphs
+	for _, f := range builtIn {
+		g, err := findFont(vmlinux, f.w, f.h)
+		if err != nil {
+			t.Logf("%s: %s: %v", Kernel, f.name, err)
+			continue
+		}
+		out = append(out, g)
 	}
-	fontCache[Kernel] = g
-	return g
+	if len(out) == 0 {
+		t.Fatalf("%s: no built-in font (CONFIG_FONT_TER16x32, CONFIG_FONT_8x16)", Kernel)
+	}
+	fontCache[Kernel] = out
+	return out
 }
 
-func findFont(vmlinux []byte) (glyphs, error) {
+func findFont(vmlinux []byte, w, h int) (glyphs, error) {
+	bpr := (w + 7) / 8
+	cell := bpr * h
+	size := 256 * cell
 	hdr := make([]byte, 16)
-	binary.LittleEndian.PutUint32(hdr[8:], 256*cellH)
+	binary.LittleEndian.PutUint32(hdr[8:], uint32(size)) // #nosec G115 -- a small font size
 	for off := 0; ; {
 		i := bytes.Index(vmlinux[off:], hdr)
 		if i < 0 {
-			return nil, errors.New("fbcon's 8x16 font isn't in the kernel (CONFIG_FONT_8x16)")
+			return glyphs{}, fmt.Errorf("no %dx%d font in the kernel", w, h)
 		}
 		off += i + len(hdr)
-		if off+256*cellH > len(vmlinux) {
+		if off+size > len(vmlinux) {
 			continue
 		}
-		data := vmlinux[off : off+256*cellH]
-		glyph := func(c int) []byte { return data[c*cellH : (c+1)*cellH] }
-		// The VGA font's shape: NUL and space are blank, 0xDB is a full
-		// block, and every letter has ink.
-		if !bytes.Equal(glyph(0), make([]byte, cellH)) || !bytes.Equal(glyph(' '), make([]byte, cellH)) ||
-			!bytes.Equal(glyph(0xdb), bytes.Repeat([]byte{0xff}, cellH)) || bytes.Equal(glyph('A'), make([]byte, cellH)) {
+		data := vmlinux[off : off+size]
+		glyph := func(c int) []byte { return data[c*cell : (c+1)*cell] }
+		// A CP437 font's shape: space is blank, 0xDB is a full block, and
+		// every letter has ink. (Terminus draws a glyph at NUL.)
+		blank := make([]byte, cell)
+		if !bytes.Equal(glyph(' '), blank) ||
+			!bytes.Equal(glyph(0xdb), bytes.Repeat([]byte{0xff}, cell)) || bytes.Equal(glyph('A'), blank) {
 			continue
 		}
-		g := glyphs{}
+		g := glyphs{w: w, h: h, char: map[string]byte{}}
 		for c := 0x7e; c >= 0x20; c-- {
-			var k [cellH]byte
-			copy(k[:], glyph(c))
-			g[k] = byte(c)
+			g.char[string(glyph(c))] = byte(c)
 		}
 		return g, nil
 	}
 }
 
-// screenText decodes a P6 screendump into its text rows: each 8x16 cell
-// is matched, as lit and unlit pixels, against the font. A cell that isn't
-// a printable character (the cursor, a logo) reads as '?'.
+// screenText decodes a P6 screendump into its text rows in font g: each
+// cell is matched, as lit and unlit pixels, against the font. A cell that
+// isn't a printable character (the cursor, a logo) reads as '?'.
 func screenText(ppm []byte, g glyphs) ([]string, error) {
 	r := bufio.NewReader(bytes.NewReader(ppm))
 	var magic string
@@ -126,19 +140,20 @@ func screenText(ppm []byte, g glyphs) ([]string, error) {
 		p := px[(y*w+x)*3:]
 		return p[0]|p[1]|p[2] != 0
 	}
-	rows := make([]string, 0, h/cellH)
-	for cy := 0; cy+cellH <= h; cy += cellH {
+	bpr := (g.w + 7) / 8
+	rows := make([]string, 0, h/g.h)
+	for cy := 0; cy+g.h <= h; cy += g.h {
 		var line []byte
-		for cx := 0; cx+cellW <= w; cx += cellW {
-			var k [cellH]byte
-			for y := 0; y < cellH; y++ {
-				for x := 0; x < cellW; x++ {
+		for cx := 0; cx+g.w <= w; cx += g.w {
+			k := make([]byte, bpr*g.h)
+			for y := 0; y < g.h; y++ {
+				for x := 0; x < g.w; x++ {
 					if lit(cx+x, cy+y) {
-						k[y] |= 0x80 >> x
+						k[y*bpr+x/8] |= 0x80 >> (x % 8)
 					}
 				}
 			}
-			c, ok := g[k]
+			c, ok := g.char[string(k)]
 			if !ok {
 				c = '?'
 			}
@@ -147,6 +162,19 @@ func screenText(ppm []byte, g glyphs) ([]string, error) {
 		rows = append(rows, string(line))
 	}
 	return rows, nil
+}
+
+// legible counts the cells read as text other than blanks.
+func legible(rows []string) int {
+	n := 0
+	for _, r := range rows {
+		for _, c := range r {
+			if c != ' ' && c != '?' {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // qmp sends one QMP command to the VM and returns its reply.
@@ -207,7 +235,7 @@ func (vm *VM) Screen() []string {
 }
 
 func (vm *VM) screen() ([]string, error) {
-	g := font(vm.t)
+	fs := fonts(vm.t)
 	shot := filepath.Join(vm.dir, "screen.ppm")
 	if err := vm.qmp("screendump", map[string]string{"filename": shot}); err != nil {
 		return nil, err
@@ -216,7 +244,20 @@ func (vm *VM) screen() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return screenText(b, g)
+	// The screen is in whichever font reads it best: the large one, or
+	// the small one before fbcon switches (the firmware's, the boot) and
+	// on a small screen.
+	var best []string
+	for _, g := range fs {
+		rows, err := screenText(b, g)
+		if err != nil {
+			return nil, err
+		}
+		if best == nil || legible(rows) > legible(best) {
+			best = rows
+		}
+	}
+	return best, nil
 }
 
 var spaces = regexp.MustCompile(`\s+`)

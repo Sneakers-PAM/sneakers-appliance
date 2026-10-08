@@ -34,7 +34,7 @@ previous release.
 |---|---|
 | `.linux` | the kernel |
 | `.initrd` | `sneakers-switchroot` as `/init` and a static `veritysetup`; no root filesystem |
-| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity` |
+| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity` |
 | `.osrel`, `.uname` | the release's os-release and kernel release |
 | `.sbat` | the shim line and `sneakers-pam,1`, so a bad release can be revoked by generation |
 

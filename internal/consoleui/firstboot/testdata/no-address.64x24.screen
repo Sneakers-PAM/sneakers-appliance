@@ -1,0 +1,24 @@
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM appliance   0.1.0                       |
++--------------------------------------------------------------+
+|                                                              |
+|   This box has no network address yet.                       |
+|                                                              |
+|   No DHCP server answered, so there is no address to show.   |
+|   Give it one by hand.                                       |
+|                                                              |
+|      Port      Cable        Hardware address                 |
+|      ens192    connected    00:50:56:00:00:01                |
+|      ens224    no cable     00:50:56:00:00:02                |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  N  Set an address by hand     R  Try DHCP again             |
++--------------------------------------------------------------+

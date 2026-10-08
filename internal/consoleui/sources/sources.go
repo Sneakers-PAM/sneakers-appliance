@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package sources is what the console reads and drives: init's custody,
-// accessd's status, setup and enrolment window, netd, and init's service
-// table. Where a backend isn't in this build yet (netd, the SSH runner,
-// the upgrade service, the platform), its stub answers NotInstalled, never
-// a success; each switches to the real one when its service appears in
-// the service table, so the console needs no change when it lands.
+// accessd's status and setup, the access backend's console API, netd, and
+// init's service table. Where a backend isn't in this build yet (netd, the
+// upgrade service, the platform), its stub answers NotInstalled, never a
+// success; each switches to the real one when its service appears in the
+// service table, so the console needs no change when it lands.
 package sources
 
 import (

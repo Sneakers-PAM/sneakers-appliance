@@ -8,24 +8,57 @@ package tuitest
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden screens")
 
-// Golden compares p laid out on 80x24 with testdata/<name>.screen.
+// Sizes are the screens every golden is checked at: the large font on a
+// 1024x768 screen, and the classic 80x24.
+var Sizes = [][2]int{{64, 24}, {80, 24}}
+
+// Golden compares p with its golden screens in testdata: laid out plain
+// at every size in Sizes (<name>.<cols>x<rows>.screen), and in colour at
+// the large font's size (<name>.colour.screen).
 func Golden(t *testing.T, name string, p tui.Page) {
 	t.Helper()
-	got := p.Frame(80, 24).Text()
-	path := filepath.Join("testdata", name+".screen")
+	for _, sz := range Sizes {
+		f := p.Frame(sz[0], sz[1])
+		aligned(t, fmt.Sprintf("%s at %dx%d", name, sz[0], sz[1]), f.Text(), sz[0])
+		aligned(t, fmt.Sprintf("%s at %dx%d in colour", name, sz[0], sz[1]), f.Coloured(), sz[0])
+		compare(t, fmt.Sprintf("%s.%dx%d.screen", name, sz[0], sz[1]), f.Text())
+	}
+	compare(t, name+".colour.screen", p.Frame(Sizes[0][0], Sizes[0][1]).Coloured())
+}
+
+var sgrCode = regexp.MustCompile(`\\e\[[0-9;]*m`)
+
+// aligned checks every row of a frame ends in the same column: width
+// visible characters, the colour codes not counted. The plain form has
+// its trailing blanks trimmed, but the frame's right edge isn't blank.
+func aligned(t *testing.T, what, frame string, width int) {
+	t.Helper()
+	for i, row := range strings.Split(strings.TrimSuffix(frame, "\n"), "\n") {
+		if n := utf8.RuneCountInString(sgrCode.ReplaceAllString(row, "")); n != width {
+			t.Errorf("%s: row %d is %d wide, not %d: %q", what, i, n, width, row)
+		}
+	}
+}
+
+func compare(t *testing.T, file, got string) {
+	t.Helper()
+	path := filepath.Join("testdata", file)
 	if *update {
 		if err := os.MkdirAll("testdata", 0o750); err != nil {
 			t.Fatal(err)
@@ -70,7 +103,7 @@ func New(t *testing.T) *Driver {
 		}
 	}()
 	t.Cleanup(func() { close(d.stop) })
-	d.UI = &tui.UI{Screen: tui.NewScreen(io.Discard, 80, 24, true), Lines: d.lines, Tick: tick, Cols: 80, Rows: 24,
+	d.UI = &tui.UI{Screen: tui.NewScreen(io.Discard, 64, 24, true), Lines: d.lines, Tick: tick, Cols: 64, Rows: 24,
 		OnFrame: func(f tui.Frame) {
 			d.mu.Lock()
 			d.last = f.Text()

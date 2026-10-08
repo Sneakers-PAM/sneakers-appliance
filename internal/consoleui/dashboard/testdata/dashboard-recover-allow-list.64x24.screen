@@ -1,0 +1,24 @@
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM appliance   0.1.0                       |
++--------------------------------------------------------------+
+|                                                              |
+|   Recover access                                             |
+|                                                              |
+|   Who can connect is reset: the admin page and SSH take      |
+|   connections from the management network again.             |
+|                                                              |
+|   Open the admin page from a computer on that network. If    |
+|   it works, press K to keep the change; otherwise it's put   |
+|   back in 2m00s.                                             |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  K  Keep it     Enter  Back                                  |
++--------------------------------------------------------------+

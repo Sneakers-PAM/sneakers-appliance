@@ -4,14 +4,15 @@
 //go:build image
 
 // Package console_test is the image suite's run of the console: the boot
-// banner and the Secure Boot choice on every console the box has, and the
-// typed answer taken from whichever one it's typed on. A VMware VM with no
-// serial port has only its screen; a headless box has only its serial
-// line.
+// banner and the Secure Boot choice on every console the box has, the
+// typed answer taken from whichever one it's typed on, and the first-boot
+// info screen on the screen alone. A VMware VM with no serial port has
+// only its screen; a headless box has only its serial line.
 package console_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -27,9 +28,12 @@ const (
 	// a TPM; Enter goes on with the key file.
 	keyfile = `Press Enter to continue`
 	booted  = `services: entering phase phase=firstboot`
-	// wizard is the first-boot wizard, which owns the consoles once the
-	// services run.
-	wizard = `Setup 1 of 5: network`
+	// info is the first-boot info screen, which owns the consoles once the
+	// services run; QEMU's user network leases the first guest its first
+	// address.
+	info = `Open this address in your browser:`
+	url  = `https://10\.0\.2\.15:8443` // scrub:allow=private-ip -- QEMU's user network
+	code = `Setup code [0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}`
 )
 
 func boot(t *testing.T, o harness.Options) *harness.VM {
@@ -43,11 +47,10 @@ func boot(t *testing.T, o harness.Options) *harness.VM {
 
 // No serial port, Secure Boot off, no TPM: the VMware VM the lab first ran
 // on, whose screen stayed black because init's console was a serial port
-// that wasn't there. Once the services run, the setup wizard owns the
-// screen: it shows the reduced protection, lists the NIC, takes keys typed
-// on the screen's keyboard, and says plainly that the network can't be
-// applied while netd isn't in the build.
-func TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer(t *testing.T) {
+// that wasn't there. Once the services run, first boot owns the screen and
+// asks nothing: it shows the :8443 address on the DHCP lease, the one-time
+// setup code and the reduced protection, in the large font.
+func TestTheScreenAloneShowsTheChoiceThenTheSetupInfo(t *testing.T) {
 	vm := boot(t, harness.Options{NoSerial: true})
 	vm.ExpectScreen(banner, 5*time.Minute)
 	vm.ExpectScreen(prompt, time.Minute)
@@ -55,13 +58,11 @@ func TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer(t *testing.T) {
 	vm.ExpectScreen(chosen, time.Minute)
 	vm.ExpectScreen(keyfile, time.Minute)
 	vm.Press("\r")
-	vm.ExpectScreen(wizard, 3*time.Minute)
-	vm.ExpectScreen(`!! Protection: reduced \(Secure Boot off\)`, time.Minute)
-	vm.ExpectScreen(`1 eth0 `, time.Minute)
-	vm.Press("1\r")
-	vm.ExpectScreen(`Management interface eth0`, time.Minute)
-	vm.Press("\r")
-	vm.ExpectScreen(`The network service isn't installed in this build yet`, time.Minute)
+	vm.ExpectScreen(info, 3*time.Minute)
+	vm.ExpectScreen(url, 2*time.Minute)
+	vm.ExpectScreen(code, time.Minute)
+	vm.ExpectScreen(`Protection REDUCED`, time.Minute)
+	t.Logf("the info screen:\n%s", strings.Join(vm.Screen(), "\n"))
 }
 
 // No display: the serial line alone carries the banner, the choice and the

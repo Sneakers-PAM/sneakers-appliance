@@ -1,9 +1,10 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package tui draws the console's full-screen pages: a fixed layout that
-// fits an 80x24 terminal, written with cursor addressing and redrawn row
-// by row so nothing flickers, in colour where wanted and plain otherwise.
+// Package tui draws the console's full-screen pages: a frame sized from
+// the real terminal (64x24 at the large font) with the body block centred
+// in it, written with cursor addressing and redrawn row by row so nothing
+// flickers, in colour where wanted and plain otherwise.
 // Input is line by line: the consoles stay in the kernel's line mode
 // (init joins them through pipes), which works the same on the screen and
 // on a serial line.
@@ -18,17 +19,28 @@ import (
 // without colour, or one that drops it, still shows the same text.
 type Style uint8
 
-// The styles.
+// The styles: the brand palette in the console's 16 colours. The frame
+// and the mark are the primary blue, with the keyhole in the bright blue;
+// the sole orange (the VGA palette's brown) is the one accent; status is
+// green, yellow and red; secondary text is dim, and what is read aloud or
+// typed is bold white.
 const (
 	Normal Style = iota
 	Bold
 	OK
 	Warn
 	Alert
-	Title
+	Brand
+	Keyhole
+	Accent
+	Dim
+	Strong
 )
 
-var sgr = map[Style]string{Bold: "1", OK: "32", Warn: "1;33", Alert: "1;31", Title: "1;36"}
+var sgr = map[Style]string{
+	Bold: "1", OK: "1;32", Warn: "1;33", Alert: "1;31",
+	Brand: "34", Keyhole: "1;34", Accent: "33", Dim: "2", Strong: "1;37",
+}
 
 // Span is text in one style.
 type Span struct {

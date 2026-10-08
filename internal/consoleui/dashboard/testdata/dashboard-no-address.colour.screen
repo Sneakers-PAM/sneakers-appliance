@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0  slot A  1 node\e[0m       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Health        \e[1;32mOK\e[0m\e[2m      all services running\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m   Product       \e[1;32mOK\e[0m\e[2m      Sneakers-PAM running\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m   Protection    \e[1;32mFULL\e[0m\e[2m    Secure Boot on, key in the TPM\e[0m       \e[34m|\e[0m
+\e[34m|\e[0m   Clock         \e[1;32mOK\e[0m\e[2m      synced 18:03 UTC\e[0m                     \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Admin         \e[1;33mno address yet\e[0m                               \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[2mFingerprints\e[0m                                               \e[34m|\e[0m
+\e[34m|\e[0m     :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D          \e[34m|\e[0m
+\e[34m|\e[0m             E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5          \e[34m|\e[0m
+\e[34m|\e[0m     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             \e[34m|\e[0m
+\e[34m|\e[0m                    cH76 LnuV dAfL HqOr ZRw                   \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m\e[2m     \e[0m\e[2mN  Network\e[0m                            \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
