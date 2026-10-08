@@ -33,7 +33,7 @@ func Prepare(src, dst string, uid, gid int) error {
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		return err
 	}
-	if err := os.Chmod(dst, 0o700); err != nil {
+	if err := os.Chmod(dst, 0o700); err != nil { // #nosec G302 -- a directory: edgefall searches it, nobody else
 		return err
 	}
 	if err := os.Lchown(dst, uid, gid); err != nil {

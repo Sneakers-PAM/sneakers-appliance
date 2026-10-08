@@ -143,7 +143,7 @@ func Redirect() http.Handler {
 			return
 		}
 		w.Header().Set("Connection", "close")
-		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusMovedPermanently)
+		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusMovedPermanently) // #nosec G710 -- the same host, checked above, over https: what Traefik's 80 does
 	})
 }
 
