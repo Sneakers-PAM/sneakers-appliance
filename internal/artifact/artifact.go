@@ -108,11 +108,16 @@ func (in Input) files() map[string]File {
 	return files
 }
 
+// DefaultKitMin is the kitMin a release gets unless it names one: the
+// lowest semantic version, so any kit or init that reads this manifest
+// format accepts it. Raise it only when a release needs a newer verifier.
+const DefaultKitMin = "0.0.0-0"
+
 // Manifest builds appliance.yaml for in, given each file's SHA-256.
 func (in Input) Manifest(sums map[string]string) *verify.Manifest {
 	kitMin := in.KitMin
 	if kitMin == "" {
-		kitMin = in.Version
+		kitMin = DefaultKitMin
 	}
 	m := &verify.Manifest{
 		APIVersion: verify.APIVersion,
