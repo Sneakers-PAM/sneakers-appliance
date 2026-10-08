@@ -6,7 +6,9 @@
 # removes it. It ships in the lab product bundle (build/lab/stacks), and
 # k0s applies it from /var/lib/k0s/manifests/hello/. It answers "hello
 # from sneakers-appliance" on NodePort 30080, which the edge stack serves
-# on 443 (build/lab/stacks/edge).
+# on 443 (build/lab/stacks/edge). The page loads the box-state poller
+# (/_box/poll.js), so an open tab shows the box-state page through a
+# reboot and comes back by itself (docs/edge-fallback.md).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -19,7 +21,10 @@ metadata:
   namespace: sneakers-hello
 data:
   index.html: |
-    hello from sneakers-appliance
+    <!doctype html>
+    <html lang="en"><head><meta charset="utf-8"><title>hello</title>
+    <script src="/_box/poll.js" defer></script></head>
+    <body><p>hello from sneakers-appliance</p></body></html>
 ---
 apiVersion: apps/v1
 kind: Deployment

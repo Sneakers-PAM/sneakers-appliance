@@ -105,7 +105,8 @@ takes its images from sneakers-release's `release.yaml`, which doesn't list k0s'
 Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s/manifests/`:
 
 - `hello` runs busybox's httpd in the `sneakers-hello` namespace, as nobody with a read-only root,
-  and serves `hello from sneakers-appliance` on NodePort 30080. It goes when platformd lands (#99).
+  and serves a page saying `hello from sneakers-appliance`, which loads the box-state poller, on
+  NodePort 30080. It goes when platformd lands (#99).
 - `edge` is a minimal edge, **interim until Traefik comes with the platform (#102)**: Traefik on the
   host network in the `sneakers-edge` namespace, with every capability dropped but
   `NET_BIND_SERVICE`. It serves `https://<box>/` on 443 from the hello NodePort, and 80 redirects to
@@ -114,6 +115,11 @@ Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s
   it). Traefik's ping has its own entry point on `127.0.0.1:9000`, as spec 3 has it, and the
   readiness probe gets `http://127.0.0.1:9000/ping` there. Ping can't share 443: Traefik's ping
   router has no TLS, so over HTTPS the hello route's `PathPrefix(/)` took `/ping` and answered 404.
+- The edge routes `/_box/` (priority 1000, ahead of the hello route) to sneakers-edgefall on
+  `127.0.0.1:9180`, and the hello route's `box-page` middleware serves edgefall's box-state page for
+  `502` to `504`. The hello page loads `/_box/poll.js`, so an open tab shows "Sneakers-PAM is
+  rebooting" and the like through a reboot, a shutdown or an update, and comes back by itself; while
+  k0s is down edgefall answers 80 and 443 itself ([edge-fallback.md](edge-fallback.md)).
 - Once a bundle is installed, accessd opens 80 and 443 on the service interface (the management
   one when the box has only one) through netd's `SetServicePorts`, after each product apply and
   revert and when it starts. 22 and 8443 are as before. Before a bundle is installed nothing
