@@ -1,0 +1,85 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package osadmin
+
+import (
+	"context"
+	"io/fs"
+	"net/http"
+	"path"
+	"strings"
+
+	"connectrpc.com/connect"
+	log "github.com/Bugs5382/go-log"
+
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+)
+
+// The box's phases, as GetPhase and GetStatus answer them.
+const (
+	// PhaseFirstBoot runs until setup's Finish.
+	PhaseFirstBoot = "firstboot"
+	// PhaseNormal follows.
+	PhaseNormal = "normal"
+)
+
+// SetupPath is the setup stepper's page, the only page served before
+// setup is done.
+const SetupPath = "/setup"
+
+// Phase is the box's phase.
+func (s *Server) Phase() string {
+	if s.SetupDone() {
+		return PhaseNormal
+	}
+	return PhaseFirstBoot
+}
+
+func (h *status) GetPhase(context.Context, *connect.Request[osadminv1.GetPhaseRequest]) (*connect.Response[osadminv1.GetPhaseResponse], error) {
+	return connect.NewResponse(&osadminv1.GetPhaseResponse{Phase: h.s.Phase()}), nil
+}
+
+// PagesHandler is StaticHandler gated on the phase: while phase answers
+// PhaseFirstBoot, every page path but /setup (/, the sign-in page,
+// included) is redirected to /setup. The files the pages load are served
+// in every phase. When phase fails the pages are served as they are; the
+// API refuses what the phase doesn't allow either way.
+func PagesHandler(assets fs.FS, phase func(*http.Request) (string, error), lg log.Logger) http.Handler {
+	if lg == nil {
+		lg = log.Nop()
+	}
+	static := StaticHandler(assets)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == SetupPath || r.URL.Path == SetupPath+"/" || isAsset(assets, r.URL.Path) {
+			static.ServeHTTP(w, r)
+			return
+		}
+		p, err := phase(r)
+		if err != nil {
+			lg.Warn("osadmin: the phase isn't known; the page is served", log.F("path", r.URL.Path), log.F("error", err.Error()))
+			static.ServeHTTP(w, r)
+			return
+		}
+		if p == PhaseFirstBoot {
+			lg.Debug("osadmin: setup isn't done; the page goes to /setup", log.F("path", r.URL.Path))
+			http.Redirect(w, r, SetupPath, http.StatusFound)
+			return
+		}
+		static.ServeHTTP(w, r)
+	})
+}
+
+// isAsset is whether p names one of the pages' files: anything but the
+// index (the page every route is served from) and a directory.
+func isAsset(assets fs.FS, p string) bool {
+	if assets == nil {
+		return false
+	}
+	name := strings.TrimPrefix(path.Clean(p), "/")
+	if name == "" || name == "." || name == "index.html" {
+		return false
+	}
+	st, err := fs.Stat(assets, name)
+	return err == nil && !st.IsDir()
+}

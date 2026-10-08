@@ -150,7 +150,7 @@ func New(o Options) *Server {
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.routes(mux)
-	mux.Handle("/", StaticHandler(s.o.Assets))
+	mux.Handle("/", PagesHandler(s.o.Assets, func(*http.Request) (string, error) { return s.Phase(), nil }, s.o.Logger))
 	return SecurityHeaders(mux)
 }
 

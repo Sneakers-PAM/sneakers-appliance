@@ -33,7 +33,7 @@ answers Connect `unavailable` ("the appliance services are unavailable").
 |---|---|
 | `GET /export/audit-log` | the whole OS audit log as written (JSON lines, oldest first), so the chain verifies off the box; needs a session, audited as `audit.export` |
 | `POST /upload` | an update `.bin` as the request body (at most 8 GiB), with the session cookie and `X-CSRF-Token`; answers `{"uploadId": "..."}` for `UpgradeService.StageUpdate`; audited as `upgrade.upload`. Nothing is verified or unpacked until it's staged |
-| `GET /` and anything else | the admin pages, with the page routes falling back to `index.html` |
+| `GET /` and anything else | the admin pages, with the page routes falling back to `index.html`. Until setup is done (`StatusService.GetPhase` answers `firstboot`), every page path but `/setup`, `/` included, answers `302` to `/setup`; the files the pages load are served in both phases |
 
 Every response carries `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri
 'none'; form-action 'self'`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
@@ -58,6 +58,7 @@ minutes.
 | `SignInService.SignOut` | admin | no | `signin.signout` |
 | `StatusService.GetStatus` | admin | no | |
 | `StatusService.SetSecureBoot` | owner | yes | `status.secure-boot.set` |
+| `StatusService.GetPhase` | public | no | |
 | `SetupService.GetSetup` | admin or code session | no | |
 | `SetupService.RedeemCode` | public | no | `setup.code.redeem` |
 | `SetupService.CheckPassword` | admin or code session | no | |

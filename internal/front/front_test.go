@@ -31,6 +31,25 @@ type fakeAPI struct {
 	osadminv1connect.UnimplementedStatusServiceHandler
 	mu      sync.Mutex
 	clients []string
+	// phase is what GetPhase answers; empty fails it.
+	phase  string
+	phases int
+}
+
+func (f *fakeAPI) GetPhase(context.Context, *connect.Request[osadminv1.GetPhaseRequest]) (*connect.Response[osadminv1.GetPhaseResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.phases++
+	if f.phase == "" {
+		return nil, connect.NewError(connect.CodeUnavailable, nil)
+	}
+	return connect.NewResponse(&osadminv1.GetPhaseResponse{Phase: f.phase}), nil
+}
+
+func (f *fakeAPI) setPhase(p string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.phase = p
 }
 
 func (f *fakeAPI) GetStatus(_ context.Context, r *connect.Request[osadminv1.GetStatusRequest]) (*connect.Response[osadminv1.GetStatusResponse], error) {
@@ -53,7 +72,7 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{t: t, api: &fakeAPI{}, statusFile: filepath.Join(t.TempDir(), "status.json")}
+	r := &rig{t: t, api: &fakeAPI{phase: osadmin.PhaseNormal}, statusFile: filepath.Join(t.TempDir(), "status.json")}
 	mux := http.NewServeMux()
 	mux.Handle(osadminv1connect.NewStatusServiceHandler(r.api))
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
@@ -207,4 +226,57 @@ func accessdDown(st *osadminv1.GetStatusResponse) bool {
 		}
 	}
 	return false
+}
+
+func (r *rig) page(p string) *http.Response {
+	r.t.Helper()
+	hc := r.ts.Client()
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := hc.Get(r.ts.URL + p)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	_ = res.Body.Close()
+	return res
+}
+
+// Before setup is done the front sends every page path, / included, to
+// /setup, asking accessd for the phase; once setup is done the pages are
+// served and accessd isn't asked again.
+func TestBeforeSetupThePagesGoToSetup(t *testing.T) {
+	r := newRig(t)
+	r.api.setPhase(osadmin.PhaseFirstBoot)
+	for _, p := range []string{"/", "/home", "/access"} {
+		if res := r.page(p); res.StatusCode != http.StatusFound || res.Header.Get("Location") != osadmin.SetupPath {
+			t.Fatalf("%s: %d %q", p, res.StatusCode, res.Header.Get("Location"))
+		}
+	}
+	if res := r.page("/setup"); res.StatusCode != http.StatusOK {
+		t.Fatalf("/setup: %d", res.StatusCode)
+	}
+	r.api.setPhase(osadmin.PhaseNormal)
+	if res := r.page("/"); res.StatusCode != http.StatusOK {
+		t.Fatalf("after setup: %d %q", res.StatusCode, res.Header.Get("Location"))
+	}
+	r.api.mu.Lock()
+	asked := r.api.phases
+	r.api.mu.Unlock()
+	r.page("/home")
+	r.page("/access")
+	r.api.mu.Lock()
+	defer r.api.mu.Unlock()
+	if r.api.phases != asked {
+		t.Fatalf("the normal phase is kept: asked %d more times", r.api.phases-asked)
+	}
+}
+
+// With accessd down the phase isn't known, and the pages are served; they
+// say the services are unavailable themselves.
+func TestAccessdDownServesThePages(t *testing.T) {
+	r := newRig(t)
+	r.api.setPhase(osadmin.PhaseFirstBoot)
+	r.back.Close()
+	if res := r.page("/"); res.StatusCode != http.StatusOK {
+		t.Fatalf("%d %q", res.StatusCode, res.Header.Get("Location"))
+	}
 }

@@ -161,6 +161,87 @@ func (WarningKind) EnumDescriptor() ([]byte, []int) {
 	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{1}
 }
 
+type GetPhaseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPhaseRequest) Reset() {
+	*x = GetPhaseRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPhaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPhaseRequest) ProtoMessage() {}
+
+func (x *GetPhaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPhaseRequest.ProtoReflect.Descriptor instead.
+func (*GetPhaseRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{0}
+}
+
+type GetPhaseResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// phase is firstboot until setup's Finish, then normal.
+	Phase         string `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPhaseResponse) Reset() {
+	*x = GetPhaseResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPhaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPhaseResponse) ProtoMessage() {}
+
+func (x *GetPhaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPhaseResponse.ProtoReflect.Descriptor instead.
+func (*GetPhaseResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GetPhaseResponse) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
 type GetStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -169,7 +250,7 @@ type GetStatusRequest struct {
 
 func (x *GetStatusRequest) Reset() {
 	*x = GetStatusRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -181,7 +262,7 @@ func (x *GetStatusRequest) String() string {
 func (*GetStatusRequest) ProtoMessage() {}
 
 func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -194,7 +275,7 @@ func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetStatusRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{0}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{2}
 }
 
 type Warning struct {
@@ -208,7 +289,7 @@ type Warning struct {
 
 func (x *Warning) Reset() {
 	*x = Warning{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -220,7 +301,7 @@ func (x *Warning) String() string {
 func (*Warning) ProtoMessage() {}
 
 func (x *Warning) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -233,7 +314,7 @@ func (x *Warning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Warning.ProtoReflect.Descriptor instead.
 func (*Warning) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{1}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Warning) GetKind() WarningKind {
@@ -262,7 +343,7 @@ type Component struct {
 
 func (x *Component) Reset() {
 	*x = Component{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -274,7 +355,7 @@ func (x *Component) String() string {
 func (*Component) ProtoMessage() {}
 
 func (x *Component) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -287,7 +368,7 @@ func (x *Component) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Component.ProtoReflect.Descriptor instead.
 func (*Component) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{2}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Component) GetName() string {
@@ -326,7 +407,7 @@ type Disk struct {
 
 func (x *Disk) Reset() {
 	*x = Disk{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -338,7 +419,7 @@ func (x *Disk) String() string {
 func (*Disk) ProtoMessage() {}
 
 func (x *Disk) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -351,7 +432,7 @@ func (x *Disk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Disk.ProtoReflect.Descriptor instead.
 func (*Disk) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{3}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Disk) GetPath() string {
@@ -415,7 +496,7 @@ type GetStatusResponse struct {
 
 func (x *GetStatusResponse) Reset() {
 	*x = GetStatusResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -427,7 +508,7 @@ func (x *GetStatusResponse) String() string {
 func (*GetStatusResponse) ProtoMessage() {}
 
 func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -440,7 +521,7 @@ func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetStatusResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{4}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetStatusResponse) GetVersion() string {
@@ -586,7 +667,7 @@ type SetSecureBootRequest struct {
 
 func (x *SetSecureBootRequest) Reset() {
 	*x = SetSecureBootRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +679,7 @@ func (x *SetSecureBootRequest) String() string {
 func (*SetSecureBootRequest) ProtoMessage() {}
 
 func (x *SetSecureBootRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +692,7 @@ func (x *SetSecureBootRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecureBootRequest.ProtoReflect.Descriptor instead.
 func (*SetSecureBootRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{5}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SetSecureBootRequest) GetOn() bool {
@@ -636,7 +717,7 @@ type SetSecureBootResponse struct {
 
 func (x *SetSecureBootResponse) Reset() {
 	*x = SetSecureBootResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -648,7 +729,7 @@ func (x *SetSecureBootResponse) String() string {
 func (*SetSecureBootResponse) ProtoMessage() {}
 
 func (x *SetSecureBootResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -661,14 +742,17 @@ func (x *SetSecureBootResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecureBootResponse.ProtoReflect.Descriptor instead.
 func (*SetSecureBootResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{6}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{8}
 }
 
 var File_sneakers_appliance_osadmin_v1_status_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\n" +
-	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\"\x12\n" +
+	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\"\x11\n" +
+	"\x0fGetPhaseRequest\"(\n" +
+	"\x10GetPhaseResponse\x12\x14\n" +
+	"\x05phase\x18\x01 \x01(\tR\x05phase\"\x12\n" +
 	"\x10GetStatusRequest\"a\n" +
 	"\aWarning\x12>\n" +
 	"\x04kind\x18\x01 \x01(\x0e2*.sneakers.appliance.osadmin.v1.WarningKindR\x04kind\x12\x16\n" +
@@ -730,10 +814,11 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x19WARNING_KIND_TLS_EXPIRING\x10\b\x12\x1c\n" +
 	"\x18WARNING_KIND_TLS_EXPIRED\x10\t\x12\x1a\n" +
 	"\x16WARNING_KIND_TLS_NAMES\x10\n" +
-	"2\xa9\x02\n" +
+	"2\xa1\x03\n" +
 	"\rStatusService\x12y\n" +
 	"\tGetStatus\x12/.sneakers.appliance.osadmin.v1.GetStatusRequest\x1a0.sneakers.appliance.osadmin.v1.GetStatusResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
-	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.set\x12v\n" +
+	"\bGetPhase\x12..sneakers.appliance.osadmin.v1.GetPhaseRequest\x1a/.sneakers.appliance.osadmin.v1.GetPhaseResponse\"\t\xc2\xf3\x18\x02\b\x01\x90\x02\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_status_proto_rawDescOnce sync.Once
@@ -748,34 +833,38 @@ func file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_status_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sneakers_appliance_osadmin_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_sneakers_appliance_osadmin_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_sneakers_appliance_osadmin_v1_status_proto_goTypes = []any{
 	(Protection)(0),               // 0: sneakers.appliance.osadmin.v1.Protection
 	(WarningKind)(0),              // 1: sneakers.appliance.osadmin.v1.WarningKind
-	(*GetStatusRequest)(nil),      // 2: sneakers.appliance.osadmin.v1.GetStatusRequest
-	(*Warning)(nil),               // 3: sneakers.appliance.osadmin.v1.Warning
-	(*Component)(nil),             // 4: sneakers.appliance.osadmin.v1.Component
-	(*Disk)(nil),                  // 5: sneakers.appliance.osadmin.v1.Disk
-	(*GetStatusResponse)(nil),     // 6: sneakers.appliance.osadmin.v1.GetStatusResponse
-	(*SetSecureBootRequest)(nil),  // 7: sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	(*SetSecureBootResponse)(nil), // 8: sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(*FactoryReset)(nil),          // 10: sneakers.appliance.osadmin.v1.FactoryReset
+	(*GetPhaseRequest)(nil),       // 2: sneakers.appliance.osadmin.v1.GetPhaseRequest
+	(*GetPhaseResponse)(nil),      // 3: sneakers.appliance.osadmin.v1.GetPhaseResponse
+	(*GetStatusRequest)(nil),      // 4: sneakers.appliance.osadmin.v1.GetStatusRequest
+	(*Warning)(nil),               // 5: sneakers.appliance.osadmin.v1.Warning
+	(*Component)(nil),             // 6: sneakers.appliance.osadmin.v1.Component
+	(*Disk)(nil),                  // 7: sneakers.appliance.osadmin.v1.Disk
+	(*GetStatusResponse)(nil),     // 8: sneakers.appliance.osadmin.v1.GetStatusResponse
+	(*SetSecureBootRequest)(nil),  // 9: sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	(*SetSecureBootResponse)(nil), // 10: sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*FactoryReset)(nil),          // 12: sneakers.appliance.osadmin.v1.FactoryReset
 }
 var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
 	1,  // 0: sneakers.appliance.osadmin.v1.Warning.kind:type_name -> sneakers.appliance.osadmin.v1.WarningKind
 	0,  // 1: sneakers.appliance.osadmin.v1.GetStatusResponse.protection:type_name -> sneakers.appliance.osadmin.v1.Protection
-	5,  // 2: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
-	4,  // 3: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
-	9,  // 4: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
-	3,  // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
-	10, // 6: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	2,  // 7: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
-	7,  // 8: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	6,  // 9: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	8,  // 10: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	9,  // [9:11] is the sub-list for method output_type
-	7,  // [7:9] is the sub-list for method input_type
+	7,  // 2: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
+	6,  // 3: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
+	11, // 4: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
+	5,  // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
+	12, // 6: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	4,  // 7: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
+	9,  // 8: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	2,  // 9: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
+	8,  // 10: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	10, // 11: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	3,  // 12: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -794,7 +883,7 @@ func file_sneakers_appliance_osadmin_v1_status_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_status_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_status_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   7,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

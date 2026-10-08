@@ -15,6 +15,7 @@ package front
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,9 @@ const apiPrefix = "/sneakers.appliance.osadmin.v1."
 // maxStatusBytes bounds a captured status response.
 const maxStatusBytes = 1 << 20
 
+// phaseTimeout bounds asking accessd for the phase before a page.
+const phaseTimeout = 3 * time.Second
+
 // Options wire the front.
 type Options struct {
 	// Backend is accessd's base URL and Transport reaches it (a unix
@@ -69,6 +73,10 @@ type Front struct {
 	known   map[[32]byte]time.Time
 	status  *osadminv1.GetStatusResponse
 	statusT time.Time
+	// normal is set once accessd said setup is done; a box only goes
+	// back to first boot through a factory reset, which restarts it.
+	normal bool
+	phases osadminv1connect.StatusServiceClient
 }
 
 // New returns the front.
@@ -94,12 +102,17 @@ func New(o Options) *Front {
 		ModifyResponse: f.observe,
 		ErrorHandler:   f.down,
 	}
+	tr := o.Transport
+	if tr == nil {
+		tr = http.DefaultTransport
+	}
+	f.phases = osadminv1connect.NewStatusServiceClient(&http.Client{Transport: tr, Timeout: phaseTimeout}, strings.TrimSuffix(o.Backend.String(), "/"))
 	return f
 }
 
 // Handler serves :8443.
 func (f *Front) Handler() http.Handler {
-	pages := osadmin.StaticHandler(f.o.Assets)
+	pages := osadmin.PagesHandler(f.o.Assets, f.phase, f.o.Logger)
 	return osadmin.SecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/"+osadminv1connect.LocalServiceName+"/"):
@@ -110,6 +123,30 @@ func (f *Front) Handler() http.Handler {
 			pages.ServeHTTP(w, r)
 		}
 	}))
+}
+
+// phase asks accessd whether setup is done, until it says it is.
+func (f *Front) phase(r *http.Request) (string, error) {
+	f.mu.Lock()
+	normal := f.normal
+	f.mu.Unlock()
+	if normal {
+		return osadmin.PhaseNormal, nil
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), phaseTimeout)
+	defer cancel()
+	res, err := f.phases.GetPhase(ctx, connect.NewRequest(&osadminv1.GetPhaseRequest{}))
+	if err != nil {
+		return "", err
+	}
+	p := res.Msg.GetPhase()
+	if p == osadmin.PhaseNormal {
+		f.mu.Lock()
+		f.normal = true
+		f.mu.Unlock()
+		f.o.Logger.Info("osadmin: setup is done; the pages are served")
+	}
+	return p, nil
 }
 
 func isStatus(r *http.Request) bool {

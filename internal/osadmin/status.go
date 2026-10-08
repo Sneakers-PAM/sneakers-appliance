@@ -37,14 +37,11 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	s := h.s
 	cert := s.cert()
 	out := &osadminv1.GetStatusResponse{
-		Version: release.Version, Channel: release.Channel, Phase: "firstboot",
+		Version: release.Version, Channel: release.Channel, Phase: s.Phase(),
 		TlsFingerprint: cert.Fingerprint, TlsSelfSigned: cert.SelfSigned,
 	}
 	if !cert.Expires.IsZero() {
 		out.TlsExpires = timestamppb.New(cert.Expires)
-	}
-	if s.SetupDone() {
-		out.Phase = "normal"
 	}
 	add := func(kind osadminv1.WarningKind, detail string) {
 		out.Warnings = append(out.Warnings, &osadminv1.Warning{Kind: kind, Detail: detail})
