@@ -73,8 +73,16 @@ type GetNetworkResponse struct {
 	ServiceAddresses    []string `protobuf:"bytes,4,rep,name=service_addresses,json=serviceAddresses,proto3" json:"service_addresses,omitempty"`
 	NtpSynced           bool     `protobuf:"varint,5,opt,name=ntp_synced,json=ntpSynced,proto3" json:"ntp_synced,omitempty"`
 	NtpOffsetMs         int64    `protobuf:"varint,6,opt,name=ntp_offset_ms,json=ntpOffsetMs,proto3" json:"ntp_offset_ms,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// pending_token is what ConfirmNetwork takes for the pending change. Only
+	// an owner's session gets it, so a reloaded page, or one opened at the
+	// change's new address, can still confirm.
+	PendingToken string `protobuf:"bytes,7,opt,name=pending_token,json=pendingToken,proto3" json:"pending_token,omitempty"`
+	// pending_change_id names the pending change in the audit.
+	PendingChangeId string `protobuf:"bytes,8,opt,name=pending_change_id,json=pendingChangeId,proto3" json:"pending_change_id,omitempty"`
+	// revert_seconds_left is how long the pending change still waits.
+	RevertSecondsLeft int32 `protobuf:"varint,9,opt,name=revert_seconds_left,json=revertSecondsLeft,proto3" json:"revert_seconds_left,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GetNetworkResponse) Reset() {
@@ -149,6 +157,27 @@ func (x *GetNetworkResponse) GetNtpOffsetMs() int64 {
 	return 0
 }
 
+func (x *GetNetworkResponse) GetPendingToken() string {
+	if x != nil {
+		return x.PendingToken
+	}
+	return ""
+}
+
+func (x *GetNetworkResponse) GetPendingChangeId() string {
+	if x != nil {
+		return x.PendingChangeId
+	}
+	return ""
+}
+
+func (x *GetNetworkResponse) GetRevertSecondsLeft() int32 {
+	if x != nil {
+		return x.RevertSecondsLeft
+	}
+	return 0
+}
+
 type SetNetworkRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Settings      *v1.Settings           `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
@@ -198,8 +227,19 @@ type SetNetworkResponse struct {
 	// token is what ConfirmNetwork takes.
 	Token              string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	RevertAfterSeconds int32  `protobuf:"varint,2,opt,name=revert_after_seconds,json=revertAfterSeconds,proto3" json:"revert_after_seconds,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// moves_management is true when the change moves the management
+	// address: the page that applied it loses the box and has to confirm from
+	// new_url.
+	MovesManagement bool `protobuf:"varint,3,opt,name=moves_management,json=movesManagement,proto3" json:"moves_management,omitempty"`
+	// new_url is the admin page at the new static management address, when
+	// the change sets one.
+	NewUrl string `protobuf:"bytes,4,opt,name=new_url,json=newUrl,proto3" json:"new_url,omitempty"`
+	// new_certificate is true when the host name or management address
+	// changes, so the box makes a new self-signed :8443 certificate (unless an
+	// owner assigned one). A browser that trusted the old one asks again.
+	NewCertificate bool `protobuf:"varint,5,opt,name=new_certificate,json=newCertificate,proto3" json:"new_certificate,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SetNetworkResponse) Reset() {
@@ -244,6 +284,27 @@ func (x *SetNetworkResponse) GetRevertAfterSeconds() int32 {
 		return x.RevertAfterSeconds
 	}
 	return 0
+}
+
+func (x *SetNetworkResponse) GetMovesManagement() bool {
+	if x != nil {
+		return x.MovesManagement
+	}
+	return false
+}
+
+func (x *SetNetworkResponse) GetNewUrl() string {
+	if x != nil {
+		return x.NewUrl
+	}
+	return ""
+}
+
+func (x *SetNetworkResponse) GetNewCertificate() bool {
+	if x != nil {
+		return x.NewCertificate
+	}
+	return false
 }
 
 type ConfirmNetworkRequest struct {
@@ -411,7 +472,7 @@ var File_sneakers_appliance_osadmin_v1_network_proto protoreflect.FileDescriptor
 const file_sneakers_appliance_osadmin_v1_network_proto_rawDesc = "" +
 	"\n" +
 	"+sneakers/appliance/osadmin/v1/network.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a%sneakers/appliance/netd/v1/netd.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\x13\n" +
-	"\x11GetNetworkRequest\"\x93\x02\n" +
+	"\x11GetNetworkRequest\"\x94\x03\n" +
 	"\x12GetNetworkResponse\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\x12\x18\n" +
 	"\apending\x18\x02 \x01(\bR\apending\x121\n" +
@@ -419,12 +480,18 @@ const file_sneakers_appliance_osadmin_v1_network_proto_rawDesc = "" +
 	"\x11service_addresses\x18\x04 \x03(\tR\x10serviceAddresses\x12\x1d\n" +
 	"\n" +
 	"ntp_synced\x18\x05 \x01(\bR\tntpSynced\x12\"\n" +
-	"\rntp_offset_ms\x18\x06 \x01(\x03R\vntpOffsetMs\"U\n" +
+	"\rntp_offset_ms\x18\x06 \x01(\x03R\vntpOffsetMs\x12#\n" +
+	"\rpending_token\x18\a \x01(\tR\fpendingToken\x12*\n" +
+	"\x11pending_change_id\x18\b \x01(\tR\x0fpendingChangeId\x12.\n" +
+	"\x13revert_seconds_left\x18\t \x01(\x05R\x11revertSecondsLeft\"U\n" +
 	"\x11SetNetworkRequest\x12@\n" +
-	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"\\\n" +
+	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"\xc9\x01\n" +
 	"\x12SetNetworkResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x120\n" +
-	"\x14revert_after_seconds\x18\x02 \x01(\x05R\x12revertAfterSeconds\"-\n" +
+	"\x14revert_after_seconds\x18\x02 \x01(\x05R\x12revertAfterSeconds\x12)\n" +
+	"\x10moves_management\x18\x03 \x01(\bR\x0fmovesManagement\x12\x17\n" +
+	"\anew_url\x18\x04 \x01(\tR\x06newUrl\x12'\n" +
+	"\x0fnew_certificate\x18\x05 \x01(\bR\x0enewCertificate\"-\n" +
 	"\x15ConfirmNetworkRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"\x18\n" +
 	"\x16ConfirmNetworkResponse\"\x12\n" +

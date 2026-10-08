@@ -246,6 +246,12 @@ func (d *Daemon) Get() (network.Settings, bool) {
 	return d.settings, d.rev.Pending()
 }
 
+// PendingChange returns the change that waits for its confirmation.
+func (d *Daemon) PendingChange() (network.Pending, bool) { return d.rev.PendingChange() }
+
+// LastChange returns how the most recent change ended.
+func (d *Daemon) LastChange() (network.Outcome, bool) { return d.rev.Last() }
+
 // Set validates next, applies it and starts the 120-second window.
 func (d *Daemon) Set(next network.Settings) (string, error) {
 	if err := network.Validate(next); err != nil {

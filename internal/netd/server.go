@@ -44,7 +44,15 @@ func toConnect(err error) error {
 
 func (h *handler) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
 	s, pending := h.d.Get()
-	return connect.NewResponse(&netdv1.GetResponse{Settings: network.ToWire(s), Pending: pending}), nil
+	out := &netdv1.GetResponse{Settings: network.ToWire(s), Pending: pending}
+	if p, ok := h.d.PendingChange(); ok {
+		out.Pending, out.Token, out.ChangeId = true, p.Token, p.ID
+		out.SecondsLeft = int32(p.Left(h.d.o.Clock.Now()).Seconds())
+	}
+	if l, ok := h.d.LastChange(); ok {
+		out.Last = &netdv1.ChangeOutcome{ChangeId: l.ID, Reverted: l.Reverted, AtUnix: l.At.Unix()}
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *handler) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) (*connect.Response[netdv1.SetResponse], error) {
@@ -56,7 +64,11 @@ func (h *handler) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) 
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&netdv1.SetResponse{Token: tok, RevertAfterSeconds: int32(network.RevertAfter.Seconds())}), nil
+	out := &netdv1.SetResponse{Token: tok, RevertAfterSeconds: int32(network.RevertAfter.Seconds())}
+	if p, ok := h.d.PendingChange(); ok && p.Token == tok {
+		out.ChangeId = p.ID
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *handler) Confirm(_ context.Context, r *connect.Request[netdv1.ConfirmRequest]) (*connect.Response[netdv1.ConfirmResponse], error) {

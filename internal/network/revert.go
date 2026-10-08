@@ -38,13 +38,36 @@ type Reverter struct {
 
 	mu      sync.Mutex
 	pending *change
+	last    *Outcome
 }
 
 type change struct {
-	token string
-	prev  Settings
-	apply ApplyFunc
-	timer clock.Timer
+	id       string
+	token    string
+	deadline time.Time
+	prev     Settings
+	apply    ApplyFunc
+	timer    clock.Timer
+}
+
+// Pending is the change that waits for its confirmation.
+type Pending struct {
+	// ID names the change in logs and the audit; Token is the secret
+	// Confirm takes.
+	ID, Token string
+	Deadline  time.Time
+}
+
+// Left is how long the change still waits at now, never below zero.
+func (p Pending) Left(now time.Time) time.Duration {
+	return max(p.Deadline.Sub(now), 0)
+}
+
+// Outcome is how a change ended.
+type Outcome struct {
+	ID       string
+	Reverted bool
+	At       time.Time
 }
 
 // NewReverter returns a reverter on clk.
@@ -80,10 +103,10 @@ func (r *Reverter) Apply(prev, next Settings, apply ApplyFunc) (string, error) {
 		return "", err
 	}
 	token := newToken()
-	c := &change{token: token, prev: prev, apply: apply}
+	c := &change{id: newToken()[:12], token: token, deadline: r.clk.Now().Add(RevertAfter), prev: prev, apply: apply}
 	c.timer = r.clk.AfterFunc(RevertAfter, func() { r.revert(c) })
 	r.pending = c
-	r.o.Logger.Info("network: change applied, waiting for confirmation", log.F("seconds", int(RevertAfter.Seconds())))
+	r.o.Logger.Info("network: change applied, waiting for confirmation", log.F("change", c.id), log.F("seconds", int(RevertAfter.Seconds())))
 	return token, nil
 }
 
@@ -100,9 +123,30 @@ func (r *Reverter) Confirm(token string) error {
 		return invalid("token", "that isn't the pending change")
 	}
 	r.pending.timer.Stop()
+	r.last = &Outcome{ID: r.pending.id, At: r.clk.Now()}
+	r.o.Logger.Info("network: change confirmed", log.F("change", r.pending.id))
 	r.pending = nil
-	r.o.Logger.Info("network: change confirmed")
 	return nil
+}
+
+// PendingChange returns the change that waits for its confirmation.
+func (r *Reverter) PendingChange() (Pending, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.pending == nil {
+		return Pending{}, false
+	}
+	return Pending{ID: r.pending.id, Token: r.pending.token, Deadline: r.pending.deadline}, true
+}
+
+// Last returns how the most recent change ended.
+func (r *Reverter) Last() (Outcome, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.last == nil {
+		return Outcome{}, false
+	}
+	return *r.last, true
 }
 
 // Pending reports whether a change waits for its confirmation.
@@ -119,13 +163,14 @@ func (r *Reverter) revert(c *change) {
 		return
 	}
 	r.pending = nil
+	r.last = &Outcome{ID: c.id, Reverted: true, At: r.clk.Now()}
 	r.mu.Unlock()
 	err := codes.New(codes.NetReverted, "the network change wasn't confirmed within %d seconds and was undone", int(RevertAfter.Seconds()))
 	if aerr := c.apply(c.prev); aerr != nil {
 		r.o.Logger.Error(aerr, "network: revert failed")
 		err = codes.Wrap(codes.NetReverted, aerr)
 	}
-	r.o.Logger.Warn("network: change reverted", log.F("error", codes.Describe(err)))
+	r.o.Logger.Warn("network: change reverted", log.F("change", c.id), log.F("error", codes.Describe(err)))
 	if r.o.OnRevert != nil {
 		r.o.OnRevert(c.prev, err)
 	}

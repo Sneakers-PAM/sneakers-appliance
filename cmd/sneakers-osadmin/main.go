@@ -12,7 +12,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -92,7 +91,14 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 
 	// Bind only the management addresses accessd reports (from netd), and
 	// rebind (with a matching certificate) whenever they or the host name
-	// change.
+	// change. Listeners on addresses that stay keep running.
+	var src *osadmin.CertSource
+	var ls *listeners
+	defer func() {
+		if ls != nil {
+			ls.closeAll()
+		}
+	}()
 	for {
 		host, addrs, err := waitForAddresses(ctx, binding, lg)
 		if err != nil {
@@ -103,24 +109,21 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			return err
 		}
 		lg.Info("osadmin: certificate ready", log.F("fingerprint", info.Fingerprint), log.F("expires", info.Expires), log.F("selfSigned", info.SelfSigned))
-		// accessd swaps the files when an owner assigns a certificate; the
-		// source re-reads them, so the listeners keep running.
-		src := osadmin.NewCertSource(paths.OwnDir(), cert, lg)
-		servers, err := serve(f.Handler(), src.GetCertificate, addrs, lg)
-		if err != nil {
+		// accessd swaps the files when an owner assigns a certificate, and
+		// EnsureCert rewrites them for a new name; the source re-reads them,
+		// so the listeners keep running.
+		if src == nil {
+			src = osadmin.NewCertSource(paths.OwnDir(), cert, lg)
+			ls = newListeners(f.Handler(), src.GetCertificate, Port, lg)
+		}
+		if err := ls.sync(addrs); err != nil {
 			return err
 		}
-		changed := watch(ctx, binding, host, addrs)
-		for _, s := range servers {
-			sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			_ = s.Shutdown(sctx)
-			cancel()
-		}
-		if !changed {
+		if !watch(ctx, binding, host, addrs) {
 			lg.Info("osadmin: stopped")
 			return nil
 		}
-		lg.Info("osadmin: management addresses changed; rebinding")
+		lg.Info("osadmin: management addresses or host name changed; rebinding")
 	}
 }
 
@@ -165,31 +168,4 @@ func watch(ctx context.Context, binding accessv1connect.BindingServiceClient, ho
 			return true
 		}
 	}
-}
-
-func serve(h http.Handler, cert func(*tls.ClientHelloInfo) (*tls.Certificate, error), addrs []string, lg log.Logger) ([]*http.Server, error) {
-	var out []*http.Server
-	for _, a := range addrs {
-		ln, err := net.Listen("tcp", net.JoinHostPort(a, Port))
-		if err != nil {
-			for _, s := range out {
-				_ = s.Close()
-			}
-			return nil, err
-		}
-		s := &http.Server{
-			Handler:           h,
-			TLSConfig:         &tls.Config{GetCertificate: cert, MinVersion: tls.VersionTLS12},
-			ReadHeaderTimeout: 10 * time.Second,
-			IdleTimeout:       2 * time.Minute,
-		}
-		go func() {
-			if err := s.ServeTLS(front.TLSOnly(ln, lg), "", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				lg.Error(err, "osadmin: listener stopped", log.F("address", ln.Addr().String()))
-			}
-		}()
-		lg.Info("osadmin: listening", log.F("address", ln.Addr().String()))
-		out = append(out, s)
-	}
-	return out, nil
 }

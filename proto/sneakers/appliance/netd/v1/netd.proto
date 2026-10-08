@@ -102,6 +102,24 @@ message GetResponse {
   Settings settings = 1;
   // pending is true while a change waits for Confirm.
   bool pending = 2;
+  // token is what Confirm takes for the pending change, so a page that was
+  // reloaded (or opened at the change's new address) can still confirm it.
+  string token = 3;
+  // change_id names the pending change in logs and the audit; it is not a
+  // secret, unlike the token.
+  string change_id = 4;
+  // seconds_left is how long the pending change still waits for Confirm.
+  int32 seconds_left = 5;
+  // last is how the most recent change ended, absent before the first.
+  ChangeOutcome last = 6;
+}
+
+// ChangeOutcome is how a change ended: confirmed or reverted.
+message ChangeOutcome {
+  string change_id = 1;
+  // reverted is true when the change was undone for lack of a Confirm.
+  bool reverted = 2;
+  int64 at_unix = 3;
 }
 
 message SetRequest {
@@ -113,6 +131,8 @@ message SetResponse {
   string token = 1;
   // revert_after_seconds is how long the change waits for Confirm.
   int32 revert_after_seconds = 2;
+  // change_id names the change in logs and the audit.
+  string change_id = 3;
 }
 
 message ConfirmRequest {
