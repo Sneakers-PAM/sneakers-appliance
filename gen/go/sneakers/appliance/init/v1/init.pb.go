@@ -1305,8 +1305,11 @@ type ImageServiceStatusResponse struct {
 	// Rollback would boot. Empty when there's none, as after a revert or
 	// while a newer release is staged.
 	PreviousVersion string `protobuf:"bytes,7,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// next_stage_removes are the releases the next Stage removes to keep the
+	// box at its release count: the previous release, or a staged one.
+	NextStageRemoves []string `protobuf:"bytes,8,rep,name=next_stage_removes,json=nextStageRemoves,proto3" json:"next_stage_removes,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ImageServiceStatusResponse) Reset() {
@@ -1386,6 +1389,13 @@ func (x *ImageServiceStatusResponse) GetPreviousVersion() string {
 		return x.PreviousVersion
 	}
 	return ""
+}
+
+func (x *ImageServiceStatusResponse) GetNextStageRemoves() []string {
+	if x != nil {
+		return x.NextStageRemoves
+	}
+	return nil
 }
 
 type RebootRequest struct {
@@ -2165,7 +2175,7 @@ const file_sneakers_appliance_init_v1_init_proto_rawDesc = "" +
 	"\x0fRollbackRequest\x12\x0e\n" +
 	"\x02by\x18\x01 \x01(\tR\x02by\"\x12\n" +
 	"\x10RollbackResponse\"\x1b\n" +
-	"\x19ImageServiceStatusRequest\"\xc7\x02\n" +
+	"\x19ImageServiceStatusRequest\"\xf5\x02\n" +
 	"\x1aImageServiceStatusResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
@@ -2175,7 +2185,8 @@ const file_sneakers_appliance_init_v1_init_proto_rawDesc = "" +
 	"revertedBy\x12;\n" +
 	"\vreverted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revertedAt\x12)\n" +
-	"\x10previous_version\x18\a \x01(\tR\x0fpreviousVersion\"'\n" +
+	"\x10previous_version\x18\a \x01(\tR\x0fpreviousVersion\x12,\n" +
+	"\x12next_stage_removes\x18\b \x03(\tR\x10nextStageRemoves\"'\n" +
 	"\rRebootRequest\x12\x16\n" +
 	"\x06forced\x18\x01 \x01(\bR\x06forced\"\x10\n" +
 	"\x0eRebootResponse\")\n" +

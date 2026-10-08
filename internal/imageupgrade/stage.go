@@ -256,6 +256,8 @@ type Status struct {
 	// Previous is the older release kept on the ESP that Rollback would
 	// boot: the revert target. Empty when there's none.
 	Previous string
+	// NextStageRemoves are the releases the next Stage removes (Retain).
+	NextStageRemoves []string
 }
 
 // Status reads the entries.
@@ -264,7 +266,7 @@ func (s *Stager) Status() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	st := Status{Running: s.Running}
+	st := Status{Running: s.Running, NextStageRemoves: versionsOf(Retain(entries, s.Running, s.Keeps()))}
 	rev := s.revert()
 	for _, e := range entries {
 		if e.Version == s.Running {

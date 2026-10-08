@@ -16,6 +16,11 @@ the state volume grows from one update to the next. The root partition itself is
 over. There are no pre-update backups: the A/B slots are the way back. The slot count and the
 partition layout of an image built from a template are a per-app design choice, made later.
 
+The removal happens at Stage, not Apply, because staging writes over the inactive slot. So
+`Image.Status` and `GetUpgrades` name the releases the next stage removes (`next_stage_removes`),
+and the Updates page shows "This removes <version> and its files" by the Stage step and in its
+confirm dialog.
+
 - `Image.Stage` fetches a release, runs the whole verification chain against the keys compiled
   into the running init, and refuses anything not newer than the running release
   (`UPGRADE_DOWNGRADE`). Nothing is written before that passes. It then writes the root image into
