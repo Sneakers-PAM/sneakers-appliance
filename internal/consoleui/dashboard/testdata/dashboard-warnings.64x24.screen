@@ -1,7 +1,6 @@
 +--------------------------------------------------------------+
 |  /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node       |
 +--------------------------------------------------------------+
-|                                                              |
 |   Health        OK      all services running                 |
 |   Product       OK      Sneakers-PAM running                 |
 |   Protection    REDUCED no TPM, Secure Boot off              |
@@ -9,7 +8,8 @@
 |                                                              |
 |   Admin         https://198.51.100.7:8443                    |
 |                 https://sneakers.example.org:8443            |
-|   SSH           198.51.100.7:22  key + TOTP code             |
+|   SSH           198.51.100.7:22                              |
+|                 key from :8443 Access, then TOTP             |
 |                                                              |
 |   Fingerprints                                               |
 |     :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D          |

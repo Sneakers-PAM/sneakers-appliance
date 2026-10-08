@@ -19,6 +19,7 @@ StrictModes yes
 RevokedKeys /var/lib/sneakers/ssh/revoked.krl
 ExposeAuthInfo yes
 ForceCommand /usr/bin/sneakers-shell
+Banner /run/sneakers/ssh/banner
 MaxAuthTries 3
 LoginGraceTime 30
 ClientAliveInterval 60

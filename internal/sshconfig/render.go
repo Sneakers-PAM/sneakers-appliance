@@ -89,8 +89,19 @@ var configTemplate string
 
 var tmpl = template.Must(template.New("sshd_config").Funcs(template.FuncMap{"join": strings.Join}).Parse(configTemplate))
 
+// banner is what sshd sends before authentication: a client without a
+// box-issued key is refused with only "server sent: publickey", so it says
+// where the key comes from.
+const banner = `Sneakers-PAM Appliance
+
+SSH takes only keys this box issued, then a TOTP code. No passwords.
+No key yet? Sign in to the admin page on :8443, open Access and choose
+"Get an SSH key". Then: ssh -i <key file> <your name>@<this box>
+`
+
 type view struct {
 	Paths
+	Banner            string
 	ListenAddrs       []string
 	AllowUsers        []string
 	PubkeyAlgorithms  []string
@@ -118,6 +129,7 @@ func Render(in Input, dir string) error {
 		KexAlgorithms:     KexAlgorithms,
 		Ciphers:           Ciphers,
 		MACs:              MACs,
+		Banner:            filepath.Join(p.ConfigDir, "banner"),
 	}
 	port := in.Port
 	if port == 0 {
@@ -139,6 +151,9 @@ func Render(in Input, dir string) error {
 		return fmt.Errorf("sshconfig: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "sshd_config"), cfg.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("sshconfig: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "banner"), []byte(banner), 0o644); err != nil { // #nosec G306 -- sshd reads it to send before authentication
 		return fmt.Errorf("sshconfig: %w", err)
 	}
 	return nil

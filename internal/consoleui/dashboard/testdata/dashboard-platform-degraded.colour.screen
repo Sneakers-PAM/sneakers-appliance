@@ -9,7 +9,8 @@
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Admin         \e[1;37mhttps://192.0.2.10:8443\e[0m                      \e[34m|\e[0m
 \e[34m|\e[0m                 \e[1;37mhttps://sneakers.example.org:8443\e[0m            \e[34m|\e[0m
-\e[34m|\e[0m   SSH           \e[1;37m192.0.2.10:22\e[0m\e[2m  key + TOTP code\e[0m               \e[34m|\e[0m
+\e[34m|\e[0m   SSH           \e[1;37m192.0.2.10:22\e[0m                                \e[34m|\e[0m
+\e[34m|\e[0m                 \e[2mkey from :8443 Access, then TOTP\e[0m             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[2mFingerprints\e[0m                                               \e[34m|\e[0m
 \e[34m|\e[0m     :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D          \e[34m|\e[0m
@@ -18,7 +19,6 @@
 \e[34m|\e[0m                    cH76 LnuV dAfL HqOr ZRw                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;33m!\e[0m \e[1;37mnetd isn't answering: connection refused\e[0m                 \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m  \e[2mR  Recover access\e[0m                                           \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m

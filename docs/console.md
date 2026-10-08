@@ -174,14 +174,14 @@ invariant applies.
 |                                                              |
 |   Admin         https://192.0.2.10:8443                      |
 |                 https://sneakers.example.org:8443            |
-|   SSH           192.0.2.10:22  key + TOTP code               |
+|   SSH           192.0.2.10:22                                |
+|                 key from :8443 Access, then TOTP             |
 |                                                              |
 |   Fingerprints                                               |
 |     :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D          |
 |             E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5          |
 |     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             |
 |                    cH76 LnuV dAfL HqOr ZRw                   |
-|                                                              |
 |                                                              |
 |                                                              |
 +--------------------------------------------------------------+
@@ -194,7 +194,8 @@ time it was saved), the protection and the custody mode from init, the root slot
 environment, the host keys from the state volume and the node count from the platform, every 5
 seconds. In order: health, the product, protection and the clock, each a status word in its colour
 with the details dim; the admin page on the first management address and, on the line under it, on
-the box's FQDN once one is set; SSH on port 22 (key and TOTP code); the fingerprints of the page's
+the box's FQDN once one is set; SSH on port 22, with a dim line under it saying the key comes from
+:8443's Access page and a TOTP code follows ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)); the fingerprints of the page's
 certificate and the SSH host key; then the warnings, each a `!` in its colour with its first
 sentence in bold. The warnings are Status's own (the exposure warning, a self-approved elevation
 and the like, but not the ones with their own line: reduced protection, the clock and the

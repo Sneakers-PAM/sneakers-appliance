@@ -442,3 +442,12 @@ func TestRecoverSubScreensGoBack(t *testing.T) {
 	d.Type(t, "\x1b")
 	d.Expect(t, "all services running")
 }
+
+// The SSH line says where the key comes from: SSH takes only a key the
+// box issued on :8443, then a TOTP code.
+func TestTheSSHLineSaysTheKeyComesFromTheAdminPage(t *testing.T) {
+	text := dashboard.Page(chrome(full, keycustody.ModeTPM), data(status()), now).Frame(64, 24).Text()
+	if !strings.Contains(text, "key from :8443 Access, then TOTP") {
+		t.Fatalf("the SSH line doesn't say where the key comes from:\n%s", text)
+	}
+}

@@ -9,7 +9,8 @@
 |                                                                              |
 |           Admin         https://192.0.2.10:8443                              |
 |                         https://sneakers.example.org:8443                    |
-|           SSH           192.0.2.10:22  key + TOTP code                       |
+|           SSH           192.0.2.10:22                                        |
+|                         key from :8443 Access, then TOTP                     |
 |                                                                              |
 |           Fingerprints                                                       |
 |             :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D                  |
@@ -18,7 +19,6 @@
 |                            cH76 LnuV dAfL HqOr ZRw                           |
 |                                                                              |
 |           ! A Recover access code is out until 19:03.                        |
-|                                                                              |
 +------------------------------------------------------------------------------+
 |          R  Recover access                                                   |
 +------------------------------------------------------------------------------+

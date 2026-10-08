@@ -5,11 +5,29 @@ closed shell and gives a TOTP code first; a root shell is opened through a one-t
 code from :8443. There are no SSH password logins, no admin-supplied login keys, no operator
 (client) certificates and no recovery codes in this release.
 
+### The first SSH login
+
+SSH needs a key from :8443 first; a client without one is refused with
+`No supported authentication methods available (server sent: publickey)`, after the banner below.
+
+1. Sign in to :8443 (name, password and TOTP code), open **Access** and choose **Get an SSH key**
+   (it asks for a fresh TOTP code). The private key and its certificate download once; the box
+   keeps neither.
+2. Keep the certificate file next to the key and log in with your own name:
+   `ssh -i <key file> <name>@192.0.2.10`.
+3. The closed shell asks for a TOTP code, under the same lockout as :8443, then shows the menu for
+   your role.
+
+There is no way to skip the TOTP code on SSH and no SSH password login: the key is one factor and
+the code the other.
+
 ## sshd's configuration
 
 accessd and `sneakers-sshd-run` render sshd's files from the access store into a staging directory,
 check them with the pinned `sshd -t` and swap them into `/run/sneakers/ssh/` only when sshd accepts
-them (`sshconfig.Install`, under an flock on `/run/sneakers/ssh.lock`). A config that fails the check
+them (`sshconfig.Install`, under an flock on `/run/sneakers/ssh.lock`). Beside `sshd_config` it
+writes `banner`, which sshd sends before authentication (`Banner`): SSH takes only keys the box
+issued, then a TOTP code, and a key comes from :8443, Access, "Get an SSH key". A config that fails the check
 is never used, and the previous one stays.
 
 - `AuthenticationMethods publickey`, `AuthorizedKeysFile none` and `TrustedUserCAKeys

@@ -151,8 +151,8 @@ func TestOnlyRootKeyCertificatesAndNoPasswords(t *testing.T) {
 			t.Fatalf("config lacks %q", want)
 		}
 	}
-	if ents, _ := os.ReadDir(dir); len(ents) != 1 {
-		t.Fatalf("Render wrote more than sshd_config: %v", ents)
+	if ents, _ := os.ReadDir(dir); len(ents) != 2 {
+		t.Fatalf("Render wrote more than sshd_config and the banner: %v", ents)
 	}
 }
 
@@ -223,5 +223,21 @@ func TestCheckRefusesABadConfig(t *testing.T) {
 	mustNoErr(t, os.WriteFile(filepath.Join(dir, "sshd_config"), []byte("NotAnOption yes\n"), 0o600))
 	if err := sshconfig.Check(sshd, dir); err == nil {
 		t.Fatal("sshd -t accepted an unknown option")
+	}
+}
+
+// A client with no box-issued key is refused with "server sent: publickey";
+// the banner sshd sends before that says to get a key on :8443 first.
+func TestTheBannerSaysToGetAKeyFirst(t *testing.T) {
+	dir := t.TempDir()
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), State: twoAdmins(t)}, dir))
+	if cfg := readFile(t, filepath.Join(dir, "sshd_config")); !strings.Contains(cfg, "\nBanner /run/sneakers/ssh/banner\n") {
+		t.Fatalf("no Banner line:\n%s", cfg)
+	}
+	b := readFile(t, filepath.Join(dir, "banner"))
+	for _, want := range []string{"only keys this box issued", ":8443", "Access", "Get an SSH key", "TOTP"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("the banner lacks %q:\n%s", want, b)
+		}
 	}
 }

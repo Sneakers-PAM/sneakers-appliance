@@ -227,7 +227,8 @@ func Page(c consoleui.Chrome, d Data, now time.Time) tui.Page {
 		if h := st.GetHostname(); h != "" {
 			b = append(b, consoleui.Field("", label, tui.Span{Text: "https://" + h + ":8443", Style: tui.Strong}))
 		}
-		b = append(b, consoleui.Field("SSH", label, tui.Span{Text: urls[0] + ":22", Style: tui.Strong}, tui.Span{Text: "  key + TOTP code", Style: tui.Dim}))
+		b = append(b, consoleui.Field("SSH", label, tui.Span{Text: urls[0] + ":22", Style: tui.Strong}),
+			consoleui.Field("", label, tui.Span{Text: "key from :8443 Access, then TOTP", Style: tui.Dim}))
 	}
 	var fps []tui.Line
 	for i, l := range consoleui.FingerprintGroups(st.GetTlsFingerprint()) {
