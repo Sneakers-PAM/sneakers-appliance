@@ -112,6 +112,7 @@ jobs:
             echo "### Lab release"
             echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes (SquashFS zstd with the verity tree)"
             echo "- raw disk: $(ls "$RUNNER_TEMP"/lab/disk)"
+            echo "- product bundle: $(stat -c %s "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin) bytes (k0s, its images and the lab stacks)"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Image suite
         if: github.event_name != 'pull_request'
@@ -121,7 +122,8 @@ jobs:
           export SNEAKERS_KEYS="$RUNNER_TEMP/labkeys"
           export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage"
           SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
-          export SNEAKERS_IMAGE
+          SNEAKERS_PRODUCT="$(ls "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin)"
+          export SNEAKERS_IMAGE SNEAKERS_PRODUCT
           go test -tags image -timeout 60m -v ./test/image/...
       - name: Wipe the lab keys
         if: always()
