@@ -24,6 +24,7 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit/audittest"
 )
 
 type fakeAccessd struct {
@@ -80,6 +81,7 @@ func setup(t *testing.T, ends time.Duration) (*fakeAccessd, *osaudit.Log, *syncB
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { audittest.CheckTargets(t, l) })
 	fa := &fakeAccessd{ends: time.Now().Add(ends)}
 	out := &syncBuf{}
 	pr, _ := io.Pipe()

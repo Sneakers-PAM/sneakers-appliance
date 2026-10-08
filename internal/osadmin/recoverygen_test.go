@@ -68,7 +68,7 @@ func TestGenerateRecoveryKey(t *testing.T) {
 	}) {
 		t.Fatalf("the escrow goes to the new key: %v", b.init.escrowFor)
 	}
-	if e := lastEntry(t, b.log, "setup.recovery-key.generate"); e.Outcome != "ok" || e.Target != rk.GetFingerprint() {
+	if e := lastEntry(t, b.log, "setup.recovery-key.generate"); e.Outcome != "ok" || e.Target != "recovery key offline safe" || e.Detail["fingerprint"] != rk.GetFingerprint() {
 		t.Fatalf("audited %+v", e)
 	}
 

@@ -43,7 +43,7 @@ func (h *rootShellSvc) IssueRootShellCode(ctx context.Context, r *connect.Reques
 		return nil, err
 	}
 	req, code, err := h.s.o.Elevation.IssueCode(st, c.session.Admin, r.Msg.GetChallenge())
-	c.note(req.ID, "admin", c.session.Admin, "sshSource", req.Source)
+	c.noteID(req.Name(), "request", req.ID, "admin", c.session.Admin, "sshSource", req.Source)
 	if err != nil {
 		return nil, err
 	}

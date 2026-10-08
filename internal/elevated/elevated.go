@@ -116,7 +116,7 @@ func Run(ctx, terminated context.Context, o Options) (Result, error) {
 	if err != nil {
 		return res, fmt.Errorf("the session can't be recorded, so it doesn't start: %w", err)
 	}
-	rec := osaudit.NewRecorder(f, o.Audit, res.ID)
+	rec := osaudit.NewRecorder(f, o.Audit, res.ID, e.GetAdmin())
 	reason, runErr := session(ctx, terminated, o, rec, e.GetAdmin(), ends)
 	res.Reason = reason
 	if err := rec.Close(reason); err != nil {

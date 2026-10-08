@@ -66,6 +66,15 @@ func (c *call) note(target string, detail ...string) {
 	}
 }
 
+// noteID names the entry's target in words and keeps id in the detail
+// under key, so the log reads by name and still carries the id.
+func (c *call) noteID(target, key, id string, detail ...string) {
+	if id != "" {
+		detail = append([]string{key, id}, detail...)
+	}
+	c.note(target, detail...)
+}
+
 // RuleOf returns the method's Rule, or nil when it has none.
 func RuleOf(md protoreflect.MethodDescriptor) *osadminv1.Rule {
 	if md == nil {

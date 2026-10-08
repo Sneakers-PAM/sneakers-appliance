@@ -13,11 +13,21 @@ One file per UTC day, `log-<YYYY-MM-DD>.jsonl`, mode 0600. Each line is one entr
 | `actor` | the admin's name, or `console` |
 | `keyFp` | the SHA-256 fingerprint of the key that signed in |
 | `source` | the client address |
-| `action`, `target` | what was done, to what |
+| `action`, `target` | what was done, to what; the target is named in words (see below) |
 | `outcome` | `ok`, `refused`, or a reason (`exit`, `time-box`, `terminated`, `expired`, `done`, `idle`, `attempts`) |
 | `code` | the error symbol when refused |
 | `detail` | action-specific fields |
 | `prev` | the hex SHA-256 of the line before, across day files |
+
+The target is always something an admin reads, never an id: an admin's name, `network`, `box`,
+`product`, a certificate by its names (`certificate *.example.org`, kept from before a removal), a
+CSR by the names it asks for, a session as `alice's browser session from 192.0.2.20` (or `SSH
+session`, `root shell`, `SSH login`), a root shell or its recording by admin and time (`alice's root
+shell, asked for 2026-10-08 14:05 UTC`), an upload as `uploaded file` and a staged update as
+`release <version>`, a recovery key by its label, and `factory reset`. The id the action concerns
+stays in `detail`, under a key naming it: `certificate`, `csr`, `session`, `login`, `request` (a
+root shell), `recording`, `upload`, `reset`, `change` (a network change), `fingerprint` or `key`.
+Tests fail on any entry whose target looks like an id (`internal/osaudit/audittest`).
 
 Every line is fsynced before the action it records is reported done. Init and accessd both append
 to the log: each takes an flock on `.lock` in the log directory and reads the head again when the
@@ -35,7 +45,8 @@ which covers it.
 An elevated session is recorded in full, both directions, as asciicast v2 in
 `sessions/<request id>.cast`. As the file grows, the SHA-256 of every 64 KiB is written to the log
 (`recording.chunk`, with the chunk's index, size and hash), and `recording.end` closes it with the
-chunk count. A session killed mid-way still leaves a prefix that verifies; a recording with more
+chunk count. Both name the recording by admin and start time and carry the request id in
+`detail.recording`, which is what verification matches on. A session killed mid-way still leaves a prefix that verifies; a recording with more
 than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can view recordings.
 
 ## Sign-in, lockout and the root shell

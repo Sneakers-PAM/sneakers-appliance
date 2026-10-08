@@ -177,6 +177,10 @@ func TestTheCSRFlowSwapsThe8443CertificateLive(t *testing.T) {
 	if _, err := br.tls().DeleteCertificate(ctx, connect.NewRequest(&osadminv1.DeleteCertificateRequest{CertificateId: cert.GetId()})); err != nil {
 		t.Fatal(err)
 	}
+	want := "certificate " + strings.Join(cert.GetNames(), ", ")
+	if e := lastEntry(t, cb.log, "tls.certificate.delete"); e.Target != want || e.Detail["certificate"] != cert.GetId() || e.Detail["fingerprint"] != cert.GetFingerprint() {
+		t.Fatalf("delete entry %+v, want target %q and the id and fingerprint in the detail", e, want)
+	}
 }
 
 func TestCertificateChangesNeedAnOwnerAndAFreshSignIn(t *testing.T) {

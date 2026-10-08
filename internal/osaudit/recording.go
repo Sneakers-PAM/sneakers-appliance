@@ -45,6 +45,7 @@ type Recorder struct {
 	w     io.Writer
 	log   Appender
 	id    string
+	name  string
 	start time.Time
 	now   func() time.Time
 
@@ -55,15 +56,17 @@ type Recorder struct {
 	err    error
 }
 
-// NewRecorder starts a recording with id (the elevation request id) and
+// NewRecorder starts a recording with id (the elevation request id) of
+// admin's root shell, named in the audit by admin and start time, and
 // writes the asciicast header. Write records output; Input records what the
 // admin typed.
-func NewRecorder(w io.Writer, log Appender, id string) *Recorder {
-	return newRecorder(w, log, id, time.Now, 80, 24)
+func NewRecorder(w io.Writer, log Appender, id, admin string) *Recorder {
+	return newRecorder(w, log, id, admin, time.Now, 80, 24)
 }
 
-func newRecorder(w io.Writer, log Appender, id string, now func() time.Time, width, height int) *Recorder {
+func newRecorder(w io.Writer, log Appender, id, admin string, now func() time.Time, width, height int) *Recorder {
 	r := &Recorder{w: w, log: log, id: id, now: now, start: now(), h: sha256.New()}
+	r.name = admin + "'s root shell recording, started " + r.start.UTC().Format("2006-01-02 15:04 UTC")
 	header, _ := json.Marshal(map[string]any{"version": 2, "width": width, "height": height, "timestamp": r.start.Unix()})
 	r.emit(append(header, '\n'))
 	return r
@@ -120,11 +123,12 @@ func (r *Recorder) logChunk(final bool) {
 	e := Entry{
 		Actor:  "sneakers-elevated",
 		Action: ActionRecordingChunk,
-		Target: r.id,
+		Target: r.name,
 		Detail: map[string]string{
-			"n":      strconv.Itoa(r.chunks),
-			"bytes":  strconv.Itoa(r.inBuf),
-			"sha256": hex.EncodeToString(r.h.Sum(nil)),
+			"recording": r.id,
+			"n":         strconv.Itoa(r.chunks),
+			"bytes":     strconv.Itoa(r.inBuf),
+			"sha256":    hex.EncodeToString(r.h.Sum(nil)),
 		},
 	}
 	if final {
@@ -152,8 +156,8 @@ func (r *Recorder) Close(reason string) error {
 	if r.err != nil {
 		return r.err
 	}
-	return r.log.Append(Entry{Actor: "sneakers-elevated", Action: ActionRecordingEnd, Target: r.id, Outcome: reason,
-		Detail: map[string]string{"chunks": strconv.Itoa(r.chunks)}})
+	return r.log.Append(Entry{Actor: "sneakers-elevated", Action: ActionRecordingEnd, Target: r.name, Outcome: reason,
+		Detail: map[string]string{"recording": r.id, "chunks": strconv.Itoa(r.chunks)}})
 }
 
 // VerifyRecording checks data, a recording's bytes, against the chunk
@@ -175,7 +179,7 @@ func VerifyRecordingPrefix(data []byte, l *Log, id string) (int, error) {
 	}
 	off, n, ended, endChunks := 0, 0, false, -1
 	for _, e := range entries {
-		if e.Target != id {
+		if e.Detail["recording"] != id {
 			continue
 		}
 		switch e.Action {

@@ -38,6 +38,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit/audittest"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
@@ -440,6 +441,7 @@ func startBox(t *testing.T, mods []func(*box, *osadmin.Options), seed func(*box)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { audittest.CheckTargets(t, b.log) })
 	b.init = &fakeInit{level: initv1.ProtectionLevel_PROTECTION_LEVEL_FULL}
 	b.netd = &fakeNetd{settings: defaultSettings(), mgmt: []string{"192.0.2.10/24"}, hostname: "box1.sneakers.example.org", ntp: true}
 	mux := http.NewServeMux()

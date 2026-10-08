@@ -140,7 +140,7 @@ func TestARevokedKeyComesBackOnlyThroughAnOwnersUnrevoke(t *testing.T) {
 	if _, err := api.UnrevokeKey(ctx, withSession(connect.NewRequest(&osadminv1.UnrevokeKeyRequest{Fingerprint: gone.fp}), cookie, csrf)); err != nil {
 		t.Fatal(err)
 	}
-	if en := lastEntry(t, b.log, "access.key.unrevoke"); en.Actor != "alice" || en.Outcome != "ok" || en.Target != gone.fp {
+	if en := lastEntry(t, b.log, "access.key.unrevoke"); en.Actor != "alice" || en.Outcome != "ok" || en.Target != "revoked login key" || en.Detail["key"] != gone.fp {
 		t.Fatalf("%+v", en)
 	}
 	if b.revoked(gone) {

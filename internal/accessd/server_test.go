@@ -197,7 +197,7 @@ func TestTheClosedShellsTOTPCheck(t *testing.T) {
 	if _, err := login.EndSshLogin(ctx, connect.NewRequest(&accessv1.EndSshLoginRequest{LoginId: out.Msg.GetLoginId()})); err != nil {
 		t.Fatal(err)
 	}
-	if e := lastEntry(t, b.log, "ssh.logout"); e.Actor != "bob" || e.Target != out.Msg.GetLoginId() {
+	if e := lastEntry(t, b.log, "ssh.logout"); e.Actor != "bob" || e.Target != "bob's SSH login from 192.0.2.50" || e.Detail["login"] != out.Msg.GetLoginId() {
 		t.Fatalf("audit %+v", e)
 	}
 	other := accessv1connect.NewSshLoginServiceClient(hc, url, connect.WithInterceptors(keyHeader(b.keys["alice"].fp)))

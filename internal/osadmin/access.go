@@ -273,7 +273,7 @@ func (s *Server) endElevations(by string, match func(elevation.Request) bool) in
 func (h *accessSvc) UnrevokeKey(ctx context.Context, r *connect.Request[osadminv1.UnrevokeKeyRequest]) (*connect.Response[osadminv1.UnrevokeKeyResponse], error) {
 	c := callFrom(ctx)
 	fp := r.Msg.GetFingerprint()
-	c.note(fp)
+	c.note("revoked login key", "key", fp)
 	err := h.s.o.Access.Update(func(st *access.State) error {
 		if !st.Unrevoke(fp) {
 			return codes.New(codes.AccessKeyType, "key %s isn't revoked", fp)

@@ -29,7 +29,10 @@ type SSHLogin struct {
 // check is audited.
 func (s *Server) VerifyLoginTotp(l Local, code string) (SSHLogin, error) {
 	out, err := s.verifyLogin(l, code)
-	e := osaudit.Entry{Actor: l.Admin, KeyFP: l.KeyFP, Source: l.Source, Action: "ssh.login", Target: out.ID, Detail: map[string]string{"surface": SurfaceSSH}}
+	e := osaudit.Entry{Actor: l.Admin, KeyFP: l.KeyFP, Source: l.Source, Action: "ssh.login", Target: sessionName(l.Admin, "SSH login", l.Source), Detail: map[string]string{"surface": SurfaceSSH}}
+	if out.ID != "" {
+		e.Detail["login"] = out.ID
+	}
 	s.write(e, err)
 	if err != nil {
 		s.o.Logger.Warn("osadmin: an SSH login's TOTP check refused", log.F("admin", l.Admin), log.F("source", l.Source), log.F("error", describe(err)))
@@ -75,5 +78,5 @@ func (s *Server) verifyLogin(l Local, code string) (SSHLogin, error) {
 
 // EndSSHLogin records a login's end.
 func (s *Server) EndSSHLogin(l Local, id string) {
-	s.write(osaudit.Entry{Actor: l.Admin, KeyFP: l.KeyFP, Source: l.Source, Action: "ssh.logout", Target: id, Detail: map[string]string{"surface": SurfaceSSH}}, nil)
+	s.write(osaudit.Entry{Actor: l.Admin, KeyFP: l.KeyFP, Source: l.Source, Action: "ssh.logout", Target: sessionName(l.Admin, "SSH login", l.Source), Detail: map[string]string{"login": id, "surface": SurfaceSSH}}, nil)
 }

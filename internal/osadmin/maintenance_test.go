@@ -222,7 +222,7 @@ func TestAnOwnerOverrideEndsTheShellThenApplies(t *testing.T) {
 		t.Fatalf("activated %d, rebooted %d", b.init.activated, b.init.reboots)
 	}
 	e := lastEntry(t, b.log, "elevation.terminate")
-	if e.Outcome != "ok" || e.Target != r.ID || e.Actor != "alice" || e.Detail["reason"] != "the security fix can't wait" || e.Detail["admin"] != "bob" || e.Detail["for"] != "upgrade.apply" {
+	if e.Outcome != "ok" || e.Target != r.Name() || e.Detail["request"] != r.ID || e.Actor != "alice" || e.Detail["reason"] != "the security fix can't wait" || e.Detail["admin"] != "bob" || e.Detail["for"] != "upgrade.apply" {
 		t.Fatalf("%+v", e)
 	}
 	if e := lastEntry(t, b.log, "upgrade.apply"); e.Outcome != "ok" || e.Detail["overrode"] != r.ID {

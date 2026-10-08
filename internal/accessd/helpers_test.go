@@ -36,6 +36,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit/audittest"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 )
 
@@ -147,6 +148,7 @@ func newBox(t *testing.T) *box {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { audittest.CheckTargets(t, b.log) })
 	var d *accessd.Server
 	rerender := func() {
 		if d != nil {

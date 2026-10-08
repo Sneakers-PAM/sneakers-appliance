@@ -101,12 +101,22 @@ func (h *power) ListSessions(context.Context, *connect.Request[osadminv1.ListSes
 	return connect.NewResponse(out), nil
 }
 
+// sessionName is a session in words: "alice's browser session from
+// 192.0.2.20".
+func sessionName(admin, kind, source string) string {
+	n := admin + "'s " + kind
+	if source != "" {
+		n += " from " + source
+	}
+	return n
+}
+
 var errNoSession = errors.New("there is no such session; it may have ended already")
 
 func (h *power) EndSession(ctx context.Context, r *connect.Request[osadminv1.EndSessionRequest]) (*connect.Response[osadminv1.EndSessionResponse], error) {
 	c := callFrom(ctx)
 	id := r.Msg.GetId()
-	c.note(id)
+	c.noteID("session", "session", id)
 	notFound := connect.NewError(connect.CodeNotFound, errNoSession)
 	lg := h.s.o.Logger
 	switch {
@@ -114,7 +124,7 @@ func (h *power) EndSession(ctx context.Context, r *connect.Request[osadminv1.End
 		for _, b := range h.s.sessions.All() {
 			if browserID(b.ID) == id {
 				h.s.sessions.End(b.ID)
-				c.note(id, "kind", "browser", "admin", b.Admin, "source", b.Source)
+				c.noteID(sessionName(b.Admin, "browser session", b.Source), "session", id, "kind", "browser", "admin", b.Admin, "source", b.Source)
 				lg.Info("osadmin: browser session ended", log.F("by", c.session.Admin), log.F("admin", b.Admin), log.F("id", id))
 				return connect.NewResponse(&osadminv1.EndSessionResponse{}), nil
 			}
@@ -124,7 +134,7 @@ func (h *power) EndSession(ctx context.Context, r *connect.Request[osadminv1.End
 		if errors.Is(err, sshsession.ErrNotFound) {
 			return nil, notFound
 		}
-		c.note(id, "kind", "ssh", "admin", sh.Admin, "source", sh.Source)
+		c.noteID(sessionName(sh.Admin, "SSH session", sh.Source), "session", id, "kind", "ssh", "admin", sh.Admin, "source", sh.Source)
 		if err != nil {
 			return nil, err
 		}
@@ -136,7 +146,7 @@ func (h *power) EndSession(ctx context.Context, r *connect.Request[osadminv1.End
 		if !ok || cur.State != elevation.Active {
 			return nil, notFound
 		}
-		c.note(id, "kind", "elevated", "admin", cur.Admin, "source", cur.Source)
+		c.noteID(sessionName(cur.Admin, "root shell", cur.Source), "session", id, "kind", "elevated", "admin", cur.Admin, "source", cur.Source)
 		if _, err := h.s.o.Elevation.Terminate(rid, c.session.Admin); err != nil {
 			return nil, err
 		}

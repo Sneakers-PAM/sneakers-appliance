@@ -187,8 +187,8 @@ func (s *Server) overrideElevation(ctx context.Context, r elevation.Request, by 
 	}
 	_, err := s.o.Elevation.Terminate(r.ID, by.Actor)
 	e := by
-	e.Action, e.Target = "elevation.terminate", r.ID
-	e.Detail = map[string]string{"admin": r.Admin, "reason": reason, "for": by.Action}
+	e.Action, e.Target = "elevation.terminate", r.Name()
+	e.Detail = map[string]string{"request": r.ID, "admin": r.Admin, "reason": reason, "for": by.Action}
 	if surface := by.Detail["surface"]; surface != "" {
 		e.Detail["surface"] = surface
 	}
@@ -367,8 +367,8 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, n, err := s.saveUpload(http.MaxBytesReader(w, r.Body, MaxUpload+1))
-	entry.Target = id
-	entry.Detail = map[string]string{"bytes": strconv.FormatInt(n, 10)}
+	entry.Target = "uploaded file"
+	entry.Detail = map[string]string{"upload": id, "bytes": strconv.FormatInt(n, 10)}
 	s.write(entry, err)
 	if err != nil {
 		s.o.Logger.Warn("osadmin: upload failed", log.F("error", describe(err)))
@@ -500,12 +500,12 @@ func (s *Server) fetch(ctx context.Context, target string) (string, int64, error
 func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadminv1.StageUpdateRequest]) (*connect.Response[osadminv1.StageUpdateResponse], error) {
 	c := callFrom(ctx)
 	id := r.Msg.GetUploadId()
-	c.note(id)
+	c.noteID("uploaded file", "upload", id)
 	pkg, err := h.s.stage(ctx, id)
 	version := ""
 	if pkg != nil {
 		version = pkg.GetVersion()
-		c.note(id, "version", version, "kind", pkg.GetKind(), "channel", pkg.GetChannel())
+		c.noteID("release "+version, "upload", id, "version", version, "kind", pkg.GetKind(), "channel", pkg.GetChannel())
 	}
 	target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
 	if pkg != nil {

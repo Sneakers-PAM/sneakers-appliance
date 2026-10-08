@@ -109,6 +109,18 @@ type Request struct {
 	RecordingSHA256 string     `json:"recordingSha256,omitempty"`
 }
 
+// Name is the root shell in words, for an audit target: whose it is and
+// when it was asked for. The id goes in the entry's detail.
+func (r Request) Name() string {
+	if r.Admin == "" {
+		return "root shell"
+	}
+	if r.Requested.IsZero() {
+		return r.Admin + "'s root shell"
+	}
+	return r.Admin + "'s root shell, asked for " + r.Requested.UTC().Format("2006-01-02 15:04 UTC")
+}
+
 // Caller is who asks: the closed-shell login's admin, the key sshd says
 // signed it in, and its SSH client address.
 type Caller struct {
@@ -206,8 +218,8 @@ func Open(o Options) (*Service, error) {
 // operator with a known SSH client address.
 func (s *Service) Challenge(st access.State, c Caller, reason string) (Request, error) {
 	r, err := s.challenge(st, c, reason)
-	s.audit(osaudit.Entry{Actor: c.Admin, KeyFP: c.KeyFP, Source: c.Source, Action: "rootshell.challenge", Target: r.ID,
-		Detail: map[string]string{"reason": reason}}, "ok", err)
+	s.audit(osaudit.Entry{Actor: c.Admin, KeyFP: c.KeyFP, Source: c.Source, Action: "rootshell.challenge", Target: r.Name(),
+		Detail: map[string]string{"request": r.ID, "reason": reason}}, "ok", err)
 	if err == nil {
 		s.changed()
 	}
@@ -245,7 +257,7 @@ func (s *Service) challenge(st access.State, c Caller, reason string) (Request, 
 // from now, once.
 func (s *Service) IssueCode(st access.State, admin, challenge string) (Request, string, error) {
 	r, code, err := s.issue(st, admin, challenge)
-	s.audit(osaudit.Entry{Actor: admin, Action: "rootshell.code", Target: r.ID, Detail: map[string]string{"source": r.Source}}, "ok", err)
+	s.audit(osaudit.Entry{Actor: admin, Action: "rootshell.code", Target: r.Name(), Detail: map[string]string{"request": r.ID, "source": r.Source}}, "ok", err)
 	if err == nil {
 		s.changed()
 	}
@@ -298,8 +310,8 @@ func (s *Service) code(r Request) string {
 // MaxCodeTries the challenge closes.
 func (s *Service) Open(st access.State, c Caller, challenge, code string) (Request, string, error) {
 	r, ticket, err := s.open(st, c, challenge, code)
-	s.audit(osaudit.Entry{Actor: c.Admin, KeyFP: c.KeyFP, Source: c.Source, Action: "rootshell.open", Target: r.ID,
-		Detail: map[string]string{"tries": strconv.Itoa(r.CodeTries)}}, "ok", err)
+	s.audit(osaudit.Entry{Actor: c.Admin, KeyFP: c.KeyFP, Source: c.Source, Action: "rootshell.open", Target: r.Name(),
+		Detail: map[string]string{"request": r.ID, "tries": strconv.Itoa(r.CodeTries)}}, "ok", err)
 	s.changed()
 	return r, ticket, err
 }
@@ -382,8 +394,8 @@ func (s *Service) byChallenge(challenge string) (int, error) {
 // active. ends is when its limit runs out.
 func (s *Service) Begin(ticket, admin string, pid int) (Request, time.Time, error) {
 	r, ends, err := s.begin(ticket, admin, pid)
-	s.audit(osaudit.Entry{Actor: admin, KeyFP: r.KeyFP, Source: r.Source, Action: "rootshell.start", Target: r.ID,
-		Detail: map[string]string{"pid": strconv.Itoa(pid), "minutes": strconv.Itoa(r.Minutes)}}, "ok", err)
+	s.audit(osaudit.Entry{Actor: admin, KeyFP: r.KeyFP, Source: r.Source, Action: "rootshell.start", Target: r.Name(),
+		Detail: map[string]string{"request": r.ID, "pid": strconv.Itoa(pid), "minutes": strconv.Itoa(r.Minutes)}}, "ok", err)
 	if err == nil {
 		s.changed()
 	}
@@ -426,8 +438,8 @@ func (s *Service) begin(ticket, admin string, pid int) (Request, time.Time, erro
 // End records how an active session ended and its recording's hash.
 func (s *Service) End(id, reason, recordingSHA string) error {
 	r, err := s.end(id, reason, recordingSHA)
-	s.audit(osaudit.Entry{Actor: "sneakers-elevated", Action: "rootshell.end", Target: id,
-		Detail: map[string]string{"admin": r.Admin, "recordingSha256": recordingSHA}}, reason, err)
+	s.audit(osaudit.Entry{Actor: "sneakers-elevated", Action: "rootshell.end", Target: r.Name(),
+		Detail: map[string]string{"request": id, "admin": r.Admin, "recordingSha256": recordingSHA}}, reason, err)
 	if err == nil {
 		s.changed()
 	}
@@ -499,7 +511,7 @@ func (s *Service) terminate(id, by string) (Request, error) {
 func (s *Service) Sweep() {
 	expired := s.sweep()
 	for _, r := range expired {
-		s.audit(osaudit.Entry{Actor: "accessd", Action: "rootshell.expire", Target: r.ID, Detail: map[string]string{"admin": r.Admin, "was": r.EndReason}}, r.EndReason, nil)
+		s.audit(osaudit.Entry{Actor: "accessd", Action: "rootshell.expire", Target: r.Name(), Detail: map[string]string{"request": r.ID, "admin": r.Admin, "was": r.EndReason}}, r.EndReason, nil)
 	}
 	if len(expired) > 0 {
 		s.changed()
