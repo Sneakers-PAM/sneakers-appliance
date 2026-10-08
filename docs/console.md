@@ -184,7 +184,8 @@ the box's FQDN once one is set; SSH on port 22 (key and TOTP code); the fingerpr
 certificate and the SSH host key; then the warnings, each a `!` in its colour with its first
 sentence in bold. The warnings are Status's own (the exposure warning, a self-approved elevation
 and the like, but not the ones with their own line: reduced protection, the clock and the
-self-signed certificate), an upgrade staged or rolled back, a factory reset waiting for approval or
+self-signed certificate), an upgrade staged, reverted by an admin ("Reverted from 0.1.1 by alice at
+14:05 UTC", in the plain colour) or rolled back by boot counting, a factory reset waiting for approval or
 counting down (with **C** to cancel it), a Recover access code that's out, a service that isn't
 answering, and accessd itself not answering. Without a management address the screen offers **N**,
 the network editor. During an upgrade the maintenance screen replaces it: the version it's moving

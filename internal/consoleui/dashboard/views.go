@@ -158,6 +158,8 @@ func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 		}
 	}
 	switch {
+	case st.GetRevertedVersion() != "":
+		add(tui.Normal, "Reverted from "+st.GetRevertedVersion()+" by "+st.GetRevertedBy()+" at "+st.GetRevertedAt().AsTime().In(now.Location()).Format("15:04 MST")+". The box runs "+st.GetVersion()+" again.")
 	case st.GetFailedVersion() != "":
 		add(tui.Alert, "The upgrade to "+st.GetFailedVersion()+" was rolled back. The box runs "+st.GetVersion()+" again.")
 	case st.GetStagedVersion() != "":

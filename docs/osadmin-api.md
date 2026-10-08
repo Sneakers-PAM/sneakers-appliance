@@ -24,7 +24,8 @@ answers Connect `unavailable` ("the appliance services are unavailable").
   the other refusals are `failed_precondition`. A service whose backend isn't on the box yet answers
   `unimplemented` with "Not available in this release", and its page says so.
 - **Rules.** Each method carries a `(sneakers.appliance.osadmin.v1.rule)` option: the least role,
-  whether it needs a step-up, and the OS audit action written for every call, allowed or refused.
+  whether it needs a step-up (or a fresh code on every call), and the OS audit action written for
+  every call, allowed or refused.
   osadmin enforces the rule from the descriptor; a method without one is refused.
 
 ## Other endpoints
@@ -44,7 +45,9 @@ Every response carries `Content-Security-Policy: default-src 'self'; frame-ances
 Role `public` needs no session; `admin` is any signed-in admin; `owner` only an owner; `code
 session` is the session a redeemed one-time code gives (the setup code, an invitation or a Recover
 access code). Step-up means a sign-in or a fresh TOTP code (`SignInService.StepUp`) from the last 5
-minutes.
+minutes. `every call` means the request carries its own `totp_code`, a fresh code checked on every
+call whatever the step-up window says; an empty code is `ACCESS_CONFIRM`, and a wrong or reused one
+is `ACCESS_CREDENTIALS` and counts toward the sign-in lockout.
 
 Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin` and
 `SetupService.Finish` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
@@ -109,8 +112,8 @@ after setup, and invitations and Recover access codes still use the code pages.
 | `UpgradeService.GetUpgrades` | admin | no | |
 | `UpgradeService.FetchUpdate` | admin | no | `upgrade.fetch` |
 | `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
-| `UpgradeService.ApplyUpdate` | owner | yes | `upgrade.apply` |
-| `UpgradeService.RevertUpdate` | owner | yes | `upgrade.revert` |
+| `UpgradeService.ApplyUpdate` | owner | every call | `upgrade.apply` |
+| `UpgradeService.RevertUpdate` | owner | every call | `upgrade.revert` |
 | `UpgradeService.ListProductVersions` | admin | no | |
 | `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
 | `ElevationService.ListElevations` | admin | no | |

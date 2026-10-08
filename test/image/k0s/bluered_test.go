@@ -88,7 +88,7 @@ func TestBlueTakesRedFromUpdatesAndRevertsToBlue(t *testing.T) {
 	if e := entries(t, blue.Disk(0)); !strings.Contains(e, imageupgrade.EntryName(redV, imageupgrade.Tries, 0)) {
 		t.Fatalf("after staging, the ESP holds %s; want RED with %d tries", e, imageupgrade.Tries)
 	}
-	adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_BASE"}, &struct{}{})
+	adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_BASE", "totpCode": alice.code()}, &struct{}{})
 	blue.WaitExit(5 * time.Minute)
 
 	redVM := boot(blue, redV)
@@ -104,7 +104,7 @@ func TestBlueTakesRedFromUpdatesAndRevertsToBlue(t *testing.T) {
 	}
 	t.Logf("RED is marked good")
 	adm = signIn(t, adminPort, alice)
-	adm.call(t, "UpgradeService/RevertUpdate", map[string]any{"target": "UPDATE_TARGET_BASE"}, &struct{}{})
+	adm.call(t, "UpgradeService/RevertUpdate", map[string]any{"target": "UPDATE_TARGET_BASE", "totpCode": alice.code()}, &struct{}{})
 	redVM.WaitExit(5 * time.Minute)
 	if e := entries(t, redVM.Disk(0)); !strings.Contains(e, imageupgrade.EntryName(redV, 0, 1)) || !strings.Contains(e, imageupgrade.GoodName(blueV)) {
 		t.Fatalf("after the revert, the ESP holds %s; want RED marked bad and BLUE good", e)
@@ -112,6 +112,17 @@ func TestBlueTakesRedFromUpdatesAndRevertsToBlue(t *testing.T) {
 
 	boot(redVM, blueV)
 	t.Logf("BLUE runs %s after the revert", blueV)
+	// The revert was asked for: it reads as reverted from RED, by alice,
+	// not as a failed boot.
+	var after struct {
+		FailedVersion   string `json:"failedVersion"`
+		RevertedVersion string `json:"revertedVersion"`
+		RevertedBy      string `json:"revertedBy"`
+	}
+	signIn(t, adminPort, alice).call(t, "UpgradeService/GetUpgrades", map[string]any{}, &after)
+	if after.FailedVersion != "" || after.RevertedVersion != redV || after.RevertedBy != "alice" {
+		t.Fatalf("after the revert, Updates reports %+v; want reverted from %s by alice", after, redV)
+	}
 }
 
 // entries lists the boot entries on the ESP of a VM's disk. The guest

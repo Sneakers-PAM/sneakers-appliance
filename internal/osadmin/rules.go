@@ -96,7 +96,7 @@ func (s *Server) interceptor() connect.UnaryInterceptorFunc {
 			}
 			ctx = context.WithValue(ctx, callKey{}, c)
 			if !rule.GetPublic() {
-				if err := s.authorize(c, rule, readOnly(md)); err != nil {
+				if err := s.authorize(c, rule, readOnly(md), req.Any()); err != nil {
 					s.audit(c, rule, err)
 					return nil, toConnect(err)
 				}
@@ -137,8 +137,9 @@ func (s *Server) setupGate(c *call, rule *osadminv1.Rule) error {
 
 // authorize checks the session (or, for a code_session method, the
 // redeemed code's), the admin it is bound to, the role, the CSRF token and
-// the step-up.
-func (s *Server) authorize(c *call, rule *osadminv1.Rule, read bool) error {
+// the step-up: the window, or for a code_each_call method the request's
+// own fresh code.
+func (s *Server) authorize(c *call, rule *osadminv1.Rule, read bool, msg any) error {
 	sess, err := s.session(c.header)
 	if err != nil && rule.GetCodeSession() {
 		cs, cerr := s.codeSessionOf(c.header)
@@ -169,9 +170,37 @@ func (s *Server) authorize(c *call, rule *osadminv1.Rule, read bool) error {
 	if !read && subtle.ConstantTimeCompare([]byte(c.header.Get(CSRFHeader)), []byte(sess.CSRF)) != 1 {
 		return codes.New(codes.AccessForbidden, "the request's CSRF token is missing or wrong; reload the page")
 	}
+	if rule.GetCodeEachCall() {
+		return s.callCode(c, msg)
+	}
 	if rule.GetStepUp() && !s.sessions.Fresh(sess) {
 		return codes.New(codes.AccessStepUpRequired, "this needs a fresh authenticator code; confirm it's you")
 	}
+	return nil
+}
+
+// callCode checks a code_each_call request's totp_code against the
+// caller's authenticator, under the sign-in lockout. An empty code is
+// refused without counting as a wrong one.
+func (s *Server) callCode(c *call, msg any) error {
+	code := ""
+	if m, ok := msg.(proto.Message); ok {
+		if fd := m.ProtoReflect().Descriptor().Fields().ByName("totp_code"); fd != nil && fd.Kind() == protoreflect.StringKind {
+			code = strings.TrimSpace(m.ProtoReflect().Get(fd).String())
+		}
+	}
+	if code == "" {
+		return codes.New(codes.AccessConfirm, "type a new code from your authenticator to confirm")
+	}
+	st := s.o.Access.Read()
+	a, ok := st.Admin(c.session.Admin)
+	if !ok || !a.HasCredentials() {
+		return codes.New(codes.AccessSession, "sign in again")
+	}
+	if err := s.checkTOTP(a, code, c.source, osaudit.SurfaceAdmin, wrongCode); err != nil {
+		return err
+	}
+	s.o.Logger.Debug("osadmin: the call's own code was accepted", log.F("procedure", c.procedure), log.F("admin", c.session.Admin))
 	return nil
 }
 

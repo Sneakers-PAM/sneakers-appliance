@@ -83,13 +83,14 @@ type UpgradeServiceClient interface {
 	StageUpdate(context.Context, *connect.Request[v1.StageUpdateRequest]) (*connect.Response[v1.StageUpdateResponse], error)
 	// ApplyUpdate boots the staged release, or for target product switches
 	// to the staged product slot and restarts the product services (no
-	// reboot). While an elevated shell is open
+	// reboot). It takes a fresh TOTP code every time (code_each_call), not
+	// the step-up window. While an elevated shell is open
 	// it is refused with UPGRADE_ELEVATED, unless the request carries an
 	// owner's elevation_override for that shell.
 	ApplyUpdate(context.Context, *connect.Request[v1.ApplyUpdateRequest]) (*connect.Response[v1.ApplyUpdateResponse], error)
 	// RevertUpdate goes back to the previous release, or for target product
-	// to the previous product slot. An open elevated
-	// shell holds it back the same way as ApplyUpdate.
+	// to the previous product slot. Like ApplyUpdate it takes a fresh TOTP
+	// code every time, and an open elevated shell holds it back the same way.
 	RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error)
 	// ListProductVersions lists the product bundles this box may install:
 	// stable versions for its architecture and channel that fit the running
@@ -218,13 +219,14 @@ type UpgradeServiceHandler interface {
 	StageUpdate(context.Context, *connect.Request[v1.StageUpdateRequest]) (*connect.Response[v1.StageUpdateResponse], error)
 	// ApplyUpdate boots the staged release, or for target product switches
 	// to the staged product slot and restarts the product services (no
-	// reboot). While an elevated shell is open
+	// reboot). It takes a fresh TOTP code every time (code_each_call), not
+	// the step-up window. While an elevated shell is open
 	// it is refused with UPGRADE_ELEVATED, unless the request carries an
 	// owner's elevation_override for that shell.
 	ApplyUpdate(context.Context, *connect.Request[v1.ApplyUpdateRequest]) (*connect.Response[v1.ApplyUpdateResponse], error)
 	// RevertUpdate goes back to the previous release, or for target product
-	// to the previous product slot. An open elevated
-	// shell holds it back the same way as ApplyUpdate.
+	// to the previous product slot. Like ApplyUpdate it takes a fresh TOTP
+	// code every time, and an open elevated shell holds it back the same way.
 	RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error)
 	// ListProductVersions lists the product bundles this box may install:
 	// stable versions for its architecture and channel that fit the running

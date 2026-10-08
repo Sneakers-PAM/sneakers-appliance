@@ -469,11 +469,13 @@ type GetStatusResponse struct {
 	Channel  string                 `protobuf:"bytes,2,opt,name=channel,proto3" json:"channel,omitempty"`
 	Hostname string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	// phase is firstboot or normal.
-	Phase          string     `protobuf:"bytes,4,opt,name=phase,proto3" json:"phase,omitempty"`
-	RunningVersion string     `protobuf:"bytes,5,opt,name=running_version,json=runningVersion,proto3" json:"running_version,omitempty"`
-	StagedVersion  string     `protobuf:"bytes,6,opt,name=staged_version,json=stagedVersion,proto3" json:"staged_version,omitempty"`
-	FailedVersion  string     `protobuf:"bytes,7,opt,name=failed_version,json=failedVersion,proto3" json:"failed_version,omitempty"`
-	Protection     Protection `protobuf:"varint,8,opt,name=protection,proto3,enum=sneakers.appliance.osadmin.v1.Protection" json:"protection,omitempty"`
+	Phase          string `protobuf:"bytes,4,opt,name=phase,proto3" json:"phase,omitempty"`
+	RunningVersion string `protobuf:"bytes,5,opt,name=running_version,json=runningVersion,proto3" json:"running_version,omitempty"`
+	StagedVersion  string `protobuf:"bytes,6,opt,name=staged_version,json=stagedVersion,proto3" json:"staged_version,omitempty"`
+	// failed_version is a release boot counting fell back from: it never
+	// reached MarkGood. Empty after a manual revert.
+	FailedVersion string     `protobuf:"bytes,7,opt,name=failed_version,json=failedVersion,proto3" json:"failed_version,omitempty"`
+	Protection    Protection `protobuf:"varint,8,opt,name=protection,proto3,enum=sneakers.appliance.osadmin.v1.Protection" json:"protection,omitempty"`
 	// protection_reason is empty for full, else no-secure-boot-firmware,
 	// secure-boot-off or no-tpm.
 	ProtectionReason string `protobuf:"bytes,9,opt,name=protection_reason,json=protectionReason,proto3" json:"protection_reason,omitempty"`
@@ -489,9 +491,14 @@ type GetStatusResponse struct {
 	TlsSelfSigned  bool                   `protobuf:"varint,17,opt,name=tls_self_signed,json=tlsSelfSigned,proto3" json:"tls_self_signed,omitempty"`
 	Warnings       []*Warning             `protobuf:"bytes,18,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	// factory_reset is set while one is pending or counting down.
-	FactoryReset  *FactoryReset `protobuf:"bytes,19,opt,name=factory_reset,json=factoryReset,proto3" json:"factory_reset,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	FactoryReset *FactoryReset `protobuf:"bytes,19,opt,name=factory_reset,json=factoryReset,proto3" json:"factory_reset,omitempty"`
+	// reverted_version is the newer release an admin reverted from, with who
+	// did it and when; empty when there was no manual revert.
+	RevertedVersion string                 `protobuf:"bytes,20,opt,name=reverted_version,json=revertedVersion,proto3" json:"reverted_version,omitempty"`
+	RevertedBy      string                 `protobuf:"bytes,21,opt,name=reverted_by,json=revertedBy,proto3" json:"reverted_by,omitempty"`
+	RevertedAt      *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=reverted_at,json=revertedAt,proto3" json:"reverted_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
@@ -657,6 +664,27 @@ func (x *GetStatusResponse) GetFactoryReset() *FactoryReset {
 	return nil
 }
 
+func (x *GetStatusResponse) GetRevertedVersion() string {
+	if x != nil {
+		return x.RevertedVersion
+	}
+	return ""
+}
+
+func (x *GetStatusResponse) GetRevertedBy() string {
+	if x != nil {
+		return x.RevertedBy
+	}
+	return ""
+}
+
+func (x *GetStatusResponse) GetRevertedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevertedAt
+	}
+	return nil
+}
+
 type SetSecureBootRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	On              bool                   `protobuf:"varint,1,opt,name=on,proto3" json:"on,omitempty"`
@@ -767,7 +795,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
 	"totalBytes\x12/\n" +
-	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xfc\x06\n" +
+	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\x85\b\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1a\n" +
@@ -792,7 +820,12 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"tlsExpires\x12&\n" +
 	"\x0ftls_self_signed\x18\x11 \x01(\bR\rtlsSelfSigned\x12B\n" +
 	"\bwarnings\x18\x12 \x03(\v2&.sneakers.appliance.osadmin.v1.WarningR\bwarnings\x12P\n" +
-	"\rfactory_reset\x18\x13 \x01(\v2+.sneakers.appliance.osadmin.v1.FactoryResetR\ffactoryReset\"Q\n" +
+	"\rfactory_reset\x18\x13 \x01(\v2+.sneakers.appliance.osadmin.v1.FactoryResetR\ffactoryReset\x12)\n" +
+	"\x10reverted_version\x18\x14 \x01(\tR\x0frevertedVersion\x12\x1f\n" +
+	"\vreverted_by\x18\x15 \x01(\tR\n" +
+	"revertedBy\x12;\n" +
+	"\vreverted_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"revertedAt\"Q\n" +
 	"\x14SetSecureBootRequest\x12\x0e\n" +
 	"\x02on\x18\x01 \x01(\bR\x02on\x12)\n" +
 	"\x10confirm_hostname\x18\x02 \x01(\tR\x0fconfirmHostname\"\x17\n" +
@@ -857,17 +890,18 @@ var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
 	11, // 4: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
 	5,  // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
 	12, // 6: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	4,  // 7: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
-	9,  // 8: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	2,  // 9: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
-	8,  // 10: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	10, // 11: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	3,  // 12: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	11, // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	4,  // 8: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
+	9,  // 9: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	2,  // 10: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
+	8,  // 11: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	10, // 12: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	3,  // 13: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_status_proto_init() }

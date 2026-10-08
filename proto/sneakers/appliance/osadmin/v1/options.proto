@@ -49,6 +49,11 @@ message Rule {
   // Every call made with a setup code's session is refused the same way,
   // whatever its method.
   bool setup_only = 6;
+  // code_each_call: the request's totp_code must be a fresh code from the
+  // caller's authenticator on every call, whatever the step-up window
+  // says. A wrong or reused code counts toward the sign-in lockout. Used
+  // for the actions that reboot the box or swap what it runs.
+  bool code_each_call = 7;
 }
 
 extend google.protobuf.MethodOptions {

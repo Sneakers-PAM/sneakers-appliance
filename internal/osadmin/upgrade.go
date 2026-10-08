@@ -37,6 +37,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
@@ -395,6 +396,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 		Product: h.s.productSlots(ctx), DirectAvailable: direct}
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
+		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
 	}
 	if h.s.o.Elevation != nil {
 		auditDir := ""
@@ -513,7 +515,23 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&osadminv1.StageUpdateResponse{Package: pkg}), nil
+	out := &osadminv1.StageUpdateResponse{Package: pkg}
+	if target != osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+		out.Slot = h.s.otherSlot()
+	}
+	return connect.NewResponse(out), nil
+}
+
+// otherSlot is the base slot the box isn't running from, A or B, or ""
+// when it doesn't know where it booted from.
+func (s *Server) otherSlot() string {
+	switch s.o.RootSource {
+	case switchroot.LabelRootA:
+		return "B"
+	case switchroot.LabelRootB:
+		return "A"
+	}
+	return ""
 }
 
 func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage, error) {
@@ -711,7 +729,7 @@ func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadmi
 		c.note("box", "overrode", overrode)
 	}
 	if err == nil {
-		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{}))
+		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: c.session.Admin}))
 	}
 	if err == nil {
 		_, err = h.s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))

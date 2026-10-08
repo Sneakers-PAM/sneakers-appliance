@@ -96,7 +96,8 @@ func TestImageServiceStagesAndReportsThroughInit(t *testing.T) {
 	if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(running)), strings.NewReader("running")); err != nil {
 		t.Fatal(err)
 	}
-	c := serveImages(t, &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Pins: pins, Running: running, InitVersion: running, WorkDir: t.TempDir()})
+	s := &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Pins: pins, Running: running, InitVersion: running, WorkDir: t.TempDir()}
+	c := serveImages(t, s)
 	ctx := context.Background()
 
 	st, err := c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
@@ -119,6 +120,16 @@ func TestImageServiceStagesAndReportsThroughInit(t *testing.T) {
 	}
 	if _, err := c.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{})); err != nil {
 		t.Fatalf("activate: %v", err)
+	}
+	// The box boots the new release, an admin reverts, and it boots the old one again.
+	s.Running = fixtures.Version
+	if _, err := c.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: "alice"})); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+	s.Running = running
+	st, err = c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil || st.Msg.GetFailedVersion() != "" || st.Msg.GetRevertedVersion() != fixtures.Version || st.Msg.GetRevertedBy() != "alice" || st.Msg.GetRevertedAt() == nil {
+		t.Fatalf("status after a revert: %v %v", st, err)
 	}
 }
 

@@ -101,7 +101,7 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 		t.Fatalf("staged %+v", staged)
 	}
 	started := time.Now()
-	adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_PRODUCT"}, &struct{}{})
+	adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_PRODUCT", "totpCode": alice.code()}, &struct{}{})
 	next.Expect(`lab-hook: product bundle installed`, 2*time.Minute)
 	next.Expect(`lab-hook: api up`, 25*time.Minute)
 	next.Expect(`lab-hook: node ready`, 15*time.Minute)

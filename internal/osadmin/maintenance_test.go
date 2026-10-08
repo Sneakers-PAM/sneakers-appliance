@@ -72,7 +72,7 @@ func TestApplyingBlocksNewElevation(t *testing.T) {
 		inMaintenance = b.srv.Maintenance()
 		during = b.requestElevation()
 	}
-	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if !inMaintenance {
@@ -96,7 +96,7 @@ func TestAFailedApplyEndsMaintenance(t *testing.T) {
 	alice.signIn("alice")
 	b.staged(alice)
 	b.init.activateErr = connect.NewError(connect.CodeInternal, errors.New("the ESP is read-only"))
-	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{})); err == nil {
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err == nil {
 		t.Fatal("no error")
 	}
 	if b.srv.Maintenance() {
@@ -113,7 +113,7 @@ func TestRevertingBlocksNewElevation(t *testing.T) {
 	alice.signIn("alice")
 	var during error
 	b.init.duringActivate = func() { during = b.requestElevation() }
-	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(&osadminv1.RevertUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if c, ok := codes.Of(during); !ok || c != codes.ElevMaintenance {
@@ -130,12 +130,12 @@ func TestAnActiveElevatedShellHoldsTheApply(t *testing.T) {
 	b.staged(alice)
 	r := b.elevated()
 	ctx := context.Background()
-	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_ELEVATED")
 	if !strings.Contains(err.Error(), r.ID) || !strings.Contains(err.Error(), "bob") {
 		t.Fatalf("the refusal doesn't name the session: %v", err)
 	}
-	_, err = alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{}))
+	_, err = alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_ELEVATED")
 	if b.init.activated != 0 || b.init.rollbacks != 0 || b.init.reboots != 0 {
 		t.Fatal("the box went down under an elevated shell")
@@ -149,7 +149,7 @@ func TestAnActiveElevatedShellHoldsTheApply(t *testing.T) {
 	if err := b.elev.End(r.ID, elevation.ReasonExit, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatalf("once the shell ended: %v", err)
 	}
 }
@@ -211,7 +211,7 @@ func TestAnOwnerOverrideEndsTheShellThenApplies(t *testing.T) {
 		got, _ := b.elev.Get(r.ID)
 		stateAtActivate = got.State
 	}
-	req := &osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}
+	req := &osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID), TotpCode: b.code("alice")}
 	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(req)); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestAnOwnerOverrideEndsTheShellThenReverts(t *testing.T) {
 	alice.signIn("alice")
 	b.endsOnSignal()
 	r := b.elevated()
-	req := &osadminv1.RevertUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}
+	req := &osadminv1.RevertUpdateRequest{ElevationOverride: override(r, "bob "+r.ID), TotpCode: b.code("alice")}
 	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(req)); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +270,7 @@ func TestAWrongOverrideIsRefused(t *testing.T) {
 		"another id":     other,
 		"case or spaces": override(r, " BOB  "+strings.ToLower(r.ID)),
 	} {
-		_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: o}))
+		_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: o, TotpCode: b.code("alice")}))
 		if err == nil {
 			t.Fatalf("%s: no error", name)
 		}
@@ -299,7 +299,7 @@ func TestANonOwnerCantOverride(t *testing.T) {
 	r := b.elevated()
 	bob := b.browser()
 	bob.signIn("bob")
-	_, err := bob.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}))
+	_, err := bob.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID), TotpCode: b.code("bob")}))
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("want permission denied, got %v", err)
 	}
@@ -316,7 +316,7 @@ func TestAnOverrideWaitsForTheSessionToEnd(t *testing.T) {
 	alice.signIn("alice")
 	b.staged(alice)
 	r := b.elevated()
-	_, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID)}))
+	_, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{ElevationOverride: override(r, "bob "+r.ID), TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_ELEVATED")
 	if len(b.signals) != 1 || b.init.activated != 0 || b.srv.Maintenance() {
 		t.Fatalf("signals %v, activated %d", b.signals, b.init.activated)

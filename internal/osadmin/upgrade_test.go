@@ -20,6 +20,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
@@ -208,19 +209,19 @@ func TestApplyAndRevert(t *testing.T) {
 	alice := b.browser()
 	alice.signIn("alice")
 	ctx := context.Background()
-	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_NOT_STAGED")
 	id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
 	if err := stage(alice, id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if b.init.activated != 1 || b.init.reboots != 1 {
 		t.Fatal("apply activates and reboots")
 	}
-	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if b.init.rollbacks != 1 || b.init.reboots != 2 {
@@ -228,7 +229,7 @@ func TestApplyAndRevert(t *testing.T) {
 	}
 	bob := b.browser()
 	bob.signIn("bob")
-	_, err = bob.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	_, err = bob.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("bob")}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 }
 
@@ -303,10 +304,96 @@ func TestMarkGoodWaitsOutAnApplyOrRevert(t *testing.T) {
 	}
 	// A revert marks the running release bad and reboots; marking it good
 	// before the reboot would undo the revert.
-	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.srv.MarkGood(ctx); err == nil || b.init.markedGood != 0 {
 		t.Fatalf("during a revert: %v, marked %d", err, b.init.markedGood)
+	}
+}
+
+// Apply and Revert take a fresh authenticator code on every call: a
+// step-up window that is still open isn't enough, and a stale one doesn't
+// stop a call that carries a good code.
+func TestApplyAndRevertTakeAFreshCodeEveryTime(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
+	_, err = alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: "000000"}))
+	symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_CREDENTIALS")
+	if b.init.activated != 0 || b.init.reboots != 0 {
+		t.Fatal("a refused apply changed nothing")
+	}
+	if e := lastEntry(t, b.log, "upgrade.apply"); e.Outcome != "refused" || e.Actor != "alice" {
+		t.Fatalf("%+v", e)
+	}
+	b.clk.Advance(10 * time.Minute)
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if b.init.activated != 1 || b.init.reboots != 1 {
+		t.Fatal("apply with a fresh code activates and reboots")
+	}
+	_, err = alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if b.init.rollbacks != 1 || b.init.reboots != 2 {
+		t.Fatal("revert with a fresh code rolls back and reboots")
+	}
+}
+
+// A manual revert is reported as reverted, by whom and when, never as a
+// failed boot.
+func TestARevertIsReportedAsReverted(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if b.init.revertedBy != "alice" {
+		t.Fatalf("init was told %q asked for the revert", b.init.revertedBy)
+	}
+	g, err := alice.upgrade().GetUpgrades(ctx, connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := g.Msg; m.GetFailedVersion() != "" || m.GetRevertedVersion() != "0.2.0" || m.GetRevertedBy() != "alice" || m.GetRevertedAt() == nil {
+		t.Fatalf("upgrades %+v", m)
+	}
+	st, err := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL).GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := st.Msg; m.GetFailedVersion() != "" || m.GetRevertedVersion() != "0.2.0" || m.GetRevertedBy() != "alice" || m.GetRevertedAt() == nil {
+		t.Fatalf("status %+v", m)
+	}
+}
+
+// A staged base release names the slot it went into: the one the box
+// isn't running from.
+func TestStagingNamesTheOtherSlot(t *testing.T) {
+	for running, want := range map[string]string{switchroot.LabelRootA: "B", switchroot.LabelRootB: "A", "": ""} {
+		b := newBox(t, false, func(_ *box, o *osadmin.Options) { o.RootSource = running })
+		alice := b.browser()
+		alice.signIn("alice")
+		id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
+		out, err := alice.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := out.Msg.GetSlot(); got != want {
+			t.Errorf("running from %q: staged into %q, want %q", running, got, want)
+		}
 	}
 }

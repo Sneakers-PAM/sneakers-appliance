@@ -608,6 +608,11 @@ type GetUpgradesResponse struct {
 	// direct_available is true when this build has a release source to
 	// fetch from directly (production builds).
 	DirectAvailable bool `protobuf:"varint,9,opt,name=direct_available,json=directAvailable,proto3" json:"direct_available,omitempty"`
+	// reverted_version is the newer release an admin reverted from, with who
+	// did it and when; failed_version stays for a boot-counting fallback.
+	RevertedVersion string                 `protobuf:"bytes,10,opt,name=reverted_version,json=revertedVersion,proto3" json:"reverted_version,omitempty"`
+	RevertedBy      string                 `protobuf:"bytes,11,opt,name=reverted_by,json=revertedBy,proto3" json:"reverted_by,omitempty"`
+	RevertedAt      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=reverted_at,json=revertedAt,proto3" json:"reverted_at,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -703,6 +708,27 @@ func (x *GetUpgradesResponse) GetDirectAvailable() bool {
 		return x.DirectAvailable
 	}
 	return false
+}
+
+func (x *GetUpgradesResponse) GetRevertedVersion() string {
+	if x != nil {
+		return x.RevertedVersion
+	}
+	return ""
+}
+
+func (x *GetUpgradesResponse) GetRevertedBy() string {
+	if x != nil {
+		return x.RevertedBy
+	}
+	return ""
+}
+
+func (x *GetUpgradesResponse) GetRevertedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevertedAt
+	}
+	return nil
 }
 
 type FetchUpdateRequest struct {
@@ -850,8 +876,11 @@ func (x *StageUpdateRequest) GetUploadId() string {
 }
 
 type StageUpdateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Package       *UpdatePackage         `protobuf:"bytes,1,opt,name=package,proto3" json:"package,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Package *UpdatePackage         `protobuf:"bytes,1,opt,name=package,proto3" json:"package,omitempty"`
+	// slot is the base slot the release was staged into, A or B; empty for a
+	// product bundle, or when the box can't tell which slot it runs from.
+	Slot          string `protobuf:"bytes,2,opt,name=slot,proto3" json:"slot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -891,6 +920,13 @@ func (x *StageUpdateResponse) GetPackage() *UpdatePackage {
 		return x.Package
 	}
 	return nil
+}
+
+func (x *StageUpdateResponse) GetSlot() string {
+	if x != nil {
+		return x.Slot
+	}
+	return ""
 }
 
 // ElevationOverride ends an open elevated shell so an apply or revert can
@@ -964,8 +1000,10 @@ type ApplyUpdateRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	ElevationOverride *ElevationOverride     `protobuf:"bytes,1,opt,name=elevation_override,json=elevationOverride,proto3" json:"elevation_override,omitempty"`
 	Target            UpdateTarget           `protobuf:"varint,2,opt,name=target,proto3,enum=sneakers.appliance.osadmin.v1.UpdateTarget" json:"target,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// totp_code is a fresh code from the owner's authenticator.
+	TotpCode      string `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApplyUpdateRequest) Reset() {
@@ -1012,6 +1050,13 @@ func (x *ApplyUpdateRequest) GetTarget() UpdateTarget {
 	return UpdateTarget_UPDATE_TARGET_UNSPECIFIED
 }
 
+func (x *ApplyUpdateRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
 type ApplyUpdateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1052,8 +1097,10 @@ type RevertUpdateRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	ElevationOverride *ElevationOverride     `protobuf:"bytes,1,opt,name=elevation_override,json=elevationOverride,proto3" json:"elevation_override,omitempty"`
 	Target            UpdateTarget           `protobuf:"varint,2,opt,name=target,proto3,enum=sneakers.appliance.osadmin.v1.UpdateTarget" json:"target,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// totp_code is a fresh code from the owner's authenticator.
+	TotpCode      string `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RevertUpdateRequest) Reset() {
@@ -1098,6 +1145,13 @@ func (x *RevertUpdateRequest) GetTarget() UpdateTarget {
 		return x.Target
 	}
 	return UpdateTarget_UPDATE_TARGET_UNSPECIFIED
+}
+
+func (x *RevertUpdateRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
 }
 
 type ListProductVersionsRequest struct {
@@ -1350,7 +1404,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x04code\x18\x06 \x01(\tR\x04code\x12\x16\n" +
 	"\x06detail\x18\a \x01(\tR\x06detail\x12C\n" +
 	"\x06target\x18\b \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x14\n" +
-	"\x12GetUpgradesRequest\"\x81\x04\n" +
+	"\x12GetUpgradesRequest\"\x8a\x05\n" +
 	"\x13GetUpgradesResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
@@ -1361,27 +1415,36 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\ahistory\x18\x06 \x03(\v2+.sneakers.appliance.osadmin.v1.UpgradeEventR\ahistory\x12U\n" +
 	"\x11active_elevations\x18\a \x03(\v2(.sneakers.appliance.osadmin.v1.ElevationR\x10activeElevations\x12E\n" +
 	"\aproduct\x18\b \x01(\v2+.sneakers.appliance.osadmin.v1.ProductSlotsR\aproduct\x12)\n" +
-	"\x10direct_available\x18\t \x01(\bR\x0fdirectAvailable\"1\n" +
+	"\x10direct_available\x18\t \x01(\bR\x0fdirectAvailable\x12)\n" +
+	"\x10reverted_version\x18\n" +
+	" \x01(\tR\x0frevertedVersion\x12\x1f\n" +
+	"\vreverted_by\x18\v \x01(\tR\n" +
+	"revertedBy\x12;\n" +
+	"\vreverted_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"revertedAt\"1\n" +
 	"\x12FetchUpdateRequest\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\"J\n" +
 	"\x13FetchUpdateResponse\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\"1\n" +
 	"\x12StageUpdateRequest\x12\x1b\n" +
-	"\tupload_id\x18\x01 \x01(\tR\buploadId\"]\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"q\n" +
 	"\x13StageUpdateResponse\x12F\n" +
-	"\apackage\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.UpdatePackageR\apackage\"h\n" +
+	"\apackage\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.UpdatePackageR\apackage\x12\x12\n" +
+	"\x04slot\x18\x02 \x01(\tR\x04slot\"h\n" +
 	"\x11ElevationOverride\x12!\n" +
 	"\felevation_id\x18\x01 \x01(\tR\velevationId\x12\x18\n" +
 	"\aconfirm\x18\x02 \x01(\tR\aconfirm\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xba\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd7\x01\n" +
 	"\x12ApplyUpdateRequest\x12_\n" +
 	"\x12elevation_override\x18\x01 \x01(\v20.sneakers.appliance.osadmin.v1.ElevationOverrideR\x11elevationOverride\x12C\n" +
-	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x15\n" +
-	"\x13ApplyUpdateResponse\"\xbb\x01\n" +
+	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x1b\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\x15\n" +
+	"\x13ApplyUpdateResponse\"\xd8\x01\n" +
 	"\x13RevertUpdateRequest\x12_\n" +
 	"\x12elevation_override\x18\x01 \x01(\v20.sneakers.appliance.osadmin.v1.ElevationOverrideR\x11elevationOverride\x12C\n" +
-	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x1c\n" +
+	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x1b\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\x1c\n" +
 	"\x1aListProductVersionsRequest\"\x8b\x01\n" +
 	"\x1bListProductVersionsResponse\x12I\n" +
 	"\bversions\x18\x01 \x03(\v2-.sneakers.appliance.osadmin.v1.ProductVersionR\bversions\x12!\n" +
@@ -1398,8 +1461,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\vGetUpgrades\x121.sneakers.appliance.osadmin.v1.GetUpgradesRequest\x1a2.sneakers.appliance.osadmin.v1.GetUpgradesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x8b\x01\n" +
 	"\vFetchUpdate\x121.sneakers.appliance.osadmin.v1.FetchUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.FetchUpdateResponse\"\x15\xc2\xf3\x18\x11\x10\x01\"\rupgrade.fetch\x12\x8d\x01\n" +
 	"\vStageUpdate\x121.sneakers.appliance.osadmin.v1.StageUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.StageUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.stage\x12\x8d\x01\n" +
-	"\vApplyUpdate\x121.sneakers.appliance.osadmin.v1.ApplyUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.ApplyUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.apply\x12\x91\x01\n" +
-	"\fRevertUpdate\x122.sneakers.appliance.osadmin.v1.RevertUpdateRequest\x1a3.sneakers.appliance.osadmin.v1.RevertUpdateResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0eupgrade.revert\x12\x97\x01\n" +
+	"\vApplyUpdate\x121.sneakers.appliance.osadmin.v1.ApplyUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.ApplyUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\"\rupgrade.apply8\x01\x12\x91\x01\n" +
+	"\fRevertUpdate\x122.sneakers.appliance.osadmin.v1.RevertUpdateRequest\x1a3.sneakers.appliance.osadmin.v1.RevertUpdateResponse\"\x18\xc2\xf3\x18\x14\x10\x02\"\x0eupgrade.revert8\x01\x12\x97\x01\n" +
 	"\x13ListProductVersions\x129.sneakers.appliance.osadmin.v1.ListProductVersionsRequest\x1a:.sneakers.appliance.osadmin.v1.ListProductVersionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa1\x01\n" +
 	"\x10SetUpgradePolicy\x126.sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest\x1a7.sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse\"\x1c\xc2\xf3\x18\x18\x10\x02\x18\x01\"\x12upgrade.policy.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
@@ -1450,32 +1513,33 @@ var file_sneakers_appliance_osadmin_v1_upgrade_proto_depIdxs = []int32{
 	5,  // 4: sneakers.appliance.osadmin.v1.GetUpgradesResponse.history:type_name -> sneakers.appliance.osadmin.v1.UpgradeEvent
 	22, // 5: sneakers.appliance.osadmin.v1.GetUpgradesResponse.active_elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
 	2,  // 6: sneakers.appliance.osadmin.v1.GetUpgradesResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
-	4,  // 7: sneakers.appliance.osadmin.v1.StageUpdateResponse.package:type_name -> sneakers.appliance.osadmin.v1.UpdatePackage
-	12, // 8: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	0,  // 9: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	12, // 10: sneakers.appliance.osadmin.v1.RevertUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	0,  // 11: sneakers.appliance.osadmin.v1.RevertUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	3,  // 12: sneakers.appliance.osadmin.v1.ListProductVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.ProductVersion
-	1,  // 13: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
-	6,  // 14: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:input_type -> sneakers.appliance.osadmin.v1.GetUpgradesRequest
-	8,  // 15: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:input_type -> sneakers.appliance.osadmin.v1.FetchUpdateRequest
-	10, // 16: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:input_type -> sneakers.appliance.osadmin.v1.StageUpdateRequest
-	13, // 17: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:input_type -> sneakers.appliance.osadmin.v1.ApplyUpdateRequest
-	15, // 18: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:input_type -> sneakers.appliance.osadmin.v1.RevertUpdateRequest
-	16, // 19: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:input_type -> sneakers.appliance.osadmin.v1.ListProductVersionsRequest
-	19, // 20: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:input_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
-	7,  // 21: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:output_type -> sneakers.appliance.osadmin.v1.GetUpgradesResponse
-	9,  // 22: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:output_type -> sneakers.appliance.osadmin.v1.FetchUpdateResponse
-	11, // 23: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:output_type -> sneakers.appliance.osadmin.v1.StageUpdateResponse
-	14, // 24: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:output_type -> sneakers.appliance.osadmin.v1.ApplyUpdateResponse
-	18, // 25: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:output_type -> sneakers.appliance.osadmin.v1.RevertUpdateResponse
-	17, // 26: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:output_type -> sneakers.appliance.osadmin.v1.ListProductVersionsResponse
-	20, // 27: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:output_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
-	21, // [21:28] is the sub-list for method output_type
-	14, // [14:21] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	21, // 7: sneakers.appliance.osadmin.v1.GetUpgradesResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	4,  // 8: sneakers.appliance.osadmin.v1.StageUpdateResponse.package:type_name -> sneakers.appliance.osadmin.v1.UpdatePackage
+	12, // 9: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	0,  // 10: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	12, // 11: sneakers.appliance.osadmin.v1.RevertUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	0,  // 12: sneakers.appliance.osadmin.v1.RevertUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	3,  // 13: sneakers.appliance.osadmin.v1.ListProductVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.ProductVersion
+	1,  // 14: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
+	6,  // 15: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:input_type -> sneakers.appliance.osadmin.v1.GetUpgradesRequest
+	8,  // 16: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:input_type -> sneakers.appliance.osadmin.v1.FetchUpdateRequest
+	10, // 17: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:input_type -> sneakers.appliance.osadmin.v1.StageUpdateRequest
+	13, // 18: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:input_type -> sneakers.appliance.osadmin.v1.ApplyUpdateRequest
+	15, // 19: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:input_type -> sneakers.appliance.osadmin.v1.RevertUpdateRequest
+	16, // 20: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:input_type -> sneakers.appliance.osadmin.v1.ListProductVersionsRequest
+	19, // 21: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:input_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
+	7,  // 22: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:output_type -> sneakers.appliance.osadmin.v1.GetUpgradesResponse
+	9,  // 23: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:output_type -> sneakers.appliance.osadmin.v1.FetchUpdateResponse
+	11, // 24: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:output_type -> sneakers.appliance.osadmin.v1.StageUpdateResponse
+	14, // 25: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:output_type -> sneakers.appliance.osadmin.v1.ApplyUpdateResponse
+	18, // 26: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:output_type -> sneakers.appliance.osadmin.v1.RevertUpdateResponse
+	17, // 27: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:output_type -> sneakers.appliance.osadmin.v1.ListProductVersionsResponse
+	20, // 28: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:output_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
+	22, // [22:29] is the sub-list for method output_type
+	15, // [15:22] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_upgrade_proto_init() }

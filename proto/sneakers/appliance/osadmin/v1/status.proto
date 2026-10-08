@@ -109,6 +109,8 @@ message GetStatusResponse {
   string phase = 4;
   string running_version = 5;
   string staged_version = 6;
+  // failed_version is a release boot counting fell back from: it never
+  // reached MarkGood. Empty after a manual revert.
   string failed_version = 7;
   Protection protection = 8;
   // protection_reason is empty for full, else no-secure-boot-firmware,
@@ -127,6 +129,11 @@ message GetStatusResponse {
   repeated Warning warnings = 18;
   // factory_reset is set while one is pending or counting down.
   FactoryReset factory_reset = 19;
+  // reverted_version is the newer release an admin reverted from, with who
+  // did it and when; empty when there was no manual revert.
+  string reverted_version = 20;
+  string reverted_by = 21;
+  google.protobuf.Timestamp reverted_at = 22;
 }
 
 message SetSecureBootRequest {

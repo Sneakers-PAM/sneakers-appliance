@@ -79,6 +79,8 @@ func TestDashboardScreens(t *testing.T) {
 	staged.StagedVersion = "0.1.1"
 	rolled := status()
 	rolled.FailedVersion = "0.1.1"
+	reverted := status()
+	reverted.RevertedVersion, reverted.RevertedBy, reverted.RevertedAt = "0.1.1", "alice", timestamppb.New(now.Add(-20*time.Minute))
 	three := data(status())
 	three.Platform.Nodes = 3
 	lab := dashboard.Data{Status: sources.StatusView{Status: &osadminv1.GetStatusResponse{Version: "0.0.0-lab.20261007d", Channel: "lab", Phase: "normal",
@@ -106,6 +108,7 @@ func TestDashboardScreens(t *testing.T) {
 		"factory-reset-pending":  dashboard.Page(chrome(full, keycustody.ModeTPM), data(pending), now),
 		"upgrade-staged":         dashboard.Page(chrome(full, keycustody.ModeTPM), data(staged), now),
 		"upgrade-rolled-back":    dashboard.Page(chrome(full, keycustody.ModeTPM), data(rolled), now),
+		"upgrade-reverted":       dashboard.Page(chrome(full, keycustody.ModeTPM), data(reverted), now),
 		"no-address":             dashboard.Page(chrome(full, keycustody.ModeTPM), noAddr, now),
 		"accessd-down":           dashboard.Page(chrome(full, keycustody.ModeTPM), cached, now),
 		"accessd-down-no-status": dashboard.Page(consoleui.Chrome{Version: "0.1.0", Now: func() time.Time { return now }}, nothing, now),

@@ -73,7 +73,7 @@ func (br *browser) installProduct(t *testing.T, version string) {
 	if err := stage(br, id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := br.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product})); err != nil {
+	if _, err := br.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: br.b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -100,7 +100,7 @@ func TestTheFirstProductInstallIsAStageAndAnApply(t *testing.T) {
 	if len(b.init.staged) != 0 || len(b.services.log()) != 0 || len(b.netd.servicePorts) != 0 {
 		t.Fatal("staging a product bundle touched the base slots, the services or the ports")
 	}
-	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product})); err != nil {
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if got := b.services.log(); !slices.Equal(got, []string{"stop k0s", "start k0s"}) {
@@ -162,7 +162,7 @@ func TestAProductUpgradeKeepsThePreviousSlotAsTheWayBack(t *testing.T) {
 	alice.signIn("alice")
 	ctx := context.Background()
 	alice.installProduct(t, "0.2.0")
-	_, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product}))
+	_, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product, TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_NO_PREVIOUS")
 	alice.installProduct(t, "0.3.0")
 	if s := alice.productSlots(t); s.GetInstalledVersion() != "0.3.0" || s.GetPreviousVersion() != "0.2.0" {
@@ -170,7 +170,7 @@ func TestAProductUpgradeKeepsThePreviousSlotAsTheWayBack(t *testing.T) {
 	}
 	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
 	symbolIn(t, stage(alice, id), connect.CodeFailedPrecondition, "UPGRADE_DOWNGRADE")
-	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product})); err != nil {
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if s := alice.productSlots(t); s.GetInstalledVersion() != "0.2.0" || s.GetPreviousVersion() != "0.3.0" {
@@ -190,7 +190,7 @@ func TestAProductApplyWaitsForAnOpenElevatedShell(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.elevated()
-	_, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product}))
+	_, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_ELEVATED")
 	if len(b.services.log()) != 0 || alice.productSlots(t).GetInstalledVersion() != "" {
 		t.Fatal("the product was applied under an elevated shell")

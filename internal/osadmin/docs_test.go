@@ -32,7 +32,10 @@ func ruleRow(svc, method string, r *osadminv1.Rule) string {
 		}
 	}
 	step := "no"
-	if r.GetStepUp() {
+	switch {
+	case r.GetCodeEachCall():
+		step = "every call"
+	case r.GetStepUp():
 		step = "yes"
 	}
 	audit := ""
