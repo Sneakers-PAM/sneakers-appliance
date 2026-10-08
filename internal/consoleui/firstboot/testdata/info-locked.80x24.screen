@@ -5,7 +5,8 @@
 |                             |   |_|            '\                            |
 |                            (=====================)                           |
 |                                                                              |
-|                        Sneakers-PAM appliance  0.1.0                         |
+|                            Sneakers-PAM Appliance                            |
+|                                    0.1.0                                     |
 |                                                                              |
 |           Open this address in your browser:                                 |
 |              https://192.0.2.10:8443                                         |
@@ -17,7 +18,6 @@
 |           Setup code  LOCKED  after too many wrong tries                     |
 |                                                                              |
 |           Protection  FULL  Secure Boot on, key in the TPM                   |
-|                                                                              |
 |                                                                              |
 +------------------------------------------------------------------------------+
 |          N  Show a new setup code                                            |

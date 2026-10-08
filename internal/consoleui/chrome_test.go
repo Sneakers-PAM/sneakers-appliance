@@ -80,7 +80,7 @@ func TestClock(t *testing.T) {
 func TestPageCarriesTheWordmark(t *testing.T) {
 	c := consoleui.Chrome{Version: "0.1.0", Info: "slot A  1 node"}
 	p := c.Page([]tui.Line{tui.Text("body")}, nil, "")
-	if p.Name != "Sneakers-PAM appliance" || p.Version != "0.1.0" || p.Info != "slot A  1 node" || p.Big {
+	if p.Name != "Sneakers-PAM Appliance" || p.Version != "0.1.0" || p.Info != "slot A  1 node" || p.Big {
 		t.Fatalf("%+v", p)
 	}
 	if b := c.BigPage(nil); !b.Big {

@@ -8,7 +8,8 @@
 |                     |   |_|            '\                    |
 |                    (=====================)                   |
 |                                                              |
-|                Sneakers-PAM appliance  0.1.0                 |
+|                    Sneakers-PAM Appliance                    |
+|                            0.1.0                             |
 |                                                              |
 |   Upgrading to 0.1.1. Leave it powered on.                   |
 |                                                              |
@@ -16,7 +17,6 @@
 |                                                              |
 |   If 0.1.1 doesn't come up healthy, the box goes back to     |
 |   0.1.0 by itself.                                           |
-|                                                              |
 |                                                              |
 |                                                              |
 |                                                              |

@@ -119,3 +119,38 @@ func TestFitFontLeavesABigScreen(t *testing.T) {
 		t.Fatalf("switched %v: %v", switched, err)
 	}
 }
+
+// A console stays in line mode with echo, but without ECHOCTL: a cursor
+// key isn't echoed as ^[[C over the screen.
+func TestOpenTurnsOffEchoctl(t *testing.T) {
+	dev := t.TempDir()
+	m := pty(t, dev, "tty0")
+	defer func() { _ = m.Close() }()
+	s, err := os.OpenFile(filepath.Join(dev, "tty0"), os.O_RDWR|unix.O_NOCTTY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	tio, err := unix.IoctlGetTermios(int(s.Fd()), unix.TCGETS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tio.Lflag |= unix.ECHOCTL | unix.ECHO | unix.ICANON
+	if err := unix.IoctlSetTermios(int(s.Fd()), unix.TCSETS, tio); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := console.Open(dev, []string{"tty0"})
+	if len(got) != 1 {
+		t.Fatalf("Open kept %d consoles", len(got))
+	}
+	tio, err = unix.IoctlGetTermios(int(s.Fd()), unix.TCGETS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tio.Lflag&unix.ECHOCTL != 0 {
+		t.Error("ECHOCTL is still on")
+	}
+	if tio.Lflag&(unix.ECHO|unix.ICANON) != unix.ECHO|unix.ICANON {
+		t.Errorf("line mode or echo went off: lflag %#o", tio.Lflag)
+	}
+}

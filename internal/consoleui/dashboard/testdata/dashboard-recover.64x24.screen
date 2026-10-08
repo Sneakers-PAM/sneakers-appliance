@@ -1,5 +1,5 @@
 +--------------------------------------------------------------+
-|  /o\__  Sneakers-PAM appliance   0.1.0                       |
+|  /o\__  Sneakers-PAM Appliance   0.1.0                       |
 +--------------------------------------------------------------+
 |                                                              |
 |   Recover access                                             |
@@ -11,14 +11,14 @@
 |                                                              |
 |   2  Reset an owner's sign-in with a one-time code           |
 |                                                              |
+|   0  Back                                                    |
+|                                                              |
 |   Both are recorded, and every admin sees a notice the       |
 |   next time they sign in.                                    |
 |                                                              |
 |                                                              |
 |                                                              |
 |                                                              |
-|                                                              |
-|                                                              |
 +--------------------------------------------------------------+
-|  1 or 2  Choose     Enter  Back                              |
+|  1, 2 or 0  Choose     Enter  Back                           |
 +--------------------------------------------------------------+

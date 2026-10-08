@@ -10,6 +10,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 )
 
@@ -49,7 +50,11 @@ func runEnrol(d enrolDeps) (enrolOutcome, error) {
 			if !lines.Scan() {
 				return "", false
 			}
-			if c, ok := parse(lines.Text()); ok {
+			l, keep := tui.Typed(lines.Text())
+			if !keep {
+				continue
+			}
+			if c, ok := parse(l); ok {
 				return c, true
 			}
 		}

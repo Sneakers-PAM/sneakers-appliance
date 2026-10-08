@@ -19,8 +19,9 @@ const Width = 56
 type Page struct {
 	// Big puts the mark and the wordmark above the body.
 	Big bool
-	// Name and Version are the wordmark; Info is the one-row header's
-	// right side (the slot and the node count, say).
+	// Name and Version are the wordmark (on the big pages the version is
+	// on its own line under the name); Info is the one-row header's right
+	// side (the slot and the node count, say).
 	Name, Version, Info string
 	Body                []Line
 	// Prompt is the text before the typing position; the cursor waits
@@ -123,7 +124,11 @@ func (p Page) Frame(cols, rows int) Frame {
 		for _, l := range mark {
 			content = append(content, cat(mp, l))
 		}
-		content = append(content, nil, centre(p.wordmark(), inner), nil)
+		content = append(content, nil, centre(Line{{Text: p.Name, Style: Strong}}, inner))
+		if p.Version != "" {
+			content = append(content, centre(Line{{Text: p.Version, Style: Dim}}, inner))
+		}
+		content = append(content, nil)
 	} else {
 		head := cat(edge, small, Line{{Text: "  ", Style: Strong}}, Line{{Text: p.Name, Style: Strong}})
 		if v := strings.TrimSpace(p.Version + "  " + p.Info); v != "" {
@@ -178,14 +183,6 @@ func (p Page) Frame(cols, rows int) Frame {
 		f.Cursor, f.CursorRow, f.CursorCol = true, promptRow+1, promptCol
 	}
 	return f
-}
-
-func (p Page) wordmark() Line {
-	l := Line{{Text: p.Name, Style: Strong}}
-	if p.Version != "" {
-		l = append(l, Span{Text: "  " + p.Version, Style: Dim})
-	}
-	return l
 }
 
 func centre(l Line, width int) Line {

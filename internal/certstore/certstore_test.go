@@ -727,3 +727,20 @@ func reopen(t *testing.T, f *fixture, probe func(context.Context, string) error)
 	}
 	return s
 }
+
+// The self-signed certificate names the product as it's written
+// everywhere else: "Sneakers-PAM Appliance".
+func TestTheSelfSignedCertificateNamesTheAppliance(t *testing.T) {
+	crt, _, err := certstore.NewSelfSigned(host, addrs, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	blk, _ := pem.Decode(crt)
+	c, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.Subject.Organization; len(got) != 1 || got[0] != "Sneakers-PAM Appliance admin" {
+		t.Fatalf("organization %q", got)
+	}
+}

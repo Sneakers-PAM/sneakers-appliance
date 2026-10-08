@@ -145,9 +145,10 @@ func (k *console) recoverAccess(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		switch strings.TrimSpace(line) {
-		case "":
+		if tui.IsBack(line) {
 			return nil
+		}
+		switch strings.TrimSpace(line) {
 		case "1":
 			if errLine, err = k.resetAllowList(ctx); err != nil || errLine == "" {
 				return err
@@ -157,7 +158,7 @@ func (k *console) recoverAccess(ctx context.Context) error {
 				return err
 			}
 		default:
-			errLine = "Type 1 or 2, or press Enter to go back."
+			errLine = "Type 1 or 2, or 0 or Enter to go back."
 		}
 	}
 }
@@ -176,9 +177,10 @@ func (k *console) resetAllowList(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		switch strings.ToLower(strings.TrimSpace(line)) {
-		case "":
+		if tui.IsBack(line) {
 			return "", nil
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "k":
 			if _, err := k.d.AccessNet.ConfirmNetwork(ctx, connect.NewRequest(&accessv1.ConfirmNetworkRequest{Token: out.Msg.GetToken()})); err != nil {
 				errLine = "The change wasn't kept: " + consoleui.Describe(err)
@@ -211,9 +213,10 @@ func (k *console) recoverCode(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		switch strings.ToLower(strings.TrimSpace(line)) {
-		case "":
+		if tui.IsBack(line) {
 			return "", nil
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "c":
 			if err := k.d.Console.CancelRecoverAccess(ctx); err != nil {
 				return "The code wasn't withdrawn: " + consoleui.Describe(err), nil

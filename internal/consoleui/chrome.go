@@ -25,7 +25,7 @@ import (
 const Width = tui.Width
 
 // Name is the wordmark.
-const Name = "Sneakers-PAM appliance"
+const Name = "Sneakers-PAM Appliance"
 
 // NTP states.
 const (

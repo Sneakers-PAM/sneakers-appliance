@@ -1,5 +1,5 @@
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM Appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;37mRecover access\e[0m                                             \e[34m|\e[0m
@@ -11,14 +11,14 @@
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;37m2\e[0m  Reset an owner's sign-in with a one-time code           \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37m0\e[0m  Back                                                    \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Both are recorded, and every admin sees a notice the       \e[34m|\e[0m
 \e[34m|\e[0m   next time they sign in.                                    \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;31mNo code was made: Recover access by code isn't installed\e[0m   \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;31min this build yet\e[0m                                          \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m  \e[1;37m1\e[0m or \e[1;37m2\e[0m  Choose\e[2m     \e[0m\e[2mEnter  Back\e[0m                              \e[34m|\e[0m
+\e[34m|\e[0m  \e[1;37m1\e[0m, \e[1;37m2\e[0m or \e[1;37m0\e[0m  Choose\e[2m     \e[0m\e[2mEnter  Back\e[0m                           \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m

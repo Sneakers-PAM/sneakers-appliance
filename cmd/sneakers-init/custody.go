@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
@@ -116,7 +117,11 @@ func protectionStep(d stateDeps) (keycustody.Mode, error) {
 		if !lines.Scan() {
 			return "", errors.New("init: the console closed at the protection step")
 		}
-		if m, ok := screens.CustodyChoice(lines.Text()); ok {
+		l, keep := tui.Typed(lines.Text())
+		if !keep {
+			continue
+		}
+		if m, ok := screens.CustodyChoice(l); ok {
 			return keycustody.Mode(m), nil
 		}
 	}

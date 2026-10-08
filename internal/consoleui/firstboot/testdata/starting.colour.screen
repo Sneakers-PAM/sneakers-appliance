@@ -8,7 +8,8 @@
 \e[34m|\e[0m                   \e[34m  |   \e[0m\e[1;34m|_|\e[0m\e[34m            '\\e[0m                    \e[34m|\e[0m
 \e[34m|\e[0m                   \e[33m (=====================)\e[0m                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                \e[1;37mSneakers-PAM appliance\e[0m\e[2m  0.1.0\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m                    \e[1;37mSneakers-PAM Appliance\e[0m                    \e[34m|\e[0m
+\e[34m|\e[0m                            \e[2m0.1.0\e[0m                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Starting up. Leave it running.                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
@@ -16,7 +17,6 @@
 \e[34m|\e[0m      \e[1;32m[ok]\e[0m  encrypted data disk                               \e[34m|\e[0m
 \e[34m|\e[0m      \e[1;33m[..]\e[0m  network\e[2m   0:42\e[0m                                    \e[34m|\e[0m
 \e[34m|\e[0m      \e[2m[  ]\e[0m  setup page                                        \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m

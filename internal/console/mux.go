@@ -35,11 +35,16 @@ type Console struct {
 
 // Mux copies init's output to every console and every console's input to
 // init. A program can own the consoles for a while (Attach): its output
-// then goes to every console and everyone else's goes aside.
+// then goes to every console and everyone else's goes aside. Quiet keeps
+// the shared output off the screens (it goes to the serial lines and
+// aside), and Hold keeps everything off them but one page.
 type Mux struct {
 	pending atomic.Int64
 	queues  []chan []byte
+	screens []bool
 	owners  atomic.Int32
+	quiet   atomic.Bool
+	held    atomic.Bool
 
 	mu    sync.Mutex
 	aside io.Writer
@@ -53,6 +58,7 @@ func Join(out io.Reader, in io.Writer, cons []Console, logf func(string, ...any)
 	for _, c := range cons {
 		q := make(chan []byte, queueLen)
 		m.queues = append(m.queues, q)
+		m.screens = append(m.screens, IsScreen(c.Name))
 		go m.write(c, q, logf)
 		go typed(c, in)
 	}
@@ -62,10 +68,14 @@ func Join(out io.Reader, in io.Writer, cons []Console, logf func(string, ...any)
 			n, err := out.Read(buf)
 			if n > 0 {
 				chunk := append([]byte(nil), buf[:n]...)
-				if m.Owned() {
+				switch {
+				case m.Owned():
 					m.toAside(chunk)
-				} else {
-					m.send(chunk)
+				case m.quiet.Load():
+					m.sendTo(chunk, false)
+					m.toAside(chunk)
+				default:
+					m.sendTo(chunk, !m.held.Load())
 				}
 			}
 			if err != nil {
@@ -76,10 +86,23 @@ func Join(out io.Reader, in io.Writer, cons []Console, logf func(string, ...any)
 	return m
 }
 
-// send queues chunk for every console; a console that has fallen too far
-// behind loses it.
-func (m *Mux) send(chunk []byte) {
-	for _, q := range m.queues {
+// IsScreen reports whether a console is a screen (a VT: tty0, tty1 ...)
+// rather than a serial line (ttyS0, ttyAMA0).
+func IsScreen(name string) bool {
+	n := strings.TrimPrefix(name, "tty")
+	if n == name || n == "" {
+		return false
+	}
+	return strings.Trim(n, "0123456789") == ""
+}
+
+// sendTo queues chunk for every serial line, and for every screen too
+// when screens is set; a console that has fallen too far behind loses it.
+func (m *Mux) sendTo(chunk []byte, screens bool) {
+	for i, q := range m.queues {
+		if m.screens[i] && !screens {
+			continue
+		}
 		m.pending.Add(1)
 		select {
 		case q <- chunk:
@@ -89,8 +112,52 @@ func (m *Mux) send(chunk []byte) {
 	}
 }
 
+// toScreens queues chunk for the screens alone.
+func (m *Mux) toScreens(chunk []byte) {
+	for i, q := range m.queues {
+		if !m.screens[i] {
+			continue
+		}
+		m.pending.Add(1)
+		select {
+		case q <- chunk:
+		default:
+			m.pending.Add(-1)
+		}
+	}
+}
+
+// Quiet draws page on the screens and keeps the shared output (init's and
+// the services' lines) off them from then on: it goes to the serial lines
+// and aside. A program that owns the consoles still draws on the screens.
+// Already quiet, it draws nothing.
+func (m *Mux) Quiet(page []byte) {
+	if m.quiet.Swap(true) && !m.held.Load() {
+		return
+	}
+	m.toScreens(page)
+}
+
+// Loud clears the screens and lets the shared output on them again: for
+// init's own screens, which ask on the console. Already loud, it clears
+// nothing.
+func (m *Mux) Loud() {
+	q, h := m.quiet.Swap(false), m.held.Swap(false)
+	if !q && !h {
+		return
+	}
+	m.toScreens([]byte("\x1b[0m\x1b[H\x1b[2J\x1b[?25h"))
+}
+
+// Hold draws page on the screens and keeps everything else off them, the
+// owner's output too: the page stays while the box stops.
+func (m *Mux) Hold(page []byte) {
+	m.held.Store(true)
+	m.toScreens(page)
+}
+
 // SetAside sets where the shared output goes while a program owns the
-// consoles; nil drops it.
+// consoles or the screens are quiet; nil drops it.
 func (m *Mux) SetAside(w io.Writer) {
 	m.mu.Lock()
 	m.aside = w
@@ -115,10 +182,10 @@ func (m *Mux) Attach(owner io.Reader) {
 		for {
 			n, err := owner.Read(buf)
 			if n > 0 {
-				m.send(append([]byte(nil), buf[:n]...))
+				m.sendTo(append([]byte(nil), buf[:n]...), !m.held.Load())
 			}
 			if err != nil {
-				m.send([]byte("\x1b[0m\r\n"))
+				m.sendTo([]byte("\x1b[0m\r\n"), !m.held.Load())
 				m.owners.Add(-1)
 				if c, ok := owner.(io.Closer); ok {
 					_ = c.Close()

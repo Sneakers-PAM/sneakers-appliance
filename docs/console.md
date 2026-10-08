@@ -14,8 +14,12 @@ the console in turn:
 Both run as root, after accessd, with `console: true` in their entry: their output reaches every
 console while every other service's lines (and init's own) go to `/run/sneakers/console.log`
 (1 MiB, then `console.log.1`). When the program stops, the shared output comes back on the
-consoles; init restarts it. Before either runs, init's own screens (the Secure Boot choice in
-`enrol`, the at-rest protection step, "State locked") are unchanged.
+consoles; init restarts it. Before either runs, the screen shows init's starting page ("Sneakers-PAM
+is starting") and none of the kernel's, init's or the services' lines; init's own screens (the
+Secure Boot choice in `enrol`, the at-rest protection step, "State locked") clear it and show as
+before. A reboot or a shutdown puts "Sneakers-PAM is rebooting" or "Sneakers-PAM is shutting down"
+on the screen until the power goes ([init.md](init.md#the-screen-stays-quiet)). The serial line
+still shows every line.
 
 The only inputs left are:
 
@@ -43,11 +47,16 @@ to fit the smallest.
 Every screen is a frame round the whole terminal, every row the full width and ending in the same
 column, with a body block of at most 56 columns centred in it. A row is always written in full, so
 a redraw needs no erase that would clear the frame's right edge. The start-up and the setup info
-screens carry the Sneakers-PAM mark (the sneaker with the keyhole) and the wordmark with the
-version; the others have a one-row header with a small mark, the wordmark, the version, the slot
+screens carry the Sneakers-PAM mark (the sneaker with the keyhole), the wordmark and, on its own dim
+line under it, the version; the others have a one-row header with a small mark, the wordmark, the version, the slot
 and the node count, and the keys in a dim row at the bottom, each ruled off. Keys are single
 letters or digits, typed and then Enter (the consoles stay in the kernel's line mode, which works
 the same on a VMware screen and a serial line); a screen with nothing to type hides the cursor.
+The arrows, Home, End, the page and function keys do nothing: init turns `ECHOCTL` off on each
+console, so they aren't echoed as `^[[C`, and their escape sequences (CSI, SS3 and the VT's
+`ESC [ [ A` to `E`) are taken out of the typed line. A line of nothing but such keys is dropped, so
+an arrow and Enter never pick a default, at init's own screens too. Back is Enter on an empty line,
+`0`, `b`, `back` or Esc, wherever a screen offers it.
 
 ```
 +--------------------------------------------------------------+
@@ -58,7 +67,8 @@ the same on a VMware screen and a serial line); a screen with nothing to type hi
 |                     |   |_|            '\                    |
 |                    (=====================)                   |
 |                                                              |
-|                Sneakers-PAM appliance  0.1.0                 |
+|                    Sneakers-PAM Appliance                    |
+|                            0.1.0                             |
 |                                                              |
 |   Open this address in your browser:                         |
 |      https://192.0.2.10:8443                                 |
@@ -72,21 +82,25 @@ the same on a VMware screen and a serial line); a screen with nothing to type hi
 |   Protection  REDUCED  no TPM, no Secure Boot                |
 |                                                              |
 |                                                              |
-|                                                              |
 +--------------------------------------------------------------+
 ```
 
 Colour is the brand palette in the console's 16 colours, foreground only (no backgrounds or
 reverse video):
 
-| What | SGR | On the VGA palette |
-|---|---|---|
-| The frame and the mark | `34` | the primary blue |
-| The keyhole | `1;34` | the bright blue |
-| The setup code and the mark's sole (the one accent) | `33` | brown, the console's orange |
-| OK, a warning, danger | `1;32`, `1;33`, `1;31` | green, yellow, red |
-| Secondary text | `2` | dim |
-| What is read aloud or typed | `1;37` | bold white |
+| What | SGR | VT slot | Colour |
+|---|---|---|---|
+| The frame and the mark | `34` | 4 | the primary blue `#2F5BD3` |
+| The keyhole | `1;34` | 12 | the bright blue `#7FA3F0` |
+| The setup code and the mark's sole (the one accent) | `33` | 3 | the approved orange `#E8742A` |
+| OK, a warning, danger | `1;32`, `1;33`, `1;31` | 10, 11, 9 | green `#6FD39B`, yellow `#F2C04B`, red `#F06B5F` |
+| Secondary text | `2` | 8 (half-bright) | dim grey `#8B94A6` |
+| What is read aloud or typed | `1;37` | 15 | bold white `#FFFFFF` |
+
+The VT's default palette is VGA's, where slot 3 is brown (`#AA5500`), so the UKI's command line
+loads the palette above into the VT (`vt.default_red=`, `vt.default_grn=`, `vt.default_blu=`, 16
+values each, from `tui.Palette`); the slots no style uses keep VGA's colours. It applies to the
+screen only: a serial terminal keeps its own palette, where `33` is whatever it calls yellow.
 
 Nothing depends on colour: every status is a word (`OK`, `REDUCED`, `UNSYNCED`) and every warning
 starts with `!`. `sneakers.console=plain` on the kernel command line, or `TERM=dumb`, turns colour
@@ -150,7 +164,7 @@ invariant applies.
 
 ```
 +--------------------------------------------------------------+
-|  /o\__  Sneakers-PAM appliance   0.1.0  slot A  1 node       |
+|  /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node       |
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        OK      all services running                 |
@@ -160,14 +174,14 @@ invariant applies.
 |                                                              |
 |   Admin         https://192.0.2.10:8443                      |
 |                 https://sneakers.example.org:8443            |
-|   SSH           192.0.2.10:22  key + TOTP code               |
+|   SSH           192.0.2.10:22                                |
+|                 key from :8443 Access, then TOTP             |
 |                                                              |
 |   Fingerprints                                               |
 |     :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D          |
 |             E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5          |
 |     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             |
 |                    cH76 LnuV dAfL HqOr ZRw                   |
-|                                                              |
 |                                                              |
 |                                                              |
 +--------------------------------------------------------------+
@@ -180,7 +194,8 @@ time it was saved), the protection and the custody mode from init, the root slot
 environment, the host keys from the state volume and the node count from the platform, every 5
 seconds. In order: health, the product, protection and the clock, each a status word in its colour
 with the details dim; the admin page on the first management address and, on the line under it, on
-the box's FQDN once one is set; SSH on port 22 (key and TOTP code); the fingerprints of the page's
+the box's FQDN once one is set; SSH on port 22, with a dim line under it saying the key comes from
+:8443's Access page and a TOTP code follows ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)); the fingerprints of the page's
 certificate and the SSH host key; then the warnings, each a `!` in its colour with its first
 sentence in bold. The warnings are Status's own (the exposure warning, a self-approved elevation
 and the like, but not the ones with their own line: reduced protection, the clock and the
@@ -194,7 +209,7 @@ to and the step, and that the box goes back by itself if the new one doesn't com
 ## Recover access
 
 **R**, for when no admin can sign in. It's recorded, and every admin sees a notice the next time
-they sign in:
+they sign in. **0** (or Enter) goes back:
 
 1. **Let this network reach the admin page again**: resets who can connect (accessd's
    `ResetAllowList`) to the management network. The screen asks to check the admin page opens from

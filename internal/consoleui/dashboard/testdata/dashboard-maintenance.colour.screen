@@ -8,7 +8,8 @@
 \e[34m|\e[0m                   \e[34m  |   \e[0m\e[1;34m|_|\e[0m\e[34m            '\\e[0m                    \e[34m|\e[0m
 \e[34m|\e[0m                   \e[33m (=====================)\e[0m                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                \e[1;37mSneakers-PAM appliance\e[0m\e[2m  0.1.0\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m                    \e[1;37mSneakers-PAM Appliance\e[0m                    \e[34m|\e[0m
+\e[34m|\e[0m                            \e[2m0.1.0\e[0m                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;37mUpgrading to 0.1.1. Leave it powered on.\e[0m                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
@@ -16,7 +17,6 @@
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   If 0.1.1 doesn't come up healthy, the box goes back to     \e[34m|\e[0m
 \e[34m|\e[0m   0.1.0 by itself.                                           \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m

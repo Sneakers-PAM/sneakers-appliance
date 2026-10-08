@@ -89,6 +89,11 @@ user certificate for it with the root key: principal the admin's name, valid for
 (default 365, 1 to 1825), `permit-pty` only, a serial from `nextSerial`. The private key is
 returned once and never kept. Admins never bring their own login keys.
 
+So the first SSH login starts on :8443: get the key on Access, then `ssh -i <key file>
+<name>@<box>`, then the TOTP code in the closed shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)).
+Without the key, sshd answers only "server sent: publickey" after its banner, which says where the
+key comes from. The console's SSH line says the same (`key from :8443 Access, then TOTP`).
+
 ## Invariants
 
 Checked on every write. A write that breaks one is refused with its code and nothing changes.

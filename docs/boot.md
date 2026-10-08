@@ -34,7 +34,7 @@ previous release.
 |---|---|
 | `.linux` | the kernel |
 | `.initrd` | `sneakers-switchroot` as `/init` and a static `veritysetup`; no root filesystem |
-| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity` |
+| `.cmdline` | `sneakers.roothash=<hex> sneakers.hashoffset=<bytes> sneakers.version=<ver> quiet loglevel=1 console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity vt.default_red=<16> vt.default_grn=<16> vt.default_blu=<16>` (the screen's palette, [console.md](console.md#how-it-looks)) |
 | `.osrel`, `.uname` | the release's os-release and kernel release |
 | `.sbat` | the shim line and `sneakers-pam,1`, so a bad release can be revoked by generation |
 
@@ -47,8 +47,10 @@ no serial port (VMware's default) ttyS0 is still in the list and still opens, bu
 write fails with EIO, so nothing from userspace would reach the screen. Init therefore doesn't use
 `/dev/console` as it is: it opens every console in `/sys/class/tty/console/active`, keeps the ones
 that take writes, and joins its standard input, output and error to them
-([init.md](init.md#the-console)). `quiet` stays: the kernel's own log isn't shown, and the first
-thing on the screen is init's.
+([init.md](init.md#the-console)). `quiet loglevel=1` keeps the kernel's own messages off both
+consoles but its emergencies (`quiet` alone leaves the console loglevel at 4, so errors such as
+"reboot: Restarting system" still printed), and the first thing on the screen is init's starting
+page ([init.md](init.md#the-screen-stays-quiet)).
 
 It then refuses the image unless it carries exactly those six payload sections: `internal/ukipcr`
 predicts PCR 11 only for them, and a box that can't predict PCR 11 for a

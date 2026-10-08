@@ -104,3 +104,17 @@ func TestOutsideSetupModeEOFAtTheChoice(t *testing.T) {
 		t.Fatalf("a closed console after a bare Enter: %v, recorded %q", err, *recorded)
 	}
 }
+
+// The cursor keys do nothing at the Secure Boot choice: an arrow and Enter
+// never pick the default, and a typed answer with a stray key in it is
+// still the answer.
+func TestCursorKeysAtTheChoiceDoNothing(t *testing.T) {
+	v := secureboot.NewDirVars(t.TempDir(), true)
+	d, out, recorded := deps(t, v, "", "\x1b[A\n\x1b[C\x1b[D\nno secure\x1b[D boot\n")
+	if got, err := runEnrol(d); err != nil || got != enrolReduced || *recorded != "off" {
+		t.Fatalf("%v %v %s", got, err, *recorded)
+	}
+	if strings.Contains(out.String(), "Secure Boot keys enrolled") {
+		t.Fatalf("an arrow key picked the default:\n%s", out)
+	}
+}

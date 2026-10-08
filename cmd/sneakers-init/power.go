@@ -81,7 +81,7 @@ func readReset(espOK bool, lg log.Logger) bool {
 // finishReset carries an interrupted factory reset on at boot, before
 // anything starts, then reboots into first boot. On failure it returns the
 // error and init halts with it on the console; it never boots normally.
-func finishReset(ctx context.Context, lg log.Logger, con *console.Taken) error {
+func finishReset(ctx context.Context, lg log.Logger, con *console.Taken, screen bootScreen) error {
 	_, _ = fmt.Fprintln(os.Stderr, "sneakers-init: a factory reset is unfinished; finishing it")
 	d, err := resetDeps(lg)
 	if err != nil {
@@ -93,6 +93,7 @@ func finishReset(ctx context.Context, lg log.Logger, con *console.Taken) error {
 		return err
 	}
 	lg.Warn("init: factory reset finished; rebooting into first boot", log.F("id", rec.ID), log.F("attempts", rec.Attempts))
+	screen.stopping(osaudit.ActionReboot)
 	con.Flush(flushWait)
 	unix.Sync()
 	_ = unix.Unmount(espMount, 0)
@@ -132,24 +133,27 @@ func (n noReset) Run(context.Context, func(context.Context) error) (factoryreset
 	return factoryreset.Record{}, n.err
 }
 
-// flushedMachine lets the last lines reach every console before the power
-// goes.
+// flushedMachine puts the rebooting or shutting down page on the screen
+// and lets the last lines reach every console before the power goes.
 type flushedMachine struct {
 	power.Linux
-	con *console.Taken
+	con    *console.Taken
+	screen bootScreen
 }
 
 func (m flushedMachine) Reboot() error {
+	m.screen.stopping(osaudit.ActionReboot)
 	m.con.Flush(flushWait)
 	return m.Linux.Reboot()
 }
 
 func (m flushedMachine) PowerOff() error {
+	m.screen.stopping(osaudit.ActionShutdown)
 	m.con.Flush(flushWait)
 	return m.Linux.PowerOff()
 }
 
-func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken) *power.Controller {
+func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken, screen bootScreen) *power.Controller {
 	var reset power.Resetter
 	if d, err := resetDeps(lg); err != nil {
 		lg.Warn("init: no factory reset on this boot", log.F("error", codes.Describe(err)))
@@ -159,13 +163,14 @@ func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken) *powe
 	}
 	roster := func() (access.State, error) { return access.ReadState(filepath.Join(stateDir, "access")) }
 	return power.New(power.Options{
-		Machine: flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: reaperRunner{binary: cryptsetup}, Logger: lg}, con: con},
-		Drainer: sup,
-		Audit:   (&lazyAudit{lg: lg}).open,
-		Roster:  roster,
-		Reset:   reset,
-		Clock:   clock.Real{},
-		Logger:  lg,
+		Machine:  flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: reaperRunner{binary: cryptsetup}, Logger: lg}, con: con, screen: screen},
+		Announce: screen.stopping,
+		Drainer:  sup,
+		Audit:    (&lazyAudit{lg: lg}).open,
+		Roster:   roster,
+		Reset:    reset,
+		Clock:    clock.Real{},
+		Logger:   lg,
 	})
 }
 

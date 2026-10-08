@@ -21,9 +21,8 @@ type Style uint8
 
 // The styles: the brand palette in the console's 16 colours. The frame
 // and the mark are the primary blue, with the keyhole in the bright blue;
-// the sole orange (the VGA palette's brown) is the one accent; status is
-// green, yellow and red; secondary text is dim, and what is read aloud or
-// typed is bold white.
+// the sole orange is the one accent; status is green, yellow and red;
+// secondary text is dim, and what is read aloud or typed is bold white.
 const (
 	Normal Style = iota
 	Bold
@@ -40,6 +39,18 @@ const (
 var sgr = map[Style]string{
 	Bold: "1", OK: "1;32", Warn: "1;33", Alert: "1;31",
 	Brand: "34", Keyhole: "1;34", Accent: "33", Dim: "2", Strong: "1;37",
+}
+
+// Palette is the screen's 16 colours as RRGGBB, slot by slot: the UKI's
+// command line loads it into the VT (vt.default_red, _grn and _blu), so
+// the styles above show the approved colours instead of VGA's. Slot 3,
+// the accent, is the approved orange where VGA has brown; 4 and 12 are the
+// blues, 9 to 11 the bold red, green and yellow, 8 the dim grey (the VT's
+// half-bright colour) and 15 the bold white. The slots no style uses keep
+// VGA's colours. A serial line keeps its terminal's own palette.
+var Palette = [16]string{
+	"000000", "AA0000", "00AA00", "E8742A", "2F5BD3", "AA00AA", "00AAAA", "AAAAAA",
+	"8B94A6", "F06B5F", "6FD39B", "F2C04B", "7FA3F0", "FF55FF", "55FFFF", "FFFFFF",
 }
 
 // Span is text in one style.

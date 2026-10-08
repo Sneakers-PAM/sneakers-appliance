@@ -112,6 +112,10 @@ type Options struct {
 	Go func(func())
 	// DrainTimeout bounds a graceful drain; zero means 5 minutes.
 	DrainTimeout time.Duration
+	// Announce, when set, is told a reboot or a shutdown is under way
+	// (power.reboot or power.shutdown) before anything stops: init puts
+	// the rebooting or shutting down screen up.
+	Announce func(action string)
 }
 
 // armed is the reset osadmin armed.
@@ -234,6 +238,9 @@ func (c *Controller) stop(_ context.Context, caller Caller, action string, force
 
 // finish runs after the request is answered.
 func (c *Controller) finish(e osaudit.Entry, action string, forced bool) {
+	if c.o.Announce != nil {
+		c.o.Announce(action)
+	}
 	outcome := "ok"
 	if !forced {
 		start := c.o.Clock.Mono()

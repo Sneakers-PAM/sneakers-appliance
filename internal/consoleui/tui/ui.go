@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -56,8 +57,22 @@ func (u *UI) Ask(ctx context.Context, view func() (Page, bool)) (line string, ok
 			if !open {
 				return "", false, ErrClosed
 			}
-			u.Screen.Typed(len(l))
-			return l, true, nil
+			clean, keep := Typed(l)
+			if clean == l {
+				u.Screen.Typed(len(l))
+				return clean, true, nil
+			}
+			// The terminal moved the cursor for the key, or echoed it:
+			// only a full redraw puts the screen right.
+			u.Screen.Invalidate()
+			if keep {
+				return clean, true, nil
+			}
+			p, wake := view()
+			if wake {
+				return "", false, nil
+			}
+			u.Show(p)
 		case <-u.Wake:
 			p, wake := view()
 			if wake {
@@ -90,6 +105,42 @@ func ReadLines(r io.Reader) <-chan string {
 		}
 	}()
 	return ch
+}
+
+// keySequence is what a key other than a letter, a digit or Enter sends
+// in line mode: a CSI sequence (the arrows, Home, End, Insert, Delete,
+// the page keys and xterm's function keys, with any modifiers), the Linux
+// VT's F1 to F5 (ESC [ [ A to E), an SS3 sequence (the arrows, Home, End
+// and F1 to F4 in application mode, the keypad's Enter), and any other
+// control character, Esc alone among them.
+var keySequence = regexp.MustCompile(`\x1b\[\[[A-E]|\x1b\[[0-9;?]*[ -/]*[@-~]|\x1bO.|[\x00-\x1f\x7f]`)
+
+// CleanLine is a typed line without the keys that aren't text: the
+// consoles stay in line mode (raw key navigation is out of scope), so a
+// cursor or function key arrives in the line as its escape sequence and
+// does nothing. Esc alone leaves an empty line, which is Back.
+func CleanLine(l string) string { return keySequence.ReplaceAllString(l, "") }
+
+// Typed is a typed line as the console takes it: CleanLine's text, and
+// whether to take it at all. A line of nothing but cursor or function keys
+// is dropped, so an arrow and Enter never pick the default; Esc alone is
+// taken, as an empty line.
+func Typed(raw string) (string, bool) {
+	clean := CleanLine(raw)
+	if clean != raw && strings.TrimSpace(clean) == "" && strings.Trim(raw, "\x1b \t") != "" {
+		return "", false
+	}
+	return clean, true
+}
+
+// IsBack reports whether a typed line means Back: Enter on an empty
+// line, 0, b or back (Esc reads as an empty line).
+func IsBack(l string) bool {
+	switch strings.ToLower(strings.TrimSpace(l)) {
+	case "", "0", "b", "back":
+		return true
+	}
+	return false
 }
 
 // PlainOption on the kernel command line turns colour off on every

@@ -5,7 +5,8 @@
 |                     |   |_|            '\                    |
 |                    (=====================)                   |
 |                                                              |
-|                Sneakers-PAM appliance  0.1.0                 |
+|                    Sneakers-PAM Appliance                    |
+|                            0.1.0                             |
 |                                                              |
 |   Open this address in your browser:                         |
 |      https://192.0.2.10:8443                                 |
@@ -19,6 +20,5 @@
 |   Setup code  7PQK-NMS9-XD2A-4KJW   expires in 59 min        |
 |                                                              |
 |   Protection  REDUCED  no TPM, no Secure Boot                |
-|                                                              |
 |                                                              |
 +--------------------------------------------------------------+
