@@ -376,3 +376,93 @@ func TestWakeRedraws(t *testing.T) {
 		t.Fatalf("after the wake:\n%s", f)
 	}
 }
+
+// The consoles stay in line mode, so a cursor or function key arrives
+// inside the typed line as its escape sequence. Every key a PC keyboard
+// sends on the Linux VT, xterm or a serial terminal reads as nothing; Esc
+// alone reads as an empty line (Back), and the text around a key stays.
+func TestKeysReadAsNothing(t *testing.T) {
+	keys := map[string]string{
+		"up": "\x1b[A", "down": "\x1b[B", "right": "\x1b[C", "left": "\x1b[D",
+		"up (application mode)": "\x1bOA", "right (application mode)": "\x1bOC",
+		"home": "\x1b[H", "end": "\x1b[F", "home (VT)": "\x1b[1~", "end (VT)": "\x1b[4~",
+		"home (rxvt)": "\x1b[7~", "end (rxvt)": "\x1b[8~", "home (application mode)": "\x1bOH", "end (application mode)": "\x1bOF",
+		"insert": "\x1b[2~", "delete": "\x1b[3~", "page up": "\x1b[5~", "page down": "\x1b[6~",
+		"F1 (VT)": "\x1b[[A", "F5 (VT)": "\x1b[[E", "F1 (xterm)": "\x1bOP", "F5 (xterm)": "\x1b[15~", "F12": "\x1b[24~",
+		"shift+up": "\x1b[1;2A", "ctrl+right": "\x1b[1;5C", "keypad Enter": "\x1bOM",
+		"Esc": "\x1b", "tab": "\t", "ctrl+a": "\x01",
+	}
+	for name, seq := range keys {
+		if got := tui.CleanLine(seq); got != "" {
+			t.Errorf("%s (%q) reads as %q", name, seq, got)
+		}
+		if got := tui.CleanLine("1" + seq + seq); got != "1" {
+			t.Errorf("1 then %s twice reads as %q", name, got)
+		}
+		if got := tui.CleanLine(seq + "no secure boot"); got != "no secure boot" {
+			t.Errorf("%s then text reads as %q", name, got)
+		}
+	}
+	if got := tui.CleanLine("no secure boot"); got != "no secure boot" {
+		t.Errorf("plain text reads as %q", got)
+	}
+}
+
+// Back is Enter on an empty line, or 0, b or back, in any case and with
+// blanks round it; Esc reads as an empty line.
+func TestIsBack(t *testing.T) {
+	for _, l := range []string{"", "  ", "0", "b", "B", "back", " Back ", tui.CleanLine("\x1b")} {
+		if !tui.IsBack(l) {
+			t.Errorf("%q isn't Back", l)
+		}
+	}
+	for _, l := range []string{"1", "2", "k", "backup", "00"} {
+		if tui.IsBack(l) {
+			t.Errorf("%q is Back", l)
+		}
+	}
+}
+
+// Ask hands on the typed line without its escape sequences, and a line
+// that had one redraws the whole screen: the terminal may have moved the
+// cursor or echoed the key.
+func TestAskCleansTheLineAndRedraws(t *testing.T) {
+	lines := make(chan string, 1)
+	var out bytes.Buffer
+	u := &tui.UI{Screen: tui.NewScreen(&out, 80, 24, false), Lines: lines, Cols: 80, Rows: 24}
+	view := func() (tui.Page, bool) { return page(), false }
+	lines <- "1\x1b[C"
+	line, ok, err := u.Ask(context.Background(), view)
+	if err != nil || !ok || line != "1" {
+		t.Fatalf("typed: %q %v %v", line, ok, err)
+	}
+	out.Reset()
+	u.Show(page())
+	if !strings.Contains(out.String(), "\x1b[2J") {
+		t.Fatalf("the screen wasn't drawn again in full: %q", out.String())
+	}
+}
+
+// A line of nothing but cursor or function keys is dropped: Ask redraws
+// and waits on, so an arrow and Enter never pick the default. Esc alone
+// is an empty line.
+func TestAskDropsALineOfOnlyKeys(t *testing.T) {
+	lines := make(chan string, 3)
+	u := &tui.UI{Screen: tui.NewScreen(&bytes.Buffer{}, 80, 24, false), Lines: lines, Cols: 80, Rows: 24}
+	view := func() (tui.Page, bool) { return page(), false }
+	lines <- "\x1b[A"
+	lines <- "\x1b[1~\x1bOP"
+	lines <- "2"
+	if line, ok, err := u.Ask(context.Background(), view); err != nil || !ok || line != "2" {
+		t.Fatalf("typed: %q %v %v", line, ok, err)
+	}
+	lines <- "\x1b"
+	if line, ok, err := u.Ask(context.Background(), view); err != nil || !ok || line != "" {
+		t.Fatalf("Esc: %q %v %v", line, ok, err)
+	}
+	for raw, want := range map[string]bool{"\x1b[C": false, "\x1b": true, "": true, "1\x1b[C": true, "\x1b[A\x1b[B": false} {
+		if _, keep := tui.Typed(raw); keep != want {
+			t.Errorf("Typed(%q) keeps %v", raw, keep)
+		}
+	}
+}

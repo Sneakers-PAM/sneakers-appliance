@@ -11,14 +11,14 @@
 |                                                                              |
 |           2  Reset an owner's sign-in with a one-time code                   |
 |                                                                              |
+|           0  Back                                                            |
+|                                                                              |
 |           Both are recorded, and every admin sees a notice the               |
 |           next time they sign in.                                            |
 |                                                                              |
 |           No code was made: Recover access by code isn't installed           |
 |           in this build yet                                                  |
 |                                                                              |
-|                                                                              |
-|                                                                              |
 +------------------------------------------------------------------------------+
-|          1 or 2  Choose     Enter  Back                                      |
+|          1, 2 or 0  Choose     Enter  Back                                   |
 +------------------------------------------------------------------------------+

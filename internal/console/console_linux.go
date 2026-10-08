@@ -34,9 +34,22 @@ func Open(devDir string, names []string) ([]Console, map[string]error) {
 			dropped[n] = err
 			continue
 		}
+		quietControlKeys(fd)
 		got = append(got, Console{Name: n, RW: os.NewFile(uintptr(fd), p)}) // #nosec G115 -- a file descriptor
 	}
 	return got, dropped
+}
+
+// quietControlKeys turns off ECHOCTL on a terminal, so a cursor key
+// isn't echoed as ^[[C; the line mode and the echo stay. A console that
+// isn't a terminal is left alone.
+func quietControlKeys(fd int) {
+	tio, err := unix.IoctlGetTermios(fd, unix.TCGETS)
+	if err != nil || tio.Lflag&unix.ECHOCTL == 0 {
+		return
+	}
+	tio.Lflag &^= unix.ECHOCTL
+	_ = unix.IoctlSetTermios(fd, unix.TCSETS, tio)
 }
 
 // Taken is init's console once Take has run.

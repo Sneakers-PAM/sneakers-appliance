@@ -382,3 +382,63 @@ func TestOtherKeysDoNothing(t *testing.T) {
 		t.Fatal("a call was made")
 	}
 }
+
+// The cursor and function keys do nothing in Recover access, and every
+// way back (Enter, Esc, 0, b and back) returns to the status view.
+func TestRecoverAccessIgnoresCursorKeysAndGoesBack(t *testing.T) {
+	e := newEnv()
+	d := start(t, e)
+	d.Expect(t, "R  Recover access")
+	d.Type(t, "r")
+	d.Expect(t, "Use this only when no admin can sign in.")
+	for _, key := range []string{"\x1b[A", "\x1b[B", "\x1b[C", "\x1b[D", "\x1b[H", "\x1b[F", "\x1b[1~", "\x1b[4~", "\x1bOH", "\x1b[[A", "\x1bOP", "\x1b[15~"} {
+		d.Type(t, key)
+	}
+	// Still on Recover access, with nothing said: 2 is taken there.
+	if strings.Contains(d.Last(), "Type 1 or 2") {
+		t.Fatalf("a cursor key was taken for a choice:\n%s", d.Last())
+	}
+	d.Type(t, "2")
+	d.Expect(t, "6HDW-2RTE-KM8Q-0VXA")
+	d.Type(t, "")
+	d.Expect(t, "all services running")
+	for _, back := range []string{"", "\x1b", "0", "b", "back"} {
+		d.Type(t, "r")
+		d.Expect(t, "Use this only when no admin can sign in.")
+		d.Type(t, back)
+		d.Expect(t, "all services running")
+	}
+	if len(e.net.list()) != 0 {
+		t.Fatal("a call was made")
+	}
+}
+
+// Back is an item of its own on Recover access, beside 1 and 2.
+func TestRecoverAccessListsBack(t *testing.T) {
+	text := dashboard.RecoverPage(chrome(full, keycustody.ModeTPM), "").Frame(64, 24).Text()
+	if !strings.Contains(text, "0  Back") {
+		t.Fatalf("no Back item:\n%s", text)
+	}
+}
+
+// From the allow-list reset and the code screen, 0, b and Esc go back as
+// Enter does.
+func TestRecoverSubScreensGoBack(t *testing.T) {
+	e := newEnv()
+	d := start(t, e)
+	d.Expect(t, "R  Recover access")
+	d.Type(t, "r")
+	d.Expect(t, "Use this only when no admin can sign in.")
+	d.Type(t, "1")
+	d.Expect(t, "press K to keep the change")
+	d.Type(t, "\x1b[C")
+	d.Type(t, "0")
+	d.Expect(t, "all services running")
+	d.Type(t, "r")
+	d.Expect(t, "Use this only when no admin can sign in.")
+	d.Type(t, "2")
+	d.Expect(t, "6HDW-2RTE-KM8Q-0VXA")
+	d.Type(t, "\x1b[D")
+	d.Type(t, "\x1b")
+	d.Expect(t, "all services running")
+}

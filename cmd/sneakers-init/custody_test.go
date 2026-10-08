@@ -165,3 +165,20 @@ func TestTheConsoleClosingAtTheProtectionStepInitializesNothing(t *testing.T) {
 		t.Fatalf("err %v, created %v", err, d.Created)
 	}
 }
+
+// An arrow and Enter at the protection step don't pick the TPM: the
+// screen asks again.
+func TestCursorKeysAtTheProtectionStepDoNothing(t *testing.T) {
+	sim := simTPM(t)
+	d := &keycustodytest.Disk{}
+	h, _, out, err := boot(t, d, sim, noSB, phase.SBUnset, "\x1b[B\nkey file\x1b[C\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.Mode != keycustody.ModeKeyfile {
+		t.Fatalf("header %+v", h)
+	}
+	if strings.Count(out, "Use the TPM (recommended)") != 2 {
+		t.Fatalf("the arrow key wasn't dropped:\n%s", out)
+	}
+}

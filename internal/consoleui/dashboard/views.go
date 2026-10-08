@@ -302,13 +302,15 @@ func RecoverPage(c consoleui.Chrome, errLine string) tui.Page {
 		tui.Text(""),
 		tui.Line{{Text: "2", Style: tui.Strong}, {Text: "  Reset an owner's sign-in with a one-time code"}},
 		tui.Text(""),
+		tui.Line{{Text: "0", Style: tui.Strong}, {Text: "  Back"}},
+		tui.Text(""),
 	)
 	b = append(b, tui.Wrap("Both are recorded, and every admin sees a notice the next time they sign in.", width, "")...)
 	if errLine != "" {
 		b = append(b, tui.Text(""))
 		b = append(b, tui.WrapStyled(tui.Alert, errLine, width, "")...)
 	}
-	return c.Page(b, consoleui.Keys(tui.Line{{Text: "1", Style: tui.Strong}, {Text: " or "}, {Text: "2", Style: tui.Strong}, {Text: "  Choose"}}, consoleui.Key("Enter", "Back")), "")
+	return c.Page(b, consoleui.Keys(tui.Line{{Text: "1", Style: tui.Strong}, {Text: ", "}, {Text: "2", Style: tui.Strong}, {Text: " or "}, {Text: "0", Style: tui.Strong}, {Text: "  Choose"}}, consoleui.Key("Enter", "Back")), "")
 }
 
 // AllowListPage is who can connect reset: kept with K once the admin page

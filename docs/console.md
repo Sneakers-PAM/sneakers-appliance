@@ -48,6 +48,11 @@ line under it, the version; the others have a one-row header with a small mark, 
 and the node count, and the keys in a dim row at the bottom, each ruled off. Keys are single
 letters or digits, typed and then Enter (the consoles stay in the kernel's line mode, which works
 the same on a VMware screen and a serial line); a screen with nothing to type hides the cursor.
+The arrows, Home, End, the page and function keys do nothing: init turns `ECHOCTL` off on each
+console, so they aren't echoed as `^[[C`, and their escape sequences (CSI, SS3 and the VT's
+`ESC [ [ A` to `E`) are taken out of the typed line. A line of nothing but such keys is dropped, so
+an arrow and Enter never pick a default, at init's own screens too. Back is Enter on an empty line,
+`0`, `b`, `back` or Esc, wherever a screen offers it.
 
 ```
 +--------------------------------------------------------------+
@@ -199,7 +204,7 @@ to and the step, and that the box goes back by itself if the new one doesn't com
 ## Recover access
 
 **R**, for when no admin can sign in. It's recorded, and every admin sees a notice the next time
-they sign in:
+they sign in. **0** (or Enter) goes back:
 
 1. **Let this network reach the admin page again**: resets who can connect (accessd's
    `ResetAllowList`) to the management network. The screen asks to check the admin page opens from
