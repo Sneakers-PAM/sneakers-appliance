@@ -269,23 +269,33 @@ func takeConsole(lg log.Logger) *console.Taken {
 }
 
 // earlyMounts are what every later step needs. nosuid and nodev are mount
-// flags (passed as flags to every one of them), never filesystem data: tmpfs
-// refuses an option it doesn't know with EINVAL.
-var earlyMounts = []struct{ src, dst, fstype, data string }{
-	{"proc", "/proc", "proc", ""},
-	{"sysfs", "/sys", "sysfs", ""},
-	{"devtmpfs", "/dev", "devtmpfs", "mode=0755"},
-	{"tmpfs", "/run", "tmpfs", "mode=0755"},
-	{"tmpfs", "/tmp", "tmpfs", "mode=1777"},
-	{"efivarfs", secureboot.DefaultEfivarfs, "efivarfs", ""},
+// flags, never filesystem data: tmpfs refuses an option it doesn't know
+// with EINVAL.
+var earlyMounts = []struct {
+	src, dst, fstype, data string
+	flags                  uintptr
+}{
+	{"proc", "/proc", "proc", "", nosuidNodev},
+	{"sysfs", "/sys", "sysfs", "", nosuidNodev},
+	{"devtmpfs", "/dev", "devtmpfs", "mode=0755", nosuidNodev},
+	// The kernel finds the terminals of /dev/ptmx on the devpts at
+	// /dev/pts; without it sshd gets no PTY. Not nodev: its entries are
+	// the terminals. No image group is named tty, so sshd hands each
+	// terminal to its user, mode 0600.
+	{"devpts", "/dev/pts", "devpts", "mode=0620,ptmxmode=0666", unix.MS_NOSUID | unix.MS_NOEXEC},
+	{"tmpfs", "/run", "tmpfs", "mode=0755", nosuidNodev},
+	{"tmpfs", "/tmp", "tmpfs", "mode=1777", nosuidNodev},
+	{"efivarfs", secureboot.DefaultEfivarfs, "efivarfs", "", nosuidNodev},
 }
+
+const nosuidNodev = unix.MS_NOSUID | unix.MS_NODEV
 
 // mountEarly mounts earlyMounts. Errors are logged, not fatal: a missing
 // efivarfs, for instance, just means no Secure Boot.
 func mountEarly(lg log.Logger) {
 	for _, m := range earlyMounts {
 		_ = os.MkdirAll(m.dst, 0o755) // #nosec G301 -- standard mount points
-		if err := unix.Mount(m.src, m.dst, m.fstype, unix.MS_NOSUID|unix.MS_NODEV, m.data); err != nil && err != unix.EBUSY {
+		if err := unix.Mount(m.src, m.dst, m.fstype, m.flags, m.data); err != nil && err != unix.EBUSY {
 			lg.Warn("init: mount", log.F("target", m.dst), log.F("error", err.Error()))
 		}
 	}

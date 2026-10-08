@@ -83,6 +83,9 @@ through the SSH command line:
 ssh alice@192.0.2.10 status -o json
 ```
 
+The interactive shell needs a terminal; without one it takes only a command on the SSH command line.
+With no terminal, the code is one line of standard input, ended by Enter as LF, CRLF or a bare CR.
+
 The shell splits the line itself; nothing is passed to `/bin/sh`, and the binary links nothing that
 can start a program. Spaces and tabs separate words, single quotes keep everything to the next single
 quote, double quotes keep everything to the next unescaped double quote (`\"` and `\\` are the only

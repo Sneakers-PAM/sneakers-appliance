@@ -94,6 +94,19 @@ func ssh(ctx context.Context, port int, user, key, stdin string, command ...stri
 	return string(out), err
 }
 
+// sshTerminal logs in as user with a forced terminal (ssh -tt), as an
+// admin's interactive login does, and types the TOTP code and lines into
+// it. ssh closes the login when the box refuses the terminal.
+func sshTerminal(ctx context.Context, port int, user, key, code string, lines ...string) (string, error) {
+	args := []string{"-tt", "-p", fmt.Sprint(port), "-i", key, "-o", "CertificateFile=" + key + "-cert.pub", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10",
+		user + "@127.0.0.1"}
+	cmd := exec.CommandContext(ctx, "ssh", args...) // #nosec G204 -- test-only
+	cmd.Stdin = strings.NewReader(code + "\r" + strings.Join(lines, "\r") + "\r")
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
 // connectCall posts a Connect unary call in JSON to :8443, with the
 // session's CSRF token.
 func connectCall(t *testing.T, hc *http.Client, base, csrf, procedure string, in, out any) {
@@ -276,6 +289,13 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 			t.Fatalf("status after the reboot: %v: %s", err, out)
 		}
 		time.Sleep(3 * time.Second)
+	}
+	// An interactive login gets a terminal, and the closed shell's menu
+	// after the code. Without one, sshd runs the shell on pipes, which
+	// never shows the menu.
+	if out, err = sshTerminal(ctx, sshPort, "alice", alice, codes.next(), "help", "exit"); err != nil ||
+		!strings.Contains(out, "Type help for the commands") || !strings.Contains(out, "alice@") {
+		t.Fatalf("an interactive SSH login didn't reach the closed shell's menu: %v: %s", err, out)
 	}
 	resp, err := hc.Get(base + "/")
 	if err != nil {
