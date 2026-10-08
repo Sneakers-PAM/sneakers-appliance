@@ -66,6 +66,9 @@ const (
 	// SetupServiceAddRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// AddRecoveryKey RPC.
 	SetupServiceAddRecoveryKeyProcedure = "/sneakers.appliance.osadmin.v1.SetupService/AddRecoveryKey"
+	// SetupServiceGenerateRecoveryKeyProcedure is the fully-qualified name of the SetupService's
+	// GenerateRecoveryKey RPC.
+	SetupServiceGenerateRecoveryKeyProcedure = "/sneakers.appliance.osadmin.v1.SetupService/GenerateRecoveryKey"
 	// SetupServiceRemoveRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// RemoveRecoveryKey RPC.
 	SetupServiceRemoveRecoveryKeyProcedure = "/sneakers.appliance.osadmin.v1.SetupService/RemoveRecoveryKey"
@@ -110,6 +113,11 @@ type SetupServiceClient interface {
 	// AddRecoveryKey adds one of up to three recovery keys and writes a new
 	// escrow to the whole set.
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// GenerateRecoveryKey has the box make an ed25519 key pair and add its
+	// public half as a recovery key, with a new escrow, under the same rule
+	// and the same limit of three as AddRecoveryKey. The OpenSSH private key
+	// is in the answer once; the box never keeps or logs it.
+	GenerateRecoveryKey(context.Context, *connect.Request[v1.GenerateRecoveryKeyRequest]) (*connect.Response[v1.GenerateRecoveryKeyResponse], error)
 	// RemoveRecoveryKey removes one (never the last) and writes a new escrow.
 	RemoveRecoveryKey(context.Context, *connect.Request[v1.RemoveRecoveryKeyRequest]) (*connect.Response[v1.RemoveRecoveryKeyResponse], error)
 	// DownloadEscrow returns the newest escrow file (age ciphertext).
@@ -177,6 +185,12 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("AddRecoveryKey")),
 			connect.WithClientOptions(opts...),
 		),
+		generateRecoveryKey: connect.NewClient[v1.GenerateRecoveryKeyRequest, v1.GenerateRecoveryKeyResponse](
+			httpClient,
+			baseURL+SetupServiceGenerateRecoveryKeyProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("GenerateRecoveryKey")),
+			connect.WithClientOptions(opts...),
+		),
 		removeRecoveryKey: connect.NewClient[v1.RemoveRecoveryKeyRequest, v1.RemoveRecoveryKeyResponse](
 			httpClient,
 			baseURL+SetupServiceRemoveRecoveryKeyProcedure,
@@ -213,6 +227,7 @@ type setupServiceClient struct {
 	completeCredentials    *connect.Client[v1.CompleteCredentialsRequest, v1.CompleteCredentialsResponse]
 	acknowledgeStep        *connect.Client[v1.AcknowledgeStepRequest, v1.AcknowledgeStepResponse]
 	addRecoveryKey         *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	generateRecoveryKey    *connect.Client[v1.GenerateRecoveryKeyRequest, v1.GenerateRecoveryKeyResponse]
 	removeRecoveryKey      *connect.Client[v1.RemoveRecoveryKeyRequest, v1.RemoveRecoveryKeyResponse]
 	downloadEscrow         *connect.Client[v1.DownloadEscrowRequest, v1.DownloadEscrowResponse]
 	acknowledgeSingleAdmin *connect.Client[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse]
@@ -252,6 +267,11 @@ func (c *setupServiceClient) AcknowledgeStep(ctx context.Context, req *connect.R
 // AddRecoveryKey calls sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey.
 func (c *setupServiceClient) AddRecoveryKey(ctx context.Context, req *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {
 	return c.addRecoveryKey.CallUnary(ctx, req)
+}
+
+// GenerateRecoveryKey calls sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey.
+func (c *setupServiceClient) GenerateRecoveryKey(ctx context.Context, req *connect.Request[v1.GenerateRecoveryKeyRequest]) (*connect.Response[v1.GenerateRecoveryKeyResponse], error) {
+	return c.generateRecoveryKey.CallUnary(ctx, req)
 }
 
 // RemoveRecoveryKey calls sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey.
@@ -306,6 +326,11 @@ type SetupServiceHandler interface {
 	// AddRecoveryKey adds one of up to three recovery keys and writes a new
 	// escrow to the whole set.
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// GenerateRecoveryKey has the box make an ed25519 key pair and add its
+	// public half as a recovery key, with a new escrow, under the same rule
+	// and the same limit of three as AddRecoveryKey. The OpenSSH private key
+	// is in the answer once; the box never keeps or logs it.
+	GenerateRecoveryKey(context.Context, *connect.Request[v1.GenerateRecoveryKeyRequest]) (*connect.Response[v1.GenerateRecoveryKeyResponse], error)
 	// RemoveRecoveryKey removes one (never the last) and writes a new escrow.
 	RemoveRecoveryKey(context.Context, *connect.Request[v1.RemoveRecoveryKeyRequest]) (*connect.Response[v1.RemoveRecoveryKeyResponse], error)
 	// DownloadEscrow returns the newest escrow file (age ciphertext).
@@ -369,6 +394,12 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("AddRecoveryKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	setupServiceGenerateRecoveryKeyHandler := connect.NewUnaryHandler(
+		SetupServiceGenerateRecoveryKeyProcedure,
+		svc.GenerateRecoveryKey,
+		connect.WithSchema(setupServiceMethods.ByName("GenerateRecoveryKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	setupServiceRemoveRecoveryKeyHandler := connect.NewUnaryHandler(
 		SetupServiceRemoveRecoveryKeyProcedure,
 		svc.RemoveRecoveryKey,
@@ -409,6 +440,8 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceAcknowledgeStepHandler.ServeHTTP(w, r)
 		case SetupServiceAddRecoveryKeyProcedure:
 			setupServiceAddRecoveryKeyHandler.ServeHTTP(w, r)
+		case SetupServiceGenerateRecoveryKeyProcedure:
+			setupServiceGenerateRecoveryKeyHandler.ServeHTTP(w, r)
 		case SetupServiceRemoveRecoveryKeyProcedure:
 			setupServiceRemoveRecoveryKeyHandler.ServeHTTP(w, r)
 		case SetupServiceDownloadEscrowProcedure:
@@ -452,6 +485,10 @@ func (UnimplementedSetupServiceHandler) AcknowledgeStep(context.Context, *connec
 
 func (UnimplementedSetupServiceHandler) AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) GenerateRecoveryKey(context.Context, *connect.Request[v1.GenerateRecoveryKeyRequest]) (*connect.Response[v1.GenerateRecoveryKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey is not implemented"))
 }
 
 func (UnimplementedSetupServiceHandler) RemoveRecoveryKey(context.Context, *connect.Request[v1.RemoveRecoveryKeyRequest]) (*connect.Response[v1.RemoveRecoveryKeyResponse], error) {

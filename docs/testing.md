@@ -45,6 +45,13 @@ key's recipient, in the `fingerprints.txt` format
 [production-keys.md](runbooks/production-keys.md) and `build/release/check-fingerprints.sh` use
 for a production key set.
 
+The :8443 pages come from sneakers-web. With `WEB` naming a sneakers-web checkout, the lab build
+builds them itself (`build/lab/pages.sh`: `npm ci --ignore-scripts`, then the appliance admin's
+build with `APP_VERSION` set to the lab version and `APP_COMMIT` to the checkout's short commit)
+and refuses pages that come out without that stamp, so About and diagnostics on the box name the
+build. `OSADMIN_ASSETS` still takes pages built elsewhere, which say `0.0.0 (unknown)` unless that
+build set both variables. `build/lab/pages_test.sh` checks the stamp with a stand-in npm.
+
 ## The QEMU harness
 
 `test/image/harness` boots a disk on q35 with SMM and OVMF's Secure Boot build and a vars store in

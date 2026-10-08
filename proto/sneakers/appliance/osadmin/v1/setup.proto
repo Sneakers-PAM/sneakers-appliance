@@ -91,6 +91,17 @@ service SetupService {
       audit: "setup.recovery-key.add"
     };
   }
+  // GenerateRecoveryKey has the box make an ed25519 key pair and add its
+  // public half as a recovery key, with a new escrow, under the same rule
+  // and the same limit of three as AddRecoveryKey. The OpenSSH private key
+  // is in the answer once; the box never keeps or logs it.
+  rpc GenerateRecoveryKey(GenerateRecoveryKeyRequest) returns (GenerateRecoveryKeyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "setup.recovery-key.generate"
+    };
+  }
   // RemoveRecoveryKey removes one (never the last) and writes a new escrow.
   rpc RemoveRecoveryKey(RemoveRecoveryKeyRequest) returns (RemoveRecoveryKeyResponse) {
     option (rule) = {
@@ -290,6 +301,21 @@ message AddRecoveryKeyRequest {
 
 message AddRecoveryKeyResponse {
   RecoveryKey recovery_key = 1;
+}
+
+message GenerateRecoveryKeyRequest {
+  // label names the key in the list (where it's kept, say).
+  string label = 1;
+}
+
+message GenerateRecoveryKeyResponse {
+  RecoveryKey recovery_key = 1;
+  // private_key is the OpenSSH private key, in the answer this once.
+  string private_key = 2;
+  // public_key is the OpenSSH public key line the box keeps.
+  string public_key = 3;
+  // file_name is a suggested name for the private key file.
+  string file_name = 4;
 }
 
 message RemoveRecoveryKeyRequest {

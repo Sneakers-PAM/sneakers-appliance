@@ -169,7 +169,11 @@ The stepper's six steps (`GetSetup` reports them and the current one; calls out 
 3. **Recovery keys,** one to three (`ssh-ed25519`, or `ssh-rsa` of 3072 bits or more). Each change asks
    init for a new escrow encrypted to the whole set and writes it to
    `/var/lib/sneakers/backup/escrow/escrow-<time>.age`; when the escrow fails, the keys don't change.
-   The newest escrow can be downloaded.
+   The newest escrow can be downloaded. Each key is either pasted (`AddRecoveryKey`) or made on the
+   box (`GenerateRecoveryKey`): an ed25519 key pair whose public half is stored like a pasted one
+   and whose OpenSSH private key is in the answer once, for the browser to download. The box never
+   keeps or logs the private key, so it can't be downloaded again. Both take an owner with a recent
+   step-up and count toward the three.
 4. **The network** (optional): change it on the Network page, or `AcknowledgeStep`.
 5. **The protection** (read only): `AcknowledgeStep`.
 6. **Sign in** once with the name, the password and a TOTP code; with one admin the single-admin

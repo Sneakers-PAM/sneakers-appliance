@@ -32,6 +32,11 @@
 #   DISK_SIZE    the raw disk's size (default 64G)
 #   KIT_MIN      the oldest kit or init version that may verify the release
 #                (spec.kitMin; default 0.0.0-0, any)
+#   WEB          a sneakers-web checkout: the :8443 pages are built from it
+#                by pages.sh, stamped with this version and its commit, and
+#                go into the root. Without it, OSADMIN_ASSETS may name pages
+#                built elsewhere (unstamped unless that build set APP_VERSION
+#                and APP_COMMIT), or the root ships with none.
 #
 # Output: $OUT/version (the version with the build number, which every
 # file name below carries), $OUT/keys.txt (the SHA-256 fingerprint of each
@@ -163,6 +168,12 @@ rm -rf "$OUT/product"
 product_bin="$(go run "$root/cmd/sneakers-artifact" bin-seal --work "$work/product/bin" --bundle "$work/product/bin/header.sigstore.json" --out "$OUT/product")"
 go run "$root/cmd/sneakers-artifact" product-index --out "$OUT/product/sneakers-product-index.json" "$product_bin" >/dev/null
 rm -rf "$work/product/tree"
+
+if [ -n "${WEB:-}" ]; then
+  echo "lab: :8443 pages"
+  WEB="$WEB" VERSION="$version" OUT="$work/osadmin" bash "$here/pages.sh"
+  export OSADMIN_ASSETS="$work/osadmin"
+fi
 
 echo "lab: root"
 env -u K0S -u IMAGES STATIC="${STATIC:-}" PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
