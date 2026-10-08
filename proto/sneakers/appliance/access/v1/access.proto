@@ -103,7 +103,7 @@ service SetupService {
   rpc ResetSetupCode(ResetSetupCodeRequest) returns (ResetSetupCodeResponse);
   // BeginRecoverAccess issues the console's Recover access code (root
   // only): on :8443 it gives an owner a new password and authenticator,
-  // or makes a new owner. It works once, for 30 minutes.
+  // or makes a new owner. It works once, for 60 minutes.
   rpc BeginRecoverAccess(BeginRecoverAccessRequest) returns (BeginRecoverAccessResponse);
   // CancelRecoverAccess withdraws a Recover access code (root only).
   rpc CancelRecoverAccess(CancelRecoverAccessRequest) returns (CancelRecoverAccessResponse);

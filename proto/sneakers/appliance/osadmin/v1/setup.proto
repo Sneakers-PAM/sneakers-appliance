@@ -39,7 +39,7 @@ service SetupService {
   // A wrong code is refused with a SignInRefusal detail; after 5 wrong
   // tries the setup code locks until the console asks for a new one, and
   // a Recover access code is withdrawn. A setup code works for 60 minutes,
-  // an invitation for 24 hours, a Recover access code for 30 minutes.
+  // an invitation for 24 hours, a Recover access code for 60 minutes.
   rpc RedeemCode(RedeemCodeRequest) returns (RedeemCodeResponse) {
     option (rule) = {
       public: true

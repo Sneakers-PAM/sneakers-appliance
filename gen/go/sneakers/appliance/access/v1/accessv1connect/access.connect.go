@@ -648,7 +648,7 @@ type SetupServiceClient interface {
 	ResetSetupCode(context.Context, *connect.Request[v1.ResetSetupCodeRequest]) (*connect.Response[v1.ResetSetupCodeResponse], error)
 	// BeginRecoverAccess issues the console's Recover access code (root
 	// only): on :8443 it gives an owner a new password and authenticator,
-	// or makes a new owner. It works once, for 30 minutes.
+	// or makes a new owner. It works once, for 60 minutes.
 	BeginRecoverAccess(context.Context, *connect.Request[v1.BeginRecoverAccessRequest]) (*connect.Response[v1.BeginRecoverAccessResponse], error)
 	// CancelRecoverAccess withdraws a Recover access code (root only).
 	CancelRecoverAccess(context.Context, *connect.Request[v1.CancelRecoverAccessRequest]) (*connect.Response[v1.CancelRecoverAccessResponse], error)
@@ -809,7 +809,7 @@ type SetupServiceHandler interface {
 	ResetSetupCode(context.Context, *connect.Request[v1.ResetSetupCodeRequest]) (*connect.Response[v1.ResetSetupCodeResponse], error)
 	// BeginRecoverAccess issues the console's Recover access code (root
 	// only): on :8443 it gives an owner a new password and authenticator,
-	// or makes a new owner. It works once, for 30 minutes.
+	// or makes a new owner. It works once, for 60 minutes.
 	BeginRecoverAccess(context.Context, *connect.Request[v1.BeginRecoverAccessRequest]) (*connect.Response[v1.BeginRecoverAccessResponse], error)
 	// CancelRecoverAccess withdraws a Recover access code (root only).
 	CancelRecoverAccess(context.Context, *connect.Request[v1.CancelRecoverAccessRequest]) (*connect.Response[v1.CancelRecoverAccessResponse], error)

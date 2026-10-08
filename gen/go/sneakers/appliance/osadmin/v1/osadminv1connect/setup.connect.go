@@ -90,7 +90,7 @@ type SetupServiceClient interface {
 	// A wrong code is refused with a SignInRefusal detail; after 5 wrong
 	// tries the setup code locks until the console asks for a new one, and
 	// a Recover access code is withdrawn. A setup code works for 60 minutes,
-	// an invitation for 24 hours, a Recover access code for 30 minutes.
+	// an invitation for 24 hours, a Recover access code for 60 minutes.
 	RedeemCode(context.Context, *connect.Request[v1.RedeemCodeRequest]) (*connect.Response[v1.RedeemCodeResponse], error)
 	// CheckPassword says whether a password would be taken: at least 12
 	// characters, and not on the breached-password list. Nothing is stored.
@@ -286,7 +286,7 @@ type SetupServiceHandler interface {
 	// A wrong code is refused with a SignInRefusal detail; after 5 wrong
 	// tries the setup code locks until the console asks for a new one, and
 	// a Recover access code is withdrawn. A setup code works for 60 minutes,
-	// an invitation for 24 hours, a Recover access code for 30 minutes.
+	// an invitation for 24 hours, a Recover access code for 60 minutes.
 	RedeemCode(context.Context, *connect.Request[v1.RedeemCodeRequest]) (*connect.Response[v1.RedeemCodeResponse], error)
 	// CheckPassword says whether a password would be taken: at least 12
 	// characters, and not on the breached-password list. Nothing is stored.
