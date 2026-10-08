@@ -876,8 +876,11 @@ func (x *StageUpdateRequest) GetUploadId() string {
 }
 
 type StageUpdateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Package       *UpdatePackage         `protobuf:"bytes,1,opt,name=package,proto3" json:"package,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Package *UpdatePackage         `protobuf:"bytes,1,opt,name=package,proto3" json:"package,omitempty"`
+	// slot is the base slot the release was staged into, A or B; empty for a
+	// product bundle, or when the box can't tell which slot it runs from.
+	Slot          string `protobuf:"bytes,2,opt,name=slot,proto3" json:"slot,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -917,6 +920,13 @@ func (x *StageUpdateResponse) GetPackage() *UpdatePackage {
 		return x.Package
 	}
 	return nil
+}
+
+func (x *StageUpdateResponse) GetSlot() string {
+	if x != nil {
+		return x.Slot
+	}
+	return ""
 }
 
 // ElevationOverride ends an open elevated shell so an apply or revert can
@@ -1418,9 +1428,10 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\"1\n" +
 	"\x12StageUpdateRequest\x12\x1b\n" +
-	"\tupload_id\x18\x01 \x01(\tR\buploadId\"]\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"q\n" +
 	"\x13StageUpdateResponse\x12F\n" +
-	"\apackage\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.UpdatePackageR\apackage\"h\n" +
+	"\apackage\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.UpdatePackageR\apackage\x12\x12\n" +
+	"\x04slot\x18\x02 \x01(\tR\x04slot\"h\n" +
 	"\x11ElevationOverride\x12!\n" +
 	"\felevation_id\x18\x01 \x01(\tR\velevationId\x12\x18\n" +
 	"\aconfirm\x18\x02 \x01(\tR\aconfirm\x12\x16\n" +

@@ -37,6 +37,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
@@ -514,7 +515,23 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&osadminv1.StageUpdateResponse{Package: pkg}), nil
+	out := &osadminv1.StageUpdateResponse{Package: pkg}
+	if target != osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+		out.Slot = h.s.otherSlot()
+	}
+	return connect.NewResponse(out), nil
+}
+
+// otherSlot is the base slot the box isn't running from, A or B, or ""
+// when it doesn't know where it booted from.
+func (s *Server) otherSlot() string {
+	switch s.o.RootSource {
+	case switchroot.LabelRootA:
+		return "B"
+	case switchroot.LabelRootB:
+		return "A"
+	}
+	return ""
 }
 
 func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage, error) {

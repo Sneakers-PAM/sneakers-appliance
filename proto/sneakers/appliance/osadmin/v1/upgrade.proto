@@ -211,6 +211,9 @@ message StageUpdateRequest {
 
 message StageUpdateResponse {
   UpdatePackage package = 1;
+  // slot is the base slot the release was staged into, A or B; empty for a
+  // product bundle, or when the box can't tell which slot it runs from.
+  string slot = 2;
 }
 
 // ElevationOverride ends an open elevated shell so an apply or revert can

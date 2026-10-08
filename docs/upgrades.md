@@ -51,7 +51,8 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    A refused file (`UPGRADE_SIGNATURE`, `UPGRADE_CHANNEL`, `UPGRADE_FORMAT`,
    `UPGRADE_PATCH_BASE`) is deleted, never unpacked, and the refusal is audited. Only then is the
    update key read from the booted UKI (by accessd, as root; [access.md](access.md#the-update-key)), the payload decrypted and unpacked, and the layout handed to
-   `Image.Stage`.
+   `Image.Stage`. The answer names the slot a base release went into (`slot`, `A` or `B`, from
+   init's `SNEAKERS_ROOT_SOURCE`), so the page can say "Staged into slot B".
 3. **Apply** (owner) activates the staged release and reboots into it (`UPGRADE_NOT_STAGED`
    when nothing is staged). **Revert** rolls back to the previous release and reboots. Neither
    rides on the step-up window: each request carries its own `totp_code`, a fresh code from the

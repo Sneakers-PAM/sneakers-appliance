@@ -20,6 +20,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
@@ -376,5 +377,23 @@ func TestARevertIsReportedAsReverted(t *testing.T) {
 	}
 	if m := st.Msg; m.GetFailedVersion() != "" || m.GetRevertedVersion() != "0.2.0" || m.GetRevertedBy() != "alice" || m.GetRevertedAt() == nil {
 		t.Fatalf("status %+v", m)
+	}
+}
+
+// A staged base release names the slot it went into: the one the box
+// isn't running from.
+func TestStagingNamesTheOtherSlot(t *testing.T) {
+	for running, want := range map[string]string{switchroot.LabelRootA: "B", switchroot.LabelRootB: "A", "": ""} {
+		b := newBox(t, false, func(_ *box, o *osadmin.Options) { o.RootSource = running })
+		alice := b.browser()
+		alice.signIn("alice")
+		id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
+		out, err := alice.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := out.Msg.GetSlot(); got != want {
+			t.Errorf("running from %q: staged into %q, want %q", running, got, want)
+		}
 	}
 }

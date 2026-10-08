@@ -51,6 +51,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshsession"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
 )
 
@@ -213,6 +214,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	}
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{},
+		RootSource: os.Getenv(switchroot.SourceEnv),
 		KeyCustody: custody,
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),

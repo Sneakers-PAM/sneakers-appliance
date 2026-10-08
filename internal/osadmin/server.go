@@ -74,6 +74,9 @@ func (p Paths) APIDir() string { return filepath.Join(p.State, "osadmin-api") }
 
 // Options wire the server to the store, the log and the daemons it calls.
 type Options struct {
+	// RootSource is where the running root came from (init's
+	// SNEAKERS_ROOT_SOURCE): a root slot's label, or empty when unknown.
+	RootSource string
 	Access     *access.Store
 	Audit      *osaudit.Log
 	Clock      clock.Clock
