@@ -7,10 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
@@ -83,7 +81,7 @@ func TestConsoleOnlyCommandRefusedOverSSH(t *testing.T) {
 }
 
 func TestSSHOnlyCommandRefusedOnConsole(t *testing.T) {
-	for _, line := range []string{"login ABCD-EFGH", "shell --reason x", "elevation status", "elevation cert E-7K2Q", "setup recovery-key", "logs export", "support-bundle"} {
+	for _, line := range []string{"shell --reason x", "setup recovery-key", "logs export", "support-bundle"} {
 		_, err := runShell(t, shell.OriginConsole, line)
 		assertCode(t, err, "ACCESS_FORBIDDEN")
 	}
@@ -93,8 +91,7 @@ func TestEveryCommandParses(t *testing.T) {
 	lines := map[shell.Origin][]string{
 		shell.OriginSSH: {
 			"status", "status -o json", "network show", "network confirm abc", "keys list", "keys list --admin bob",
-			"keys remove SHA256:abc", "admins list", "admins add carol --role owner", "admins remove carol",
-			"elevation status", "elevation status E-7K2Q", "elevation cert E-7K2Q", "tls show", "backup list",
+			"admins list", "tls show", "backup list",
 			"restore", "upgrade status", "mcp off", "resources", "logs export", "support-bundle",
 		},
 		shell.OriginConsole: {"status", "network show", "keys list", "admins list", "tls show"},
@@ -111,13 +108,10 @@ func TestEveryCommandParses(t *testing.T) {
 		o           shell.Origin
 		line, stdin string
 	}{
-		{shell.OriginSSH, "keys add", "ssh-ed25519 AAAA k\n"},
 		{shell.OriginSSH, "setup recovery-key --label safe", "ssh-ed25519 AAAA k\n"},
 		{shell.OriginConsole, "recovery-key add", "ssh-ed25519 AAAA k\n"},
 		{shell.OriginSSH, "network set hostname=appliance.example.org", "y\n"},
 		{shell.OriginConsole, "network allow-list reset", "reset\n"},
-		{shell.OriginSSH, "login ABCD-EFGH", "y\n"},
-		{shell.OriginSSH, `shell --minutes 30 --reason "investigate kubelet"`, ""},
 		{shell.OriginSSH, "reboot", "reboot\n"},
 		{shell.OriginConsole, "poweroff", "poweroff\n"},
 	} {
@@ -134,19 +128,23 @@ func TestUnknownCommand(t *testing.T) {
 	if err == nil {
 		t.Fatal("status; id ran")
 	}
-	_, err = runShell(t, shell.OriginSSH, "keys add --no-such-flag")
+	_, err = runShell(t, shell.OriginSSH, "keys list --no-such-flag")
 	assertCode(t, err, "SHELL_PARSE")
-	_, err = runShell(t, shell.OriginSSH, "keys remove")
+	_, err = runShell(t, shell.OriginSSH, "network confirm")
 	assertCode(t, err, "SHELL_PARSE")
 }
 
-func TestKeysAddReadsStdin(t *testing.T) {
-	r := runShellIn(t, shell.OriginSSH, "keys add", "ssh-ed25519 AAAA test key\n", nil)
-	if r.e != nil {
-		t.Fatal(r.e)
-	}
-	if got := string(r.b.calls[0].Stdin); got != "ssh-ed25519 AAAA test key\n" {
-		t.Fatalf("stdin %q", got)
+// Admins, keys and passwords change on :8443 only, where a step-up
+// applies; the closed shell can't add or remove them, and sign-in codes
+// are gone.
+func TestAdminsAndKeysChangeOnlyOn8443(t *testing.T) {
+	for _, line := range []string{"keys add", "keys remove SHA256:abc", "admins add carol", "admins remove carol", "login ABCD-EFGH", "elevation status", "elevation cert E-7K2Q"} {
+		for _, o := range []shell.Origin{shell.OriginSSH, shell.OriginConsole} {
+			r := runShellIn(t, o, line, "ssh-ed25519 AAAA k\n", nil)
+			if len(r.b.calls) != 0 {
+				t.Errorf("%s %q ran: %v %v", o, line, r.e, r.b.actions())
+			}
+		}
 	}
 }
 
@@ -162,30 +160,63 @@ func TestRebootNeedsTypedConfirmation(t *testing.T) {
 	}
 }
 
-func TestLoginAsksBeforeApproving(t *testing.T) {
-	b := &recordingBackend{reply: map[string]shell.Result{"login.lookup": {Text: "Sign in the browser at 192.0.2.50 (test-agent) as alice?"}}}
-	r := runShellIn(t, shell.OriginSSH, "login ABCD-EFGH", "n\n", b)
-	if r.e != nil || strings.Join(b.actions(), ",") != "login.lookup" {
-		t.Fatalf("approved without a yes: %v %v", r.e, b.actions())
+// The root shell: a challenge to take to :8443, then the code it gave;
+// a wrong code may be typed again, and the right one's ticket opens the
+// relay.
+func TestTheRootShellTakesTheCodeAndRelays(t *testing.T) {
+	b := &recordingBackend{
+		reply: map[string]shell.Result{
+			"rootshell.begin": {Text: "Paste K3M9-7QDA-2XPN-8RTW on :8443.", Data: map[string]string{"challenge": "K3M9-7QDA-2XPN-8RTW", "id": "R-ABCD"}},
+			"rootshell.open":  {Data: map[string]string{"ticket": "tkt", "socket": "/run/sneakers/rootshell.sock"}},
+		},
 	}
-	if !strings.Contains(r.out, "192.0.2.50") {
-		t.Fatalf("the prompt doesn't show the browser: %q", r.out)
+	tries := 0
+	var relayed []string
+	var out bytes.Buffer
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: codeBackend{b: b, wrongFirst: &tries}, In: strings.NewReader("0000-0000\nQ7XD-2PNR\n"), Out: &out, Err: &out,
+		RootShell: func(_ context.Context, socket, ticket string) error {
+			relayed = append(relayed, socket, ticket)
+			return nil
+		}}
+	if err := shell.Run(context.Background(), e, `shell --reason "kubelet"`); err != nil {
+		t.Fatal(err)
 	}
-	b.calls = nil
-	r = runShellIn(t, shell.OriginSSH, "login ABCD-EFGH", "y\n", b)
-	if r.e != nil || strings.Join(b.actions(), ",") != "login.lookup,login.approve" {
-		t.Fatalf("%v %v", r.e, b.actions())
+	if strings.Join(relayed, " ") != "/run/sneakers/rootshell.sock tkt" {
+		t.Fatalf("relayed %v, out %q", relayed, out.String())
+	}
+	if got := strings.Join(b.actions(), ","); got != "rootshell.begin,rootshell.open,rootshell.open" {
+		t.Fatalf("calls %s", got)
+	}
+	if b.calls[2].Args[0] != "K3M9-7QDA-2XPN-8RTW" || b.calls[2].Args[1] != "Q7XD-2PNR" || b.calls[0].Flags["reason"] != "kubelet" {
+		t.Fatalf("calls %+v", b.calls)
+	}
+	if !strings.Contains(out.String(), "K3M9-7QDA-2XPN-8RTW") || !strings.Contains(out.String(), "tries left") || !strings.Contains(out.String(), "back in the menu") {
+		t.Fatalf("out %q", out.String())
 	}
 }
 
-func TestShellRequestValidates(t *testing.T) {
-	_, err := runShell(t, shell.OriginSSH, "shell")
-	assertCode(t, err, "SHELL_PARSE")
-	_, err = runShell(t, shell.OriginSSH, "shell --minutes 5 --reason x")
-	assertCode(t, err, "SHELL_PARSE")
-	r := runShellIn(t, shell.OriginSSH, `shell --minutes 30 --reason "investigate kubelet"`, "", nil)
-	if r.e != nil || r.b.calls[0].Flags["minutes"] != "30" || r.b.calls[0].Flags["reason"] != "investigate kubelet" {
-		t.Fatalf("%v %+v", r.e, r.b.calls)
+// codeBackend refuses the first code as wrong.
+type codeBackend struct {
+	b          *recordingBackend
+	wrongFirst *int
+}
+
+func (c codeBackend) Call(ctx context.Context, r shell.Request) (shell.Result, error) {
+	res, err := c.b.Call(ctx, r)
+	if r.Action == "rootshell.open" {
+		*c.wrongFirst++
+		if *c.wrongFirst == 1 {
+			return shell.Result{}, codes.New(codes.RootCode, "that code doesn't match the challenge; 2 tries left")
+		}
+	}
+	return res, err
+}
+
+func TestTheRootShellNeedsATerminal(t *testing.T) {
+	r := runShellIn(t, shell.OriginSSH, "shell", "", nil)
+	assertCode(t, r.e, "ACCESS_FORBIDDEN")
+	if len(r.b.calls) != 0 {
+		t.Fatalf("asked for a challenge without a terminal: %v", r.b.actions())
 	}
 }
 
@@ -247,7 +278,7 @@ func TestComplete(t *testing.T) {
 		"network a":      "network allow-list ",
 		"network allow-": "network allow-list ",
 		"ke":             "keys ",
-		"keys ":          "keys ",
+		"keys ":          "keys list ",
 		"zzz":            "zzz",
 	} {
 		if got := shell.Complete(shell.OriginConsole, typed); got != want {
@@ -256,77 +287,6 @@ func TestComplete(t *testing.T) {
 	}
 	if got := shell.Complete(shell.OriginSSH, "network a"); got != "network a" {
 		t.Errorf("SSH completes a console-only command: %q", got)
-	}
-}
-
-// sequenceBackend answers elevation.status with the states in order.
-type sequenceBackend struct {
-	recordingBackend
-	states []string
-}
-
-func (b *sequenceBackend) Call(ctx context.Context, r shell.Request) (shell.Result, error) {
-	switch r.Action {
-	case "elevation.request":
-		b.calls = append(b.calls, r)
-		return shell.Result{Text: "Requested E-7K2Q (30 minutes).", Data: map[string]string{"id": "E-7K2Q", "state": "pending"}}, nil
-	case "elevation.status":
-		b.calls = append(b.calls, r)
-		s := b.states[0]
-		if len(b.states) > 1 {
-			b.states = b.states[1:]
-		}
-		return shell.Result{Data: []map[string]string{{"id": "E-7K2Q", "state": s}}}, nil
-	case "elevation.cert":
-		b.calls = append(b.calls, r)
-		return shell.Result{Text: "the-elevation-certificate"}, nil
-	case "elevation.withdraw":
-		b.calls = append(b.calls, r)
-		return shell.Result{Text: fmt.Sprintf("%s withdrawn.", r.Args[0]), Data: map[string]string{"id": r.Args[0], "state": "withdrawn"}}, nil
-	}
-	return b.recordingBackend.Call(ctx, r)
-}
-
-// shell waits for the approval and prints the certificate.
-func TestShellWaitsForTheApproval(t *testing.T) {
-	b := &sequenceBackend{states: []string{"pending", "pending", "approved"}}
-	var out bytes.Buffer
-	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(""), Out: &out, Err: &out, Poll: time.Millisecond}
-	if err := shell.Run(context.Background(), e, `shell --minutes 30 --reason "kubelet"`); err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Join(b.actions(), ","); got != "elevation.request,elevation.status,elevation.status,elevation.status,elevation.cert" {
-		t.Fatalf("%s", got)
-	}
-	if !strings.Contains(out.String(), "Waiting for an owner") || !strings.Contains(out.String(), "the-elevation-certificate") {
-		t.Fatalf("%q", out.String())
-	}
-}
-
-func TestShellStopsWaitingOnADenial(t *testing.T) {
-	b := &sequenceBackend{states: []string{"pending", "denied"}}
-	var out bytes.Buffer
-	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(""), Out: &out, Err: &out, Poll: time.Millisecond}
-	err := shell.Run(context.Background(), e, `shell --minutes 30 --reason "kubelet"`)
-	assertCode(t, err, "ELEV_USED")
-}
-
-// Ctrl-C ends the wait (modelled here as the session's context being
-// done): the pending request is withdrawn, not left dangling.
-func TestShellWithdrawsOnCtrlC(t *testing.T) {
-	b := &sequenceBackend{states: []string{"pending"}}
-	var out bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: strings.NewReader(""), Out: &out, Err: &out, Poll: time.Millisecond}
-	if err := shell.Run(ctx, e, `shell --minutes 30 --reason "kubelet"`); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(out.String(), "withdrawn") {
-		t.Fatalf("%q", out.String())
-	}
-	if got := b.actions(); got[len(got)-1] != "elevation.withdraw" || b.calls[len(b.calls)-1].Args[0] != "E-7K2Q" {
-		t.Fatalf("%v", got)
 	}
 }
 
@@ -343,11 +303,11 @@ func TestCommandsDescribesTheConsoleSet(t *testing.T) {
 	if c := got["network allow-list reset"]; c.Confirm != "reset" || c.Args {
 		t.Fatalf("allow-list reset: %+v", c)
 	}
-	if c := got["keys add"]; !c.Stdin || len(c.Flags) != 1 || c.Flags[0] != "admin" {
-		t.Fatalf("keys add: %+v", c)
+	if c := got["keys list"]; c.Stdin || len(c.Flags) != 1 || c.Flags[0] != "admin" {
+		t.Fatalf("keys list: %+v", c)
 	}
-	if c := got["keys remove"]; !c.Args || c.Use != "remove <fingerprint>" {
-		t.Fatalf("keys remove: %+v", c)
+	if c := got["recovery-key add"]; !c.Stdin {
+		t.Fatalf("recovery-key add: %+v", c)
 	}
 	if c := got["backup"]; !c.Later {
 		t.Fatalf("backup: %+v", c)

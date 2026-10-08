@@ -330,6 +330,9 @@ type Continue struct {
 	Recovery   []*osadminv1.RecoveryKey
 	Max        int32
 	Admin      string
+	// SetupCode is the one-time code the :8443 setup page asks for, while
+	// no browser holds it.
+	SetupCode string
 	// Err is why setup couldn't complete.
 	Err string
 }
@@ -357,6 +360,9 @@ func ContinuePage(f Frame, c Continue) tui.Page {
 			}
 			b = append(b, tui.Line{{Text: lead}, {Text: "https://" + h + ":8443/", Style: tui.Bold}})
 		}
+	}
+	if c.SetupCode != "" {
+		b = append(b, tui.Line{{Text: "and type the setup code "}, {Text: c.SetupCode, Style: tui.Bold}})
 	}
 	if c.OsadminErr != nil {
 		b = append(b, tui.WrapStyled(tui.Alert, ":8443 isn't running: "+c.OsadminErr.Error(), width, "")...)

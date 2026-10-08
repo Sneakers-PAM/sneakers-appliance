@@ -20,13 +20,18 @@ type Session struct {
 
 // SessionFromSSH reads the session sshd describes in the environment
 // (accessapi.LoginFromSSH): the key that signed in and the client's
-// address.
+// address. A login with a box-issued certificate is named by the issued
+// key's own fingerprint, the one the access store keeps.
 func SessionFromSSH(getenv func(string) string, admin string) (Session, error) {
 	l, err := accessapi.LoginFromSSH(getenv)
 	s := Session{Admin: admin, Source: l.Source}
 	if err != nil {
 		return s, err
 	}
-	s.KeyFingerprint = ssh.FingerprintSHA256(l.Key)
+	key := l.Key
+	if c, ok := key.(*ssh.Certificate); ok {
+		key = c.Key
+	}
+	s.KeyFingerprint = ssh.FingerprintSHA256(key)
 	return s, nil
 }

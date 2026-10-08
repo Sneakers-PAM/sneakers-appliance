@@ -1,19 +1,19 @@
  Sneakers-PAM appliance  Menu                             sneakers.example.org
  ------------------------------------------------------------------------------
-   1  status                             13  tls show
-   2  network show                       14  backup
-   3  network set                        15  restore
-   4  network confirm                    16  upgrade
-   5  network allow-list reset           17  mcp
-   6  keys list                          18  resources
-   7  keys add                           19  reboot
-   8  keys remove                        20  poweroff
-   9  admins list                        21  Recover access
-  10  admins add                         22  Recent messages
-  11  admins remove                       c  Cancel the factory reset
-  12  recovery-key add
+   1  status                             11  restore
+   2  network show                       12  upgrade
+   3  network set                        13  mcp
+   4  network confirm                    14  resources
+   5  network allow-list reset           15  reboot
+   6  keys list                          16  poweroff
+   7  admins list                        17  Recover access
+   8  recovery-key add                   18  Recent messages
+   9  tls show                            c  Cancel the factory reset
+  10  backup
 
  "99" isn't on the menu.
+
+
 
 
 

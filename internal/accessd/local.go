@@ -69,11 +69,11 @@ func (h *accessH) ListAdmins(ctx context.Context, r *connect.Request[accessv1.Li
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
 	m := r.Msg
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceAddAdminProcedure, osadminv1connect.AccessServiceAddAdminProcedure, h.s.h.Access.AddAdmin,
-		&osadminv1.AddAdminRequest{Name: m.GetName(), Role: m.GetRole(), PublicKey: m.GetPublicKey()})
+		&osadminv1.AddAdminRequest{Name: m.GetName(), Role: m.GetRole(), RootOperator: m.GetRootOperator()})
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&accessv1.AddAdminResponse{Admin: out.GetAdmin()}), nil
+	return connect.NewResponse(&accessv1.AddAdminResponse{Admin: out.GetAdmin(), Invitation: out.GetInvitation()}), nil
 }
 
 func (h *accessH) RemoveAdmin(ctx context.Context, r *connect.Request[accessv1.RemoveAdminRequest]) (*connect.Response[accessv1.RemoveAdminResponse], error) {
@@ -120,22 +120,6 @@ func (h *accessH) ListKeys(ctx context.Context, r *connect.Request[accessv1.List
 		}
 	}
 	return nil, refuse(codes.New(codes.AccessName, "there is no admin named %q", name))
-}
-
-func (h *accessH) AddKey(ctx context.Context, r *connect.Request[accessv1.AddKeyRequest]) (*connect.Response[accessv1.AddKeyResponse], error) {
-	l, err := h.s.caller(ctx, r.Header(), accessv1connect.AccessServiceAddKeyProcedure)
-	if err != nil {
-		return nil, err
-	}
-	name, err := target(l, r.Msg.GetAdmin())
-	if err != nil {
-		return nil, err
-	}
-	out, err := runAs(ctx, h.s, l, osadminv1connect.AccessServiceAddKeyProcedure, h.s.h.Access.AddKey, &osadminv1.AddKeyRequest{Admin: name, PublicKey: r.Msg.GetPublicKey()})
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&accessv1.AddKeyResponse{Key: out.GetKey()}), nil
 }
 
 func (h *accessH) RemoveKey(ctx context.Context, r *connect.Request[accessv1.RemoveKeyRequest]) (*connect.Response[accessv1.RemoveKeyResponse], error) {

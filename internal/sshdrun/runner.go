@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package sshdrun is sneakers-sshd-run (spec 2, Section 3.3): it renders
-// sshd's files from the access store, has the pinned sshd -t check them,
+// sshd's config from the access store, has the pinned sshd -t check them,
 // swaps them in, and runs OpenSSH sshd on them. On a SIGHUP from accessd,
 // or when netd reports new management addresses, it renders and checks
 // again and tells sshd (SIGHUP) only after the check passed; a render sshd
@@ -13,7 +13,6 @@
 package sshdrun
 
 import (
-	"bufio"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -21,7 +20,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -30,25 +28,8 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
-)
-
-// Mode is which accounts sshd lets in.
-type Mode string
-
-// The modes.
-const (
-	// Admin is every admin into the closed shell, and maint; it refuses to
-	// start without an owner key (ACCESS_NO_ADMIN_KEY).
-	Admin Mode = "admin"
-	// Enrol is first-boot step 3: only the enrol account.
-	Enrol Mode = "enrol"
-	// Auto, the service entry's mode, is enrol until the store holds an
-	// owner key and admin after; once setup is done it never falls back
-	// to enrol.
-	Auto Mode = "auto"
 )
 
 // Daemon is the running sshd.
@@ -59,15 +40,10 @@ type Daemon interface {
 
 // Options wire a Runner.
 type Options struct {
-	Mode  Mode
 	Paths sshconfig.Paths
 	Port  uint16
-	// StateDir is /var/lib/sneakers: access/store.json,
-	// access/elevation.json, setup/done.
+	// StateDir is /var/lib/sneakers: access/store.json.
 	StateDir string
-	// AccountsDir is accessd's rendered passwd: the enrol account there
-	// means an enrolment window is open.
-	AccountsDir string
 	// Addresses are the management addresses sshd listens on (netd).
 	Addresses func(ctx context.Context) ([]netip.Addr, error)
 	// AddressWait is how often Prepare asks again while there's no
@@ -112,61 +88,25 @@ func (r *Runner) configFile() string { return filepath.Join(r.o.Paths.ConfigDir,
 // Reloads counts the reloads handled, for tests.
 func (r *Runner) Reloads() int64 { return r.reloads.Load() }
 
-func ownerKey(st access.State) bool {
-	for _, a := range st.Admins {
-		if a.Role == access.RoleOwner && len(a.Keys) > 0 {
+func signInAdmin(st access.State) bool {
+	for i := range st.Admins {
+		if st.Admins[i].HasCredentials() {
 			return true
 		}
 	}
 	return false
 }
 
-func (r *Runner) setupDone() bool {
-	_, err := os.Stat(filepath.Join(r.o.StateDir, "setup", "done"))
-	return err == nil
-}
-
-// enrolOpen reports whether accessd rendered the enrol account, which
-// exists only while an enrolment window is open.
-func (r *Runner) enrolOpen() bool {
-	f, err := os.Open(filepath.Join(r.o.AccountsDir, "passwd")) // #nosec G304 -- accessd's rendered passwd
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if strings.HasPrefix(sc.Text(), "enrol:") {
-			return true
-		}
-	}
-	return false
-}
-
-// Input is what the next render is made from: the store, the mode, the
-// addresses, an open enrolment window and the open elevation principals.
+// Input is what the next render is made from: the store and the
+// addresses. It refuses while no admin can sign in: sshd stays off until
+// the first admin exists.
 func (r *Runner) Input(ctx context.Context) (sshconfig.Input, error) {
 	st, err := access.ReadState(filepath.Join(r.o.StateDir, "access"))
 	if err != nil {
 		return sshconfig.Input{}, err
 	}
-	mode := sshconfig.EnrolMode
-	switch r.o.Mode {
-	case Admin:
-		if !ownerKey(st) {
-			return sshconfig.Input{}, codes.New(codes.AccessNoAdminKey, "admin mode needs an owner with a key in the access store")
-		}
-		mode = sshconfig.AdminMode
-	case Auto:
-		switch {
-		case ownerKey(st):
-			mode = sshconfig.AdminMode
-		case r.setupDone():
-			return sshconfig.Input{}, codes.New(codes.AccessNoAdminKey, "setup is done but no owner has a key; enrolment won't reopen")
-		}
-	case Enrol:
-	default:
-		return sshconfig.Input{}, fmt.Errorf("sshd-run: unknown mode %q", r.o.Mode)
+	if !signInAdmin(st) {
+		return sshconfig.Input{}, codes.New(codes.AccessNoAdmin, "no admin can sign in yet; sshd starts once the first admin exists")
 	}
 	addrs, err := r.o.Addresses(ctx)
 	if err != nil {
@@ -175,22 +115,16 @@ func (r *Runner) Input(ctx context.Context) (sshconfig.Input, error) {
 	if len(addrs) == 0 {
 		return sshconfig.Input{}, errors.New("sshd-run: no management address yet")
 	}
-	principals, err := elevation.ReadPrincipals(filepath.Join(r.o.StateDir, "access", "elevation.json"), r.o.Now())
-	if err != nil {
-		return sshconfig.Input{}, err
-	}
-	in := sshconfig.Input{ListenAddrs: addrs, Mode: mode, State: st, Principals: principals, Paths: r.o.Paths, Port: r.o.Port}
-	in.EnrolOpen = mode == sshconfig.AdminMode && r.enrolOpen()
-	return in, nil
+	return sshconfig.Input{ListenAddrs: addrs, State: st, Paths: r.o.Paths, Port: r.o.Port}, nil
 }
 
-// Prepare makes the first render: it refuses admin mode without an owner
-// key, waits for a management address, and installs the checked config.
+// Prepare makes the first render: it refuses while no admin can sign in,
+// waits for a management address, and installs the checked config.
 func (r *Runner) Prepare(ctx context.Context) error {
 	lg := r.o.Logger
 	for {
 		in, err := r.Input(ctx)
-		if codes.Is(err, codes.AccessNoAdminKey) {
+		if codes.Is(err, codes.AccessNoAdmin) {
 			lg.Error(err, "sshd-run: refusing to start")
 			return err
 		}
@@ -200,7 +134,7 @@ func (r *Runner) Prepare(ctx context.Context) error {
 				r.audit(err)
 				return err
 			}
-			lg.Info("sshd-run: config installed", log.F("mode", string(in.Mode)), log.F("listen", len(in.ListenAddrs)), log.F("enrolOpen", in.EnrolOpen))
+			lg.Info("sshd-run: config installed", log.F("listen", len(in.ListenAddrs)))
 			return nil
 		}
 		lg.Warn("sshd-run: not ready to render", log.F("error", err.Error()))
@@ -288,7 +222,7 @@ func (r *Runner) reload(ctx context.Context) {
 		return
 	}
 	r.loaded = h
-	lg.Info("sshd-run: sshd told to reload", log.F("mode", string(in.Mode)), log.F("listen", len(in.ListenAddrs)))
+	lg.Info("sshd-run: sshd told to reload", log.F("listen", len(in.ListenAddrs)))
 }
 
 func (r *Runner) audit(err error) {

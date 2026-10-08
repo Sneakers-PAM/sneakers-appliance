@@ -1,7 +1,9 @@
 # SSH and elevation
 
-SSH on the box is key-only. Every admin logs in with their own name into the closed shell; real
-shell access is a one-time elevation through a short-lived certificate for the `maint` account.
+SSH on the box takes only keys the box issued. Every admin logs in with their own name into the
+closed shell and gives a TOTP code first; a root shell is opened through a one-time challenge and a
+code from :8443. There are no SSH password logins, no admin-supplied login keys, no operator
+(client) certificates and no recovery codes in this release.
 
 ## sshd's configuration
 
@@ -10,77 +12,57 @@ check them with the pinned `sshd -t` and swap them into `/run/sneakers/ssh/` onl
 them (`sshconfig.Install`, under an flock on `/run/sneakers/ssh.lock`). A config that fails the check
 is never used, and the previous one stays.
 
-| File | Contents |
-|---|---|
-| `sshd_config` | the settings below |
-| `authorized_keys/<admin>` | each of the admin's keys, prefixed `restrict,pty`: no forwarding, no user rc, and a pty for the interactive shell |
-| `principals/maint` | the `elev-<id>` principal of each approved, unused elevation |
-
-The global settings:
-
-- `AuthenticationMethods publickey`; password, keyboard-interactive and empty-password logins are
-  off, and so is `PermitRootLogin`.
+- `AuthenticationMethods publickey`, `AuthorizedKeysFile none` and `TrustedUserCAKeys
+  /var/lib/sneakers/ssh/root_key.pub`: the only keys sshd takes are certificates the box's root key
+  signed for the admin's name ([access.md](access.md#issued-ssh-keys)). Password,
+  keyboard-interactive and empty-password logins are off, and so is `PermitRootLogin`.
+- `RevokedKeys /var/lib/sneakers/ssh/revoked.krl`: removed keys, as keys and as certificate serials.
 - `DisableForwarding yes`, `PermitTunnel no`, `PermitUserRC no`, `PermitUserEnvironment no`, and no
   `Subsystem` line, so there is no sftp or scp.
 - `ForceCommand /usr/bin/sneakers-shell` and `ExposeAuthInfo yes`, so the closed shell learns which
   key signed in.
-- `RevokedKeys /var/lib/sneakers/ssh/revoked.krl` for removed login keys and used elevation
-  certificates.
-- `AllowUsers` lists the admins and `maint` (and `enrol` while an enrolment window is open); in the
-  first-boot enrolment step it lists only `enrol`.
-- The algorithms are the modern set only: ed25519, ECDSA P-256 and P-384, the FIDO forms of ed25519
-  and P-256, RSA with SHA-2 signatures, and their certificate types; ML-KEM and sntrup761 hybrid key
-  exchange or curve25519; ChaCha20-Poly1305 and AES-GCM; encrypt-then-MAC SHA-2 MACs.
+- `AllowUsers` lists the admins who can sign in; with none, `DenyUsers *`.
+- The algorithms are the modern set only: ed25519, ECDSA P-256 and P-384, RSA with SHA-2 signatures,
+  and their certificate types; ML-KEM and sntrup761 hybrid key exchange or curve25519;
+  ChaCha20-Poly1305 and AES-GCM; encrypt-then-MAC SHA-2 MACs.
 
-`Match User maint` trusts the appliance's user CA only for that account, takes principals from
-`principals/maint`, forces `/usr/libexec/sneakers-elevated` and allows one session per connection.
-`Match User enrol`, rendered only during an enrolment window, accepts any key through
-`sneakers-enrol-keys` and forces `sneakers-enrol`, which then needs the code and the console's `yes`
-([The enrolment window](#the-enrolment-window)).
-
-The tests render every mode and run the pinned static sshd's `sshd -t` on each; the Static tools
-workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary it built.
+The tests run the pinned static sshd's `sshd -t` on the rendered config, and
+`TestRealSshdTakesOnlyTheRootKeysCertificates` logs in against it: a certificate from the root key
+works, a plain key or another CA's certificate doesn't, and a revoked serial is refused. The Static
+tools workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary it built.
 
 ## sneakers-sshd-run
 
-sshd runs under `sneakers-sshd-run --mode admin|enrol|auto --config-dir /run/sneakers/ssh`
-(`os/rootfs/services.d/sshd.yaml`: `--mode auto`, started on demand in first boot by the SSH key step,
-always in normal operation, after netd and accessd, restarted whenever it stops). It:
+sshd runs under `sneakers-sshd-run --config-dir /run/sneakers/ssh` (`os/rootfs/services.d/sshd.yaml`:
+in first boot accessd asks init to start it once the first admin exists, and at its own start when an
+admin can sign in; always in normal operation, after netd and accessd, restarted whenever it stops).
+It:
 
-1. reads the access store; `admin` without an owner holding a key exits with `ACCESS_NO_ADMIN_KEY`.
-   `auto` is enrol mode until an owner has a key and admin mode after; once
-   `/var/lib/sneakers/setup/done` exists it refuses rather than fall back to enrolment;
-2. waits until netd reports a management address, then renders (the `enrol` block too while
-   accessd's `passwd` holds the enrol account, and the open elevation principals from
-   `elevation.json`), checks with `sshd -t` and swaps the files in;
+1. reads the access store and exits with `ACCESS_NO_ADMIN` while no admin can sign in;
+2. waits until netd reports a management address, then renders, checks with `sshd -t` and swaps the
+   files in;
 3. writes its pid to `/run/sneakers/sshd.pid` and runs `sshd -D -e -f /run/sneakers/ssh/sshd_config`
-   as its child (sshd's own `PidFile` is `none`). It stays the parent instead of exec'ing sshd so that
-   every reload passes `sshd -t` first;
+   as its child (sshd's own `PidFile` is `none`), so every reload passes `sshd -t` first;
 4. on a `SIGHUP` (accessd sends one when `sshd_config` changed) or a new address list on netd's
    `Watch` stream, renders and checks again, and sends sshd a `SIGHUP` only when the check passed and
-   the installed config differs from the one sshd runs. A render sshd refuses is logged and written
-   to the OS audit log (`sshd.config`, outcome `refused`, the sshd error in the detail); sshd keeps
-   the config it has;
+   the config changed. A render sshd refuses is logged and audited (`sshd.config`, outcome
+   `refused`); sshd keeps the config it has;
 5. on `SIGTERM` stops sshd (`SIGTERM`, then `SIGKILL` after 10 seconds); when sshd exits on its own
    sshd-run exits with it and init restarts both.
 
-Flags: `--mode` (`auto`), `--config-dir`, `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`),
-`--sshd` (`/usr/sbin/sshd`), `--netd-socket` and `--pid-file` (`/run/sneakers/sshd.pid`).
-
-The unit tests run sshd-run against a fake sshd; `TestRealSshdStartsReloadsAndRefuses` runs it
-against the pinned static sshd (the Static tools workflow sets `SNEAKERS_TEST_SSHD`): sshd serves
-on the installed config, keeps serving across a reload, and a render `sshd -t` refuses never reaches
-it.
+Flags: `--config-dir`, `--state` (`/var/lib/sneakers`), `--sshd` (`/usr/sbin/sshd`), `--netd-socket`
+and `--pid-file` (`/run/sneakers/sshd.pid`).
 
 ## The closed shell
 
-`sneakers-shell` is every admin's login shell and sshd's `ForceCommand`. It offers only the appliance
-commands below, interactively (with `help`, line editing and tab completion) or one per connection
+`sneakers-shell` is every admin's login shell and sshd's `ForceCommand`. It first asks for a TOTP
+code (`SshLoginService.VerifyTotp`, under the same lockout as :8443 sign-in,
+[access.md](access.md#lockout-and-throttling)) and closes the connection when it is wrong or the
+account is locked; then it offers only the appliance commands below, interactively (with `help`, line editing and tab completion) or one per connection
 through the SSH command line:
 
 ```sh
 ssh alice@192.0.2.10 status -o json
-ssh alice@192.0.2.10 keys add < new.pub
 ```
 
 The shell splits the line itself; nothing is passed to `/bin/sh`, and the binary links nothing that
@@ -96,12 +78,11 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `status` | yes | yes | accessd |
 | `network show`, `network set key=value...`, `network confirm <token>` | yes | yes | accessd; `set` reverts in 120 s unless kept |
 | `network allow-list reset` | yes | no | accessd; typed `reset` |
-| `keys list`, `keys add`, `keys remove <fingerprint>` | yes | yes | accessd; `add` reads the key from standard input |
-| `admins list`, `admins add <name>`, `admins remove <name>` | yes | yes | accessd; owners only |
+| `keys list` | yes | yes | accessd; keys are issued on :8443 |
+| `admins list` | yes | yes | accessd; admins are managed on :8443 |
 | `recovery-key add` | yes | no | accessd |
 | `setup recovery-key` | no | yes | accessd; first boot only |
-| `login <code>` | no | yes | accessd: approves a :8443 sign-in |
-| `shell --minutes N --reason "..."`, `elevation status [<id>]`, `elevation cert <id>` | no | yes | accessd; see [One-time elevation](#one-time-elevation) |
+| `shell` | no | yes | accessd; root operators; see [The root shell](#the-root-shell) |
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `mcp ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
@@ -116,128 +97,23 @@ A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` an
 `NOT_AVAILABLE` ("the appliance services are unavailable"), and `status` shows the last status
 accessd kept, with the time it was taken.
 
-### Signing in to :8443
+## The root shell
 
-`login XXXX-XXXX` asks accessd (`LocalService.DescribeSignIn` on `/run/sneakers/access.sock`)
-which browser is waiting on the code and asks:
+A root operator ([access.md](access.md#roles-the-roster-and-step-up)) opens a root shell from the
+closed shell:
 
-```text
-Sign in the browser at 192.0.2.50 (Mozilla/5.0 ...) as alice? [y/N]
-```
+1. `shell` asks accessd (`ElevationService.BeginRootShell`) for a challenge: 16 Crockford characters,
+   shown with the time it is good until (the policy's minutes, 10 by default).
+2. On :8443, signed in with a fresh step-up, the admin types the challenge
+   (`RootShellService.IssueRootShellCode`) and gets an 8-character code: the first 40 bits of the root
+   key's ed25519 signature over the challenge, the admin, the SSH source and the expiry. It is bound
+   to that login and works once.
+3. The admin types the code into the SSH session (`OpenRootShell`). Three wrong codes close the
+   challenge, and they count toward the account's lockout. A right one gives a one-minute ticket.
+4. The shell connects to `/run/sneakers/rootshell.sock` with the ticket and the terminal size; accessd
+   starts `/usr/libexec/sneakers-elevated` as root with the connection as its terminal and relays
+   data and resizes. The session ends after the policy's minutes, after 10 minutes idle, when the SSH
+   client goes away, or when an owner ends it on the Sessions page.
 
-Only `y` or `yes` approves; anything else, including an empty line, doesn't. The browser's address
-and user agent are shown with control characters replaced and cut to 200 characters, so a crafted
-user agent can't rewrite the terminal. On `y` the shell calls `LocalService.ApproveSignIn` with the
-admin, the client's address (from `SSH_CONNECTION`) and the fingerprint of the key that signed in
-(from the `SSH_USER_AUTH` file sshd writes with `ExposeAuthInfo`). osadmin checks the caller's uid is
-that admin and the key is theirs, and audits the approval either way. A session whose key sshd didn't
-name can't approve a sign-in.
-
-## The enrolment window
-
-The first admin's keys (first-boot step 3), and more keys later through the console, come in over
-SSH while the console watches:
-
-1. The console opens a window for one admin (`EnrolmentService.OpenEnrolment`, root only). accessd
-   makes the SSH host keys if the box has none (`ssh_host_ed25519_key` and a 3072-bit
-   `ssh_host_rsa_key` in `/var/lib/sneakers/ssh/`, mode 0600) and returns their fingerprints and an
-   enrolment code, `XXXX-XXXX`. The `enrol` account (uid 103) now exists in the rendered passwd, and
-   sshd's `Match User enrol` block is rendered.
-2. The admin checks the host key fingerprint and runs `ssh enrol@<address>`. sshd's
-   `AuthorizedKeysCommand`, `sneakers-enrol-keys %f %k %t` (run as `sshkeys`), prints the offered
-   key back with `restrict` when its type is an accepted login key type and the fingerprint, key
-   and type agree, so any such key authenticates as `enrol`.
-3. `sneakers-enrol`, the forced command, asks for the code and sends it with the key sshd
-   authenticated (from `SSH_USER_AUTH`) and the client address. accessd lets the enrol uid make
-   only these calls. A wrong code says how many attempts are left; the third closes the window and
-   a new one opens with a new code on the console. Nothing the client types besides the code does
-   anything.
-4. The console shows the key (fingerprint, type, comment, address); typing `yes`
-   (`AcceptEnrolmentKey`) stores it as the admin's key, `via` `enrol`. `sneakers-enrol` waits for
-   that answer and prints "Key enrolled", or that the console refused it.
-5. The window closes when the console presses Done (`CloseEnrolment`), after 30 minutes without a
-   code, a key or an answer, or after three wrong codes. The `enrol` account and its sshd block go
-   away with it, so outside a window `ssh enrol@` is refused at authentication.
-
-A key can also reach the window from the console itself: typed, or fetched from an https URL
-(`OfferEnrolmentKey`, root only, `via` `typed` or `url`). It waits for the same typed `yes`, uses
-none of the code's attempts, and is stored with its `via`.
-
-The console's Recover access opens the window with `recovery` set (owners only). Each key it stores
-is `via` `console-recovery`, sets the admin's `approvalHoldUntil` 24 hours ahead (no elevation
-approvals until then), and is audited as `access.console-recovery` instead of `enrol.accept`.
-
-Every step is in the OS audit log (`enrol.open`, `enrol.code`, `enrol.submit`, `enrol.offer`,
-`enrol.accept` or `access.console-recovery`, `enrol.reject`, `enrol.close`).
-
-## One-time elevation
-
-A real root shell is a one-time elevation: a short-lived OpenSSH certificate for the `maint`
-account, signed by the box's own user CA after an owner approves.
-
-1. **Request.** `shell --minutes 30 --reason "investigate kubelet"` (15 to the policy's maximum,
-   240 by default; 0 or no `--minutes` takes the default of 60) records the admin, the key the
-   login signed in with, its SSH client address, the reason and the length, and prints a request id
-   such as `E-7K2Q`. The shell then waits and prints the certificate once it is approved; Ctrl-C
-   withdraws the request (audited, and it can't be approved afterwards), and so does closing the
-   connection while it waits. A request nobody approves expires after 30 minutes (`ELEV_EXPIRED`).
-2. **Approve.** An owner approves on the Shell elevation page (`ApproveElevation`, with a step-up)
-   or on the console, optionally shortening it (never lengthening it, `ELEV_MINUTES`), or denies it.
-   - With two or more owners, nobody approves their own request (`ELEV_SELF_APPROVAL`).
-   - With one owner, that owner may, and the request is flagged `self_approved`: in the audit entry,
-     on the page and on Status (`WARNING_KIND_SELF_APPROVED_ELEVATION`) while it is approved or
-     active. Turning `selfApprovalWhenSingleOwner` off in the elevation policy refuses it too.
-   - An owner whose key came through the console's Recover access can't approve for 24 hours
-     (`ELEV_HOLD`).
-   - Admins (not owners) can't approve (`ACCESS_FORBIDDEN`).
-3. **Certificate.** On approval accessd signs a user certificate for the requester's own key:
-   principal `elev-<id>`, key id `elev-<id> admin=<name> fp=<fingerprint>`, the next serial, valid
-   from now for 10 minutes (the window to connect, not the session's length), critical options
-   `force-command=/usr/libexec/sneakers-elevated` and `source-address=<the request's address>`,
-   and the one extension `permit-pty`. `elev-<id>` joins `principals/maint`.
-4. **Fetch.** The waiting `shell` prints it, or `elevation cert E-7K2Q > ~/.ssh/id_ed25519-cert.pub`
-   does. Only the requester gets it.
-5. **Connect.** `ssh -i ~/.ssh/id_ed25519 maint@192.0.2.10`, from the address the request came
-   from, within the 10 minutes.
-6. **Single use.** Before it gives a prompt, `sneakers-elevated` has accessd use the certificate
-   up (`BeginElevatedSession`): the request goes active, `elev-<id>` leaves `principals/maint` and
-   the serial joins `revoked.krl`, so a second connection with the same certificate fails at
-   authentication. If accessd can't be reached, no shell starts.
-7. **Session.** `sneakers-elevated` runs `/bin/sh -l` (static busybox) as root on a pty it owns,
-   records both directions to `os-audit/sessions/<id>.cast` with the chunk hashes in the OS audit
-   log ([os-audit.md](os-audit.md#session-recordings)), shows the minutes left in the prompt, warns
-   at 5 and 1 minutes, and ends the shell's whole process group at the approved length. An owner
-   can terminate it from the page or the console (`TerminateElevation`): accessd sends
-   `sneakers-elevated` a `SIGTERM`, after checking the pid is still one. Terminating an approved
-   certificate nobody has used yet revokes it.
-8. **End.** `sneakers-elevated` reports how the session ended (`exit`, `time-box` or
-   `terminated`) and the SHA-256 of the whole recording. Owners read the recording on the page
-   (`GetElevationRecording`), checked against the logged chunk hashes.
-
-While a session is active, the automatic update window waits for it to end, and an owner's Apply or
-Revert on the Updates page is refused with `UPGRADE_ELEVATED`, naming the admin and the request:
-the session ends, or an owner terminates it, before the box goes down. An owner can also end it
-from the refusal with the typed override ([upgrades.md](upgrades.md)), which terminates the
-session, audited with the reason, and applies once its end is reported. While an update is being
-applied or reverted (from the moment the apply starts until the box reboots, at most 15 minutes if
-the reboot never comes; a failed apply ends it at once), a new request, an approval and the first
-connection with an approved certificate are refused with `ELEV_MAINTENANCE`.
-
-### The user CA, the serials and the revocation list
-
-| File in `/var/lib/sneakers/ssh/` | Contents |
-|---|---|
-| `user_ca.pub` | the ed25519 user CA's public key; sshd trusts it for `maint` only. The private key isn't kept here: it's the sealed item `ssh-user-ca` (below) |
-| `serial` | the last certificate serial issued, written before each certificate is signed |
-| `revoked.krl` | an OpenSSH key revocation list of every serial used, expired or revoked and every removed login key not un-revoked ([access.md](access.md#removed-keys-are-revoked)), rewritten on each change; sshd reads it as `RevokedKeys` |
-| `/var/lib/sneakers/access/elevation.json` | the requests and what became of them: the history the page shows |
-
-The CA signs only elevation certificates, in process (`golang.org/x/crypto/ssh`), and is trusted
-only in the `maint` block. It never signs host or login certificates.
-
-**Sealed CA:** accessd makes the CA at its first start and seals the private key through init's
-`KeyCustody.Seal("ssh-user-ca")`, so in TPM mode a copied state volume doesn't yield it; every start
-unseals it. A box set up before this kept the CA as a plain `user_ca` key file (0600, root); accessd
-seals that same key, checks the sealed copy reads back, then overwrites and removes the file, so the
-CA (and the certificates it signed) stays the same. If the seal fails the file is left and accessd
-doesn't start.
+Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
+Removing an admin's key ends a root shell it opened.

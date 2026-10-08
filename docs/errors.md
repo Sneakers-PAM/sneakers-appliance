@@ -6,7 +6,7 @@ shares with `Image.Stage`; 2xxx are boot.
 
 ## First boot and access (3xxx)
 
-30xx are the access store, 31xx SSH enrolment, 32xx the :8443 sign-in, 33xx elevation, 34xx the
+30xx are the access store, 31xx SSH login, 32xx the :8443 sign-in, 33xx elevation, 34xx the
 network, 35xx the setup steps, 36xx the factory reset and power, and 37xx the closed shell. The
 shell, the console and :8443 show the same sentence.
 
@@ -16,28 +16,28 @@ shell, the console and :8443 show the same sentence.
 | 3002 | `ACCESS_KEY_WEAK` | the key is DSA or RSA shorter than 3072 bits |
 | 3003 | `ACCESS_KEY_DUPLICATE` | the key is already a login key of an admin or a recovery key |
 | 3004 | `ACCESS_NAME` | the admin name doesn't match `^[a-z][a-z0-9_-]{1,30}$`, is reserved, or is taken |
-| 3005 | `ACCESS_LAST_KEY` | the change would leave no owner with a key |
 | 3006 | `ACCESS_LAST_OWNER` | the change would leave no owner |
 | 3007 | `ACCESS_LAST_RECOVERY_KEY` | the last recovery key can't be removed; add its replacement first |
 | 3008 | `ACCESS_RECOVERY_KEY_LIMIT` | three recovery keys are already set |
 | 3009 | `ACCESS_FORBIDDEN` | the role or the origin doesn't allow it |
 | 3010 | `ACCESS_STEPUP_REQUIRED` | a sign-in no older than 5 minutes is needed |
-| 3011 | `ACCESS_NO_ADMIN_KEY` | sshd or osadmin was asked to start in admin mode with no owner key |
 | 3012 | `ACCESS_STORE_INVALID` | the access store doesn't parse |
 | 3013 | `ACCESS_SESSION` | no :8443 session: signed out, idle for 15 minutes, past 8 hours, or its key or admin was removed |
 | 3014 | `ACCESS_CONFIRM` | the typed confirmation (the host name) doesn't match |
 | 3015 | `ACCESS_KEY_REVOKED` | the key was removed and is on the revocation list; an owner un-revokes it first |
-| 3101 | `ENROL_CODE` | wrong enrolment code (the attempts left are shown) |
-| 3102 | `ENROL_CLOSED` | the enrolment window is closed |
-| 3103 | `ENROL_UNKNOWN` | no key with that id is waiting in the enrolment window |
-| 3201 | `LOGIN_CODE` | unknown, used or expired sign-in code |
-| 3301 | `ELEV_SELF_APPROVAL` | with two or more owners, nobody approves their own request |
-| 3302 | `ELEV_HOLD` | the approver is under the 24-hour console-recovery hold |
+| 3016 | `ACCESS_PASSWORD` | the password is shorter than 12 characters, on the breached-password list, or the admin's name |
+| 3017 | `ACCESS_CREDENTIALS` | the name, password or TOTP code is wrong, or the TOTP code was used already |
+| 3018 | `ACCESS_LOCKED` | the account is locked after 3 failures in 15 minutes, for 15 minutes or until an owner unlocks it |
+| 3019 | `ACCESS_THROTTLED` | this source failed too often; it may try again after the time given |
+| 3020 | `ACCESS_NO_ADMIN` | sshd was asked to start while no admin has a password and a TOTP secret |
+| 3021 | `ACCESS_POLICY` | an access setting is out of its bounds |
+| 3022 | `ACCESS_QUORUM` | the root-operator roster would be empty, name someone who isn't an admin, or have a threshold out of range |
 | 3303 | `ELEV_EXPIRED` | the request or certificate expired |
 | 3304 | `ELEV_USED` | the certificate was already used |
 | 3305 | `ELEV_MAINTENANCE` | an upgrade is in progress |
-| 3306 | `ELEV_MINUTES` | the length is outside 15 minutes to the policy's maximum, or an approval would lengthen the request |
 | 3307 | `ELEV_UNKNOWN` | no elevation request or certificate has that id |
+| 3308 | `ROOT_CHALLENGE` | the root-shell challenge is unknown, expired, closed or someone else's |
+| 3309 | `ROOT_CODE` | the code doesn't match the challenge |
 | 3401 | `NET_INVALID` | a setting fails validation (the error names the field) |
 | 3402 | `NET_NO_ADDRESS` | the management interface has no usable address |
 | 3403 | `NET_DHCP_TIMEOUT` | no DHCP server answered in time |
@@ -46,6 +46,7 @@ shell, the console and :8443 show the same sentence.
 | 3406 | `NET_NTP` | no NTP server gave a usable time |
 | 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
 | 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
+| 3502 | `SETUP_CODE` | a wrong, used or expired one-time code (setup, invitation or Recover access) |
 | 3601 | `RESET_UNAVAILABLE` | no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress |
 | 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
 | 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |

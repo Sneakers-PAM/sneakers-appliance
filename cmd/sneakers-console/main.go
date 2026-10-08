@@ -20,7 +20,6 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/dashboard"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/enrolment"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -38,28 +37,18 @@ func main() {
 	b := sources.Dial()
 	u := newUI()
 	d := dashboard.Deps{
-		Chrome:   consoleui.Chrome{Version: release.Version, Phase: "normal"},
-		Custody:  b.Custody.Read,
-		Status:   b.Status.Read,
-		Network:  b.Network,
-		HostKeys: func() []sources.HostKey { return sources.HostKeys(b.SSHDir) },
-		Slot:     dashboard.Slot(os.Getenv(switchroot.SourceEnv)),
-		Upgrades: b.Upgrades,
-		Platform: b.Platform,
-		Shell:    b.Shell,
-		Access:   b.Access,
-		Local:    b.Local,
-		Enrol: enrolment.Deps{
-			Window: b.Window, Fetch: b.FetchKeys,
-			Addresses: func(ctx context.Context) ([]string, error) { a, err := b.Network.Status(ctx); return a.Management, err },
-			SSH: func(ctx context.Context) error {
-				up, err := b.Services.Running(ctx, "sshd")
-				if err == nil && !up {
-					err = errors.New("the SSH service isn't running")
-				}
-				return err
-			},
-		},
+		Chrome:       consoleui.Chrome{Version: release.Version, Phase: "normal"},
+		Custody:      b.Custody.Read,
+		Status:       b.Status.Read,
+		Network:      b.Network,
+		HostKeys:     func() []sources.HostKey { return sources.HostKeys(b.SSHDir) },
+		Slot:         dashboard.Slot(os.Getenv(switchroot.SourceEnv)),
+		Upgrades:     b.Upgrades,
+		Platform:     b.Platform,
+		Shell:        b.Shell,
+		Access:       b.Access,
+		Local:        b.Local,
+		Setup:        b.Setup,
 		MessagesFile: messagesFile,
 		Logger:       lg,
 	}

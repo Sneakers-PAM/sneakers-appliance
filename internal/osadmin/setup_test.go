@@ -18,6 +18,16 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 )
 
+// acknowledge marks the network and protection steps seen.
+func acknowledge(t *testing.T, su osadminv1connect.SetupServiceClient) {
+	t.Helper()
+	for _, s := range []osadminv1.SetupStepKind{osadminv1.SetupStepKind_SETUP_STEP_KIND_NETWORK, osadminv1.SetupStepKind_SETUP_STEP_KIND_PROTECTION} {
+		if _, err := su.AcknowledgeStep(context.Background(), connect.NewRequest(&osadminv1.AcknowledgeStepRequest{Step: s})); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestSetupFlow(t *testing.T) {
 	b := newBox(t, false)
 	alice := b.browser()
@@ -62,6 +72,7 @@ func TestSetupFlow(t *testing.T) {
 	if e := lastEntry(t, b.log, "setup.escrow.download"); e.Outcome != "ok" {
 		t.Fatal("download audited")
 	}
+	acknowledge(t, su)
 
 	_, err = su.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "single-admin")
@@ -109,6 +120,7 @@ func TestTwoAdminsNeedNoSingleAdminWarning(t *testing.T) {
 	if _, err := su.AddRecoveryKey(ctx, connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: newKey(t).line})); err != nil {
 		t.Fatal(err)
 	}
+	acknowledge(t, su)
 	if _, err := su.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{})); err != nil {
 		t.Fatal(err)
 	}
@@ -142,6 +154,14 @@ func TestFinishNeedsAFirstSignIn(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	for _, s := range []osadminv1.SetupStepKind{osadminv1.SetupStepKind_SETUP_STEP_KIND_NETWORK, osadminv1.SetupStepKind_SETUP_STEP_KIND_PROTECTION} {
+		if err := local(osadminv1connect.SetupServiceAcknowledgeStepProcedure, func(ctx context.Context) error {
+			_, err := h.Setup.AcknowledgeStep(ctx, connect.NewRequest(&osadminv1.AcknowledgeStepRequest{Step: s}))
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	finish := func() error {
 		return local(osadminv1connect.SetupServiceFinishProcedure, func(ctx context.Context) error {
 			_, err := h.Setup.Finish(ctx, connect.NewRequest(&osadminv1.FinishRequest{}))
@@ -161,7 +181,7 @@ func TestFinishNeedsAFirstSignIn(t *testing.T) {
 	}
 	err := finish()
 	symbolIn(t, err, connect.CodeFailedPrecondition, "SETUP_INCOMPLETE")
-	if !strings.Contains(err.Error(), "sign-in") || signedIn() {
+	if !strings.Contains(err.Error(), "sign in once") || signedIn() {
 		t.Fatalf("%v", err)
 	}
 	b.browser().signIn("alice")

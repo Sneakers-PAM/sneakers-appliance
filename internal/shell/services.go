@@ -12,25 +12,25 @@ import (
 
 	"connectrpc.com/connect"
 
+	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
-	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 )
 
-// Services is the shell's backend on the box. The access commands and the
-// sign-in approval go to accessd on access.sock, which knows the login by
-// its uid; reboot and poweroff go to init's PowerService on power.sock,
+// Services is the shell's backend on the box. The TOTP check, the access
+// commands and the root shell go to accessd on access.sock, which knows
+// the login by its uid; reboot and poweroff go to init's PowerService on power.sock,
 // always graceful (init checks it's the shell asking); the commands of
 // later specs answer "Not available in this release". While accessd is
 // down its commands say the appliance services are unavailable, and
 // status shows the last status accessd kept.
 type Services struct {
 	Session Session
-	// SessionErr is why Session couldn't be read; a sign-in approval needs
-	// the session's key, so it's refused.
+	// SessionErr is why Session couldn't be read; the TOTP check needs the
+	// session's key, so the login is refused.
 	SessionErr error
 	Local      osadminv1connect.LocalServiceClient
 	Power      initv1connect.PowerServiceClient
@@ -40,6 +40,7 @@ type Services struct {
 	Network   accessv1connect.NetworkServiceClient
 	Setup     accessv1connect.SetupServiceClient
 	Elevation accessv1connect.ElevationServiceClient
+	SSHLogin  accessv1connect.SshLoginServiceClient
 	// StatusFile is accessd's status cache (accessapi.StatusFile).
 	StatusFile string
 }
@@ -53,10 +54,6 @@ const maxShown = 200
 // Call carries out r.
 func (s *Services) Call(ctx context.Context, r Request) (Result, error) {
 	switch {
-	case r.Action == "login.lookup":
-		return s.lookup(ctx, r.Args[0])
-	case r.Action == "login.approve":
-		return s.approve(ctx, r.Args[0])
 	case (r.Action == "power.reboot" || r.Action == "power.off") && s.Power != nil:
 		return s.power(ctx, r.Action)
 	case laterAction(r.Action):
@@ -68,29 +65,27 @@ func (s *Services) Call(ctx context.Context, r Request) (Result, error) {
 	return Result{}, ErrUnavailable
 }
 
-func (s *Services) lookup(ctx context.Context, code string) (Result, error) {
+// VerifyTotp is the login's first act: the admin's TOTP code, checked by
+// accessd under the lockout. It returns the login's id for the audit log.
+func (s *Services) VerifyTotp(ctx context.Context, code string) (string, error) {
 	if s.SessionErr != nil || s.Session.KeyFingerprint == "" {
-		return Result{}, codes.New(codes.AccessForbidden, "this login can't approve a sign-in: sshd didn't say which key signed in")
+		return "", codes.New(codes.AccessForbidden, "this login can't be checked: sshd didn't say which key signed in")
 	}
-	if s.Local == nil {
-		return Result{}, ErrUnavailable
+	if s.SSHLogin == nil {
+		return "", ErrUnavailable
 	}
-	resp, err := s.Local.DescribeSignIn(ctx, connect.NewRequest(&osadminv1.DescribeSignInRequest{Code: code}))
+	out, err := s.SSHLogin.VerifyTotp(ctx, connect.NewRequest(&accessv1.VerifyTotpRequest{TotpCode: code}))
 	if err != nil {
-		return Result{}, fromAccessd(err)
+		return "", fromAccessd(err)
 	}
-	m := resp.Msg
-	return Result{Text: fmt.Sprintf("Sign in the browser at %s (%s) as %s?", Printable(m.GetSourceAddress()), Printable(m.GetUserAgent()), s.Session.Admin)}, nil
+	return out.Msg.GetLoginId(), nil
 }
 
-func (s *Services) approve(ctx context.Context, code string) (Result, error) {
-	_, err := s.Local.ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{
-		Code: code, Admin: s.Session.Admin, KeyFingerprint: s.Session.KeyFingerprint, SourceAddress: s.Session.Source,
-	}))
-	if err != nil {
-		return Result{}, fromAccessd(err)
+// EndLogin records the login's end.
+func (s *Services) EndLogin(ctx context.Context, id string) {
+	if s.SSHLogin != nil && id != "" {
+		_, _ = s.SSHLogin.EndSshLogin(ctx, connect.NewRequest(&accessv1.EndSshLoginRequest{LoginId: id}))
 	}
-	return Result{Text: "Signed in. The browser continues on its own.", Data: map[string]string{"signedIn": s.Session.Admin}}, nil
 }
 
 func (s *Services) power(ctx context.Context, action string) (Result, error) {

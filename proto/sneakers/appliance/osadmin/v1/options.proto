@@ -14,11 +14,13 @@ import "google/protobuf/descriptor.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
-// Role is an appliance admin's role.
+// Role is an appliance admin's role. Root operators are not a third role
+// but a roster any admin may be on (Admin.root_operator): they may open the
+// root shell, and they approve a factory reset.
 enum Role {
   ROLE_UNSPECIFIED = 0;
-  // ROLE_ADMIN can use every page except managing other admins and
-  // approving elevations.
+  // ROLE_ADMIN can use every page except managing other admins and the
+  // box's access settings.
   ROLE_ADMIN = 1;
   // ROLE_OWNER can do everything.
   ROLE_OWNER = 2;
@@ -26,16 +28,23 @@ enum Role {
 
 // Rule guards one method.
 message Rule {
-  // public methods need no session (the sign-in methods only).
+  // public methods need no session (the sign-in methods and redeeming a
+  // one-time code only).
   bool public = 1;
   // role is the least role that may call the method.
   Role role = 2;
-  // step_up: the session's sign-in must be no older than 5 minutes
+  // step_up: the session's sign-in or its last step-up (a fresh TOTP code,
+  // SignInService.StepUp) must be no older than 5 minutes
   // (ACCESS_STEPUP_REQUIRED).
   bool step_up = 3;
   // audit is the OS audit action written for every call, allowed or
   // refused. Empty for reads.
   string audit = 4;
+  // code_session: the method also takes the session a redeemed one-time
+  // code gives (the first-boot setup code, an admin's invitation or the
+  // console's Recover access code), before that admin can sign in. When
+  // role is also set, a signed-in admin of that role may call it too.
+  bool code_session = 5;
 }
 
 extend google.protobuf.MethodOptions {

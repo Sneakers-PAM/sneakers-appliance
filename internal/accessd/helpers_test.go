@@ -30,14 +30,19 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 )
 
 type sshKey struct{ line, fp string }
+
+// testPassword is every test admin's password.
+const testPassword = "correct horse battery staple"
 
 func newKey(t *testing.T) sshKey {
 	t.Helper()
@@ -103,8 +108,13 @@ type box struct {
 	d     *accessd.Server
 	keys  map[string]sshKey
 	uids  map[string]uint32
+	totp  map[string][]byte
 	elev  *elevation.Service
-	enrol *enrol.Service
+	root  *rootkey.Key
+	book  *lockout.Book
+	clk   *clock.Fake
+	// pwHash is every admin's password, testPassword.
+	pwHash string
 
 	sigMu   sync.Mutex
 	signals []int
@@ -118,7 +128,7 @@ func (b *box) signalled() []int {
 
 func newBox(t *testing.T) *box {
 	t.Helper()
-	b := &box{t: t, state: t.TempDir(), run: t.TempDir(), keys: map[string]sshKey{}, uids: map[string]uint32{}}
+	b := &box{t: t, state: t.TempDir(), run: t.TempDir(), keys: map[string]sshKey{}, uids: map[string]uint32{}, totp: map[string][]byte{}, clk: clock.NewFake()}
 	b.netd = &fakeNetd{
 		settings: &netdv1.Settings{AllowList: []string{"198.51.100.0/24"}},
 		mgmt:     []string{"192.0.2.10/24", "fe80::1/64", "2001:db8::10/64"},
@@ -143,8 +153,20 @@ func newBox(t *testing.T) *box {
 			d.Rerender()
 		}
 	}
+	b.root, err = rootkey.Load(newMemSealer(), filepath.Join(b.state, "ssh"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.pwHash, err = credentials.HashPassword(b.root.Pepper(), testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.book, err = lockout.Open(filepath.Join(b.state, "access", "lockout.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	b.elev, err = elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"), Sealer: newMemSealer(),
+		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"), RootKey: b.root,
 		Audit: b.log, OnChange: rerender,
 		Signal: func(pid int) error {
 			b.sigMu.Lock()
@@ -169,16 +191,16 @@ func newBox(t *testing.T) *box {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.enrol = enrol.New(enrol.Options{Store: b.store, Audit: b.log, OnChange: rerender})
-	b.d.SetEnrolment(b.enrol)
 	b.api = osadmin.New(osadmin.Options{
-		Access: b.store, Audit: b.log, Clock: clock.Real{},
+		Access: b.store, Audit: b.log, Clock: b.clk,
 		KeyCustody: initv1connect.NewKeyCustodyServiceClient(hc, daemons.URL),
 		Image:      initv1connect.NewImageServiceClient(hc, daemons.URL),
 		Power:      initv1connect.NewPowerServiceClient(hc, daemons.URL),
 		Network:    netd,
 		Paths:      osadmin.Paths{State: b.state},
 		Elevation:  b.elev,
+		RootKey:    b.root, Lockout: b.book,
+		OnConsoleChange: b.d.ConsoleChanged,
 	})
 	b.d.Attach(b.store, b.api)
 	b.addAdmin("alice", access.RoleOwner)
@@ -193,15 +215,35 @@ func (b *box) addAdmin(name string, role access.Role) {
 	if err != nil {
 		b.t.Fatal(err)
 	}
+	secret, err := credentials.NewTOTPSecret()
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	sealed, err := credentials.SealTOTP(b.root.Pepper(), name, secret)
+	if err != nil {
+		b.t.Fatal(err)
+	}
 	if err := b.store.Update(func(st *access.State) error {
-		a := st.AddAdmin(name, role, "console", time.Now())
-		a.Keys = append(a.Keys, access.AdminKey{Key: pk, Added: time.Now(), AddedBy: "console", Via: access.ViaEnrol})
+		a := st.AddAdmin(name, role, "setup", time.Now())
+		a.Keys = append(a.Keys, access.AdminKey{Key: pk, Added: time.Now(), AddedBy: name, Via: access.ViaIssued, Serial: st.NextSerial})
+		st.NextSerial++
+		a.Password = &access.Password{Hash: b.pwHash, Changed: time.Now()}
+		a.TOTP = &access.TOTP{Sealed: sealed, Added: time.Now()}
 		b.uids[name] = uint32(a.UID) // #nosec G115 -- admin uids start at 20000
 		return nil
 	}); err != nil {
 		b.t.Fatal(err)
 	}
-	b.keys[name] = k
+	b.keys[name], b.totp[name] = k, secret
+}
+
+// code is name's TOTP code for a step not used yet: the clock moves on a
+// step when this one's code was taken.
+func (b *box) code(name string) string {
+	for b.book.LastStep(name) >= credentials.Step(b.clk.Now()) {
+		b.clk.Advance(credentials.Period)
+	}
+	return credentials.TOTP(b.totp[name], b.clk.Now())
 }
 
 // as is an HTTP client whose requests reach accessd from uid.

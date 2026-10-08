@@ -6,10 +6,10 @@ package accessd_test
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -80,10 +80,8 @@ func TestAnAdminUIDActsAsThatAdmin(t *testing.T) {
 	if a, ok := st.Admin("carol"); !ok || a.CreatedBy != "alice" {
 		t.Fatalf("%+v %v", a, ok)
 	}
-	k := newKey(t)
-	added, err := bob.AddKey(ctx, connect.NewRequest(&accessv1.AddKeyRequest{PublicKey: k.line}))
-	if err != nil || added.Msg.GetKey().GetVia() != "shell" {
-		t.Fatalf("%v %v", added, err)
+	if a, _ := st.Admin("carol"); a.Invite == nil {
+		t.Fatal("carol has no invitation")
 	}
 }
 
@@ -166,45 +164,77 @@ func TestAnOsadminCallWithoutASessionIsRefused(t *testing.T) {
 }
 
 // The whole :8443 sign-in through accessd: the browser's address is the
-// one sneakers-osadmin forwards, the shell approves as itself, and the
-// session's role is checked in accessd.
+// one sneakers-osadmin forwards, and the session's role is checked in
+// accessd.
 func TestAnOsadminCallWithASession(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
-	hc, url := b.osadmin()
-	si := osadminv1connect.NewSignInServiceClient(hc, url)
-	begin := connect.NewRequest(&osadminv1.BeginSignInRequest{})
-	begin.Header().Set(accessapi.ClientHeader, "203.0.113.9")
-	code, err := si.BeginSignIn(ctx, begin)
-	if err != nil || code.Msg.GetSourceAddress() != "203.0.113.9" {
-		t.Fatalf("%v %v", code, err)
+	cookie, csrf := b.signIn("bob")
+	if e := lastEntry(t, b.log, "signin.password"); e.Source != "203.0.113.9" || e.Outcome != "ok" {
+		t.Fatalf("audit %+v", e)
 	}
-	shc, surl := b.as(b.uids["bob"])
-	local := osadminv1connect.NewLocalServiceClient(shc, surl)
-	if _, err := local.ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{Code: code.Msg.GetCode(), Admin: "alice", KeyFingerprint: b.keys["alice"].fp})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("bob's login approved as alice: %v", err)
-	}
-	if _, err := local.ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{Code: code.Msg.GetCode(), Admin: "bob", KeyFingerprint: b.keys["bob"].fp})); err != nil {
+	if _, err := b.osadminAccess().ListAdmins(ctx, withSession(connect.NewRequest(&osadminv1.ListAdminsRequest{}), cookie, csrf)); err != nil {
 		t.Fatal(err)
 	}
-	poll, err := si.PollSignIn(ctx, connect.NewRequest(&osadminv1.PollSignInRequest{PollToken: code.Msg.GetPollToken()}))
-	if err != nil || poll.Msg.GetState() != osadminv1.SignInState_SIGN_IN_STATE_APPROVED {
-		t.Fatalf("%v %v", poll, err)
+	_, err := b.osadminAccess().AddAdmin(ctx, withSession(connect.NewRequest(&osadminv1.AddAdminRequest{Name: "carol", Role: osadminv1.Role_ROLE_ADMIN}), cookie, csrf))
+	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+}
+
+// The closed shell's TOTP check over access.sock: the issued key sshd
+// named, a fresh code, under the lockout.
+func TestTheClosedShellsTOTPCheck(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	hc, url := b.as(b.uids["bob"])
+	login := accessv1connect.NewSshLoginServiceClient(hc, url, connect.WithInterceptors(keyHeader(b.keys["bob"].fp)))
+	if _, err := login.VerifyTotp(ctx, connect.NewRequest(&accessv1.VerifyTotpRequest{TotpCode: "000000"})); err == nil || !strings.Contains(err.Error(), "ACCESS_CREDENTIALS") {
+		t.Fatalf("a wrong code: %v", err)
 	}
-	cookie := poll.Header().Get("Set-Cookie")
-	r, err := http.ParseSetCookie(cookie)
+	out, err := login.VerifyTotp(ctx, connect.NewRequest(&accessv1.VerifyTotpRequest{TotpCode: b.code("bob")}))
+	if err != nil || out.Msg.GetAdmin() != "bob" || out.Msg.GetLoginId() == "" {
+		t.Fatalf("%v %v", out, err)
+	}
+	if _, err := login.EndSshLogin(ctx, connect.NewRequest(&accessv1.EndSshLoginRequest{LoginId: out.Msg.GetLoginId()})); err != nil {
+		t.Fatal(err)
+	}
+	if e := lastEntry(t, b.log, "ssh.logout"); e.Actor != "bob" || e.Target != out.Msg.GetLoginId() {
+		t.Fatalf("audit %+v", e)
+	}
+	other := accessv1connect.NewSshLoginServiceClient(hc, url, connect.WithInterceptors(keyHeader(b.keys["alice"].fp)))
+	if _, err := other.VerifyTotp(ctx, connect.NewRequest(&accessv1.VerifyTotpRequest{TotpCode: b.code("bob")})); err == nil {
+		t.Fatal("bob's login passed with alice's key")
+	}
+	_, err = accessv1connect.NewSshLoginServiceClient(b.console()).VerifyTotp(ctx, connect.NewRequest(&accessv1.VerifyTotpRequest{TotpCode: "123456"}))
+	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+}
+
+// The console reads its info and is woken by every change.
+func TestTheConsoleInfoStream(t *testing.T) {
+	b := newBox(t)
+	hc, url := b.console()
+	su := accessv1connect.NewSetupServiceClient(hc, url)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	got, err := su.GetConsoleInfo(ctx, connect.NewRequest(&accessv1.GetConsoleInfoRequest{}))
+	if err != nil || got.Msg.GetConsoleInfo().GetUrl() != "https://192.0.2.10:8443" || got.Msg.GetConsoleInfo().GetFqdn() != "box1.sneakers.example.org" {
+		t.Fatalf("%v %v", got, err)
+	}
+	stream, err := su.WatchConsoleInfo(ctx, connect.NewRequest(&accessv1.WatchConsoleInfoRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	list := connect.NewRequest(&osadminv1.ListAdminsRequest{})
-	list.Header().Set("Cookie", r.Name+"="+r.Value)
-	if _, err := b.osadminAccess().ListAdmins(ctx, list); err != nil {
+	if !stream.Receive() || stream.Msg().GetConsoleInfo().GetRecover() != nil {
+		t.Fatalf("first send: %v", stream.Err())
+	}
+	rec, err := su.BeginRecoverAccess(ctx, connect.NewRequest(&accessv1.BeginRecoverAccessRequest{}))
+	if err != nil {
 		t.Fatal(err)
 	}
-	add := connect.NewRequest(&osadminv1.AddAdminRequest{Name: "carol", Role: osadminv1.Role_ROLE_ADMIN})
-	add.Header().Set("Cookie", r.Name+"="+r.Value)
-	add.Header().Set(osadmin.CSRFHeader, poll.Msg.GetSession().GetCsrfToken())
-	_, err = b.osadminAccess().AddAdmin(ctx, add)
+	if !stream.Receive() || stream.Msg().GetConsoleInfo().GetRecover().GetCode() != rec.Msg.GetRecover().GetCode() {
+		t.Fatalf("the change didn't reach the stream: %v", stream.Err())
+	}
+	shc, surl := b.as(b.uids["alice"])
+	_, err = accessv1connect.NewSetupServiceClient(shc, surl, connect.WithInterceptors(keyHeader(b.keys["alice"].fp))).GetConsoleInfo(ctx, connect.NewRequest(&accessv1.GetConsoleInfoRequest{}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 }
 

@@ -22,7 +22,6 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/enrolment"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
@@ -40,17 +39,13 @@ type Deps struct {
 	Status   func(ctx context.Context) sources.StatusView
 	Steps    Steps
 	Power    initv1connect.PowerServiceClient
-	// Enrol is the enrolment window's; its Page, Addresses and SSH are
-	// set by the wizard.
-	Enrol  enrolment.Deps
-	Logger log.Logger
+	Logger   log.Logger
 }
 
 type run struct {
-	u    *tui.UI
-	d    Deps
-	f    Frame
-	sshd error
+	u *tui.UI
+	d Deps
+	f Frame
 }
 
 // Run runs first boot on the console until setup is complete, then keeps
@@ -82,7 +77,7 @@ func Run(ctx context.Context, u *tui.UI, d Deps) error {
 		case StepProtection:
 			_, _, err = u.Ask(ctx, tui.Static(ProtectionPage(r.f, r.f.Chrome.Protection, r.f.Chrome.Mode)))
 		case StepAdmin:
-			err = r.admin(ctx)
+			// The first admin is made on the :8443 setup page.
 		case StepRecovery, StepSignIn, StepDone:
 			err = r.continueOn(ctx)
 		default:
@@ -444,91 +439,14 @@ func (r *run) addresses(ctx context.Context) ([]string, error) {
 	return a.Management, err
 }
 
-// admin is step 3: the name, then the enrolment window with sshd started
-// for it. :8443 starts once the step is done.
-func (r *run) admin(ctx context.Context) error {
-	errLine := ""
-	var name string
-	for {
-		line, _, err := r.u.Ask(ctx, tui.Static(AdminPage(r.f, errLine)))
-		if err != nil {
-			return err
-		}
-		name = strings.TrimSpace(line)
-		if !access.ValidName(name) {
-			errLine = fmt.Sprintf("%q can't be an admin name: use 2 to 31 lowercase letters, digits, _ or -, starting with a letter, and not a reserved name.", name)
-			continue
-		}
-		if err := r.ensureOwner(ctx, name); err != nil {
-			errLine = consoleui.Describe(err)
-			continue
-		}
-		break
-	}
-	ed := r.d.Enrol
-	// sshd starts once the window is open: opening it makes the host keys
-	// sshd needs.
-	ed.Opened = func(ctx context.Context) {
-		if err := r.d.Network.SetManagementPorts(ctx, true, false); err != nil {
-			r.d.Logger.Warn("wizard: port 22 didn't open", log.F("error", err.Error()))
-		}
-		r.sshd = r.d.Services.Start(ctx, "sshd")
-		if r.sshd != nil {
-			r.d.Logger.Warn("wizard: sshd didn't start for the enrolment", log.F("error", r.sshd.Error()))
-		}
-	}
-	ed.Page = func(_ string, body []tui.Line, keys, prompt string) tui.Page { return r.f.Page(body, keys, prompt) }
-	ed.Addresses = r.addresses
-	ed.SSH = func(ctx context.Context) error {
-		if r.sshd != nil {
-			return r.sshd
-		}
-		if up, err := r.d.Services.Running(ctx, "sshd"); err != nil || !up {
-			if err == nil {
-				err = errors.New("the SSH service isn't running")
-			}
-			return err
-		}
-		return nil
-	}
-	if _, err := enrolment.Run(ctx, r.u, ed, name, false); err != nil {
-		return err
-	}
-	return nil
-}
-
-// ensureOwner adds name as an owner unless it is one already.
-func (r *run) ensureOwner(ctx context.Context, name string) error {
-	l, err := r.d.Access.ListAdmins(ctx, connect.NewRequest(&accessv1.ListAdminsRequest{}))
-	if err != nil {
-		return err
-	}
-	for _, a := range l.Msg.GetAdmins() {
-		if a.GetName() == name {
-			if a.GetRole() != osadminv1.Role_ROLE_OWNER {
-				return fmt.Errorf("%s is an admin but not an owner", name)
-			}
-			return nil
-		}
-	}
-	_, err = r.d.Access.AddAdmin(ctx, connect.NewRequest(&accessv1.AddAdminRequest{Name: name, Role: osadminv1.Role_ROLE_OWNER}))
-	if err == nil {
-		r.d.Logger.Info("wizard: first owner added", log.F("admin", name))
-	}
-	return err
-}
-
-// continueOn is steps 4 and 5: :8443 (and sshd, for the recovery keys
-// and the sign-in approval) runs, the screen follows the recovery keys and
+// continueOn is the rest of setup: :8443 runs (accessd starts sshd once
+// the first admin exists), the screen follows the recovery keys and
 // the first sign-in, then setup completes: the single-admin warning
 // confirmed if it applies, and accessd's Complete, which checks every step
 // and writes setup/done.
 func (r *run) continueOn(ctx context.Context) error {
 	if err := r.d.Network.SetManagementPorts(ctx, true, true); err != nil {
 		r.d.Logger.Warn("wizard: ports 22 and 8443 didn't open", log.F("error", err.Error()))
-	}
-	if err := r.d.Services.Start(ctx, "sshd"); err != nil {
-		r.d.Logger.Warn("wizard: sshd isn't running for the recovery keys and sign-in", log.F("error", err.Error()))
 	}
 	osErr := r.d.Services.Start(ctx, "osadmin")
 	if osErr != nil {
@@ -555,6 +473,9 @@ func (r *run) continueOn(ctx context.Context) error {
 			c.Addresses, c.AddrErr = r.addresses(ctx)
 			if st := r.d.Status(ctx); st.Status != nil {
 				c.TLS = st.Status.GetTlsFingerprint()
+			}
+			if ci, err := r.d.Setup.GetConsoleInfo(ctx, connect.NewRequest(&accessv1.GetConsoleInfoRequest{})); err == nil {
+				c.SetupCode = ci.Msg.GetConsoleInfo().GetSetupCode()
 			}
 			s, err := r.d.Setup.GetSetup(ctx, connect.NewRequest(&accessv1.GetSetupRequest{}))
 			if err != nil {

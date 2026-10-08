@@ -183,8 +183,18 @@ func TestQuorumRoster(t *testing.T) {
 	if err != nil || l.Msg.GetQuorum().GetRequired() != 2 || l.Msg.GetQuorum().GetConfigured() || len(l.Msg.GetQuorum().GetMembers()) != 2 {
 		t.Fatalf("the default roster: %v %v", l, err)
 	}
-	_, err = alice.access().SetQuorum(ctx, connect.NewRequest(&osadminv1.SetQuorumRequest{Members: []string{"alice"}, Required: 1}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "RESET_UNAVAILABLE")
+	// One root operator is a roster (it opens the root shell); it just
+	// can't approve a factory reset on its own.
+	if _, err := alice.access().SetQuorum(ctx, connect.NewRequest(&osadminv1.SetQuorumRequest{Members: []string{"alice"}, Required: 1})); err != nil {
+		t.Fatal(err)
+	}
+	if b.store.Read().EffectiveQuorum().Available() {
+		t.Fatal("a roster of one approves a factory reset")
+	}
+	_, err = alice.access().SetQuorum(ctx, connect.NewRequest(&osadminv1.SetQuorumRequest{Members: []string{"alice", "bob"}, Required: 1}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_QUORUM")
+	_, err = alice.access().SetQuorum(ctx, connect.NewRequest(&osadminv1.SetQuorumRequest{}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_QUORUM")
 	_, err = alice.access().SetQuorum(ctx, connect.NewRequest(&osadminv1.SetQuorumRequest{Members: []string{"alice", "zed"}, Required: 2}))
 	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_NAME")
 	bob := b.browser()

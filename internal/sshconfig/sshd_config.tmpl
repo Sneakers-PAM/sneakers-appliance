@@ -11,12 +11,13 @@ PasswordAuthentication no
 KbdInteractiveAuthentication no
 PermitEmptyPasswords no
 PermitRootLogin no
+AuthorizedKeysFile none
+TrustedUserCAKeys {{.UserCA}}
 DisableForwarding yes
 PermitTunnel no
 PermitUserRC no
 PermitUserEnvironment no
 StrictModes yes
-AuthorizedKeysFile {{.AuthorizedKeysDir}}/%u
 RevokedKeys {{.RevokedKeys}}
 ExposeAuthInfo yes
 ForceCommand {{.Shell}}
@@ -26,7 +27,11 @@ ClientAliveInterval 60
 ClientAliveCountMax 3
 LogLevel VERBOSE
 PidFile {{.PidFile}}
+{{- if .AllowUsers}}
 AllowUsers {{join .AllowUsers " "}}
+{{- else}}
+DenyUsers *
+{{- end}}
 PubkeyAcceptedAlgorithms {{join .PubkeyAlgorithms ","}}
 HostKeyAlgorithms {{join .HostKeyAlgorithms ","}}
 KexAlgorithms {{join .KexAlgorithms ","}}
@@ -39,19 +44,3 @@ SshdSessionPath {{.SessionPath}}
 SshdAuthPath {{.AuthPath}}
 {{- end}}
 # No Subsystem lines: no sftp, no scp.
-
-Match User maint
-    PermitRootLogin forced-commands-only
-    AuthorizedKeysFile none
-    TrustedUserCAKeys {{.UserCA}}
-    AuthorizedPrincipalsFile {{.PrincipalsDir}}/maint
-    ForceCommand {{.Elevated}}
-    MaxSessions 1
-{{- if .EnrolOpen}}
-
-Match User enrol
-    AuthorizedKeysFile none
-    AuthorizedKeysCommand {{.EnrolKeys}} %f %k %t
-    AuthorizedKeysCommandUser sshkeys
-    ForceCommand {{.Enrol}}
-{{- end}}

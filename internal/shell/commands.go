@@ -11,9 +11,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -64,9 +62,9 @@ type Env struct {
 	In      io.Reader
 	Out     io.Writer
 	Err     io.Writer
-	// Poll is how often `shell` checks its request while it waits for an
-	// approver; zero is every 2 seconds.
-	Poll time.Duration
+	// RootShell relays the terminal to accessd's root-shell socket with a
+	// ticket, until the root shell ends; nil (no terminal) refuses `shell`.
+	RootShell func(ctx context.Context, socket, ticket string) error
 }
 
 type flagSpec struct {
@@ -101,18 +99,11 @@ var specs = []spec{
 	{path: "network confirm", use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1}},
 	{path: "network allow-list reset", short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset"},
 	{path: "keys list", short: "List login keys", action: "keys.list", origins: both, flags: []flagSpec{{"admin", "the admin (owners only; default yourself)", ""}}},
-	{path: "keys add", short: "Add a login key, read from standard input", action: "keys.add", origins: both, stdin: true, flags: []flagSpec{{"admin", "the admin (owners only; default yourself)", ""}}},
-	{path: "keys remove", use: "remove <fingerprint>", short: "Remove a login key", action: "keys.remove", origins: both, nargs: [2]int{1, 1}, flags: []flagSpec{{"admin", "the admin (owners only; default yourself)", ""}}},
 	{path: "admins list", short: "List the admins", action: "admins.list", origins: both},
-	{path: "admins add", use: "add <name>", short: "Add an admin (owners only)", action: "admins.add", origins: both, nargs: [2]int{1, 1}, flags: []flagSpec{{"role", "owner or admin", "admin"}}},
-	{path: "admins remove", use: "remove <name>", short: "Remove an admin (owners only)", action: "admins.remove", origins: both, nargs: [2]int{1, 1}},
 	{path: "recovery-key add", short: "Add a recovery key, read from standard input (up to three)", action: "recovery.add", origins: []Origin{OriginConsole}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}}},
 	{path: "setup recovery-key", short: "Set a recovery key during setup, read from standard input", action: "setup.recovery", origins: []Origin{OriginSSH}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}}},
-	{path: "login", use: "login <code>", short: "Approve a :8443 sign-in", action: "login.approve", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}, run: runLogin},
-	{path: "shell", short: "Request a one-time elevated shell", action: "elevation.request", origins: []Origin{OriginSSH}, run: runShellRequest,
-		flags: []flagSpec{{"minutes", "how long, 15 to 240", "60"}, {"reason", "why (required)", ""}}},
-	{path: "elevation status", use: "status [<id>]", short: "Show elevation requests", action: "elevation.status", origins: []Origin{OriginSSH}, nargs: [2]int{0, 1}},
-	{path: "elevation cert", use: "cert <id>", short: "Print an approved elevation certificate", action: "elevation.cert", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}},
+	{path: "shell", short: "Open the root shell (root operators): a challenge, then the code :8443 gives for it", action: "rootshell.begin", origins: []Origin{OriginSSH}, run: runRootShell,
+		flags: []flagSpec{{"reason", "why, for the audit log", ""}}},
 	{path: "tls show", short: "Show the TLS certificates", action: "tls.show", origins: both, later: true},
 	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true},
@@ -155,7 +146,7 @@ func Resolve(words []string) *Command {
 // Actions are every backend call a command line can make. Nothing else
 // leaves the shell.
 func Actions() []string {
-	out := []string{"login.lookup", "network.confirm"}
+	out := []string{"rootshell.open", "network.confirm"}
 	for _, s := range specs {
 		if !slices.Contains(out, s.action) {
 			out = append(out, s.action)
@@ -396,17 +387,6 @@ func yes(e *Env, prompt string) bool {
 	return a == "y" || a == "yes"
 }
 
-func runLogin(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
-	who, err := e.Backend.Call(ctx, Request{Action: "login.lookup", Args: args})
-	if err != nil {
-		return Result{}, err
-	}
-	if !yes(e, who.Text) {
-		return Result{Text: "Not approved."}, nil
-	}
-	return e.Backend.Call(ctx, Request{Action: "login.approve", Args: args})
-}
-
 func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags map[string]string) (Result, error) {
 	res, err := e.Backend.Call(ctx, Request{Action: "network.set", Args: args, Flags: flags})
 	if err != nil {
@@ -424,74 +404,48 @@ func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags
 	return e.Backend.Call(ctx, Request{Action: "network.confirm", Args: []string{token}})
 }
 
-func runShellRequest(ctx context.Context, e *Env, _ *Command, _ []string, flags map[string]string) (Result, error) {
-	if strings.TrimSpace(flags["reason"]) == "" {
-		return Result{}, codes.New(codes.ShellParse, "give a reason: shell --reason \"...\"")
+// runRootShell asks for a challenge, reads the code the operator got for it
+// on :8443, trades both for a ticket and relays the terminal to the root
+// shell until it ends. A wrong code may be typed again until the challenge
+// closes.
+func runRootShell(ctx context.Context, e *Env, _ *Command, _ []string, flags map[string]string) (Result, error) {
+	if e.RootShell == nil {
+		return Result{}, codes.New(codes.AccessForbidden, "the root shell needs a terminal: log in with ssh -t, or without a command")
 	}
-	m, err := strconv.Atoi(flags["minutes"])
-	if err != nil || m < 15 || m > 240 {
-		return Result{}, codes.New(codes.ShellParse, "--minutes is 15 to 240")
-	}
-	res, err := e.Backend.Call(ctx, Request{Action: "elevation.request", Flags: flags})
+	res, err := e.Backend.Call(ctx, Request{Action: "rootshell.begin", Flags: flags})
 	if err != nil {
 		return Result{}, err
 	}
 	data, _ := res.Data.(map[string]string)
-	id := data["id"]
-	if id == "" {
-		return res, nil
-	}
+	challenge := data["challenge"]
 	_, _ = fmt.Fprintln(e.Out, res.Text)
-	_, _ = fmt.Fprintln(e.Out, "Waiting for an owner to approve it; Ctrl-C withdraws it.")
-	return waitForApproval(ctx, e, id, res)
+	lines := bufio.NewReader(e.In)
+	for {
+		_, _ = fmt.Fprint(e.Out, "Code: ")
+		line, _ := lines.ReadString('\n')
+		code := strings.TrimSpace(line)
+		if code == "" {
+			return Result{Text: "No code typed; the challenge stays open until it expires."}, nil
+		}
+		opened, err := e.Backend.Call(ctx, Request{Action: "rootshell.open", Args: []string{challenge, code}})
+		if codes.Is(err, codes.RootCode) {
+			_, _ = fmt.Fprintln(e.Out, codes.Describe(err))
+			continue
+		}
+		if err != nil {
+			return Result{}, err
+		}
+		od, _ := opened.Data.(map[string]string)
+		if err := e.RootShell(ctx, od["socket"], od["ticket"]); err != nil {
+			return Result{}, err
+		}
+		return Result{Text: "The root shell ended; back in the menu."}, nil
+	}
 }
 
 // waitForApproval polls request id until an owner approves it (then
 // prints its certificate), denies it or it expires. A status the shell
 // can't read ends the wait with the request's own result.
-func waitForApproval(ctx context.Context, e *Env, id string, requested Result) (Result, error) {
-	poll := e.Poll
-	if poll <= 0 {
-		poll = 2 * time.Second
-	}
-	t := time.NewTicker(poll)
-	defer t.Stop()
-	for {
-		st, err := e.Backend.Call(ctx, Request{Action: "elevation.status", Args: []string{id}})
-		if err != nil {
-			return Result{}, err
-		}
-		state := ""
-		if rows, ok := st.Data.([]map[string]string); ok && len(rows) == 1 {
-			state = rows[0]["state"]
-		}
-		switch state {
-		case "pending":
-		case "approved":
-			return e.Backend.Call(ctx, Request{Action: "elevation.cert", Args: []string{id}})
-		case "denied":
-			return Result{}, codes.New(codes.ElevUsed, "%s was denied", id)
-		case "expired":
-			return Result{}, codes.New(codes.ElevExpired, "%s expired without an approval", id)
-		default:
-			return requested, nil
-		}
-		select {
-		case <-ctx.Done():
-			// Ctrl-C (or the connection ending) withdraws the wait rather
-			// than leaving it dangling; ctx is already done, so the
-			// withdrawal itself runs on a fresh, short one.
-			wctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			res, err := e.Backend.Call(wctx, Request{Action: "elevation.withdraw", Args: []string{id}})
-			cancel()
-			if err != nil {
-				return Result{}, err
-			}
-			return res, nil
-		case <-t.C:
-		}
-	}
-}
 
 func emit(e *Env, asJSON bool, r Result) error {
 	if r.Stream != nil {

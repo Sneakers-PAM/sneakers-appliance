@@ -1,11 +1,13 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package sshconfig renders what OpenSSH sshd reads: sshd_config, each
-// admin's authorized_keys and the maint principals file, from the access
-// store (spec 2, Section 3.3). Render only ever writes into a staging
-// directory; sneakers-sshd-run checks the result with sshd -t and swaps it
-// in.
+// Package sshconfig renders OpenSSH sshd's config from the access store
+// (spec 2, Section 3.3). Authentication is public key only, and only a
+// certificate the box's root key signed is accepted (TrustedUserCAKeys,
+// with no authorized_keys files), for a login name among its principals;
+// the closed shell then checks the admin's TOTP code. Render only ever
+// writes into a staging directory; sneakers-sshd-run checks the result with
+// sshd -t and swaps it in.
 package sshconfig
 
 import (
@@ -17,7 +19,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"text/template"
 	"time"
@@ -27,17 +28,6 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 )
 
-// Mode is which accounts sshd lets in.
-type Mode string
-
-const (
-	// EnrolMode is first-boot step 3: only the enrol account exists.
-	EnrolMode Mode = "enrol"
-	// AdminMode is every admin into the closed shell, and maint for
-	// elevation.
-	AdminMode Mode = "admin"
-)
-
 // Paths are where sshd finds its files on the box. Tests point them into a
 // temporary directory.
 type Paths struct {
@@ -45,12 +35,10 @@ type Paths struct {
 	ConfigDir   string
 	HostKeys    []string
 	RevokedKeys string
-	UserCA      string
-	PidFile     string
-	Shell       string
-	Elevated    string
-	Enrol       string
-	EnrolKeys   string
+	// UserCA is the root key's public half, the only user CA sshd trusts.
+	UserCA  string
+	PidFile string
+	Shell   string
 	// SessionPath and AuthPath override where sshd finds sshd-session and
 	// sshd-auth; empty keeps the built-in /usr/libexec/openssh paths.
 	SessionPath string
@@ -63,26 +51,16 @@ func DefaultPaths() Paths {
 		ConfigDir:   "/run/sneakers/ssh",
 		HostKeys:    []string{"/var/lib/sneakers/ssh/ssh_host_ed25519_key", "/var/lib/sneakers/ssh/ssh_host_rsa_key"},
 		RevokedKeys: "/var/lib/sneakers/ssh/revoked.krl",
-		UserCA:      "/var/lib/sneakers/ssh/user_ca.pub",
+		UserCA:      "/var/lib/sneakers/ssh/root_key.pub",
 		PidFile:     "none", // sneakers-sshd-run keeps /run/sneakers/sshd.pid
 		Shell:       "/usr/bin/sneakers-shell",
-		Elevated:    "/usr/libexec/sneakers-elevated",
-		Enrol:       "/usr/libexec/sneakers-enrol",
-		EnrolKeys:   "/usr/libexec/sneakers-enrol-keys",
 	}
 }
 
 // Input is what one render needs.
 type Input struct {
 	ListenAddrs []netip.Addr
-	Mode        Mode
-	// EnrolOpen renders the enrol block in admin mode too (Recover access,
-	// or another admin's keys added on the console). EnrolMode implies it.
-	EnrolOpen bool
-	State     access.State
-	// Principals are the open elevation principals (elev-<id>) maint
-	// accepts.
-	Principals []string
+	State       access.State
 	// Paths default to DefaultPaths when ConfigDir is empty.
 	Paths Paths
 	// Port is the listen port; 0 is 22. Tests running sshd unprivileged
@@ -93,16 +71,9 @@ type Input struct {
 // The algorithms the box offers, the modern set only. Names come from the
 // x/crypto constants where it has them.
 var (
-	// PubkeyAlgorithms are the login key types plus the certificate types
-	// an elevation certificate for each of them can have.
-	PubkeyAlgorithms = []string{
-		ssh.KeyAlgoED25519, ssh.KeyAlgoSKED25519,
-		ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoSKECDSA256,
-		ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256,
-		ssh.CertAlgoED25519v01, ssh.CertAlgoSKED25519v01,
-		ssh.CertAlgoECDSA256v01, ssh.CertAlgoECDSA384v01, ssh.CertAlgoSKECDSA256v01,
-		ssh.CertAlgoRSASHA512v01, ssh.CertAlgoRSASHA256v01,
-	}
+	// PubkeyAlgorithms are the issued keys' type and its certificate type:
+	// the box issues ed25519 keys only.
+	PubkeyAlgorithms = []string{ssh.CertAlgoED25519v01, ssh.KeyAlgoED25519}
 	// HostKeyAlgorithms match the ed25519 and RSA host keys.
 	HostKeyAlgorithms = []string{ssh.KeyAlgoED25519, ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
 	// KexAlgorithms are the hybrid post-quantum exchanges and curve25519.
@@ -121,9 +92,6 @@ var tmpl = template.Must(template.New("sshd_config").Funcs(template.FuncMap{"joi
 type view struct {
 	Paths
 	ListenAddrs       []string
-	AuthorizedKeysDir string
-	PrincipalsDir     string
-	EnrolOpen         bool
 	AllowUsers        []string
 	PubkeyAlgorithms  []string
 	HostKeyAlgorithms []string
@@ -132,8 +100,9 @@ type view struct {
 	MACs              []string
 }
 
-// Render writes sshd_config, authorized_keys/<admin> and principals/maint
-// for in into dir. It never touches the live configuration.
+// Render writes sshd_config for in into dir. It never touches the live
+// configuration. Only admins who can sign in (a password and a TOTP
+// secret) may log in.
 func Render(in Input, dir string) error {
 	p := in.Paths
 	if p.ConfigDir == "" {
@@ -144,9 +113,6 @@ func Render(in Input, dir string) error {
 	}
 	v := view{
 		Paths:             p,
-		AuthorizedKeysDir: filepath.Join(p.ConfigDir, "authorized_keys"),
-		PrincipalsDir:     filepath.Join(p.ConfigDir, "principals"),
-		EnrolOpen:         in.Mode == EnrolMode || in.EnrolOpen,
 		PubkeyAlgorithms:  PubkeyAlgorithms,
 		HostKeyAlgorithms: HostKeyAlgorithms,
 		KexAlgorithms:     KexAlgorithms,
@@ -160,59 +126,19 @@ func Render(in Input, dir string) error {
 	for _, a := range in.ListenAddrs {
 		v.ListenAddrs = append(v.ListenAddrs, netip.AddrPortFrom(a, port).String())
 	}
-	switch in.Mode {
-	case EnrolMode:
-		v.AllowUsers = []string{"enrol"}
-	case AdminMode:
-		for _, a := range in.State.Admins {
+	for _, a := range in.State.Admins {
+		if a.HasCredentials() {
 			v.AllowUsers = append(v.AllowUsers, a.Name)
 		}
-		v.AllowUsers = append(v.AllowUsers, "maint")
-		if in.EnrolOpen {
-			v.AllowUsers = append(v.AllowUsers, "enrol")
-		}
-	default:
-		return fmt.Errorf("sshconfig: unknown mode %q", in.Mode)
 	}
 	var cfg bytes.Buffer
 	if err := tmpl.Execute(&cfg, v); err != nil {
 		return fmt.Errorf("sshconfig: %w", err)
 	}
-	for _, sub := range []string{"authorized_keys", "principals"} {
-		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil { // #nosec G301 -- sshd reads them as the logging-in user
-			return fmt.Errorf("sshconfig: %w", err)
-		}
+	if err := os.MkdirAll(dir, 0o755); err != nil { // #nosec G301 -- sshd's config directory
+		return fmt.Errorf("sshconfig: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "sshd_config"), cfg.Bytes(), 0o600); err != nil {
-		return fmt.Errorf("sshconfig: %w", err)
-	}
-	if in.Mode == AdminMode {
-		for _, a := range in.State.Admins {
-			if err := writeKeys(filepath.Join(dir, "authorized_keys", a.Name), a.Keys); err != nil {
-				return err
-			}
-		}
-	}
-	principals := slices.Clone(in.Principals)
-	slices.Sort(principals)
-	body := strings.Join(principals, "\n")
-	if body != "" {
-		body += "\n"
-	}
-	if err := os.WriteFile(filepath.Join(dir, "principals", "maint"), []byte(body), 0o644); err != nil { // #nosec G306 -- sshd reads it as the logging-in user
-		return fmt.Errorf("sshconfig: %w", err)
-	}
-	return nil
-}
-
-// Every key is restricted (no forwarding, no user rc) with the pty given
-// back, since the interactive closed shell needs one.
-func writeKeys(path string, keys []access.AdminKey) error {
-	var b strings.Builder
-	for _, k := range keys {
-		fmt.Fprintf(&b, "restrict,pty %s\n", k.PublicKey)
-	}
-	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil { // #nosec G306 -- sshd reads it as the logging-in user
 		return fmt.Errorf("sshconfig: %w", err)
 	}
 	return nil
@@ -230,6 +156,3 @@ func Check(sshdPath, dir string) error {
 	}
 	return nil
 }
-
-// Principal is the maint principal an elevation request opens.
-func Principal(requestID string) string { return "elev-" + requestID }

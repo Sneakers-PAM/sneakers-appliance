@@ -77,7 +77,7 @@ func (s *Server) exportAudit(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = s.liveRole(sess)
 	}
-	entry := osaudit.Entry{Actor: sess.Admin, KeyFP: sess.KeyFP, Source: hostOf(r.RemoteAddr), Action: "audit.export"}
+	entry := osaudit.Entry{Actor: sess.Admin, Source: hostOf(r.RemoteAddr), Action: "audit.export"}
 	if err != nil {
 		s.write(entry, err)
 		http.Error(w, codes.Describe(err), http.StatusUnauthorized)

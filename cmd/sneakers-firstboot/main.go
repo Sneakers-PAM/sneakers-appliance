@@ -2,11 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Command sneakers-firstboot is first boot on the console: the network,
-// the protection chosen at boot, the first admin and the SSH key
-// enrolment, then :8443 for the recovery keys and the first sign-in. Init
-// runs it as the console's owner in the firstboot phase
-// (services.d/firstboot.yaml). It starts sshd when the admin step starts
-// and :8443 once that step is done.
+// the protection chosen at boot, then :8443, where the setup page makes
+// the first admin and finishes setup. Init runs it as the console's owner
+// in the firstboot phase (services.d/firstboot.yaml). It starts :8443 once
+// the protection is shown; accessd starts sshd once the first admin exists.
 package main
 
 import (
@@ -19,7 +18,6 @@ import (
 	log "github.com/Bugs5382/go-log"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/enrolment"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/wizard"
@@ -58,7 +56,6 @@ func main() {
 		Status:   b.Status.Read,
 		Steps:    wizard.MachineSteps{M: m},
 		Power:    b.Power,
-		Enrol:    enrolment.Deps{Window: b.Window, Fetch: b.FetchKeys},
 		Logger:   lg,
 	}
 	lg.Info("firstboot: started", log.F("version", release.Version))

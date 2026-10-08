@@ -17,10 +17,12 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
@@ -30,6 +32,11 @@ import (
 type call struct {
 	procedure string
 	session   weblogin.Session
+	// code is the redeemed one-time code's session, for a code_session
+	// method called without a signed-in admin.
+	code *codeSession
+	// keyFP is the SSH key of a closed-shell login, for the audit entry.
+	keyFP     string
 	role      access.Role
 	source    string
 	userAgent string
@@ -109,12 +116,27 @@ func (s *Server) interceptor() connect.UnaryInterceptorFunc {
 	}
 }
 
-// authorize checks the session, the admin and key it is bound to, the
-// role, the CSRF token and the step-up.
+// authorize checks the session (or, for a code_session method, the
+// redeemed code's), the admin it is bound to, the role, the CSRF token and
+// the step-up.
 func (s *Server) authorize(c *call, rule *osadminv1.Rule, read bool) error {
 	sess, err := s.session(c.header)
+	if err != nil && rule.GetCodeSession() {
+		cs, cerr := s.codeSessionOf(c.header)
+		if cerr != nil {
+			return err
+		}
+		if !read && subtle.ConstantTimeCompare([]byte(c.header.Get(CSRFHeader)), []byte(cs.CSRF)) != 1 {
+			return codes.New(codes.AccessForbidden, "the request's CSRF token is missing or wrong; reload the page")
+		}
+		c.code = &cs
+		return nil
+	}
 	if err != nil {
 		return err
+	}
+	if rule.GetRole() == osadminv1.Role_ROLE_UNSPECIFIED {
+		return codes.New(codes.AccessForbidden, "this is done with a one-time code, not a signed-in session")
 	}
 	c.session = sess
 	role, err := s.liveRole(sess)
@@ -129,7 +151,7 @@ func (s *Server) authorize(c *call, rule *osadminv1.Rule, read bool) error {
 		return codes.New(codes.AccessForbidden, "the request's CSRF token is missing or wrong; reload the page")
 	}
 	if rule.GetStepUp() && !s.sessions.Fresh(sess) {
-		return codes.New(codes.AccessStepUpRequired, "this needs a sign-in from the last 5 minutes; sign in again with a new code")
+		return codes.New(codes.AccessStepUpRequired, "this needs a fresh authenticator code; confirm it's you")
 	}
 	return nil
 }
@@ -148,15 +170,16 @@ func (s *Server) session(h http.Header) (weblogin.Session, error) {
 	return sess, nil
 }
 
-// liveRole checks the session's admin and key still exist and returns the
-// admin's current role. A session whose admin or key is gone ends here.
+// liveRole checks the session's admin still exists and can sign in, and
+// returns the admin's current role. A session whose admin is gone ends
+// here.
 func (s *Server) liveRole(sess weblogin.Session) (access.Role, error) {
 	st := s.o.Access.Read()
 	a, ok := st.Admin(sess.Admin)
-	if !ok || !hasKey(a, sess.KeyFP) {
+	if !ok || !a.HasCredentials() {
 		s.sessions.End(sess.ID)
-		s.o.Logger.Info("osadmin: session ended, its admin or key was removed", log.F("admin", sess.Admin))
-		return "", codes.New(codes.AccessSession, "the admin or key this session signed in with was removed; sign in again")
+		s.o.Logger.Info("osadmin: session ended, its admin was removed or re-invited", log.F("admin", sess.Admin))
+		return "", codes.New(codes.AccessSession, "the admin this session signed in as was removed or re-invited; sign in again")
 	}
 	return a.Role, nil
 }
@@ -221,7 +244,7 @@ func (s *Server) localIdentity(c *call, l Local, rule *osadminv1.Rule) error {
 		c.session, c.role = weblogin.Session{Admin: osaudit.SurfaceConsole}, access.RoleOwner
 		return nil
 	}
-	c.session = weblogin.Session{Admin: l.Admin, KeyFP: l.KeyFP}
+	c.session, c.keyFP = weblogin.Session{Admin: l.Admin}, l.KeyFP
 	st := s.o.Access.Read()
 	a, ok := st.Admin(l.Admin)
 	if !ok {
@@ -248,24 +271,16 @@ func methodOf(procedure string) protoreflect.MethodDescriptor {
 	return md
 }
 
-// via is how a key added in this call arrived: the shell, the console
-// (typed or pasted) or :8443.
-func (c *call) via() string {
-	switch c.detail["surface"] {
-	case SurfaceSSH:
-		return access.ViaShell
-	case osaudit.SurfaceConsole:
-		return access.ViaTyped
-	}
-	return access.ViaOSAdmin
-}
-
 // audit writes the entry for a method whose rule names an action.
 func (s *Server) audit(c *call, rule *osadminv1.Rule, err error) {
 	if rule.GetAudit() == "" {
 		return
 	}
-	s.write(osaudit.Entry{Actor: c.session.Admin, KeyFP: c.session.KeyFP, Source: c.source, Action: rule.GetAudit(), Target: c.target, Detail: c.detail}, err)
+	actor := c.session.Admin
+	if actor == "" && c.code != nil {
+		actor = c.code.actor()
+	}
+	s.write(osaudit.Entry{Actor: actor, KeyFP: c.keyFP, Source: c.source, Action: rule.GetAudit(), Target: c.target, Detail: c.detail}, err)
 }
 
 // write appends e with the outcome of err.
@@ -315,16 +330,36 @@ func toConnect(err error) error {
 	}
 	c := connect.CodeFailedPrecondition
 	switch code {
-	case codes.AccessSession:
+	case codes.AccessSession, codes.AccessCredentials:
 		c = connect.CodeUnauthenticated
 	case codes.AccessForbidden, codes.AccessStepUpRequired:
 		c = connect.CodePermissionDenied
-	case codes.AccessKeyType, codes.AccessKeyWeak, codes.AccessName, codes.AccessConfirm, codes.NetInvalid:
+	case codes.AccessKeyType, codes.AccessKeyWeak, codes.AccessName, codes.AccessConfirm, codes.NetInvalid, codes.AccessPassword, codes.AccessPolicy, codes.AccessQuorum:
 		c = connect.CodeInvalidArgument
-	case codes.LoginCode:
+	case codes.AccessLocked, codes.AccessThrottled:
+		c = connect.CodeResourceExhausted
+	case codes.SetupCode, codes.RootChallenge, codes.RootCode:
 		c = connect.CodeNotFound
 	}
-	return connect.NewError(c, errors.New(codes.Describe(err)))
+	ce := connect.NewError(c, errors.New(codes.Describe(err)))
+	if r := lockout.RefusalOf(err); r != (lockout.Refusal{}) || code == codes.AccessCredentials || code == codes.SetupCode || code == codes.RootCode {
+		if d, derr := connect.NewErrorDetail(refusalToWire(r)); derr == nil {
+			ce.AddDetail(d)
+		}
+	}
+	return ce
+}
+
+// refusalToWire is a lockout refusal as the pages read it.
+func refusalToWire(r lockout.Refusal) *osadminv1.SignInRefusal {
+	out := &osadminv1.SignInRefusal{AttemptsLeft: int32(min(r.AttemptsLeft, 1<<30)), LockedUntilUnlocked: r.UntilUnlocked} // #nosec G115 -- clamped
+	if !r.LockedUntil.IsZero() {
+		out.LockedUntil = timestamppb.New(r.LockedUntil)
+	}
+	if !r.RetryAfter.IsZero() {
+		out.RetryAfter = timestamppb.New(r.RetryAfter)
+	}
+	return out
 }
 
 func hostOf(addr string) string {

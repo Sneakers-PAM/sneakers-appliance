@@ -17,7 +17,7 @@ func installInput(t *testing.T, dir string, addrsIn ...string) sshconfig.Input {
 	t.Helper()
 	p := sshconfig.DefaultPaths()
 	p.ConfigDir = filepath.Join(dir, "ssh")
-	return sshconfig.Input{ListenAddrs: addrs(addrsIn...), Mode: sshconfig.AdminMode, State: twoAdmins(t), Paths: p}
+	return sshconfig.Input{ListenAddrs: addrs(addrsIn...), State: twoAdmins(t), Paths: p}
 }
 
 func TestInstallSwapsInACheckedRender(t *testing.T) {

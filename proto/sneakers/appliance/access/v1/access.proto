@@ -14,6 +14,9 @@
 // signed it in, in the Sneakers-Key-Fingerprint header, and its SSH client
 // address in Sneakers-Source; accessd refuses a fingerprint that isn't one
 // of the peer uid's admin's keys.
+//
+// sshd authenticates SSH logins by the box-issued certificate alone; the
+// closed shell's first act is SshLoginService.VerifyTotp, as its admin uid.
 syntax = "proto3";
 
 package sneakers.appliance.access.v1;
@@ -47,7 +50,11 @@ service AccessService {
   rpc ListKeys(ListKeysRequest) returns (ListKeysResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  rpc AddKey(AddKeyRequest) returns (AddKeyResponse);
+  // AddKey is no longer served: the box issues SSH keys on :8443 and never
+  // takes one an admin brings.
+  rpc AddKey(AddKeyRequest) returns (AddKeyResponse) {
+    option deprecated = true;
+  }
   rpc RemoveKey(RemoveKeyRequest) returns (RemoveKeyResponse);
   // AddRecoveryKey is the console's (root only).
   rpc AddRecoveryKey(AddRecoveryKeyRequest) returns (AddRecoveryKeyResponse);
@@ -77,48 +84,89 @@ service SetupService {
   rpc AcknowledgeSingleAdmin(AcknowledgeSingleAdminRequest) returns (AcknowledgeSingleAdminResponse);
   // Complete checks every step and finishes setup (root only: firstboot).
   rpc Complete(CompleteRequest) returns (CompleteResponse);
+  // GetConsoleInfo is what the console shows (root only): the setup code
+  // or setup's progress, the :8443 address and its certificate
+  // fingerprint, and a live Recover access code.
+  rpc GetConsoleInfo(GetConsoleInfoRequest) returns (GetConsoleInfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // WatchConsoleInfo sends the console info at once, again on every change
+  // (a new code, a browser starting setup, a step done, setup done, a
+  // Recover access code used or expired), and at least every 30 seconds
+  // (root only).
+  rpc WatchConsoleInfo(WatchConsoleInfoRequest) returns (stream WatchConsoleInfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ResetSetupCode stops a browser setup that hasn't made the first admin
+  // yet, or clears a locked code, and shows a new code: the console's "this
+  // isn't you" and "new code" (root only).
+  rpc ResetSetupCode(ResetSetupCodeRequest) returns (ResetSetupCodeResponse);
+  // BeginRecoverAccess issues the console's Recover access code (root
+  // only): on :8443 it gives an owner a new password and authenticator,
+  // or makes a new owner. It works once, for 60 minutes.
+  rpc BeginRecoverAccess(BeginRecoverAccessRequest) returns (BeginRecoverAccessResponse);
+  // CancelRecoverAccess withdraws a Recover access code (root only).
+  rpc CancelRecoverAccess(CancelRecoverAccessRequest) returns (CancelRecoverAccessResponse);
 }
 
-// ElevationService is the one-time root shells.
+// ElevationService is the root shells. A root operator's closed shell asks
+// for a challenge (BeginRootShell), the operator gets its code on :8443
+// (osadmin.v1 RootShellService), and the shell trades challenge and code
+// for a ticket (OpenRootShell). It opens /run/sneakers/rootshell.sock with
+// the ticket; accessd runs the recorded root shell on a pty it owns, and
+// the shell relays the terminal in the same SSH session.
 service ElevationService {
-  // RequestElevation asks for an elevated shell for the key the caller's
-  // closed-shell login signed in with, from its SSH client address.
-  rpc RequestElevation(RequestElevationRequest) returns (RequestElevationResponse);
+  // BeginRootShell opens a challenge for the caller (an admin uid on the
+  // root-operator roster), bound to its SSH client address. It works for
+  // the access policy's code lifetime.
+  rpc BeginRootShell(BeginRootShellRequest) returns (BeginRootShellResponse);
+  // OpenRootShell checks the code typed for a challenge (one use, that
+  // challenge only) and returns a one-use ticket for rootshell.sock. Three
+  // wrong codes close the challenge.
+  rpc OpenRootShell(OpenRootShellRequest) returns (OpenRootShellResponse);
+  // RequestElevation is no longer served: BeginRootShell replaced the
+  // owner-approved request.
+  rpc RequestElevation(RequestElevationRequest) returns (RequestElevationResponse) {
+    option deprecated = true;
+  }
   rpc ListElevations(ListElevationsRequest) returns (ListElevationsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // GetElevationCertificate returns the certificate of an approved
-  // request, for its requester.
+  // GetElevationCertificate is no longer served: no certificate is issued
+  // for a root shell.
   rpc GetElevationCertificate(GetElevationCertificateRequest) returns (GetElevationCertificateResponse) {
+    option deprecated = true;
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // WithdrawElevation withdraws the caller's own pending request (the
-  // closed shell's Ctrl-C while it waits); a withdrawn request can't be
-  // approved afterwards.
-  rpc WithdrawElevation(WithdrawElevationRequest) returns (WithdrawElevationResponse);
-  // ApproveElevation is the console's (root only); owners approve on :8443.
-  rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse);
-  // DenyElevation is the console's (root only); owners deny on :8443.
-  rpc DenyElevation(DenyElevationRequest) returns (DenyElevationResponse);
+  // WithdrawElevation is no longer served.
+  rpc WithdrawElevation(WithdrawElevationRequest) returns (WithdrawElevationResponse) {
+    option deprecated = true;
+  }
+  // ApproveElevation is no longer served.
+  rpc ApproveElevation(ApproveElevationRequest) returns (ApproveElevationResponse) {
+    option deprecated = true;
+  }
+  // DenyElevation is no longer served.
+  rpc DenyElevation(DenyElevationRequest) returns (DenyElevationResponse) {
+    option deprecated = true;
+  }
   // TerminateElevation ends an active elevated session (root only; owners
   // terminate on :8443).
   rpc TerminateElevation(TerminateElevationRequest) returns (TerminateElevationResponse);
   // BeginElevatedSession is sneakers-elevated's (root only), before it
-  // gives a prompt: it uses the certificate up (its principal leaves the
-  // principals file and its serial joins the revocation list) and returns
-  // the approved length.
+  // gives a prompt: it uses the ticket from OpenRootShell up and returns
+  // the session's limit.
   rpc BeginElevatedSession(BeginElevatedSessionRequest) returns (BeginElevatedSessionResponse);
   // EndElevatedSession is sneakers-elevated's (root only) when the
   // session ends.
   rpc EndElevatedSession(EndElevatedSessionRequest) returns (EndElevatedSessionResponse);
 }
 
-// EnrolmentService is the SSH key enrolment window (first-boot step 3,
-// and the console's Recover access). The console (root) opens it, accepts
-// each key with a typed yes, and closes it; the enrol uid
-// (sneakers-enrol, the enrol account's forced command) sends the code and
-// the key sshd authenticated, and waits for the console.
+// EnrolmentService was the SSH key enrolment window. It is no longer
+// served: the first admin is made on the :8443 setup page, and the box
+// issues SSH keys. Every method answers Not available.
 service EnrolmentService {
+  option deprecated = true;
   // OpenEnrolment opens a window for an admin's keys (root only). It
   // generates the SSH host keys when the box has none.
   rpc OpenEnrolment(OpenEnrolmentRequest) returns (OpenEnrolmentResponse);
@@ -147,6 +195,20 @@ service EnrolmentService {
   }
 }
 
+// SshLoginService is the closed shell's login check (an admin uid). sshd
+// has already checked the certificate; the shell asks for the TOTP code
+// before anything else, and a refusal ends the session. Every refusal
+// counts toward the admin's lockout and the source's throttle, is
+// audited, and carries an osadmin.v1.SignInRefusal detail.
+service SshLoginService {
+  // VerifyTotp checks the caller's TOTP code (a fresh one) and that the
+  // key fingerprint in the Sneakers-Key-Fingerprint header is one of the
+  // caller's issued keys.
+  rpc VerifyTotp(VerifyTotpRequest) returns (VerifyTotpResponse);
+  // EndSshLogin records a login's end, for the audit log.
+  rpc EndSshLogin(EndSshLoginRequest) returns (EndSshLoginResponse);
+}
+
 // BindingService tells sneakers-osadmin where to listen (the osadmin uid
 // only): netd's socket is root's.
 service BindingService {
@@ -170,12 +232,15 @@ message ListAdminsResponse {
 message AddAdminRequest {
   string name = 1;
   sneakers.appliance.osadmin.v1.Role role = 2;
-  // public_key is an optional first login key.
-  string public_key = 3;
+  // public_key is unused: the box issues SSH keys.
+  string public_key = 3 [deprecated = true];
+  bool root_operator = 4;
 }
 
 message AddAdminResponse {
   sneakers.appliance.osadmin.v1.Admin admin = 1;
+  // invitation is the new admin's one-time code for :8443.
+  sneakers.appliance.osadmin.v1.Invitation invitation = 2;
 }
 
 message RemoveAdminRequest {
@@ -194,12 +259,13 @@ message ListKeysResponse {
 }
 
 message AddKeyRequest {
-  // admin empty means the caller.
+  option deprecated = true;
   string admin = 1;
   string public_key = 2;
 }
 
 message AddKeyResponse {
+  option deprecated = true;
   sneakers.appliance.osadmin.v1.Key key = 1;
 }
 
@@ -276,11 +342,13 @@ message CompleteResponse {
 }
 
 message RequestElevationRequest {
+  option deprecated = true;
   int32 minutes = 1;
   string reason = 2;
 }
 
 message RequestElevationResponse {
+  option deprecated = true;
   sneakers.appliance.osadmin.v1.Elevation elevation = 1;
 }
 
@@ -291,10 +359,12 @@ message ListElevationsResponse {
 }
 
 message GetElevationCertificateRequest {
+  option deprecated = true;
   string id = 1;
 }
 
 message GetElevationCertificateResponse {
+  option deprecated = true;
   // certificate is the OpenSSH certificate, one authorized_keys-style line.
   string certificate = 1;
   google.protobuf.Timestamp valid_before = 2;
@@ -303,23 +373,32 @@ message GetElevationCertificateResponse {
 }
 
 message WithdrawElevationRequest {
+  option deprecated = true;
   string id = 1;
 }
 
-message WithdrawElevationResponse {}
+message WithdrawElevationResponse {
+  option deprecated = true;
+}
 
 message ApproveElevationRequest {
+  option deprecated = true;
   string id = 1;
   int32 minutes = 2;
 }
 
-message ApproveElevationResponse {}
+message ApproveElevationResponse {
+  option deprecated = true;
+}
 
 message DenyElevationRequest {
+  option deprecated = true;
   string id = 1;
 }
 
-message DenyElevationResponse {}
+message DenyElevationResponse {
+  option deprecated = true;
+}
 
 message TerminateElevationRequest {
   string id = 1;
@@ -328,10 +407,15 @@ message TerminateElevationRequest {
 message TerminateElevationResponse {}
 
 message BeginElevatedSessionRequest {
-  // certificate is the certificate sshd accepted, from SSH_USER_AUTH.
-  string certificate = 1;
+  // certificate is unused: root shells open with a ticket.
+  string certificate = 1 [deprecated = true];
   // pid is sneakers-elevated's, so a terminate can reach it.
   int32 pid = 2;
+  // ticket is OpenRootShell's.
+  string ticket = 3;
+  // admin is who the SSH session authenticated as; it must be the
+  // ticket's.
+  string admin = 4;
 }
 
 message BeginElevatedSessionResponse {
@@ -342,7 +426,7 @@ message BeginElevatedSessionResponse {
 
 message EndElevatedSessionRequest {
   string id = 1;
-  // reason is exit, time-box or terminated.
+  // reason is exit, idle, time-box or terminated.
   string reason = 2;
   // recording_sha256 is the hex SHA-256 of the whole recording.
   string recording_sha256 = 3;
@@ -352,6 +436,7 @@ message EndElevatedSessionResponse {}
 
 // Enrolment is an enrolment window as the console shows it.
 message Enrolment {
+  option deprecated = true;
   bool open = 1;
   string admin = 2;
   // code is XXXX-XXXX (Crockford base32).
@@ -373,6 +458,7 @@ message Enrolment {
 
 // EnrolmentKey is a key that gave the right code.
 message EnrolmentKey {
+  option deprecated = true;
   string id = 1;
   string fingerprint = 2;
   string type = 3;
@@ -385,40 +471,53 @@ message EnrolmentKey {
 }
 
 message OpenEnrolmentRequest {
+  option deprecated = true;
   string admin = 1;
   // recovery opens the console's Recover access window (owners only).
   bool recovery = 2;
 }
 
 message OpenEnrolmentResponse {
+  option deprecated = true;
   Enrolment enrolment = 1;
 }
 
-message GetEnrolmentRequest {}
+message GetEnrolmentRequest {
+  option deprecated = true;
+}
 
 message GetEnrolmentResponse {
+  option deprecated = true;
   Enrolment enrolment = 1;
 }
 
 message AcceptEnrolmentKeyRequest {
+  option deprecated = true;
   string id = 1;
   // confirm must be yes.
   string confirm = 2;
 }
 
 message AcceptEnrolmentKeyResponse {
+  option deprecated = true;
   sneakers.appliance.osadmin.v1.Key key = 1;
 }
 
 message RejectEnrolmentKeyRequest {
+  option deprecated = true;
   string id = 1;
 }
 
-message RejectEnrolmentKeyResponse {}
+message RejectEnrolmentKeyResponse {
+  option deprecated = true;
+}
 
-message CloseEnrolmentRequest {}
+message CloseEnrolmentRequest {
+  option deprecated = true;
+}
 
 message OfferEnrolmentKeyRequest {
+  option deprecated = true;
   // public_key is one authorized_keys line.
   string public_key = 1;
   // via is typed or url.
@@ -428,28 +527,35 @@ message OfferEnrolmentKeyRequest {
 }
 
 message OfferEnrolmentKeyResponse {
+  option deprecated = true;
   EnrolmentKey key = 1;
 }
 
-message CloseEnrolmentResponse {}
+message CloseEnrolmentResponse {
+  option deprecated = true;
+}
 
 message SubmitEnrolmentCodeRequest {
+  option deprecated = true;
   string code = 1;
   // public_key is the key sshd authenticated, from SSH_USER_AUTH.
   string public_key = 2;
 }
 
 message SubmitEnrolmentCodeResponse {
+  option deprecated = true;
   string id = 1;
   string admin = 2;
   string fingerprint = 3;
 }
 
 message GetEnrolmentKeyRequest {
+  option deprecated = true;
   string id = 1;
 }
 
 message GetEnrolmentKeyResponse {
+  option deprecated = true;
   EnrolmentKey key = 1;
 }
 
@@ -460,3 +566,147 @@ message GetBindingResponse {
   // management_addresses are the addresses :8443 binds (no link-local).
   repeated string management_addresses = 2;
 }
+
+// SetupState is where first boot's setup is, as the console shows it.
+enum SetupState {
+  SETUP_STATE_UNSPECIFIED = 0;
+  // SETUP_STATE_NOT_STARTED: the console shows the setup code.
+  SETUP_STATE_NOT_STARTED = 1;
+  // SETUP_STATE_IN_PROGRESS: a browser redeemed the code; the console
+  // shows where it is.
+  SETUP_STATE_IN_PROGRESS = 2;
+  // SETUP_STATE_DONE: setup finished; the console shows the status.
+  SETUP_STATE_DONE = 3;
+}
+
+// ConsoleInfo is what the console shows about access.
+message ConsoleInfo {
+  SetupState state = 1;
+  // setup_code is XXXX-XXXX-XXXX-XXXX while the state is not started and
+  // the code isn't locked. Only this message carries it, to the console; no
+  // :8443 call returns it.
+  string setup_code = 2;
+  // code_expires is when a new code replaces it (60 minutes).
+  google.protobuf.Timestamp code_expires = 3;
+  // attempts_left is the wrong tries left before the code locks.
+  int32 attempts_left = 4;
+  // url is :8443 on the first management address, https://<address>:8443.
+  string url = 5;
+  // urls are :8443 on every management address.
+  repeated string urls = 6;
+  // cert_fingerprint is the SHA-256 of :8443's certificate, upper-case
+  // hex with no separators (the console groups it in fours).
+  string cert_fingerprint = 7;
+  // setup_source is the browser's address once a code is redeemed.
+  string setup_source = 8;
+  google.protobuf.Timestamp setup_started = 9;
+  // setup_step is the stepper's current step (1 to 6); setup_steps is 6.
+  int32 setup_step = 10;
+  sneakers.appliance.osadmin.v1.SetupStepKind setup_step_kind = 11;
+  int32 setup_steps = 12;
+  // first_admin is set once the first admin exists.
+  string first_admin = 13;
+  // ssh_on: sneakers-sshd may run (an admin exists).
+  bool ssh_on = 14;
+  // host_keys are the SSH host keys' fingerprints.
+  repeated sneakers.appliance.osadmin.v1.HostKey host_keys = 15;
+  // recover is set while a Recover access code is out.
+  RecoverAccess recover = 16;
+  google.protobuf.Timestamp updated = 17;
+  // fqdn is the box's fully qualified name once a host name or domain is
+  // set; empty before. The console shows https://<fqdn>:8443 under the
+  // address when it's set.
+  string fqdn = 18;
+  // code_locked: five wrong tries locked the setup code out; none works
+  // until the console asks for a new one (ResetSetupCode).
+  bool code_locked = 19;
+}
+
+// RecoverAccess is a live Recover access code.
+message RecoverAccess {
+  // code is XXXX-XXXX-XXXX-XXXX.
+  string code = 1;
+  google.protobuf.Timestamp expires = 2;
+  int32 attempts_left = 3;
+  // url is the page to open: https://<address>:8443/recover.
+  string url = 4;
+  // in_use: a browser redeemed it; source is that browser.
+  bool in_use = 5;
+  string source = 6;
+}
+
+message GetConsoleInfoRequest {}
+
+message GetConsoleInfoResponse {
+  ConsoleInfo console_info = 1;
+}
+
+message WatchConsoleInfoRequest {}
+
+message WatchConsoleInfoResponse {
+  ConsoleInfo console_info = 1;
+}
+
+message ResetSetupCodeRequest {}
+
+message ResetSetupCodeResponse {
+  ConsoleInfo console_info = 1;
+}
+
+message BeginRecoverAccessRequest {}
+
+message BeginRecoverAccessResponse {
+  RecoverAccess recover = 1;
+}
+
+message CancelRecoverAccessRequest {}
+
+message CancelRecoverAccessResponse {}
+
+message BeginRootShellRequest {
+  // reason is optional, for the audit log.
+  string reason = 1;
+}
+
+message BeginRootShellResponse {
+  // challenge is XXXX-XXXX-XXXX-XXXX, to paste into :8443.
+  string challenge = 1;
+  google.protobuf.Timestamp expires = 2;
+  // url is the :8443 page that answers it.
+  string url = 3;
+  // id names the root shell in the history.
+  string id = 4;
+}
+
+message OpenRootShellRequest {
+  string challenge = 1;
+  // code is what :8443 answered; dashes, spaces and case don't matter.
+  string code = 2;
+}
+
+message OpenRootShellResponse {
+  // ticket opens rootshell.sock, once.
+  string ticket = 1;
+  // socket is the root-shell socket's path.
+  string socket = 4;
+  int32 session_minutes = 2;
+  string id = 3;
+}
+
+message VerifyTotpRequest {
+  string totp_code = 1;
+}
+
+message VerifyTotpResponse {
+  string admin = 1;
+  sneakers.appliance.osadmin.v1.Role role = 2;
+  bool root_operator = 3;
+  // login_id names the login in the audit log.
+  string login_id = 4;
+}
+
+message EndSshLoginRequest {
+  string login_id = 1;
+}
+
+message EndSshLoginResponse {}

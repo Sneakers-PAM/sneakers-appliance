@@ -17,7 +17,17 @@ func TestInvariants(t *testing.T) {
 		code string
 	}{
 		{"valid", func(*access.State) {}, ""},
-		{"remove last owner key", func(s *access.State) { s.Admins[0].Keys = nil }, "ACCESS_LAST_KEY"},
+		{"an owner without keys", func(s *access.State) { s.Admins[0].Keys = nil }, ""},
+		{"no owner who can sign in", func(s *access.State) { s.Admins[0].TOTP = nil }, "ACCESS_LAST_OWNER"},
+		{"an invited owner beside one who can sign in", func(s *access.State) {
+			s.AddAdmin("bob", access.RoleOwner, "alice", t0)
+		}, ""},
+		{"an empty roster", func(s *access.State) { s.Quorum.Members = nil }, "ACCESS_QUORUM"},
+		{"a roster naming nobody", func(s *access.State) { s.Quorum.Members = []string{"zed"} }, "ACCESS_NAME"},
+		{"a root code lifetime of 61 minutes", func(s *access.State) { s.AccessPolicy.RootCodeMinutes = 61 }, "ACCESS_POLICY"},
+		{"a root session of 60 minutes", func(s *access.State) { s.AccessPolicy.RootSessionMinutes = 60 }, ""},
+		{"a key valid for six years", func(s *access.State) { s.AccessPolicy.SSHKeyValidDays = 6 * 365 }, "ACCESS_POLICY"},
+		{"an unknown lockout mode", func(s *access.State) { s.AccessPolicy.LockoutMode = "never" }, "ACCESS_POLICY"},
 		{"demote last owner", func(s *access.State) { s.Admins[0].Role = access.RoleAdmin }, "ACCESS_LAST_OWNER"},
 		{"login equals recovery", func(s *access.State) {
 			s.RecoveryKeys = []access.RecoveryKey{{Key: s.Admins[0].Keys[0].Key}}
@@ -27,7 +37,7 @@ func TestInvariants(t *testing.T) {
 		}, "ACCESS_KEY_DUPLICATE"},
 		{"three recovery keys", func(s *access.State) { s.RecoveryKeys = recoveryKeys(t, 3) }, ""},
 		{"fourth recovery key", func(s *access.State) { s.RecoveryKeys = recoveryKeys(t, 4) }, "ACCESS_RECOVERY_KEY_LIMIT"},
-		{"no recovery key after step 4", func(s *access.State) { s.RecoveryKeys = nil }, "ACCESS_LAST_RECOVERY_KEY"},
+		{"no recovery key after setup", func(s *access.State) { s.RecoveryKeys = nil }, "ACCESS_LAST_RECOVERY_KEY"},
 		{"sk recovery key", func(s *access.State) {
 			k, err := access.ParseLoginKey(readFixture(t, genSKEd25519))
 			if err != nil {

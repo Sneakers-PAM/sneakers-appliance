@@ -19,20 +19,26 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
 
-// elevated gives bob an elevated shell: requested, approved by alice and
-// connected, so it's active.
+// elevated gives bob a root shell: a challenge, its code, the ticket used
+// up, so it's active.
 func (b *box) elevated() elevation.Request {
 	b.t.Helper()
 	st := b.store.Read()
-	r, err := b.elev.Request(st, elevation.Caller{Admin: "bob", KeyFP: b.keys["bob"].fp, Source: "192.0.2.50"}, "investigate kubelet", 30)
+	c := elevation.Caller{Admin: "bob", KeyFP: b.keys["bob"].fp, Source: "192.0.2.50"}
+	r, err := b.elev.Challenge(st, c, "investigate kubelet")
 	if err != nil {
 		b.t.Fatal(err)
 	}
-	a, err := b.elev.Approve(st, "alice", r.ID, 0)
+	_, code, err := b.elev.IssueCode(st, "bob", r.Challenge)
 	if err != nil {
 		b.t.Fatal(err)
 	}
-	if _, _, err := b.elev.Begin(a.Certificate, 4242); err != nil {
+	_, ticket, err := b.elev.Open(st, c, r.Challenge, code)
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	a, _, err := b.elev.Begin(ticket, "bob", 4242)
+	if err != nil {
 		b.t.Fatal(err)
 	}
 	return a
@@ -46,9 +52,10 @@ func (b *box) staged(alice *browser) {
 	}
 }
 
-// requestElevation asks for an elevated shell as bob's closed shell would.
+// requestElevation asks for a root-shell challenge as bob's closed shell
+// would.
 func (b *box) requestElevation() error {
-	_, err := b.elev.Request(b.store.Read(), elevation.Caller{Admin: "bob", KeyFP: b.keys["bob"].fp, Source: "192.0.2.50"}, "check the disk", 30)
+	_, err := b.elev.Challenge(b.store.Read(), elevation.Caller{Admin: "bob", KeyFP: b.keys["bob"].fp, Source: "192.0.2.50"}, "check the disk")
 	return err
 }
 

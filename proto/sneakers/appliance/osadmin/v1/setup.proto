@@ -1,23 +1,86 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The Setup page (first boot): the recovery keys, the escrow, the
-// single-admin warning and Finish.
+// The Setup stepper (first boot) and the one-time-code pages that give an
+// admin a password and an authenticator: the first admin (the console's
+// setup code), an invited admin (the code an owner gets from AddAdmin) and
+// the console's Recover access (a new password and authenticator for an
+// owner, or a new owner).
+//
+// The stepper's six steps: 1 the setup code (RedeemCode), 2 the first
+// admin (CheckPassword, BeginCredentials, CompleteCredentials), 3 the
+// recovery keys, 4 the network (optional), 5 the protection (read only),
+// 6 signing in once (SignInService.SignIn) and Finish.
 syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
 
 import "google/protobuf/timestamp.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/signin.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
 // SetupService finishes the appliance setup. Recovery keys may also be
 // changed after setup (a new escrow is written each time).
 service SetupService {
+  // GetSetup is where setup is. A code session (before the first admin
+  // exists) sees the steps and the protection, not the keys.
   rpc GetSetup(GetSetupRequest) returns (GetSetupResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
-    option (rule) = {role: ROLE_ADMIN};
+    option (rule) = {
+      role: ROLE_ADMIN
+      code_session: true
+    };
+  }
+  // RedeemCode takes a one-time code (16 characters, Crockford base32;
+  // dashes, spaces and case don't matter, O reads as 0 and I and L as 1)
+  // and sets the code session's cookie. Only allow-listed sources may try.
+  // A wrong code is refused with a SignInRefusal detail; after 5 wrong
+  // tries the setup code locks until the console asks for a new one, and
+  // a Recover access code is withdrawn. A setup code works for 60 minutes,
+  // an invitation for 24 hours, a Recover access code for 60 minutes.
+  rpc RedeemCode(RedeemCodeRequest) returns (RedeemCodeResponse) {
+    option (rule) = {
+      public: true
+      audit: "setup.code.redeem"
+    };
+  }
+  // CheckPassword says whether a password would be taken: at least 12
+  // characters, and not on the breached-password list. Nothing is stored.
+  rpc CheckPassword(CheckPasswordRequest) returns (CheckPasswordResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {
+      role: ROLE_ADMIN
+      code_session: true
+    };
+  }
+  // BeginCredentials checks the name and the password and returns a new
+  // TOTP secret to scan. Nothing is stored until CompleteCredentials.
+  rpc BeginCredentials(BeginCredentialsRequest) returns (BeginCredentialsResponse) {
+    option (rule) = {
+      code_session: true
+      audit: "setup.credentials.begin"
+    };
+  }
+  // CompleteCredentials checks a code from the new authenticator, then
+  // stores the admin's password (argon2id with the box's pepper) and TOTP
+  // secret, ends the code session and signs the browser in. For the setup
+  // code this creates the first admin: an owner and the first root
+  // operator. SSH comes on once the first admin exists.
+  rpc CompleteCredentials(CompleteCredentialsRequest) returns (CompleteCredentialsResponse) {
+    option (rule) = {
+      code_session: true
+      audit: "setup.credentials.complete"
+    };
+  }
+  // AcknowledgeStep marks the optional network step (4) and the read-only
+  // protection step (5) as seen.
+  rpc AcknowledgeStep(AcknowledgeStepRequest) returns (AcknowledgeStepResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "setup.step.acknowledge"
+    };
   }
   // AddRecoveryKey adds one of up to three recovery keys and writes a new
   // escrow to the whole set.
@@ -86,10 +149,137 @@ message GetSetupResponse {
   // product_setup_url is where the product's own /setup runs once the
   // platform is up.
   string product_setup_url = 8;
-  // signed_in is true once an admin has signed in to :8443: setup can't
-  // finish before.
+  // signed_in is true once an admin has signed in to :8443 with a
+  // password and a TOTP code: setup can't finish before.
   bool signed_in = 9;
+  // steps are the stepper's six steps, in order.
+  repeated SetupStep steps = 10;
+  // current is the first step not done (1 to 6); 0 when setup is done.
+  int32 current = 11;
+  // code_kind is the code session's kind; unspecified for a signed-in
+  // admin.
+  CodeKind code_kind = 12;
+  // code_admin is the admin an invitation or Recover access code is for;
+  // empty when the name is chosen (the first admin, a new owner).
+  string code_admin = 13;
+  // code_session_expires is when the code session ends unless used.
+  google.protobuf.Timestamp code_session_expires = 14;
+  // first_admin is set once the first admin exists.
+  string first_admin = 15;
 }
+
+// SetupStepKind names a stepper step.
+enum SetupStepKind {
+  SETUP_STEP_KIND_UNSPECIFIED = 0;
+  SETUP_STEP_KIND_CODE = 1;
+  SETUP_STEP_KIND_ADMIN = 2;
+  SETUP_STEP_KIND_RECOVERY_KEYS = 3;
+  SETUP_STEP_KIND_NETWORK = 4;
+  SETUP_STEP_KIND_PROTECTION = 5;
+  SETUP_STEP_KIND_SIGN_IN = 6;
+}
+
+message SetupStep {
+  // number is 1 to 6.
+  int32 number = 1;
+  SetupStepKind kind = 2;
+  bool done = 3;
+  // optional steps (the network) may be acknowledged without a change.
+  bool optional = 4;
+}
+
+// CodeKind is what a one-time code is for.
+enum CodeKind {
+  CODE_KIND_UNSPECIFIED = 0;
+  // CODE_KIND_SETUP: the console's first-boot setup code; it creates the
+  // first admin.
+  CODE_KIND_SETUP = 1;
+  // CODE_KIND_INVITE: an owner added an admin; the code sets that admin's
+  // password and authenticator.
+  CODE_KIND_INVITE = 2;
+  // CODE_KIND_RECOVER: the console's Recover access; a new password and
+  // authenticator for an owner, or a new owner.
+  CODE_KIND_RECOVER = 3;
+}
+
+message RedeemCodeRequest {
+  string code = 1;
+}
+
+message RedeemCodeResponse {
+  CodeKind kind = 1;
+  // admin is the admin the code is for; empty when the name is chosen.
+  string admin = 2;
+  google.protobuf.Timestamp expires = 3;
+  // existing_owners are the owners a Recover access code may reset.
+  repeated string existing_owners = 4;
+  // csrf_token goes in the X-CSRF-Token header of the code session's
+  // calls that change something.
+  string csrf_token = 5;
+}
+
+message CheckPasswordRequest {
+  string password = 1;
+  // admin is the name it would belong to; a password equal to the name is
+  // refused.
+  string admin = 2;
+}
+
+message CheckPasswordResponse {
+  bool ok = 1;
+  int32 min_length = 2;
+  bool too_short = 3;
+  // breached: the password is on the breached-password list.
+  bool breached = 4;
+  // message is one plain sentence when ok is false.
+  string message = 5;
+}
+
+message BeginCredentialsRequest {
+  // admin is the name: chosen for the first admin and a new owner, fixed
+  // (and then checked) for an invitation or an owner's reset.
+  string admin = 1;
+  string password = 2;
+}
+
+// TotpEnrolment is a new authenticator secret, shown once.
+message TotpEnrolment {
+  // id names this enrolment for its Complete call.
+  string id = 1;
+  // secret is the base32 secret, for typing; the page shows it in groups
+  // of four.
+  string secret = 2;
+  // uri is the otpauth:// URI for the QR code.
+  string uri = 3;
+  string issuer = 4;
+  string account = 5;
+  // digits is 6, period_seconds 30, algorithm SHA1 (what every
+  // authenticator app reads).
+  int32 digits = 6;
+  int32 period_seconds = 7;
+  string algorithm = 8;
+  google.protobuf.Timestamp expires = 9;
+}
+
+message BeginCredentialsResponse {
+  TotpEnrolment totp = 1;
+}
+
+message CompleteCredentialsRequest {
+  string enrolment_id = 1;
+  string totp_code = 2;
+}
+
+message CompleteCredentialsResponse {
+  // session is the signed-in browser (the cookie is set too).
+  Session session = 1;
+}
+
+message AcknowledgeStepRequest {
+  SetupStepKind step = 1;
+}
+
+message AcknowledgeStepResponse {}
 
 message AddRecoveryKeyRequest {
   // public_key is one OpenSSH line: ssh-ed25519, or ssh-rsa of 3072 bits

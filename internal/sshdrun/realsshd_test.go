@@ -73,7 +73,7 @@ func realPaths(t *testing.T, sshd, dir string) sshconfig.Paths {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(keys, "user_ca.pub"), ssh.MarshalAuthorizedKey(ca), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(keys, "root_key.pub"), ssh.MarshalAuthorizedKey(ca), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(keys, "revoked.krl"), nil, 0o644); err != nil {
@@ -81,8 +81,8 @@ func realPaths(t *testing.T, sshd, dir string) sshconfig.Paths {
 	}
 	bin := filepath.Dir(sshd)
 	return sshconfig.Paths{
-		ConfigDir: filepath.Join(dir, "ssh"), HostKeys: hostKeys, RevokedKeys: filepath.Join(keys, "revoked.krl"), UserCA: filepath.Join(keys, "user_ca.pub"),
-		PidFile: "none", Shell: "/bin/true", Elevated: "/bin/true", Enrol: "/bin/true", EnrolKeys: "/bin/true",
+		ConfigDir: filepath.Join(dir, "ssh"), HostKeys: hostKeys, RevokedKeys: filepath.Join(keys, "revoked.krl"), UserCA: filepath.Join(keys, "root_key.pub"),
+		PidFile: "none", Shell: "/bin/true",
 		SessionPath: filepath.Join(bin, "sshd-session"), AuthPath: filepath.Join(bin, "sshd-auth"),
 	}
 }
@@ -129,7 +129,7 @@ func TestRealSshdStartsReloadsAndRefuses(t *testing.T) {
 	r := newRig(t)
 	r.writeStore("alice")
 	port := freePort(t)
-	o := r.options(sshdrun.Admin)
+	o := r.options()
 	o.Paths = realPaths(t, sshd, r.run)
 	o.Port = port
 	o.Addresses = func(context.Context) ([]netip.Addr, error) {
@@ -155,7 +155,7 @@ func TestRealSshdStartsReloadsAndRefuses(t *testing.T) {
 	waitFor(t, func() bool { return run.Reloads() > before })
 	waitBanner(t, addr)
 	cfg, _ := os.ReadFile(filepath.Join(o.Paths.ConfigDir, "sshd_config"))
-	if !strings.Contains(string(cfg), "AllowUsers alice bob maint") {
+	if !strings.Contains(string(cfg), "AllowUsers alice bob\n") {
 		t.Fatalf("config:\n%s", cfg)
 	}
 

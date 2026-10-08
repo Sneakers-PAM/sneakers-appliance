@@ -5,7 +5,6 @@ package osadmin
 
 import (
 	"context"
-	"net/http"
 	"path/filepath"
 
 	"connectrpc.com/connect"
@@ -16,6 +15,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
@@ -25,55 +25,72 @@ type signIn struct {
 	s *Server
 }
 
-func (h *signIn) BeginSignIn(ctx context.Context, _ *connect.Request[osadminv1.BeginSignInRequest]) (*connect.Response[osadminv1.BeginSignInResponse], error) {
+// wrongSignIn is the one answer to a wrong name, password or code, so the
+// page can't tell which.
+const wrongSignIn = "that didn't work; check the name, the password and the authenticator code"
+
+func (h *signIn) SignIn(ctx context.Context, r *connect.Request[osadminv1.SignInRequest]) (*connect.Response[osadminv1.SignInResponse], error) {
 	c := callFrom(ctx)
-	code, err := h.s.logins.Begin(c.source, c.userAgent)
-	if err != nil {
+	name := r.Msg.GetAdmin()
+	c.note(name)
+	st := h.s.o.Access.Read()
+	a, known := st.Admin(name)
+	who := ""
+	if known {
+		who = name
+	}
+	now := h.s.o.Clock.Now()
+	if err := h.s.o.Lockout.Check(who, c.source, now); err != nil {
 		return nil, err
 	}
-	h.s.o.Logger.Info("osadmin: sign-in code issued", log.F("source", c.source))
-	return connect.NewResponse(&osadminv1.BeginSignInResponse{
-		Code: code.Code, PollToken: code.PollToken, Expires: timestamppb.New(code.Expires),
-		SourceAddress: code.Source, UserAgent: code.UserAgent,
-	}), nil
-}
-
-func (h *signIn) PollSignIn(ctx context.Context, r *connect.Request[osadminv1.PollSignInRequest]) (*connect.Response[osadminv1.PollSignInResponse], error) {
-	c := callFrom(ctx)
-	state, ap := h.s.logins.Poll(r.Msg.GetPollToken())
-	switch state {
-	case weblogin.Pending:
-		return connect.NewResponse(&osadminv1.PollSignInResponse{State: osadminv1.SignInState_SIGN_IN_STATE_PENDING}), nil
-	case weblogin.Expired:
-		return connect.NewResponse(&osadminv1.PollSignInResponse{State: osadminv1.SignInState_SIGN_IN_STATE_EXPIRED}), nil
+	if !known || !a.HasCredentials() {
+		credentials.VerifyPassword(h.s.o.RootKey.Pepper(), dummyHash(), r.Msg.GetPassword())
+		return nil, h.s.failed(who, c.source, osaudit.SurfaceAdmin, wrongSignIn)
 	}
-	st := h.s.o.Access.Read()
-	a, ok := st.Admin(ap.Admin)
-	if !ok || !hasKey(a, ap.KeyFP) {
-		return nil, codes.New(codes.LoginCode, "the admin or key that approved this sign-in was removed")
+	if !credentials.VerifyPassword(h.s.o.RootKey.Pepper(), a.Password.Hash, r.Msg.GetPassword()) {
+		return nil, h.s.failed(who, c.source, osaudit.SurfaceAdmin, wrongSignIn)
+	}
+	if err := h.s.checkTOTP(a, r.Msg.GetTotpCode(), c.source, osaudit.SurfaceAdmin, wrongSignIn); err != nil {
+		return nil, err
 	}
 	// A sign-in from a browser that already holds a session for the same
-	// admin is a step-up: the new session replaces the old one.
-	if old, err := h.s.session(c.header); err == nil && old.Admin == ap.Admin {
+	// admin replaces it.
+	if old, err := h.s.session(c.header); err == nil && old.Admin == name {
 		h.s.sessions.End(old.ID)
 	}
-	sess := h.s.sessions.Create(ap.Admin, ap.KeyFP, ap.Source, ap.UserAgent)
-	h.s.write(osaudit.Entry{Actor: sess.Admin, KeyFP: sess.KeyFP, Source: c.source, Action: "signin.session.start"}, nil)
-	if !h.s.SetupDone() && !exists(filepath.Join(h.s.o.Paths.SetupDir(), SignedInMarker)) {
-		// First boot's step 5: the admin can reach and use :8443.
+	sess, notices := h.s.newSession(*a, c.source, c.userAgent)
+	c.session = sess
+	if h.s.FirstAdminDone() && !h.s.SetupDone() && !exists(filepath.Join(h.s.o.Paths.SetupDir(), SignedInMarker)) {
+		// First boot's step 6: the admin can sign in from where they sit.
 		if err := h.s.mark(SignedInMarker); err != nil {
 			h.s.o.Logger.Error(err, "osadmin: the first sign-in wasn't recorded")
 		} else {
 			h.s.o.Logger.Info("osadmin: first sign-in recorded", log.F("admin", sess.Admin))
+			h.s.consoleChanged()
 		}
 	}
 	h.s.o.Logger.Info("osadmin: signed in", log.F("admin", sess.Admin), log.F("source", c.source))
-	resp := connect.NewResponse(&osadminv1.PollSignInResponse{State: osadminv1.SignInState_SIGN_IN_STATE_APPROVED, Session: h.s.toSession(sess, a.Role)})
-	resp.Header().Add("Set-Cookie", (&http.Cookie{
-		Name: CookieName, Value: sess.ID, Path: "/", Secure: true, HttpOnly: true,
-		SameSite: http.SameSiteStrictMode, MaxAge: int(weblogin.MaxAge.Seconds()),
-	}).String())
+	resp := connect.NewResponse(&osadminv1.SignInResponse{Session: h.s.toSession(sess, a.Role, notices...)})
+	resp.Header().Add("Set-Cookie", sessionCookie(sess.ID, weblogin.MaxAge))
 	return resp, nil
+}
+
+func (h *signIn) StepUp(ctx context.Context, r *connect.Request[osadminv1.StepUpRequest]) (*connect.Response[osadminv1.StepUpResponse], error) {
+	c := callFrom(ctx)
+	st := h.s.o.Access.Read()
+	a, ok := st.Admin(c.session.Admin)
+	if !ok || !a.HasCredentials() {
+		return nil, codes.New(codes.AccessSession, "sign in again")
+	}
+	if err := h.s.checkTOTP(a, r.Msg.GetTotpCode(), c.source, osaudit.SurfaceAdmin, wrongCode); err != nil {
+		return nil, err
+	}
+	sess, ok := h.s.sessions.StepUp(c.session.ID)
+	if !ok {
+		return nil, codes.New(codes.AccessSession, "the session has ended; sign in again")
+	}
+	h.s.o.Logger.Info("osadmin: stepped up", log.F("admin", sess.Admin))
+	return connect.NewResponse(&osadminv1.StepUpResponse{Session: h.s.toSession(sess, c.role)}), nil
 }
 
 func (h *signIn) GetSession(ctx context.Context, _ *connect.Request[osadminv1.GetSessionRequest]) (*connect.Response[osadminv1.GetSessionResponse], error) {
@@ -86,16 +103,16 @@ func (h *signIn) SignOut(ctx context.Context, _ *connect.Request[osadminv1.SignO
 	h.s.sessions.End(c.session.ID)
 	h.s.o.Logger.Info("osadmin: signed out", log.F("admin", c.session.Admin))
 	resp := connect.NewResponse(&osadminv1.SignOutResponse{})
-	resp.Header().Add("Set-Cookie", (&http.Cookie{Name: CookieName, Value: "", Path: "/", Secure: true, HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: -1}).String())
+	resp.Header().Add("Set-Cookie", sessionCookie("", -1))
 	return resp, nil
 }
 
-func (s *Server) toSession(sess weblogin.Session, role access.Role) *osadminv1.Session {
+func (s *Server) toSession(sess weblogin.Session, role access.Role, notices ...string) *osadminv1.Session {
 	return &osadminv1.Session{
-		Admin: sess.Admin, Role: roleToWire(role), KeyFingerprint: sess.KeyFP,
+		Admin: sess.Admin, Role: roleToWire(role),
 		SignedIn: timestamppb.New(sess.SignedIn), StepUpUntil: timestamppb.New(sess.StepUpUntil()),
 		IdleExpires: timestamppb.New(sess.IdleExpires()), Expires: timestamppb.New(sess.Expires()),
-		CsrfToken: sess.CSRF,
+		CsrfToken: sess.CSRF, RootOperator: s.o.Access.Read().IsRootOperator(sess.Admin), Notices: notices,
 	}
 }
 

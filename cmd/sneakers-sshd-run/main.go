@@ -4,7 +4,7 @@
 //go:build linux
 
 // Command sneakers-sshd-run renders, checks and runs OpenSSH sshd: it
-// refuses admin mode without an owner key, installs the config only once
+// refuses to start while no admin can sign in, installs the config only once
 // the pinned sshd -t accepts it, runs sshd -D -e -f on it, and on a
 // SIGHUP from accessd, or new management addresses from netd, renders and
 // checks again before it tells sshd.
@@ -36,15 +36,13 @@ import (
 )
 
 type config struct {
-	mode, configDir, state, run, sshd, netdSock, pidFile string
+	configDir, state, sshd, netdSock, pidFile string
 }
 
 func main() {
 	var c config
-	flag.StringVar(&c.mode, "mode", "auto", "admin, enrol, or auto (enrol until an owner has a key)")
 	flag.StringVar(&c.configDir, "config-dir", "/run/sneakers/ssh", "where the rendered files live")
 	flag.StringVar(&c.state, "state", "/var/lib/sneakers", "the state volume")
-	flag.StringVar(&c.run, "run", "/run/sneakers", "where accessd renders the accounts")
 	flag.StringVar(&c.sshd, "sshd", "/usr/sbin/sshd", "the pinned sshd")
 	flag.StringVar(&c.netdSock, "netd-socket", netdapi.SocketPath, "netd's socket")
 	flag.StringVar(&c.pidFile, "pid-file", "/run/sneakers/sshd.pid", "where this process's pid goes; accessd signals it")
@@ -60,11 +58,6 @@ func main() {
 }
 
 func run(ctx context.Context, c config, lg log.Logger) error {
-	switch sshdrun.Mode(c.mode) {
-	case sshdrun.Admin, sshdrun.Enrol, sshdrun.Auto:
-	default:
-		return fmt.Errorf("--mode %q: use admin, enrol or auto", c.mode)
-	}
 	if err := os.WriteFile(c.pidFile, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o644); err != nil { // #nosec G306 -- a pid file
 		return err
 	}
@@ -85,7 +78,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	paths := sshconfig.DefaultPaths()
 	paths.ConfigDir = c.configDir
 	o := sshdrun.Options{
-		Mode: sshdrun.Mode(c.mode), Paths: paths, StateDir: c.state, AccountsDir: filepath.Join(c.run, "accounts"),
+		Paths: paths, StateDir: c.state,
 		Addresses: func(ctx context.Context) ([]netip.Addr, error) {
 			cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 			defer cancel()

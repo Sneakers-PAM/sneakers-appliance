@@ -4,13 +4,9 @@
 package sources
 
 import (
-	"context"
-	"net/http"
-
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
@@ -25,20 +21,18 @@ const (
 
 // Box is every client the console programs use, on the box's sockets.
 type Box struct {
-	Custody   Custody
-	Status    Status
-	Network   Network
-	Services  Services
-	Access    accessv1connect.AccessServiceClient
-	Setup     accessv1connect.SetupServiceClient
-	Window    accessv1connect.EnrolmentServiceClient
-	Local     osadminv1connect.LocalServiceClient
-	Power     initv1connect.PowerServiceClient
-	Shell     *shell.Services
-	SSHDir    string
-	Platform  Platform
-	Upgrades  Upgrades
-	FetchKeys func(ctx context.Context, url string) (access.Fetched, error)
+	Custody  Custody
+	Status   Status
+	Network  Network
+	Services Services
+	Access   accessv1connect.AccessServiceClient
+	Setup    accessv1connect.SetupServiceClient
+	Local    osadminv1connect.LocalServiceClient
+	Power    initv1connect.PowerServiceClient
+	Shell    *shell.Services
+	SSHDir   string
+	Platform Platform
+	Upgrades Upgrades
 }
 
 // Dial makes the console's clients. Nothing connects until a call.
@@ -52,15 +46,11 @@ func Dial() Box {
 		Services: NewServices(ServicesDir, initv1connect.NewServicesServiceClient(ic, initURL)),
 		Access:   accessv1connect.NewAccessServiceClient(ac, accessURL),
 		Setup:    accessv1connect.NewSetupServiceClient(ac, accessURL),
-		Window:   accessv1connect.NewEnrolmentServiceClient(ac, accessURL),
 		Local:    osadminv1connect.NewLocalServiceClient(ac, accessURL),
 		Power:    initv1connect.NewPowerServiceClient(pc, powerURL),
 		SSHDir:   SSHDir,
 		Platform: NoPlatform{},
 		Upgrades: NoUpgrades{},
-		FetchKeys: func(ctx context.Context, url string) (access.Fetched, error) {
-			return access.FetchKeys(ctx, &http.Client{}, url)
-		},
 	}
 	b.Shell = &shell.Services{Power: b.Power, StatusFile: accessapi.StatusFile}
 	b.Shell.UseAccessd(ac, accessURL)

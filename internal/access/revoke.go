@@ -30,6 +30,8 @@ type RevokedKey struct {
 	// RevokedBy is the admin, or ConsoleActor, who removed the key or its
 	// admin; empty in an older store.
 	RevokedBy string `json:"revokedBy,omitempty"`
+	// Serial is the removed key's certificate serial, also on the list.
+	Serial uint64 `json:"serial,omitempty"`
 }
 
 // By is who revoked the key, UnknownActor when the store didn't record it.
@@ -55,7 +57,7 @@ func revokeRemoved(cur State, next *State, now time.Time, by string) {
 			if kept[k.Fingerprint] || next.revoked(k.Fingerprint) {
 				continue
 			}
-			next.RevokedKeys = append(next.RevokedKeys, RevokedKey{Fingerprint: k.Fingerprint, PublicKey: k.PublicKey, Admin: a.Name, Revoked: now.UTC(), RevokedBy: by})
+			next.RevokedKeys = append(next.RevokedKeys, RevokedKey{Fingerprint: k.Fingerprint, PublicKey: k.PublicKey, Admin: a.Name, Revoked: now.UTC(), RevokedBy: by, Serial: k.Serial})
 		}
 	}
 }
@@ -83,4 +85,15 @@ func (s State) RevokedPublicKeys() ([]ssh.PublicKey, error) {
 		out = append(out, pk)
 	}
 	return out, nil
+}
+
+// RevokedSerials are the certificate serials of the removed keys.
+func (s State) RevokedSerials() []uint64 {
+	var out []uint64
+	for _, r := range s.RevokedKeys {
+		if r.Serial != 0 {
+			out = append(out, r.Serial)
+		}
+	}
+	return out
 }

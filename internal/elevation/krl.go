@@ -30,7 +30,7 @@ func MarshalKRL(ca ssh.PublicKey, serials []uint64, keys []ssh.PublicKey, versio
 	b = binary.BigEndian.AppendUint64(b, uint64(max(generated.Unix(), 0))) // #nosec G115 -- clamped
 	b = binary.BigEndian.AppendUint64(b, 0)                                // flags
 	b = appendString(b, nil)                                               // reserved
-	b = appendString(b, []byte("sneakers-appliance removed login keys and elevation certificates"))
+	b = appendString(b, []byte("sneakers-appliance removed SSH keys"))
 	b = appendCertSerials(b, ca, serials)
 	if len(keys) == 0 {
 		return b

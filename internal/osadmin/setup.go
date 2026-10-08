@@ -51,8 +51,19 @@ func exists(p string) bool {
 }
 
 func (h *setup) GetSetup(ctx context.Context, _ *connect.Request[osadminv1.GetSetupRequest]) (*connect.Response[osadminv1.GetSetupResponse], error) {
+	c := callFrom(ctx)
 	st := h.s.o.Access.Read()
+	steps := h.s.setupSteps()
+	cur, _ := currentStep(steps)
+	if c.code != nil {
+		// Before an admin exists, the code session sees the steps only.
+		out := &osadminv1.GetSetupResponse{Done: h.s.SetupDone(), Steps: steps, Current: cur, CodeKind: c.code.Kind, CodeAdmin: c.code.Admin,
+			CodeSessionExpires: timestamppb.New(c.code.Expires), MaxRecoveryKeys: access.MaxRecoveryKeys}
+		return connect.NewResponse(out), nil
+	}
 	out := &osadminv1.GetSetupResponse{
+		Steps:                   steps,
+		Current:                 cur,
 		Done:                    h.s.SetupDone(),
 		MaxRecoveryKeys:         access.MaxRecoveryKeys,
 		AdminCount:              int32(min(len(st.Admins), 1<<30)), // #nosec G115 -- clamped
@@ -66,6 +77,11 @@ func (h *setup) GetSetup(ctx context.Context, _ *connect.Request[osadminv1.GetSe
 	}
 	if name, _ := h.s.newestEscrow(); name != "" {
 		out.EscrowFile = name
+	}
+	for _, a := range st.Admins {
+		if a.CreatedBy == "setup" {
+			out.FirstAdmin = a.Name
+		}
 	}
 	return connect.NewResponse(out), nil
 }
@@ -197,12 +213,18 @@ func (h *setup) Finish(ctx context.Context, _ *connect.Request[osadminv1.FinishR
 	if len(st.Admins) == 1 && !exists(filepath.Join(h.s.o.Paths.SetupDir(), SingleAdminMarker)) {
 		return nil, codes.New(codes.SetupIncomplete, "a step is still open: confirm the single-admin warning, or add a second admin")
 	}
+	for _, m := range []struct{ marker, step string }{{NetworkSeenMarker, "step 4, the network"}, {ProtectionSeenMarker, "step 5, the protection"}} {
+		if !exists(filepath.Join(h.s.o.Paths.SetupDir(), m.marker)) {
+			return nil, codes.New(codes.SetupIncomplete, "a step is still open: %s", m.step)
+		}
+	}
 	if !exists(filepath.Join(h.s.o.Paths.SetupDir(), SignedInMarker)) {
-		return nil, codes.New(codes.SetupIncomplete, "a step is still open: the first sign-in on :8443")
+		return nil, codes.New(codes.SetupIncomplete, "a step is still open: sign in once with your name, password and authenticator code")
 	}
 	if err := h.s.mark(DoneMarker); err != nil {
 		return nil, err
 	}
+	h.s.consoleChanged()
 	h.s.o.Logger.Info("osadmin: setup finished", log.F("by", callFrom(ctx).session.Admin))
 	return connect.NewResponse(&osadminv1.FinishResponse{ProductSetupUrl: h.s.productSetupURL(ctx)}), nil
 }

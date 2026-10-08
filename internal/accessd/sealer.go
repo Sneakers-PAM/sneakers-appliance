@@ -16,8 +16,8 @@ import (
 // sealTimeout bounds one call to init: a sealed item is small.
 const sealTimeout = 30 * time.Second
 
-// CustodySealer seals accessd's secrets (the SSH user CA) through init's
-// KeyCustody on init.sock.
+// CustodySealer seals accessd's secrets (the root key, the pepper and the
+// setup code) through init's KeyCustody on init.sock.
 type CustodySealer struct {
 	Client initv1connect.KeyCustodyServiceClient
 }

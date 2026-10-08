@@ -24,16 +24,22 @@ const FileName = "store.json"
 
 // State is the whole access store (spec 2, Section 4.1).
 type State struct {
-	Version         int           `json:"version"`
-	NextUID         int           `json:"nextUid"`
-	Admins          []Admin       `json:"admins"`
-	RecoveryKeys    []RecoveryKey `json:"recoveryKeys"`
-	ElevationPolicy Policy        `json:"elevationPolicy"`
-	// Quorum is the factory-reset roster; nil means every admin, two
-	// approvals.
+	Version      int           `json:"version"`
+	NextUID      int           `json:"nextUid"`
+	Admins       []Admin       `json:"admins"`
+	RecoveryKeys []RecoveryKey `json:"recoveryKeys"`
+	AccessPolicy Policy        `json:"accessPolicy"`
+	// Quorum is the root-operator roster, which also approves a factory
+	// reset; nil (a store from before the first admin set it) means every
+	// admin, two approvals.
 	Quorum *QuorumRoster `json:"quorum,omitempty"`
 	// RevokedKeys are removed login keys, on sshd's revocation list.
 	RevokedKeys []RevokedKey `json:"revokedKeys,omitempty"`
+	// NextSerial is the next issued certificate's serial.
+	NextSerial uint64 `json:"nextSerial,omitempty"`
+	// LastRecoverAccess is the last console Recover access, shown to every
+	// admin at their next sign-in.
+	LastRecoverAccess *time.Time `json:"lastRecoverAccess,omitempty"`
 }
 
 // Clone returns a deep copy of s.
@@ -48,15 +54,37 @@ func (s State) Clone() State {
 				a.Keys[j].LastUsed = &t
 			}
 		}
-		if a.ApprovalHoldUntil != nil {
-			t := *a.ApprovalHoldUntil
-			a.ApprovalHoldUntil = &t
+		for j, k := range a.Keys {
+			if k.ValidBefore != nil {
+				t := *k.ValidBefore
+				a.Keys[j].ValidBefore = &t
+			}
+		}
+		if a.Password != nil {
+			p := *a.Password
+			a.Password = &p
+		}
+		if a.TOTP != nil {
+			p := *a.TOTP
+			a.TOTP = &p
+		}
+		if a.Invite != nil {
+			p := *a.Invite
+			a.Invite = &p
+		}
+		if a.LastSignIn != nil {
+			t := *a.LastSignIn
+			a.LastSignIn = &t
 		}
 		c.Admins[i] = a
 	}
 	c.RecoveryKeys = slices.Clone(s.RecoveryKeys)
 	c.Quorum = s.Quorum.clone()
 	c.RevokedKeys = slices.Clone(s.RevokedKeys)
+	if s.LastRecoverAccess != nil {
+		t := *s.LastRecoverAccess
+		c.LastRecoverAccess = &t
+	}
 	return c
 }
 
@@ -92,7 +120,8 @@ func (s *State) AddAdmin(name string, role Role, createdBy string, now time.Time
 }
 
 // Stage reports which setup steps have completed, so Check knows whether an
-// empty admin or recovery key list is still allowed.
+// empty admin or recovery key list is still allowed: the admin step is done
+// once the first admin exists, the recovery step once setup is done.
 type Stage func() (adminDone, recoveryDone bool)
 
 // Done is the Stage of a box past setup: every invariant applies.
@@ -229,7 +258,7 @@ func ReadState(dir string) (State, error) {
 	p := filepath.Join(dir, FileName)
 	b, err := os.ReadFile(p) // #nosec G304 -- the store file in the directory given
 	if errors.Is(err, fs.ErrNotExist) {
-		return State{NextUID: FirstUID, Admins: []Admin{}, RecoveryKeys: []RecoveryKey{}, ElevationPolicy: DefaultPolicy()}, nil
+		return State{NextUID: FirstUID, Admins: []Admin{}, RecoveryKeys: []RecoveryKey{}, AccessPolicy: DefaultPolicy(), NextSerial: 1}, nil
 	}
 	if err != nil {
 		return State{}, fmt.Errorf("access store: %w", err)

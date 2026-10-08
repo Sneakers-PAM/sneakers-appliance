@@ -119,7 +119,7 @@ func TestTheRevokeHookRunsBeforeTheWriteAndCanRefuseIt(t *testing.T) {
 	}
 	k1, k2 := loginKey(t), loginKey(t)
 	if err := st.Update(func(s *access.State) error {
-		a := s.AddAdmin("alice", access.RoleOwner, "console", t0)
+		a := signIn(s.AddAdmin("alice", access.RoleOwner, "setup", t0))
 		a.Keys = append(a.Keys, k1, k2)
 		s.RecoveryKeys = recoveryKeys(t, 1)
 		return nil

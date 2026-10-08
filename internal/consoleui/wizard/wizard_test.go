@@ -20,7 +20,6 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/consoletest"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/enrolment"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui/tuitest"
@@ -184,14 +183,14 @@ func newEnv(t *testing.T) *env {
 		},
 		Steps: wizard.MachineSteps{M: e.machine},
 		Power: e.pw,
-		Enrol: enrolment.Deps{Window: e.box.Window(), Now: func() time.Time { return now }},
 	}
 	return e
 }
 
-// The whole first boot: the listeners open at their steps and no earlier
-// (sshd when the admin step starts, :8443 once it's done), and the end
-// asks for a restart while the hand-over to normal isn't installed.
+// The whole first boot on the console: the network and the protection,
+// then :8443, where the first admin is made (accessd starts sshd then),
+// and the end asks for a restart while the hand-over to normal isn't
+// installed.
 func TestFirstBootOpensTheListenersAtTheirSteps(t *testing.T) {
 	e := newEnv(t)
 	d := tuitest.New(t)
@@ -210,32 +209,17 @@ func TestFirstBootOpensTheListenersAtTheirSteps(t *testing.T) {
 	d.Type(t, "sneakers.example.org")
 	d.Expect(t, "Host name  sneakers.example.org")
 	if got := e.svcs.Starts(); len(got) != 0 {
-		t.Fatalf("started before the admin step: %v", got)
+		t.Fatalf("started before the protection step: %v", got)
 	}
 	d.Type(t, "")
 	d.Expect(t, "Every check passed.")
 	d.Type(t, "")
 	d.Expect(t, "Protection: reduced (Secure Boot off)")
 	d.Type(t, "")
-	d.Expect(t, "The first admin is an owner")
-	d.Type(t, "root")
-	d.Expect(t, `"root" can't be an admin name`)
-	d.Type(t, "alice")
-	d.Expect(t, "ssh enrol@192.0.2.10")
-	if got := e.svcs.Starts(); !slices.Equal(got, []string{"sshd"}) || !slices.Equal(e.net.Opened(), []string{"ssh"}) {
-		t.Fatalf("at the admin step: %v, ports %v", got, e.net.Opened())
-	}
-	line, fp := consoletest.Key(t, "alice@laptop")
-	if _, err := e.box.Enrol.Submit(e.box.Enrol.Get().Code, line, "192.0.2.50"); err != nil {
-		t.Fatal(err)
-	}
-	d.Expect(t, fp)
-	d.Type(t, "yes")
-	d.Expect(t, "Keys enrolled so far: 1")
-	d.Type(t, "d")
+	e.box.AddOwner("alice")
 	d.Expect(t, "https://192.0.2.10:8443/")
-	if got := e.svcs.Starts(); !slices.Equal(got, []string{"sshd", "osadmin"}) || !slices.Equal(e.net.Opened(), []string{"ssh", "ssh+https"}) {
-		t.Fatalf("after the admin step: %v, ports %v", got, e.net.Opened())
+	if got := e.svcs.Starts(); !slices.Equal(got, []string{"osadmin"}) || !slices.Equal(e.net.Opened(), []string{"ssh+https"}) {
+		t.Fatalf("after the protection step: %v, ports %v", got, e.net.Opened())
 	}
 	e.box.SetRecovery(&osadminv1.RecoveryKey{Fingerprint: "SHA256:ysknevuNI/Ng13w+vvxlQW6FcH76LnuVdAfLHqOrZRw", Type: "ssh-ed25519", Label: "offline safe"})
 	d.Expect(t, "offline safe")

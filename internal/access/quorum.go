@@ -62,14 +62,21 @@ func ValidateQuorum(s State, r QuorumRoster) error {
 		}
 		seen[m] = true
 	}
-	if len(r.Members) < 2 {
-		return codes.New(codes.ResetUnavailable, "a quorum needs at least two admins on its roster")
+	if len(r.Members) == 0 {
+		return codes.New(codes.AccessQuorum, "the root-operator roster needs at least one admin")
 	}
-	if r.Required < 2 || r.Required > len(r.Members) {
-		return codes.New(codes.ResetUnavailable, "the threshold must be from 2 to %d, the roster's size", len(r.Members))
+	least := min(2, len(r.Members))
+	if r.Required < least || r.Required > len(r.Members) {
+		return codes.New(codes.AccessQuorum, "the threshold must be from %d to %d, the roster's size", least, len(r.Members))
 	}
 	return nil
 }
+
+// RootOperators are the admins on the roster: who may open the root shell.
+func (s State) RootOperators() []string { return s.EffectiveQuorum().Members }
+
+// IsRootOperator reports whether name is on the roster.
+func (s State) IsRootOperator(name string) bool { return slices.Contains(s.RootOperators(), name) }
 
 func (r *QuorumRoster) clone() *QuorumRoster {
 	if r == nil {

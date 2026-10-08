@@ -54,8 +54,8 @@ func TestStatus(t *testing.T) {
 	b.netd.settings.AllowList = []string{"0.0.0.0/0"}
 	b.netd.ntp = false
 	b.init.level = initv1.ProtectionLevel_PROTECTION_LEVEL_REDUCED
-	hold := b.clk.Now().Add(24 * time.Hour)
-	if err := b.store.Update(func(s *access.State) error { s.Admins[0].ApprovalHoldUntil = &hold; return nil }); err != nil {
+	used := b.clk.Now().Add(-time.Hour)
+	if err := b.store.Update(func(s *access.State) error { s.LastRecoverAccess = &used; return nil }); err != nil {
 		t.Fatal(err)
 	}
 	s, err = st.GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
@@ -163,7 +163,7 @@ func TestAuditListAndExport(t *testing.T) {
 	ctx := context.Background()
 	ac := osadminv1connect.NewAuditServiceClient(alice.hc, b.ts.URL)
 	for range 3 {
-		_, _ = alice.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: newKey(t).line}))
+		_, _ = alice.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: newKey(t).line})) //nolint:staticcheck // the deprecated RPC still answers
 	}
 	l, err := ac.ListEvents(ctx, connect.NewRequest(&osadminv1.ListEventsRequest{Limit: 2, Action: "access."}))
 	if err != nil || len(l.Msg.GetEvents()) != 2 || !l.Msg.GetChainOk() || l.Msg.GetNextPageToken() == "" {

@@ -4,13 +4,13 @@
 //go:build linux
 
 // Package elevated is sneakers-elevated (spec 2, Sections 2.8 and 3.4),
-// the forced command of a maint login: before it gives a prompt it has
-// accessd use the certificate up, then it runs the root shell on a pty it
-// owns, records the whole session in both directions, shows the time left
-// in the prompt, warns at 5 and 1 minutes, and ends the session at the
-// approved length. It holds the time box itself, so the session ends even
-// if accessd is down by then; and as the shell's parent, its own end ends
-// the session.
+// which accessd starts for a closed shell's root-shell ticket: before it
+// gives a prompt it has accessd use the ticket up, then it runs the root
+// shell on a pty it owns, records the whole session in both directions,
+// shows the time left in the prompt, warns a minute before the end, and
+// ends the session at the limit or after 10 minutes idle. It holds the
+// time box itself, so the session ends even if accessd is down by then; and
+// as the shell's parent, its own end ends the session.
 package elevated
 
 import (
@@ -29,7 +29,6 @@ import (
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
-	"golang.org/x/crypto/ssh"
 
 	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
@@ -44,14 +43,17 @@ type Accessd interface {
 }
 
 // DefaultWarnings are when the session warns before its end.
-var DefaultWarnings = []time.Duration{5 * time.Minute, time.Minute}
+var DefaultWarnings = []time.Duration{time.Minute}
+
+// DefaultIdle is how long the session waits for a key before it ends.
+const DefaultIdle = 10 * time.Minute
 
 // Options wire a session.
 type Options struct {
 	Accessd Accessd
-	// Login is what sshd says about the login: its certificate and the
-	// client's address.
-	Login accessapi.Login
+	// Ticket is the closed shell's root-shell ticket, and Admin the admin
+	// accessd saw on the other end of the socket.
+	Ticket, Admin string
 	// Shell is the root shell and its arguments; empty is /bin/sh -l.
 	Shell []string
 	// Audit is the OS audit log the recording's chunk hashes go to; its
@@ -64,8 +66,11 @@ type Options struct {
 	// pty now and whenever it changes, until ctx ends.
 	Resize   func(ctx context.Context, pty *os.File)
 	Warnings []time.Duration
-	PID      int
-	Logger   log.Logger
+	// Idle ends the session after this long without a key; zero is
+	// DefaultIdle.
+	Idle   time.Duration
+	PID    int
+	Logger log.Logger
 }
 
 // Result is how the session ended.
@@ -87,16 +92,19 @@ func Run(ctx, terminated context.Context, o Options) (Result, error) {
 	if o.Warnings == nil {
 		o.Warnings = DefaultWarnings
 	}
-	if _, ok := o.Login.Key.(*ssh.Certificate); !ok {
-		return Result{}, errors.New("this login didn't use an elevation certificate")
+	if o.Idle == 0 {
+		o.Idle = DefaultIdle
 	}
-	begin, err := o.Accessd.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Certificate: o.Login.KeyLine, Pid: int32(min(o.PID, 1<<30))})) // #nosec G115 -- clamped
+	if o.Ticket == "" || o.Admin == "" {
+		return Result{}, errors.New("there is no root-shell ticket")
+	}
+	begin, err := o.Accessd.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Ticket: o.Ticket, Admin: o.Admin, Pid: int32(min(o.PID, 1<<30))})) // #nosec G115 -- clamped
 	if err != nil {
 		var ce *connect.Error
 		if errors.As(err, &ce) && ce.Code() == connect.CodeUnavailable {
 			return Result{}, errors.New(accessapi.Unavailable)
 		}
-		return Result{}, fmt.Errorf("the certificate wasn't accepted: %w", err)
+		return Result{}, fmt.Errorf("the ticket wasn't accepted: %w", err)
 	}
 	e := begin.Msg.GetElevation()
 	ends := begin.Msg.GetEnds().AsTime()
@@ -140,11 +148,11 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		"HOME=/root", "USER=root", "LOGNAME=root", "SHELL=" + o.Shell[0],
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"TERM=" + termOf(os.Getenv("TERM")),
-		"SNEAKERS_ELEVATION=" + admin,
-		"SNEAKERS_ELEVATION_ENDS=" + strconv.FormatInt(ends.Unix(), 10),
+		"SNEAKERS_ROOT_SHELL=" + admin,
+		"SNEAKERS_ROOT_SHELL_ENDS=" + strconv.FormatInt(ends.Unix(), 10),
 		// busybox ash expands the prompt (ASH_EXPAND_PRMT), so it shows the
 		// minutes left at each prompt.
-		`PS1=[elevated $(( (SNEAKERS_ELEVATION_ENDS - $(date +%s)) / 60 )) min left] \w # `,
+		`PS1=[root $(( (SNEAKERS_ROOT_SHELL_ENDS - $(date +%s)) / 60 )) min left] \w # `,
 	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
@@ -167,12 +175,21 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		_, _ = o.Out.Write(b)
 		_, _ = rec.Write(b)
 	}
-	say(fmt.Sprintf("Root shell for %s, recorded. It ends at %s UTC.", admin, ends.UTC().Format("15:04:05")))
+	say(fmt.Sprintf("Root shell for %s, recorded. It ends at %s UTC, or after %s without a key.", admin, ends.UTC().Format("15:04:05"), o.Idle))
+	typed := make(chan struct{}, 1)
+	// gone closes when the client's side closes: the session ends as an
+	// exit.
+	gone := make(chan struct{})
 	go func() {
+		defer close(gone)
 		buf := make([]byte, 32*1024)
 		for {
 			n, err := o.In.Read(buf)
 			if n > 0 {
+				select {
+				case typed <- struct{}{}:
+				default:
+				}
 				if rerr := rec.Input(buf[:n]); rerr != nil {
 					o.Logger.Error(rerr, "elevated: the recording failed; ending the session")
 					_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
@@ -228,19 +245,33 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 	}()
 	box := time.NewTimer(time.Until(ends))
 	defer box.Stop()
+	idle := time.NewTimer(o.Idle)
+	defer idle.Stop()
 
 	reason := elevation.ReasonExit
-	select {
-	case <-exited:
-	case <-box.C:
-		reason = elevation.ReasonTimeBox
-	case <-terminated.Done():
-		reason = elevation.ReasonTerminated
-	case <-ctx.Done():
-		// The client went away (SIGHUP): the session ends as an exit.
+	clientGone := false
+wait:
+	for {
+		select {
+		case <-exited:
+		case <-box.C:
+			reason = elevation.ReasonTimeBox
+		case <-idle.C:
+			reason = elevation.ReasonIdle
+		case <-typed:
+			idle.Reset(o.Idle)
+			continue
+		case <-gone:
+			clientGone = true
+		case <-terminated.Done():
+			reason = elevation.ReasonTerminated
+		case <-ctx.Done():
+			// The client went away: the session ends as an exit.
+		}
+		break wait
 	}
-	if reason != elevation.ReasonExit || ctx.Err() != nil {
-		if msg := map[string]string{elevation.ReasonTimeBox: "The approved time is up; the session ends now.", elevation.ReasonTerminated: "An owner ended this session."}[reason]; msg != "" {
+	if reason != elevation.ReasonExit || ctx.Err() != nil || clientGone {
+		if msg := map[string]string{elevation.ReasonTimeBox: "The time is up; the root shell ends now.", elevation.ReasonIdle: "No key for " + o.Idle.String() + "; the root shell ends now.", elevation.ReasonTerminated: "An owner ended this root shell."}[reason]; msg != "" {
 			say(msg)
 		}
 		// The shell leads its own session and process group (Setsid), so

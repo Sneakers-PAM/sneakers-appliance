@@ -38,11 +38,8 @@ func TestAccountsAndSSHFilesFollowTheStore(t *testing.T) {
 	if !strings.Contains(cfg, "ListenAddress 192.0.2.10:22") || !strings.Contains(cfg, "ListenAddress [2001:db8::10]:22") || strings.Contains(cfg, "fe80") {
 		t.Fatalf("sshd_config:\n%s", cfg)
 	}
-	if !strings.Contains(cfg, "AllowUsers alice bob maint") {
+	if !strings.Contains(cfg, "AllowUsers alice bob\n") || !strings.Contains(cfg, "TrustedUserCAKeys ") || !strings.Contains(cfg, "AuthorizedKeysFile none") {
 		t.Fatalf("sshd_config:\n%s", cfg)
-	}
-	if k := read(t, filepath.Join(b.run, "ssh", "authorized_keys", "bob")); !strings.Contains(k, b.keys["bob"].line) {
-		t.Fatalf("bob's keys:\n%s", k)
 	}
 	if err := b.store.Update(func(st *access.State) error {
 		st.Admins = slices.DeleteFunc(st.Admins, func(a access.Admin) bool { return a.Name == "bob" })
@@ -50,8 +47,8 @@ func TestAccountsAndSSHFilesFollowTheStore(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(b.run, "ssh", "authorized_keys", "bob")); !os.IsNotExist(err) {
-		t.Fatalf("bob's keys are still there: %v", err)
+	if cfg := read(t, filepath.Join(b.run, "ssh", "sshd_config")); !strings.Contains(cfg, "AllowUsers alice\n") {
+		t.Fatalf("bob may still log in:\n%s", cfg)
 	}
 	if p := read(t, filepath.Join(b.run, "accounts", "passwd")); strings.Contains(p, "bob:x:") {
 		t.Fatalf("passwd:\n%s", p)
@@ -62,7 +59,8 @@ func TestAccountsAndSSHFilesFollowTheStore(t *testing.T) {
 }
 
 // sshd re-reads its config on SIGHUP: accessd sends one when sshd_config
-// changed (a new admin), not when only a key file did.
+// changed (a new admin), not for a new issued key (the certificate is
+// checked against the root key at each login).
 func TestSSHDIsToldWhenItsConfigChanges(t *testing.T) {
 	b := newBox(t)
 	hup := make(chan os.Signal, 4)
@@ -84,7 +82,7 @@ func TestSSHDIsToldWhenItsConfigChanges(t *testing.T) {
 	}
 	if err := b.store.Update(func(st *access.State) error {
 		a, _ := st.Admin("carol")
-		a.Keys = append(a.Keys, access.AdminKey{Key: pk, Added: time.Now(), AddedBy: "carol", Via: access.ViaShell})
+		a.Keys = append(a.Keys, access.AdminKey{Key: pk, Added: time.Now(), AddedBy: "carol", Via: access.ViaIssued, Serial: 99})
 		return nil
 	}); err != nil {
 		t.Fatal(err)
@@ -93,8 +91,5 @@ func TestSSHDIsToldWhenItsConfigChanges(t *testing.T) {
 	case <-hup:
 		t.Fatal("SIGHUP for a key change")
 	case <-time.After(300 * time.Millisecond):
-	}
-	if k2 := read(t, filepath.Join(b.run, "ssh", "authorized_keys", "carol")); !strings.Contains(k2, k.line) {
-		t.Fatalf("carol's keys:\n%s", k2)
 	}
 }

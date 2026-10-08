@@ -19,7 +19,8 @@ import (
 )
 
 // The local socket reads the caller's uid: this test process is neither
-// root nor an admin uid, so it may describe a code but not approve one.
+// root nor an admin uid, so it can't cancel a factory reset, and the sign-in
+// approval of old is gone.
 func TestLocalSocketUsesThePeerUID(t *testing.T) {
 	b := newBox(t, false)
 	sock := filepath.Join(t.TempDir(), "osadmin.sock")
@@ -35,14 +36,10 @@ func TestLocalSocketUsesThePeerUID(t *testing.T) {
 	}}}
 	lc := osadminv1connect.NewLocalServiceClient(hc, "http://osadmin.sock")
 	ctx := context.Background()
-	begin, err := osadminv1connect.NewSignInServiceClient(b.browser().hc, b.ts.URL).BeginSignIn(ctx, connect.NewRequest(&osadminv1.BeginSignInRequest{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	d, err := lc.DescribeSignIn(ctx, connect.NewRequest(&osadminv1.DescribeSignInRequest{Code: begin.Msg.GetCode()}))
-	if err != nil || d.Msg.GetUserAgent() != "TestBrowser/1.0" {
-		t.Fatalf("%v %v", d, err)
-	}
-	_, err = lc.ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{Code: begin.Msg.GetCode(), Admin: "alice", KeyFingerprint: b.keys["alice"].fp}))
+	_, err = lc.LocalCancelFactoryReset(ctx, connect.NewRequest(&osadminv1.LocalCancelFactoryResetRequest{}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+	_, err = lc.ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{Code: "ABCD-EFGH", Admin: "alice"}))
+	if connect.CodeOf(err) != connect.CodeUnimplemented {
+		t.Fatalf("the sign-in approval answers: %v", err)
+	}
 }

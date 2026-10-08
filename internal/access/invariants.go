@@ -8,14 +8,14 @@ import (
 )
 
 // Check applies every access invariant of spec 2 Section 4.2 to s.
-// step3Done and step4Done say whether the first admin and the recovery key
-// setup steps have completed: before them, an empty admin list or recovery
-// key list is allowed.
-func Check(s State, step3Done, step4Done bool) error {
+// adminDone says the first admin exists and setupDone that setup is
+// finished: before them, an empty admin list or recovery key list is
+// allowed.
+func Check(s State, adminDone, setupDone bool) error {
 	names := map[string]bool{}
 	uids := map[int]bool{}
 	seen := map[string]string{}
-	owners, ownersWithKey := 0, 0
+	owners, ownersWithCredentials := 0, 0
 	for _, a := range s.Admins {
 		if !ValidName(a.Name) {
 			return codes.New(codes.AccessName, "%q isn't a valid admin name: use 2 to 31 lowercase letters, digits, _ or -, starting with a letter, and not a reserved name", a.Name)
@@ -31,8 +31,8 @@ func Check(s State, step3Done, step4Done bool) error {
 		switch a.Role {
 		case RoleOwner:
 			owners++
-			if len(a.Keys) > 0 {
-				ownersWithKey++
+			if a.HasCredentials() {
+				ownersWithCredentials++
 			}
 		case RoleAdmin:
 		default:
@@ -65,16 +65,42 @@ func Check(s State, step3Done, step4Done bool) error {
 		}
 		seen[parsed.Fingerprint] = "a recovery key"
 	}
-	if step3Done {
+	if err := checkPolicy(s.AccessPolicy.Effective()); err != nil {
+		return err
+	}
+	if adminDone {
 		if owners == 0 {
 			return codes.New(codes.AccessLastOwner, "the box must keep at least one owner")
 		}
-		if ownersWithKey == 0 {
-			return codes.New(codes.AccessLastKey, "the last key of the last owner can't be removed; add the new key first")
+		if ownersWithCredentials == 0 {
+			return codes.New(codes.AccessLastOwner, "the box must keep at least one owner who can sign in")
+		}
+		if s.Quorum != nil {
+			if err := ValidateQuorum(s, *s.Quorum); err != nil {
+				return err
+			}
 		}
 	}
-	if step4Done && len(s.RecoveryKeys) == 0 {
+	if setupDone && len(s.RecoveryKeys) == 0 {
 		return codes.New(codes.AccessLastRecoveryKey, "the last recovery key can't be removed; add its replacement first")
+	}
+	return nil
+}
+
+func checkPolicy(p Policy) error {
+	switch p.LockoutMode {
+	case LockoutTimed, LockoutUntilUnlocked:
+	default:
+		return codes.New(codes.AccessPolicy, "the lockout mode is %s or %s, not %q", LockoutTimed, LockoutUntilUnlocked, p.LockoutMode)
+	}
+	if p.RootCodeMinutes < MinRootMinutes || p.RootCodeMinutes > MaxRootMinutes {
+		return codes.New(codes.AccessPolicy, "a root-shell code lasts %d to %d minutes", MinRootMinutes, MaxRootMinutes)
+	}
+	if p.RootSessionMinutes < MinRootMinutes || p.RootSessionMinutes > MaxRootMinutes {
+		return codes.New(codes.AccessPolicy, "a root shell lasts %d to %d minutes", MinRootMinutes, MaxRootMinutes)
+	}
+	if p.SSHKeyValidDays < MinKeyValidDays || p.SSHKeyValidDays > MaxKeyValidDays {
+		return codes.New(codes.AccessPolicy, "an SSH key is valid for %d to %d days", MinKeyValidDays, MaxKeyValidDays)
 	}
 	return nil
 }

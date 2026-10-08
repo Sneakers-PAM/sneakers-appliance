@@ -54,8 +54,7 @@ func (b *box) consoleAccess() accessv1connect.AccessServiceClient {
 }
 
 // The key goes on the list in the store's own write, so a render that
-// fails right after (netd is down) leaves a stale authorized keys file
-// that sshd still refuses.
+// fails right after (netd is down) still leaves sshd refusing it.
 func TestARemovedKeyIsRevokedEvenWhenTheRenderFails(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
@@ -67,9 +66,6 @@ func TestARemovedKeyIsRevokedEvenWhenTheRenderFails(t *testing.T) {
 	b.netd.mu.Unlock()
 	if _, err := b.consoleAccess().RemoveKey(ctx, connect.NewRequest(&accessv1.RemoveKeyRequest{Admin: "bob", Fingerprint: b.keys["bob"].fp})); err != nil {
 		t.Fatal(err)
-	}
-	if k := read(t, filepath.Join(b.run, "ssh", "authorized_keys", "bob")); !strings.Contains(k, b.keys["bob"].line) {
-		t.Fatalf("the render didn't fail; the test proves nothing:\n%s", k)
 	}
 	if !b.revoked(b.keys["bob"]) {
 		t.Fatal("the removed key isn't on the revocation list")
@@ -89,25 +85,25 @@ func TestRemovingAnAdminRevokesTheirKeys(t *testing.T) {
 	}
 }
 
-// An elevated shell signed in with the key ends with it.
-func TestRemovingAKeyEndsItsElevatedSession(t *testing.T) {
+// A root shell opened with the key ends with it.
+func TestRemovingAKeyEndsItsRootShell(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
-	bob := b.shellElevation("bob")
-	req, err := bob.RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "investigate kubelet"}))
+	st := b.store.Read()
+	c := elevation.Caller{Admin: "bob", KeyFP: b.keys["bob"].fp, Source: "192.0.2.50"}
+	r, err := b.elev.Challenge(st, c, "investigate kubelet")
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := req.Msg.GetElevation().GetId()
-	console := b.elevationAs(0, "")
-	if _, err := console.ApproveElevation(ctx, connect.NewRequest(&accessv1.ApproveElevationRequest{Id: id})); err != nil {
-		t.Fatal(err)
-	}
-	cert, err := bob.GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: id}))
+	_, code, err := b.elev.IssueCode(st, "bob", r.Challenge)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := console.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Certificate: cert.Msg.GetCertificate(), Pid: 4242})); err != nil {
+	_, ticket, err := b.elev.Open(st, c, r.Challenge, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.elevationAs(0, "").BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Ticket: ticket, Admin: "bob", Pid: 4242})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := b.consoleAccess().RemoveKey(ctx, connect.NewRequest(&accessv1.RemoveKeyRequest{Admin: "bob", Fingerprint: b.keys["bob"].fp})); err != nil {
@@ -118,8 +114,8 @@ func TestRemovingAKeyEndsItsElevatedSession(t *testing.T) {
 	}
 }
 
-// A revoked key is refused wherever it's added, until an owner un-revokes
-// it on :8443 (step-up, audited).
+// A revoked key stays on the list until an owner un-revokes it on :8443
+// (step-up, audited).
 func TestARevokedKeyComesBackOnlyThroughAnOwnersUnrevoke(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
@@ -127,9 +123,9 @@ func TestARevokedKeyComesBackOnlyThroughAnOwnersUnrevoke(t *testing.T) {
 	if _, err := b.consoleAccess().RemoveKey(ctx, connect.NewRequest(&accessv1.RemoveKeyRequest{Admin: "bob", Fingerprint: gone.fp})); err != nil {
 		t.Fatal(err)
 	}
-	_, err := b.consoleAccess().AddKey(ctx, connect.NewRequest(&accessv1.AddKeyRequest{Admin: "bob", PublicKey: gone.line}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ACCESS_KEY_REVOKED")
-
+	if !b.revoked(gone) {
+		t.Fatal("the removed key isn't revoked")
+	}
 	hc, url := b.osadmin()
 	api := osadminv1connect.NewAccessServiceClient(hc, url)
 	cookie, csrf := b.signIn("alice")
@@ -149,9 +145,6 @@ func TestARevokedKeyComesBackOnlyThroughAnOwnersUnrevoke(t *testing.T) {
 	}
 	if b.revoked(gone) {
 		t.Fatal("the un-revoked key is still on the list")
-	}
-	if _, err := b.consoleAccess().AddKey(ctx, connect.NewRequest(&accessv1.AddKeyRequest{Admin: "bob", PublicKey: gone.line})); err != nil {
-		t.Fatalf("the un-revoked key is refused: %v", err)
 	}
 	_, err = api.UnrevokeKey(ctx, withSession(connect.NewRequest(&osadminv1.UnrevokeKeyRequest{Fingerprint: gone.fp}), cookie, csrf))
 	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_KEY_TYPE")

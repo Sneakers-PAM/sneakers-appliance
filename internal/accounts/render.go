@@ -22,8 +22,6 @@ const (
 	Dir         = "/run/sneakers/accounts"
 	HomeRoot    = "/run/sneakers/home"
 	ShellPath   = "/usr/bin/sneakers-shell"
-	ElevatedSh  = "/usr/libexec/sneakers-elevated"
-	EnrolShell  = "/usr/libexec/sneakers-enrol"
 	NoLogin     = "/usr/sbin/nologin"
 	privsepHome = "/run/sneakers/sshd-empty"
 )
@@ -38,24 +36,19 @@ type Account struct {
 	Shell string
 }
 
-// The fixed system accounts. maint is uid 0: the elevation account, whose
-// shell is the time-boxed, recorded sneakers-elevated. Each account's shell
-// is its forced command too, so sshd never hands a line to /bin/sh.
+// The fixed system accounts. No login reaches a uid 0 account: the root
+// shell runs under accessd, through the challenge and its code.
 var system = []Account{
 	{"root", 0, 0, "root", "/", NoLogin},
-	{"maint", 0, 0, "elevated session", HomeRoot + "/maint", ElevatedSh},
 	{"sshd", 100, 100, "sshd privilege separation", privsepHome, NoLogin},
 	{"sshkeys", 101, 101, "sshd keys command", "/", NoLogin},
 	{"osadmin", OsadminUID, OsadminUID, "appliance admin on 8443", "/", NoLogin},
 }
 
-var (
-	enrol  = Account{"enrol", EnrolUID, EnrolUID, "SSH key enrolment", HomeRoot + "/enrol", EnrolShell}
-	nobody = Account{"nobody", 65534, 65534, "nobody", "/", NoLogin}
-)
+var nobody = Account{"nobody", 65534, 65534, "nobody", "/", NoLogin}
 
 // ServiceUser returns the fixed system account a service may run as: one
-// with its own uid, so never root or maint (uid 0).
+// with its own uid, so never root.
 func ServiceUser(name string) (Account, bool) {
 	for _, a := range system {
 		if a.Name == name && a.UID != 0 {
@@ -68,15 +61,9 @@ func ServiceUser(name string) (Account, bool) {
 // OsadminUID is the uid sneakers-osadmin runs as.
 const OsadminUID = 102
 
-// EnrolUID is the enrol account's uid, which sneakers-enrol runs as.
-const EnrolUID = 103
-
 // Accounts returns every account for s, in file order.
-func Accounts(s access.State, enrolOpen bool) []Account {
+func Accounts(s access.State) []Account {
 	out := slices.Clone(system)
-	if enrolOpen {
-		out = append(out, enrol)
-	}
 	out = append(out, nobody)
 	for _, a := range s.Admins {
 		out = append(out, Account{Name: a.Name, UID: a.UID, GID: a.UID, Gecos: string(a.Role), Home: HomeRoot + "/" + a.Name, Shell: ShellPath})
@@ -86,8 +73,8 @@ func Accounts(s access.State, enrolOpen bool) []Account {
 
 // Render writes passwd, group and shadow for s into dir, each through a
 // tmp file and a rename, so a reader sees the old file or the new one.
-func Render(s access.State, enrolOpen bool, dir string) error {
-	accts := Accounts(s, enrolOpen)
+func Render(s access.State, dir string) error {
+	accts := Accounts(s)
 	var passwd, group, shadow strings.Builder
 	seenGID := map[int]bool{}
 	for _, a := range accts {
@@ -123,8 +110,8 @@ func Render(s access.State, enrolOpen bool, dir string) error {
 
 // MakeHomes creates each login account's home under root: empty, mode 0755
 // and, when running as root, owned by root, which StrictModes accepts.
-func MakeHomes(s access.State, enrolOpen bool, root string) error {
-	for _, a := range Accounts(s, enrolOpen) {
+func MakeHomes(s access.State, root string) error {
+	for _, a := range Accounts(s) {
 		if !strings.HasPrefix(a.Home, HomeRoot+"/") {
 			continue
 		}

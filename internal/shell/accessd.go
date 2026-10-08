@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +31,7 @@ func (s *Services) UseAccessd(hc connect.HTTPClient, baseURL string) {
 	s.Network = accessv1connect.NewNetworkServiceClient(hc, baseURL, opt)
 	s.Setup = accessv1connect.NewSetupServiceClient(hc, baseURL, opt)
 	s.Elevation = accessv1connect.NewElevationServiceClient(hc, baseURL, opt)
+	s.SSHLogin = accessv1connect.NewSshLoginServiceClient(hc, baseURL, opt)
 	s.Local = osadminv1connect.NewLocalServiceClient(hc, baseURL)
 }
 
@@ -60,8 +60,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 			return res, true, err
 		}
 		switch r.Action {
-		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list", "keys.add", "keys.remove",
-			"admins.list", "admins.add", "admins.remove", "recovery.add", "setup.recovery", "elevation.request", "elevation.status", "elevation.cert", "elevation.withdraw":
+		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -89,22 +89,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 	case "keys.list":
 		res, err = s.keysList(ctx, r.Flags["admin"])
-	case "keys.add":
-		var out *connect.Response[accessv1.AddKeyResponse]
-		out, err = s.Access.AddKey(ctx, connect.NewRequest(&accessv1.AddKeyRequest{Admin: r.Flags["admin"], PublicKey: string(r.Stdin)}))
-		if err == nil {
-			res = Result{Text: "Added " + out.Msg.GetKey().GetFingerprint() + ".", Data: map[string]string{"fingerprint": out.Msg.GetKey().GetFingerprint()}}
-		}
-	case "keys.remove":
-		_, err = s.Access.RemoveKey(ctx, connect.NewRequest(&accessv1.RemoveKeyRequest{Admin: r.Flags["admin"], Fingerprint: r.Args[0]}))
-		res = Result{Text: "Removed."}
 	case "admins.list":
 		res, err = s.adminsList(ctx)
-	case "admins.add":
-		res, err = s.adminsAdd(ctx, r.Args[0], r.Flags["role"])
-	case "admins.remove":
-		_, err = s.Access.RemoveAdmin(ctx, connect.NewRequest(&accessv1.RemoveAdminRequest{Name: r.Args[0]}))
-		res = Result{Text: "Removed " + r.Args[0] + "."}
 	case "recovery.add":
 		var out *connect.Response[accessv1.AddRecoveryKeyResponse]
 		out, err = s.Access.AddRecoveryKey(ctx, connect.NewRequest(&accessv1.AddRecoveryKeyRequest{PublicKey: string(r.Stdin), Label: r.Flags["label"]}))
@@ -117,8 +103,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		if err == nil {
 			res = Result{Text: "Recovery key " + out.Msg.GetRecoveryKey().GetFingerprint() + " set; a new escrow file was written."}
 		}
-	case "elevation.request", "elevation.status", "elevation.cert", "elevation.withdraw":
-		res, err = s.elevation(ctx, r)
+	case "rootshell.begin", "rootshell.open":
+		res, err = s.rootShell(ctx, r)
 	default:
 		return Result{}, false, nil
 	}
@@ -132,42 +118,26 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 	return res, true, nil
 }
 
-func (s *Services) elevation(ctx context.Context, r Request) (Result, error) {
-	switch r.Action {
-	case "elevation.request":
-		m, _ := strconv.Atoi(r.Flags["minutes"])
-		out, err := s.Elevation.RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: int32(min(max(m, 0), 240)), Reason: r.Flags["reason"]})) // #nosec G115 -- clamped
+func (s *Services) rootShell(ctx context.Context, r Request) (Result, error) {
+	if r.Action == "rootshell.begin" {
+		out, err := s.Elevation.BeginRootShell(ctx, connect.NewRequest(&accessv1.BeginRootShellRequest{Reason: r.Flags["reason"]}))
 		if err != nil {
 			return Result{}, err
 		}
-		e := out.Msg.GetElevation()
-		return Result{Text: fmt.Sprintf("Requested %s (%d minutes). An owner approves it; then run: elevation cert %s", e.GetId(), e.GetMinutes(), e.GetId()), Data: map[string]string{"id": e.GetId(), "state": e.GetState()}}, nil
-	case "elevation.status":
-		out, err := s.Elevation.ListElevations(ctx, connect.NewRequest(&accessv1.ListElevationsRequest{}))
-		if err != nil {
-			return Result{}, err
+		m := out.Msg
+		where := m.GetUrl()
+		if where == "" {
+			where = "the Root shell page on :8443"
 		}
-		var b strings.Builder
-		var data []map[string]string
-		for _, e := range out.Msg.GetElevations() {
-			if len(r.Args) == 1 && e.GetId() != r.Args[0] {
-				continue
-			}
-			fmt.Fprintf(&b, "%s  %s  %s  %d min  %s\n", e.GetId(), e.GetState(), e.GetAdmin(), e.GetMinutes(), Printable(e.GetReason()))
-			data = append(data, map[string]string{"id": e.GetId(), "state": e.GetState(), "admin": e.GetAdmin()})
-		}
-		return Result{Text: b.String(), Data: data}, nil
-	case "elevation.withdraw":
-		if _, err := s.Elevation.WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: r.Args[0]})); err != nil {
-			return Result{}, err
-		}
-		return Result{Text: fmt.Sprintf("%s withdrawn.", r.Args[0]), Data: map[string]string{"id": r.Args[0], "state": "withdrawn"}}, nil
+		text := fmt.Sprintf("Root shell %s. Open %s, paste this challenge and give a new authenticator code there:\n\n    %s\n\nIt works until %s UTC. Then type the code it gives you here.",
+			m.GetId(), where, m.GetChallenge(), m.GetExpires().AsTime().UTC().Format("15:04:05"))
+		return Result{Text: text, Data: map[string]string{"id": m.GetId(), "challenge": m.GetChallenge(), "url": m.GetUrl()}}, nil
 	}
-	out, err := s.Elevation.GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: r.Args[0]}))
+	out, err := s.Elevation.OpenRootShell(ctx, connect.NewRequest(&accessv1.OpenRootShellRequest{Challenge: r.Args[0], Code: r.Args[1]}))
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Text: out.Msg.GetCertificate() + "\n" + out.Msg.GetLogin(), Data: map[string]string{"certificate": out.Msg.GetCertificate(), "login": out.Msg.GetLogin()}}, nil
+	return Result{Text: "Opening the root shell.", Data: map[string]string{"ticket": out.Msg.GetTicket(), "socket": out.Msg.GetSocket(), "id": out.Msg.GetId()}}, nil
 }
 
 func unavailable(err error) bool {
@@ -373,22 +343,4 @@ func roleWord(r osadminv1.Role) string {
 		return "admin"
 	}
 	return "?"
-}
-
-func (s *Services) adminsAdd(ctx context.Context, name, role string) (Result, error) {
-	var r osadminv1.Role
-	switch role {
-	case "owner":
-		r = osadminv1.Role_ROLE_OWNER
-	case "admin", "":
-		r = osadminv1.Role_ROLE_ADMIN
-	default:
-		return Result{}, codes.New(codes.ShellParse, "--role is owner or admin")
-	}
-	out, err := s.Access.AddAdmin(ctx, connect.NewRequest(&accessv1.AddAdminRequest{Name: name, Role: r}))
-	if err != nil {
-		return Result{}, err
-	}
-	a := out.Msg.GetAdmin()
-	return Result{Text: fmt.Sprintf("Added %s (%s). Add a login key with: keys add --admin %s", a.GetName(), roleWord(a.GetRole()), a.GetName())}, nil
 }

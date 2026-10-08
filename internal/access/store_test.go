@@ -25,7 +25,7 @@ func openStoreWithOwnerTwoKeys(t *testing.T) (*access.Store, string) {
 	k1, k2 := loginKey(t), loginKey(t)
 	rk := recoveryKeys(t, 1)
 	err = st.Update(func(s *access.State) error {
-		a := s.AddAdmin("alice", access.RoleOwner, "console", t0)
+		a := signIn(s.AddAdmin("alice", access.RoleOwner, "setup", t0))
 		a.Keys = append(a.Keys, k1, k2)
 		s.RecoveryKeys = rk
 		return nil
@@ -61,21 +61,36 @@ func removeKey(i int) func(*access.State) error {
 
 func TestConcurrentUpdatesKeepInvariants(t *testing.T) {
 	st, _ := openStoreWithOwnerTwoKeys(t)
+	if err := st.Update(func(s *access.State) error {
+		signIn(s.AddAdmin("bob", access.RoleOwner, "alice", t0))
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Each writer demotes one of the two owners; both together would leave
+	// no owner.
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
-	for i := range 2 {
+	for i, name := range []string{"alice", "bob"} {
 		wg.Add(1)
-		go func() { defer wg.Done(); errs[i] = st.Update(removeKey(i)) }()
+		go func() {
+			defer wg.Done()
+			errs[i] = st.Update(func(s *access.State) error {
+				a, _ := s.Admin(name)
+				a.Role = access.RoleAdmin
+				return nil
+			})
+		}()
 	}
 	wg.Wait()
 	if errs[0] == nil && errs[1] == nil {
-		t.Fatal("both removals succeeded; the last key is gone")
+		t.Fatal("both demotions succeeded; no owner is left")
 	}
 	failed := errs[0]
 	if failed == nil {
 		failed = errs[1]
 	}
-	assertCode(t, failed, "ACCESS_LAST_KEY")
+	assertCode(t, failed, "ACCESS_LAST_OWNER")
 	assertCode(t, access.Check(st.Read(), true, true), "")
 }
 
@@ -104,7 +119,7 @@ func TestUpdatePersistsAndVersions(t *testing.T) {
 func TestRefusedUpdateChangesNothing(t *testing.T) {
 	st, dir := openStoreWithOwnerTwoKeys(t)
 	before, _ := os.ReadFile(filepath.Join(dir, access.FileName))
-	assertCode(t, st.Update(func(s *access.State) error { s.Admins[0].Keys = nil; return nil }), "ACCESS_LAST_KEY")
+	assertCode(t, st.Update(func(s *access.State) error { s.Admins[0].TOTP = nil; return nil }), "ACCESS_LAST_OWNER")
 	boom := errors.New("caller refused")
 	if err := st.Update(func(*access.State) error { return boom }); !errors.Is(err, boom) {
 		t.Fatalf("fn error not returned: %v", err)
@@ -170,7 +185,7 @@ func TestStageRelaxesSetupInvariants(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Step 3 not done: an owner with no key yet is allowed.
+	// Before the first admin: an owner with no credentials yet is allowed.
 	assertCode(t, st.Update(func(s *access.State) error { s.AddAdmin("alice", access.RoleOwner, "console", t0); return nil }), "")
 }
 
@@ -184,7 +199,7 @@ func TestStoreShape(t *testing.T) {
 	if err := json.Unmarshal(b, &raw); err != nil {
 		t.Fatal(err)
 	}
-	for _, k := range []string{"version", "admins", "recoveryKeys", "elevationPolicy"} {
+	for _, k := range []string{"version", "admins", "recoveryKeys", "accessPolicy"} {
 		if _, ok := raw[k]; !ok {
 			t.Errorf("store.json has no %q", k)
 		}
@@ -196,8 +211,10 @@ func TestStoreShape(t *testing.T) {
 			t.Errorf("key has no %q", k)
 		}
 	}
-	if _, ok := admin["approvalHoldUntil"]; !ok {
-		t.Error("admin has no approvalHoldUntil")
+	for _, k := range []string{"password", "totp"} {
+		if _, ok := admin[k]; !ok {
+			t.Errorf("admin has no %q", k)
+		}
 	}
 }
 
@@ -208,7 +225,7 @@ func TestReadStateSeesTheWritersLatestVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.Update(func(st *access.State) error {
-		a := st.AddAdmin("alice", access.RoleOwner, "test", time.Now())
+		a := signIn(st.AddAdmin("alice", access.RoleOwner, "test", time.Now()))
 		a.Keys = append(a.Keys, loginKey(t))
 		return nil
 	}); err != nil {

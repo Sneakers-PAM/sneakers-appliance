@@ -1,11 +1,12 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package osadmin is the :8443 appliance admin (spec 2, Sections 2.6 and
+// Package osadmin is the :8443 appliance admin (spec 2, Sections 2.4 to
 // 2.7): the static admin pages and the Connect API of
-// proto/sneakers/appliance/osadmin/v1, the SSH-attested sign-in, the
-// sessions, CSRF, roles, step-up and the OS audit entries for every
-// action. Each method's Rule (role, step-up, audit action) is read from the
+// proto/sneakers/appliance/osadmin/v1, the setup stepper and its one-time
+// codes, the password and TOTP sign-in with its lockout, the sessions,
+// CSRF, roles, step-up, the issued SSH keys, the root-shell codes and the
+// OS audit entries for every action. Each method's Rule (role, step-up, audit action) is read from the
 // proto descriptor, so a method without one is refused.
 package osadmin
 
@@ -26,13 +27,19 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/onetime"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
 
 // CookieName is the session cookie. The __Host- prefix makes the browser
 // insist on Secure, Path=/ and no Domain (host-only).
 const CookieName = "__Host-osadmin-session"
+
+// CodeCookieName is the cookie of a redeemed one-time code's session.
+const CodeCookieName = "__Host-osadmin-code"
 
 // CSRFHeader carries the session's CSRF token on every call that changes
 // something.
@@ -83,8 +90,20 @@ type Options struct {
 	CertDir string
 	// Upgrade configures the update flows.
 	Upgrade UpgradeOptions
-	// Elevation is the one-time root shells; nil answers Not available.
+	// Elevation is the root shells; nil answers Not available.
 	Elevation *elevation.Service
+	// CodeSealer seals the setup code (init's KeyCustody on the box). Nil
+	// keeps it in memory only (tests).
+	CodeSealer onetime.Sealer
+	// RootKey is the box's root key and pepper. Required for setup,
+	// sign-in and issued SSH keys.
+	RootKey *rootkey.Key
+	// Lockout is the shared lockout and throttling book. Required.
+	Lockout *lockout.Book
+	// OnFirstAdmin runs once the first admin exists: accessd starts sshd.
+	OnFirstAdmin func()
+	// OnConsoleChange runs whenever what the console shows changes.
+	OnConsoleChange func()
 	// Shells is the admins' SSH logins to the closed shell
 	// (sshsession.Proc on the box); nil lists none.
 	Shells Shells
@@ -96,8 +115,9 @@ type Options struct {
 // Server is the appliance admin.
 type Server struct {
 	o        Options
-	logins   *weblogin.Manager
 	sessions *weblogin.Sessions
+	codes    *onetime.Codes
+	creds    credentialFlows
 	certMu   sync.Mutex
 	resets   resets
 	upgrades upgrades
@@ -111,7 +131,13 @@ func New(o Options) *Server {
 	if o.Logger == nil {
 		o.Logger = log.Nop()
 	}
-	return &Server{o: o, logins: weblogin.New(o.Clock), sessions: weblogin.NewSessions(o.Clock)}
+	s := &Server{o: o, sessions: weblogin.NewSessions(o.Clock)}
+	s.codes = onetime.NewCodes(o.Clock, s.consoleChanged, o.CodeSealer, o.Logger)
+	s.creds.init()
+	if s.FirstAdminDone() {
+		s.codes.ConsumeSetup()
+	}
+	return s
 }
 
 // Handler is the whole :8443 handler in one process: the API, the static
@@ -143,6 +169,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewAuditServiceHandler(&audit{s: s}, opts))
 	mux.Handle(osadminv1connect.NewPowerServiceHandler(&power{s: s}, opts))
 	mux.Handle(osadminv1connect.NewElevationServiceHandler(&elevationSvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewRootShellServiceHandler(&rootShellSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(osadminv1connect.UnimplementedTlsServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(osadminv1connect.UnimplementedMcpServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
@@ -244,3 +271,9 @@ func (s *Server) cert() CertInfo {
 
 // Sessions is the live session table (the console and Power show it).
 func (s *Server) Sessions() *weblogin.Sessions { return s.sessions }
+
+func (s *Server) consoleChanged() {
+	if s.o.OnConsoleChange != nil {
+		s.o.OnConsoleChange()
+	}
+}

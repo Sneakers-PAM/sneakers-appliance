@@ -20,7 +20,6 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
-	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
@@ -32,7 +31,6 @@ type fakeAccessd struct {
 	accessv1connect.UnimplementedNetworkServiceHandler
 	mu       sync.Mutex
 	headers  []http.Header
-	added    []*accessv1.AddAdminRequest
 	settings *netdv1.Settings
 	set      []*netdv1.Settings
 }
@@ -57,13 +55,6 @@ func (f *fakeAccessd) ListKeys(_ context.Context, r *connect.Request[accessv1.Li
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("ACCESS_FORBIDDEN (3009): an admin sees only their own keys"))
 	}
 	return connect.NewResponse(&accessv1.ListKeysResponse{Admin: "alice", Keys: []*osadminv1.Key{{Fingerprint: "SHA256:abc", Type: "ssh-ed25519", Comment: "laptop"}}}), nil
-}
-
-func (f *fakeAccessd) AddAdmin(_ context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
-	f.mu.Lock()
-	f.added = append(f.added, r.Msg)
-	f.mu.Unlock()
-	return connect.NewResponse(&accessv1.AddAdminResponse{Admin: &osadminv1.Admin{Name: r.Msg.GetName(), Role: r.Msg.GetRole(), Uid: 20002}}), nil
 }
 
 func (f *fakeAccessd) GetNetwork(context.Context, *connect.Request[accessv1.GetNetworkRequest]) (*connect.Response[accessv1.GetNetworkResponse], error) {
@@ -111,16 +102,6 @@ func TestAccessdCommandsReachAccessd(t *testing.T) {
 	if !codes.Is(err, codes.AccessForbidden) || !strings.Contains(stderr, "only their own keys") {
 		t.Fatalf("%v %q", err, stderr)
 	}
-	if _, _, err := runWith(t, s, "admins add carol --role owner", ""); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.added) != 1 || f.added[0].GetName() != "carol" || f.added[0].GetRole() != osadminv1.Role_ROLE_OWNER {
-		t.Fatalf("%v", f.added)
-	}
-	_, _, err = runWith(t, s, "admins add dave --role boss", "")
-	if !codes.Is(err, codes.ShellParse) {
-		t.Fatalf("%v", err)
-	}
 }
 
 func TestStatusFromAccessd(t *testing.T) {
@@ -148,7 +129,7 @@ func TestAccessdDownLeavesCachedStatus(t *testing.T) {
 	if err != nil || !strings.Contains(out, "appliance services are unavailable") || !strings.Contains(out, "2026-10-07T14:00:00Z") || !strings.Contains(out, "box1.sneakers.example.org") {
 		t.Fatalf("%v %q", err, out)
 	}
-	for _, line := range []string{"keys list", "admins list", "network show", "login ABCD-EFGH"} {
+	for _, line := range []string{"keys list", "admins list", "network show"} {
 		_, stderr, err := runWith(t, s, line, "y\n")
 		if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "appliance services are unavailable") {
 			t.Errorf("%q: %v %q", line, err, stderr)
@@ -174,24 +155,12 @@ func TestNetworkSet(t *testing.T) {
 	}
 }
 
-func TestElevationIsNotInThisRelease(t *testing.T) {
+// The root shell's two calls reach accessd's ElevationService, which
+// answers Not available when the box has none.
+func TestTheRootShellCallsAccessd(t *testing.T) {
 	s, _ := withAccessd(t, &fakeAccessd{})
-	_, stderr, err := runWith(t, s, "elevation status", "")
-	if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "Not available in this release") {
-		t.Fatalf("%v %q", err, stderr)
-	}
-}
-
-// LocalService is on access.sock too; its client comes with UseAccessd.
-func TestUseAccessdWiresTheSignInApproval(t *testing.T) {
-	f := &fakeLocal{ua: "TestBrowser/1.0"}
-	mux := http.NewServeMux()
-	mux.Handle(osadminv1connect.NewLocalServiceHandler(f))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	s := &shell.Services{Session: shell.Session{Admin: "alice", KeyFingerprint: "SHA256:abc"}}
-	s.UseAccessd(http.DefaultClient, srv.URL)
-	if _, _, err := runWith(t, s, "login ABCD-EFGH", "y\n"); err != nil || len(f.approved) != 1 {
-		t.Fatalf("%v %d", err, len(f.approved))
+	_, err := s.Call(context.Background(), shell.Request{Action: "rootshell.begin"})
+	if !codes.Is(err, codes.NotAvailable) {
+		t.Fatalf("%v", err)
 	}
 }

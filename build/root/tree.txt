@@ -58,8 +58,6 @@ drwxr-xr-x 0/0 /usr/libexec/openssh
 -rwxr-xr-x 0/0 /usr/libexec/openssh/sshd-session
 drwxr-xr-x 0/0 /usr/libexec/sneakers
 -rwxr-xr-x 0/0 /usr/libexec/sneakers-elevated
--rwxr-xr-x 0/0 /usr/libexec/sneakers-enrol
--rwxr-xr-x 0/0 /usr/libexec/sneakers-enrol-keys
 -rwxr-xr-x 0/0 /usr/libexec/sneakers/k0s-interim
 drwxr-xr-x 0/0 /usr/sbin
 -rwxr-xr-x 0/0 /usr/sbin/sshd
