@@ -98,12 +98,13 @@ service AccessService {
   // sign it with the box's root key as an SSH user certificate (principal:
   // the admin's name; valid for valid_days, default from the access
   // policy). The private key is returned once and never kept; the box
-  // keeps the public key and the certificate. TOTP is still asked at
-  // every SSH login.
+  // keeps the public key and the certificate. It takes a fresh TOTP code
+  // every time (code_each_call), not the step-up window, since the private
+  // key leaves the box. TOTP is still asked at every SSH login.
   rpc IssueSshKey(IssueSshKeyRequest) returns (IssueSshKeyResponse) {
     option (rule) = {
       role: ROLE_ADMIN
-      step_up: true
+      code_each_call: true
       audit: "access.ssh-key.issue"
     };
   }
@@ -363,6 +364,8 @@ message IssueSshKeyRequest {
   string label = 1;
   // valid_days is 0 for the access policy's default.
   int32 valid_days = 2;
+  // totp_code is a fresh code from the caller's authenticator.
+  string totp_code = 3;
 }
 
 message IssueSshKeyResponse {

@@ -265,7 +265,7 @@ func TestCSRF(t *testing.T) {
 	_, err = br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 	br.csrf = token
-	if _, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"})); err != nil {
+	if _, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop", TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if e := lastEntry(t, b.log, "access.ssh-key.issue"); e.Outcome != "ok" || e.Actor != "alice" || e.Target != "alice" {
@@ -281,7 +281,7 @@ func TestStepUpTakesAFreshCode(t *testing.T) {
 	br.signIn("alice")
 	b.clk.Advance(6 * time.Minute)
 	ctx := context.Background()
-	_, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{}))
+	_, err := br.access().AddAdmin(ctx, connect.NewRequest(&osadminv1.AddAdminRequest{Name: "carol", Role: osadminv1.Role_ROLE_ADMIN}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_STEPUP_REQUIRED")
 	if _, err := br.access().ListAdmins(ctx, connect.NewRequest(&osadminv1.ListAdminsRequest{})); err != nil {
 		t.Fatalf("reads need no step-up: %v", err)
@@ -293,7 +293,7 @@ func TestStepUpTakesAFreshCode(t *testing.T) {
 	}
 	_, err = signInClient(br).StepUp(ctx, connect.NewRequest(&osadminv1.StepUpRequest{TotpCode: code}))
 	symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_CREDENTIALS")
-	if _, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{})); err != nil {
+	if _, err := br.access().AddAdmin(ctx, connect.NewRequest(&osadminv1.AddAdminRequest{Name: "carol", Role: osadminv1.Role_ROLE_ADMIN})); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(b.srv.Sessions().Of("alice")); n != 1 {

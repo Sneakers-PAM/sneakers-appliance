@@ -29,7 +29,7 @@ func TestRoles(t *testing.T) {
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 	_, err = bob.access().RemoveKey(ctx, connect.NewRequest(&osadminv1.RemoveKeyRequest{Admin: "alice", Fingerprint: b.keys["alice"].fp}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
-	if _, err := bob.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"})); err != nil {
+	if _, err := bob.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop", TotpCode: b.code("bob")})); err != nil {
 		t.Fatalf("an admin gets their own keys: %v", err)
 	}
 	_, err = bob.access().SetRole(ctx, connect.NewRequest(&osadminv1.SetRoleRequest{Name: "bob", Role: osadminv1.Role_ROLE_OWNER}))
@@ -94,7 +94,7 @@ func TestAnIssuedSSHKey(t *testing.T) {
 	alice := b.browser()
 	alice.signIn("alice")
 	ctx := context.Background()
-	out, err := alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop", ValidDays: 30}))
+	out, err := alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop", ValidDays: 30, TotpCode: b.code("alice")}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestAnIssuedSSHKey(t *testing.T) {
 	if bytes.Contains(stored, []byte("PRIVATE KEY")) {
 		t.Fatal("the private key was kept")
 	}
-	again, err := alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{}))
+	again, err := alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{TotpCode: b.code("alice")}))
 	if err != nil || again.Msg.GetKey().GetSerial() == m.GetKey().GetSerial() {
 		t.Fatalf("a second key reused the serial: %v %v", again, err)
 	}
@@ -145,7 +145,7 @@ func TestAnIssuedSSHKey(t *testing.T) {
 	if !slices.Contains(st.RevokedSerials(), cert.Serial) {
 		t.Fatalf("revoked serials %v", st.RevokedSerials())
 	}
-	_, err = alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{ValidDays: 5000}))
+	_, err = alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{ValidDays: 5000, TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_POLICY")
 }
 
@@ -305,4 +305,35 @@ func mustRead(t *testing.T, p string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+// Issuing an SSH key mints a credential whose private half leaves the box,
+// so it takes a fresh code every time: a fresh sign-in or step-up window
+// doesn't count, and a wrong code is a failed try like any other.
+func TestIssuingAnSSHKeyTakesAFreshCodeEveryTime(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	keys := func() int {
+		st := b.store.Read()
+		a, _ := st.Admin("alice")
+		return len(a.Keys)
+	}
+	before := keys()
+	_, err := alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
+	_, err = alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop", TotpCode: "000000"}))
+	symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_CREDENTIALS")
+	if e := lastEntry(t, b.log, "access.ssh-key.issue"); e.Outcome != "refused" || e.Actor != "alice" {
+		t.Fatalf("%+v", e)
+	}
+	if n := keys() - before; n != 0 {
+		t.Fatalf("a refused issue made %d keys", n)
+	}
+	if _, err := alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop", TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	_, err = alice.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "desk"}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
 }
