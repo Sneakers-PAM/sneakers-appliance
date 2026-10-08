@@ -4,10 +4,12 @@
 //go:build linux
 
 // Command sneakers-accessd is the root access service: the access store,
-// the sign-in codes and sessions, the OS audit log, the accounts and sshd
-// files rendered from the store, and the backend of the :8443 API, served
-// on /run/sneakers/access.sock to root, the closed shell's admin uids and
-// sneakers-osadmin, each told apart by SO_PEERCRED.
+// the root key and pepper, the setup and one-time codes, the sessions and
+// lockout, the root shells, the OS audit log, the accounts and sshd config
+// rendered from the store, and the backend of the :8443 API, served on
+// /run/sneakers/access.sock to root, the closed shell's admin uids and
+// sneakers-osadmin, each told apart by SO_PEERCRED. Root shells open on
+// /run/sneakers/rootshell.sock.
 package main
 
 import (
@@ -24,9 +26,11 @@ import (
 	"syscall"
 	"time"
 
+	"connectrpc.com/connect"
 	"filippo.io/age"
 	log "github.com/Bugs5382/go-log"
 
+	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
@@ -36,13 +40,13 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/setup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshsession"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
@@ -121,16 +125,38 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		return err
 	}
 	custody := initv1connect.NewKeyCustodyServiceClient(ic, "http://init.sock")
-	// The user CA is made at first boot and sealed through init's
-	// KeyCustody (docs/ssh-and-elevation.md).
+	// The root key and the pepper are made at first boot and sealed through
+	// init's KeyCustody (docs/access.md).
+	root, err := rootkey.Load(accessd.CustodySealer{Client: custody}, paths.SSHDir(), lg)
+	if err != nil {
+		return err
+	}
+	if err := accessd.EnsureHostKeys(paths.SSHDir()); err != nil {
+		return err
+	}
+	book, err := lockout.Open(filepath.Join(c.state, "access", "lockout.json"))
+	if err != nil {
+		return err
+	}
+	svcs := initv1connect.NewServicesServiceClient(ic, "http://init.sock")
+	startSSHD := func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if _, err := svcs.Start(sctx, connect.NewRequest(&initv1.StartRequest{Name: "sshd"})); err != nil {
+			lg.Warn("accessd: init didn't start sshd", log.F("error", err.Error()))
+			return
+		}
+		lg.Info("accessd: sshd started; an admin can sign in")
+	}
 	elev, err := elevation.Open(elevation.Options{
-		Sealer:      accessd.CustodySealer{Client: custody},
-		RevokedKeys: revokedKeys,
-		SSHDir:      paths.SSHDir(),
-		StateFile:   filepath.Join(c.state, "access", "elevation.json"),
-		Audit:       audit,
-		Logger:      lg,
-		OnChange:    rerender,
+		RootKey:        root,
+		RevokedKeys:    revokedKeys,
+		RevokedSerials: stored.RevokedSerials(),
+		SSHDir:         paths.SSHDir(),
+		StateFile:      filepath.Join(c.state, "access", "elevation.json"),
+		Audit:          audit,
+		Logger:         lg,
+		OnChange:       rerender,
 		// An update being applied or reverted refuses new elevated shells.
 		Maintenance: func() bool { return api != nil && api.Maintenance() },
 		Signal: func(pid int) error {
@@ -150,8 +176,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		AuditDir:   audit.Dir(),
 		Logger:     lg,
 	})
+	setupDone := func() bool { return api != nil && api.SetupDone() }
 	store, err := access.Open(filepath.Join(c.state, "access"), access.Options{
-		Stage:    accessd.SetupStage(setup.BoxPaths, func() bool { return api != nil && api.SetupDone() }),
+		Stage:    accessd.SetupStage(func() bool { return api != nil && api.FirstAdminDone() }, setupDone),
 		Logger:   lg,
 		OnChange: d.Changed,
 		Revoke:   elev.RevokeLoginKeys,
@@ -159,7 +186,6 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err != nil {
 		return err
 	}
-	d.SetEnrolment(enrol.New(enrol.Options{Store: store, Audit: audit, Logger: lg, OnChange: rerender}))
 	go audit.RunRetention(ctx, 24*time.Hour)
 	pins, perr := release.Load()
 	if perr != nil {
@@ -171,13 +197,18 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
 		// Stopping k0s may take its whole stop-timeout (2 minutes).
-		Services:  initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
-		Network:   netd,
-		Paths:     paths,
-		CertDir:   paths.OwnDir(),
-		Elevation: elev,
-		Shells:    &sshsession.Proc{},
-		Logger:    lg,
+		Services:        initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
+		Network:         netd,
+		Paths:           paths,
+		CertDir:         paths.OwnDir(),
+		Elevation:       elev,
+		RootKey:         root,
+		CodeSealer:      accessd.CustodySealer{Client: custody},
+		Lockout:         book,
+		OnFirstAdmin:    func() { go startSSHD() },
+		OnConsoleChange: d.ConsoleChanged,
+		Shells:          &sshsession.Proc{},
+		Logger:          lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and
@@ -197,6 +228,16 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		return err
 	}
 	defer func() { _ = srv.Close() }()
+	rs, err := listenRootShell(filepath.Join(c.run, "rootshell.sock"), lg)
+	if err != nil {
+		return err
+	}
+	go d.ServeRootShells(ctx, rs)
+	if osadmin.HasSignInAdmin(store.Read()) {
+		// A box past its first admin: sshd runs (in first boot it starts
+		// on demand only).
+		go startSSHD()
+	}
 	ready := filepath.Join(c.run, filepath.Base(accessapi.ReadyFile))
 	if err := os.WriteFile(ready, nil, 0o644); err != nil { // #nosec G306 -- an empty readiness marker
 		return err
@@ -268,6 +309,24 @@ func dirs(p osadmin.Paths) error {
 		}
 	}
 	return nil
+}
+
+// listenRootShell opens rootshell.sock: mode 0666, since admin uids
+// connect; SO_PEERCRED lets only admin uids through.
+func listenRootShell(path string, lg log.Logger) (net.Listener, error) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o666); err != nil { // #nosec G302 -- the peer uid is checked on every connection
+		_ = ln.Close()
+		return nil, err
+	}
+	logf := func(format string, args ...any) { lg.Warn(fmt.Sprintf(format, args...)) }
+	return initapi.PeerListener(ln, accessd.AdminPeer, logf), nil
 }
 
 // listen serves access.sock: mode 0666, since admin uids and osadmin

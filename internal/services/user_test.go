@@ -137,8 +137,8 @@ func TestOnDemandInMustBeOneOfTheServicesPhases(t *testing.T) {
 }
 
 // The root image's table: accessd as root in firstboot and normal,
-// restarted whenever it stops; osadmin as osadmin after it, on demand
-// during first boot.
+// restarted whenever it stops; osadmin as osadmin after it, from the first
+// boot on (setup runs on its page).
 func TestTheRootImageTable(t *testing.T) {
 	tbl, err := services.Load(os.DirFS("../../os/rootfs"), "services.d")
 	if err != nil {
@@ -156,7 +156,7 @@ func TestTheRootImageTable(t *testing.T) {
 		t.Fatal("no osadmin")
 	}
 	if o.User != "osadmin" || o.Restart != services.RestartAlways || !slices.Contains(o.After, "accessd") ||
-		!o.In(phase.Firstboot) || !o.In(phase.Normal) || !slices.Equal(o.OnDemandIn, []phase.Phase{phase.Firstboot}) {
+		!o.In(phase.Firstboot) || !o.In(phase.Normal) || len(o.OnDemandIn) != 0 {
 		t.Fatalf("osadmin: %+v", o)
 	}
 }
@@ -182,9 +182,9 @@ func TestTheRootImageTableRunsNetd(t *testing.T) {
 	}
 }
 
-// sshd runs through sneakers-sshd-run in auto mode: on demand in first
-// boot (the SSH key step starts it), always in normal operation, after
-// netd and accessd.
+// sshd runs through sneakers-sshd-run: on demand in first boot (accessd
+// starts it once the first admin exists), always in normal operation,
+// after netd and accessd.
 func TestTheRootImageTableRunsSshd(t *testing.T) {
 	tbl, err := services.Load(os.DirFS("../../os/rootfs"), "services.d")
 	if err != nil {
@@ -194,7 +194,7 @@ func TestTheRootImageTableRunsSshd(t *testing.T) {
 	if !ok {
 		t.Fatal("no sshd")
 	}
-	if s.Exec != "/usr/bin/sneakers-sshd-run" || !slices.Equal(s.Args, []string{"--mode", "auto"}) || s.User != "" || s.Restart != services.RestartAlways ||
+	if s.Exec != "/usr/bin/sneakers-sshd-run" || len(s.Args) != 0 || s.User != "" || s.Restart != services.RestartAlways ||
 		!s.OnDemand(phase.Firstboot) || s.OnDemand(phase.Normal) || !s.In(phase.Normal) ||
 		!slices.Contains(s.After, "netd") || !slices.Contains(s.After, "accessd") {
 		t.Fatalf("sshd: %+v", s)

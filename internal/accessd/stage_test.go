@@ -7,30 +7,20 @@ import (
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/setup"
 )
 
-// First boot adds its owner before the owner has a key: the store allows
-// that until the admin step is done, and a box without a recovery key
-// until the recovery step is.
-func TestTheStoreFollowsFirstBootsProgress(t *testing.T) {
-	p := setup.Paths{Tmp: t.TempDir(), State: t.TempDir()}
-	done := false
-	stage := accessd.SetupStage(p, func() bool { return done })
+// Setup makes its first admin through the store, so the store allows no
+// admin until the first one exists, and no recovery key until setup is
+// done.
+func TestTheStoreFollowsSetupsProgress(t *testing.T) {
+	first, done := false, false
+	stage := accessd.SetupStage(func() bool { return first }, func() bool { return done })
 	if a, r := stage(); a || r {
 		t.Fatalf("a fresh box: %v %v", a, r)
 	}
-	m, err := setup.Open(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, s := range []setup.Step{setup.StepNetwork, setup.StepProtection, setup.StepAdmin} {
-		if err := m.Complete(s); err != nil {
-			t.Fatal(err)
-		}
-	}
+	first = true
 	if a, r := stage(); !a || r {
-		t.Fatalf("past the admin step: %v %v", a, r)
+		t.Fatalf("with the first admin: %v %v", a, r)
 	}
 	done = true
 	if a, r := stage(); !a || !r {

@@ -1,9 +1,9 @@
 # OpenSSH sshd through sneakers-sshd-run, which renders and checks its
-# config and rebinds on netd's address events. Key-only, into the closed
-# shell. During first boot it starts at the SSH key step (enrol mode until
-# an owner has a key); in normal operation it always runs.
+# config and rebinds on netd's address events. Box-issued certificates
+# only, into the closed shell, which asks for the TOTP code first. During
+# first boot accessd starts it once the first admin exists; in normal
+# operation it always runs.
 exec: /usr/bin/sneakers-sshd-run
-args: [--mode, auto]
 phases: [firstboot, normal]
 on-demand-in: [firstboot]
 after: [netd, accessd]

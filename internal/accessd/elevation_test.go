@@ -5,15 +5,17 @@ package accessd_test
 
 import (
 	"context"
+	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
-	"golang.org/x/crypto/ssh"
+	"golang.org/x/sys/unix"
 
 	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
@@ -21,9 +23,11 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootshell"
 )
 
 func (b *box) elevationAs(uid uint32, fp string) accessv1connect.ElevationServiceClient {
@@ -38,171 +42,22 @@ func (b *box) shellElevation(name string) accessv1connect.ElevationServiceClient
 	return b.elevationAs(b.uids[name], b.keys[name].fp)
 }
 
-func (b *box) principals() string {
-	b.t.Helper()
-	got, err := os.ReadFile(filepath.Join(b.run, "ssh", "principals", "maint"))
-	if err != nil {
-		b.t.Fatal(err)
-	}
-	return string(got)
-}
-
-// The whole elevation through access.sock: bob's shell asks, the console
-// shortens and approves, bob fetches the certificate, sneakers-elevated
-// (root) uses it up and reports the end. Each step is audited.
-func TestElevationEndToEnd(t *testing.T) {
-	b := newBox(t)
-	ctx := context.Background()
-	bob := b.shellElevation("bob")
-	req, err := bob.RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "investigate kubelet"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	e := req.Msg.GetElevation()
-	id := e.GetId()
-	if e.GetState() != "pending" || e.GetAdmin() != "bob" || e.GetKeyFingerprint() != b.keys["bob"].fp || e.GetSourceAddress() != "192.0.2.50" {
-		t.Fatalf("%v", e)
-	}
-	if en := lastEntry(t, b.log, "elevation.request"); en.Actor != "bob" || en.Target != id || en.Source != "192.0.2.50" {
-		t.Fatalf("%+v", en)
-	}
-	_, err = bob.ApproveElevation(ctx, connect.NewRequest(&accessv1.ApproveElevationRequest{Id: id}))
-	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
-	_, err = bob.GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: id}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_UNKNOWN")
-
-	console := b.elevationAs(0, "")
-	if _, err := console.ApproveElevation(ctx, connect.NewRequest(&accessv1.ApproveElevationRequest{Id: id, Minutes: 20})); err != nil {
-		t.Fatal(err)
-	}
-	if en := lastEntry(t, b.log, "elevation.approve"); en.Actor != "console" || en.Outcome != "ok" || en.Target != id || en.Detail["minutes"] != "20" {
-		t.Fatalf("%+v", en)
-	}
-	if got := b.principals(); got != "elev-"+id+"\n" {
-		t.Fatalf("principals %q", got)
-	}
-
-	_, err = b.shellElevation("alice").GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: id}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_UNKNOWN")
-	cert, err := bob.GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: id}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(cert.Msg.GetLogin(), "maint@192.0.2.10") {
-		t.Fatalf("login %q", cert.Msg.GetLogin())
-	}
-	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(cert.Msg.GetCertificate()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c, ok := pk.(*ssh.Certificate); !ok || !slices.Equal(c.ValidPrincipals, []string{"elev-" + id}) {
-		t.Fatalf("%v", pk)
-	}
-
-	_, err = bob.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Certificate: cert.Msg.GetCertificate(), Pid: 4242}))
-	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
-	begin, err := console.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Certificate: cert.Msg.GetCertificate(), Pid: 4242}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if begin.Msg.GetElevation().GetMinutes() != 20 || begin.Msg.GetElevation().GetState() != "active" ||
-		begin.Msg.GetEnds().AsTime().Sub(begin.Msg.GetElevation().GetStarted().AsTime()).Minutes() != 20 {
-		t.Fatalf("%v", begin.Msg)
-	}
-	if got := b.principals(); got != "" {
-		t.Fatalf("the used principal is still open: %q", got)
-	}
-	if _, err := os.Stat(filepath.Join(b.state, "ssh", elevation.RevokedFile)); err != nil {
-		t.Fatal(err)
-	}
-	_, err = console.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Certificate: cert.Msg.GetCertificate(), Pid: 4243}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_USED")
-	if en := lastEntry(t, b.log, "elevation.connect"); en.Outcome != "refused" || en.Code != "ELEV_USED" {
-		t.Fatalf("%+v", en)
-	}
-
-	if _, err := console.TerminateElevation(ctx, connect.NewRequest(&accessv1.TerminateElevationRequest{Id: id})); err != nil {
-		t.Fatal(err)
-	}
-	if got := b.signalled(); !slices.Equal(got, []int{4242}) {
-		t.Fatalf("signals %v", got)
-	}
-	if _, err := console.EndElevatedSession(ctx, connect.NewRequest(&accessv1.EndElevatedSessionRequest{Id: id, Reason: "terminated", RecordingSha256: "ab12"})); err != nil {
-		t.Fatal(err)
-	}
-	if en := lastEntry(t, b.log, "elevation.end"); en.Outcome != "terminated" || en.Detail["recordingSha256"] != "ab12" {
-		t.Fatalf("%+v", en)
-	}
-	list, err := bob.ListElevations(ctx, connect.NewRequest(&accessv1.ListElevationsRequest{}))
-	if err != nil || len(list.Msg.GetElevations()) != 1 || list.Msg.GetElevations()[0].GetEndReason() != "terminated" {
-		t.Fatalf("%v %v", list, err)
-	}
-}
-
-// A requester withdraws their own pending request; it's audited, and the
-// console can no longer approve it. Someone else's request isn't theirs
-// to withdraw.
-func TestWithdrawElevation(t *testing.T) {
-	b := newBox(t)
-	ctx := context.Background()
-	bob := b.shellElevation("bob")
-	req, err := bob.RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "x"}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	id := req.Msg.GetElevation().GetId()
-
-	_, err = b.shellElevation("alice").WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: id}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_UNKNOWN")
-
-	if _, err := bob.WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: id})); err != nil {
-		t.Fatal(err)
-	}
-	if en := lastEntry(t, b.log, "elevation.withdraw"); en.Actor != "bob" || en.Outcome != "ok" || en.Target != id {
-		t.Fatalf("%+v", en)
-	}
-
-	console := b.elevationAs(0, "")
-	_, err = console.ApproveElevation(ctx, connect.NewRequest(&accessv1.ApproveElevationRequest{Id: id}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_USED")
-
-	_, err = bob.WithdrawElevation(ctx, connect.NewRequest(&accessv1.WithdrawElevationRequest{Id: id}))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_USED")
-}
-
-// The console has no key to sign, so it can't ask for elevation.
-func TestTheConsoleCantRequestElevation(t *testing.T) {
-	b := newBox(t)
-	_, err := b.elevationAs(0, "").RequestElevation(context.Background(), connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "x"}))
-	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
-}
-
-// signIn signs name in to :8443 through accessd and returns the cookie
-// and CSRF token.
+// signIn signs name in on :8443 through the osadmin uid and returns the
+// cookie and the CSRF token.
 func (b *box) signIn(name string) (string, string) {
 	b.t.Helper()
-	ctx := context.Background()
 	hc, url := b.osadmin()
-	si := osadminv1connect.NewSignInServiceClient(hc, url)
-	begin := connect.NewRequest(&osadminv1.BeginSignInRequest{})
-	begin.Header().Set(accessapi.ClientHeader, "203.0.113.9")
-	code, err := si.BeginSignIn(ctx, begin)
+	req := connect.NewRequest(&osadminv1.SignInRequest{Admin: name, Password: testPassword, TotpCode: b.code(name)})
+	req.Header().Set(accessapi.ClientHeader, "203.0.113.9")
+	out, err := osadminv1connect.NewSignInServiceClient(hc, url).SignIn(context.Background(), req)
 	if err != nil {
 		b.t.Fatal(err)
 	}
-	shc, surl := b.as(b.uids[name])
-	if _, err := osadminv1connect.NewLocalServiceClient(shc, surl).ApproveSignIn(ctx, connect.NewRequest(&osadminv1.ApproveSignInRequest{Code: code.Msg.GetCode(), Admin: name, KeyFingerprint: b.keys[name].fp})); err != nil {
-		b.t.Fatal(err)
-	}
-	poll, err := si.PollSignIn(ctx, connect.NewRequest(&osadminv1.PollSignInRequest{PollToken: code.Msg.GetPollToken()}))
+	ck, err := http.ParseSetCookie(out.Header().Get("Set-Cookie"))
 	if err != nil {
 		b.t.Fatal(err)
 	}
-	ck, err := http.ParseSetCookie(poll.Header().Get("Set-Cookie"))
-	if err != nil {
-		b.t.Fatal(err)
-	}
-	return ck.Name + "=" + ck.Value, poll.Msg.GetSession().GetCsrfToken()
+	return ck.Name + "=" + ck.Value, out.Msg.GetSession().GetCsrfToken()
 }
 
 func withSession[T any](r *connect.Request[T], cookie, csrf string) *connect.Request[T] {
@@ -211,96 +66,178 @@ func withSession[T any](r *connect.Request[T], cookie, csrf string) *connect.Req
 	return r
 }
 
-// The only owner may approve their own request on :8443; it's flagged on
-// the request, in the audit entry and on Status. With a second owner, it
-// is refused.
-func TestSelfApprovalOn8443(t *testing.T) {
+// The root shell through access.sock: alice's shell gets a challenge, her
+// :8443 session gets the code with a fresh TOTP code, the shell trades
+// both for a ticket, and sneakers-elevated (root) uses the ticket up and
+// reports the end. Each step is audited.
+func TestTheRootShellEndToEnd(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
-	req, err := b.shellElevation("alice").RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "kubelet"}))
+	alice := b.shellElevation("alice")
+	ch, err := alice.BeginRootShell(ctx, connect.NewRequest(&accessv1.BeginRootShellRequest{Reason: "investigate kubelet"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := req.Msg.GetElevation().GetId()
+	if ch.Msg.GetUrl() != "https://192.0.2.10:8443/root-shell" || len(ch.Msg.GetChallenge()) != 19 {
+		t.Fatalf("challenge %v", ch.Msg)
+	}
+	if e := lastEntry(t, b.log, "rootshell.challenge"); e.Actor != "alice" || e.Source != "192.0.2.50" || e.KeyFP != b.keys["alice"].fp {
+		t.Fatalf("audit %+v", e)
+	}
 	cookie, csrf := b.signIn("alice")
 	hc, url := b.osadmin()
-	el := osadminv1connect.NewElevationServiceClient(hc, url)
-	if _, err := el.ApproveElevation(ctx, withSession(connect.NewRequest(&osadminv1.ApproveElevationRequest{Id: id}), cookie, csrf)); err != nil {
-		t.Fatal(err)
-	}
-	if en := lastEntry(t, b.log, "elevation.approve"); en.Actor != "alice" || en.Detail["selfApproved"] != "true" || en.Detail["surface"] != "8443" {
-		t.Fatalf("%+v", en)
-	}
-	list, err := el.ListElevations(ctx, withSession(connect.NewRequest(&osadminv1.ListElevationsRequest{}), cookie, csrf))
-	if err != nil || !list.Msg.GetElevations()[0].GetSelfApproved() {
-		t.Fatalf("%v %v", list, err)
-	}
-	st, err := osadminv1connect.NewStatusServiceClient(hc, url).GetStatus(ctx, withSession(connect.NewRequest(&osadminv1.GetStatusRequest{}), cookie, csrf))
+	code, err := osadminv1connect.NewRootShellServiceClient(hc, url).IssueRootShellCode(ctx, withSession(connect.NewRequest(&osadminv1.IssueRootShellCodeRequest{Challenge: ch.Msg.GetChallenge(), TotpCode: b.code("alice")}), cookie, csrf))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.ContainsFunc(st.Msg.GetWarnings(), func(w *osadminv1.Warning) bool {
-		return w.GetKind() == osadminv1.WarningKind_WARNING_KIND_SELF_APPROVED_ELEVATION
-	}) {
-		t.Fatalf("no self-approved warning: %v", st.Msg.GetWarnings())
+	_, err = alice.OpenRootShell(ctx, connect.NewRequest(&accessv1.OpenRootShellRequest{Challenge: ch.Msg.GetChallenge(), Code: "0000-0000"}))
+	if err == nil || !strings.Contains(err.Error(), "ROOT_CODE") {
+		t.Fatalf("a wrong code: %v", err)
 	}
-
-	b.addAdmin("carol", access.RoleOwner)
-	req2, err := b.shellElevation("alice").RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "kubelet"}))
+	open, err := alice.OpenRootShell(ctx, connect.NewRequest(&accessv1.OpenRootShellRequest{Challenge: ch.Msg.GetChallenge(), Code: code.Msg.GetCode()}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = el.ApproveElevation(ctx, withSession(connect.NewRequest(&osadminv1.ApproveElevationRequest{Id: req2.Msg.GetElevation().GetId()}), cookie, csrf))
-	symbolIn(t, err, connect.CodeFailedPrecondition, "ELEV_SELF_APPROVAL")
-	ccookie, ccsrf := b.signIn("carol")
-	if _, err := el.DenyElevation(ctx, withSession(connect.NewRequest(&osadminv1.DenyElevationRequest{Id: req2.Msg.GetElevation().GetId()}), ccookie, ccsrf)); err != nil {
+	if open.Msg.GetTicket() == "" || open.Msg.GetSocket() != filepath.Join(b.run, "rootshell.sock") || open.Msg.GetSessionMinutes() != 10 {
+		t.Fatalf("open %v", open.Msg)
+	}
+	console := b.elevationAs(0, "")
+	if _, err := console.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Ticket: open.Msg.GetTicket(), Admin: "bob", Pid: 9})); err == nil {
+		t.Fatal("alice's ticket opened a shell for bob")
+	}
+	begin, err := console.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Ticket: open.Msg.GetTicket(), Admin: "alice", Pid: 9}))
+	if err != nil || begin.Msg.GetElevation().GetState() != "active" {
+		t.Fatalf("begin %v %v", begin, err)
+	}
+	if _, err := console.EndElevatedSession(ctx, connect.NewRequest(&accessv1.EndElevatedSessionRequest{Id: begin.Msg.GetElevation().GetId(), Reason: "idle", RecordingSha256: "abc"})); err != nil {
 		t.Fatal(err)
 	}
-	if en := lastEntry(t, b.log, "elevation.deny"); en.Actor != "carol" || en.Outcome != "ok" {
-		t.Fatalf("%+v", en)
+	if e := lastEntry(t, b.log, "rootshell.end"); e.Outcome != "idle" {
+		t.Fatalf("audit %+v", e)
 	}
 }
 
-// An admin (not an owner) can't approve on :8443.
-func TestAnAdminCantApproveOn8443(t *testing.T) {
+// The console has no SSH login to tie a challenge to, and an admin who
+// isn't a root operator gets none.
+func TestOnlyARootOperatorsLoginGetsAChallenge(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
-	req, err := b.shellElevation("bob").RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "x"}))
+	_, err := b.elevationAs(0, "").BeginRootShell(ctx, connect.NewRequest(&accessv1.BeginRootShellRequest{}))
+	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+	if err := b.store.Update(func(st *access.State) error {
+		st.Quorum = &access.QuorumRoster{Members: []string{"alice"}, Required: 1}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.shellElevation("bob").BeginRootShell(ctx, connect.NewRequest(&accessv1.BeginRootShellRequest{}))
+	if err == nil || !strings.Contains(err.Error(), "ACCESS_FORBIDDEN") {
+		t.Fatalf("bob got a challenge: %v", err)
+	}
+}
+
+// socketpair returns both ends of a unix stream socket pair.
+func socketpair(t *testing.T) (*net.UnixConn, *net.UnixConn) {
+	t.Helper()
+	fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cookie, csrf := b.signIn("bob")
-	hc, url := b.osadmin()
-	_, err = osadminv1connect.NewElevationServiceClient(hc, url).ApproveElevation(ctx, withSession(connect.NewRequest(&osadminv1.ApproveElevationRequest{Id: req.Msg.GetElevation().GetId()}), cookie, csrf))
-	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+	conn := func(fd int) *net.UnixConn {
+		f := os.NewFile(uintptr(fd), "socketpair") // #nosec G115 -- a descriptor
+		c, err := net.FileConn(f)
+		_ = f.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.(*net.UnixConn)
+	}
+	return conn(fds[0]), conn(fds[1])
 }
 
-// Owners read a session's recording, checked against the audit log's
-// chunk hashes.
+// A root-shell connection runs sneakers-elevated with the connection as
+// its terminal: the ticket and the admin of the connection's uid come in
+// its environment, and what the client sends after the handshake reaches
+// it.
+func TestARootShellConnectionRunsElevated(t *testing.T) {
+	b := newBox(t)
+	script := filepath.Join(t.TempDir(), "elevated")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho \"ticket=$SNEAKERS_ROOT_TICKET admin=$SNEAKERS_ROOT_ADMIN rows=$SNEAKERS_ROOT_ROWS cols=$SNEAKERS_ROOT_COLS\"\nhead -c 9\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	d := accessd.New(accessd.Options{Elevated: script, Paths: accessd.Paths{Run: t.TempDir()}})
+	d.Attach(b.store, b.api)
+	server, client := socketpair(t)
+	done := make(chan struct{})
+	go func() {
+		d.RootShellConn(context.Background(), server, b.uids["bob"])
+		close(done)
+	}()
+	if err := rootshell.WriteHandshake(client, rootshell.Handshake{Ticket: "tkt", Term: "xterm", Rows: 30, Cols: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rootshell.WriteData(client, []byte("hi")); err != nil {
+		t.Fatal(err)
+	}
+	_ = client.CloseWrite()
+	_ = client.SetReadDeadline(time.Now().Add(10 * time.Second))
+	out, _ := io.ReadAll(client)
+	if !strings.Contains(string(out), "ticket=tkt admin=bob rows=30 cols=100") {
+		t.Fatalf("out %q", out)
+	}
+	if !strings.Contains(string(out), "hi") {
+		t.Fatalf("the typed bytes didn't reach it: %q", out)
+	}
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the connection wasn't closed")
+	}
+}
+
+// A connection from a uid with no admin behind it runs nothing.
+func TestARootShellConnectionFromNoAdminRunsNothing(t *testing.T) {
+	b := newBox(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	script := filepath.Join(t.TempDir(), "elevated")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	d := accessd.New(accessd.Options{Elevated: script, Paths: accessd.Paths{Run: t.TempDir()}})
+	d.Attach(b.store, b.api)
+	server, client := socketpair(t)
+	go func() { _ = rootshell.WriteHandshake(client, rootshell.Handshake{Ticket: "tkt"}) }()
+	d.RootShellConn(context.Background(), server, 20099)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("sneakers-elevated ran for a uid with no admin")
+	}
+}
+
 func TestARecordingIsReadAndVerified(t *testing.T) {
 	b := newBox(t)
 	ctx := context.Background()
-	req, err := b.shellElevation("bob").RequestElevation(ctx, connect.NewRequest(&accessv1.RequestElevationRequest{Minutes: 30, Reason: "x"}))
+	st := b.store.Read()
+	c := elevation.Caller{Admin: "bob", KeyFP: b.keys["bob"].fp, Source: "192.0.2.50"}
+	r, err := b.elev.Challenge(st, c, "x")
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := req.Msg.GetElevation().GetId()
-	console := b.elevationAs(0, "")
-	if _, err := console.ApproveElevation(ctx, connect.NewRequest(&accessv1.ApproveElevationRequest{Id: id})); err != nil {
-		t.Fatal(err)
-	}
-	cert, err := b.shellElevation("bob").GetElevationCertificate(ctx, connect.NewRequest(&accessv1.GetElevationCertificateRequest{Id: id}))
+	_, code, err := b.elev.IssueCode(st, "bob", r.Challenge)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := console.BeginElevatedSession(ctx, connect.NewRequest(&accessv1.BeginElevatedSessionRequest{Certificate: cert.Msg.GetCertificate(), Pid: 7})); err != nil {
-		t.Fatal(err)
-	}
-	f, err := os.Create(osaudit.RecordingPath(b.log.Dir(), id)) // #nosec G304 -- test path
+	_, ticket, err := b.elev.Open(st, c, r.Challenge, code)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := osaudit.NewRecorder(f, b.log, id)
+	if _, _, err := b.elev.Begin(ticket, "bob", 7); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(osaudit.RecordingPath(b.log.Dir(), r.ID)) // #nosec G304 -- test path
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := osaudit.NewRecorder(f, b.log, r.ID)
 	_, _ = rec.Write([]byte("# id\r\nuid=0(root)\r\n"))
 	if err := rec.Close("exit"); err != nil {
 		t.Fatal(err)
@@ -308,11 +245,11 @@ func TestARecordingIsReadAndVerified(t *testing.T) {
 	_ = f.Close()
 	cookie, csrf := b.signIn("alice")
 	hc, url := b.osadmin()
-	got, err := osadminv1connect.NewElevationServiceClient(hc, url).GetElevationRecording(ctx, withSession(connect.NewRequest(&osadminv1.GetElevationRecordingRequest{Id: id}), cookie, csrf))
+	got, err := osadminv1connect.NewElevationServiceClient(hc, url).GetElevationRecording(ctx, withSession(connect.NewRequest(&osadminv1.GetElevationRecordingRequest{Id: r.ID}), cookie, csrf))
 	if err != nil || !got.Msg.GetVerified() || !strings.Contains(string(got.Msg.GetCast()), "uid=0(root)") {
 		t.Fatalf("%v %v", got, err)
 	}
 	bcookie, bcsrf := b.signIn("bob")
-	_, err = osadminv1connect.NewElevationServiceClient(hc, url).GetElevationRecording(ctx, withSession(connect.NewRequest(&osadminv1.GetElevationRecordingRequest{Id: id}), bcookie, bcsrf))
+	_, err = osadminv1connect.NewElevationServiceClient(hc, url).GetElevationRecording(ctx, withSession(connect.NewRequest(&osadminv1.GetElevationRecordingRequest{Id: r.ID}), bcookie, bcsrf))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 }

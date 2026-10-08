@@ -67,9 +67,9 @@ gobuild "$tree/sbin/init" sneakers-init
 for c in sneakers-accessd sneakers-console sneakers-firstboot sneakers-netd sneakers-osadmin sneakers-shell sneakers-sshd-run; do
   gobuild "$tree/usr/bin/$c" "$c"
 done
-# sshd runs these as forced commands and as the AuthorizedKeysCommand, so
-# they and every directory above them are root's and not writable by others.
-for c in sneakers-elevated sneakers-enrol sneakers-enrol-keys; do
+# accessd runs the root shell through it, so it and every directory above it
+# are root's and not writable by others.
+for c in sneakers-elevated; do
   gobuild "$tree/usr/libexec/$c" "$c"
 done
 

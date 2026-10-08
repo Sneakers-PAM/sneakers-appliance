@@ -99,3 +99,12 @@ func PeerContext(ctx context.Context, c net.Conn) context.Context {
 func WithPeer(ctx context.Context, p Peer) context.Context {
 	return context.WithValue(ctx, peerKey{}, p)
 }
+
+// Underlying returns the connection a PeerListener wrapped, for a server
+// that hands the socket itself to a child process.
+func Underlying(c net.Conn) net.Conn {
+	if pc, ok := c.(peerConn); ok {
+		return pc.Conn
+	}
+	return c
+}
