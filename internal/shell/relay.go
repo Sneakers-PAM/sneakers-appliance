@@ -68,6 +68,15 @@ func Relay(ctx context.Context, socket, ticket, term string, in *os.File, out io
 		if n == 0 || fds[0].Revents == 0 {
 			continue
 		}
+		select {
+		case <-resize:
+			// A resize that came in while polling goes before the keys.
+			r, c := size()
+			if err := rootshell.WriteResize(conn, r, c); err != nil {
+				return nil
+			}
+		default:
+		}
 		k, err := in.Read(buf)
 		if k > 0 {
 			if werr := rootshell.WriteData(conn, buf[:k]); werr != nil {

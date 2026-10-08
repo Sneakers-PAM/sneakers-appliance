@@ -48,6 +48,7 @@ func TestTheRelayCarriesTheTerminal(t *testing.T) {
 	}
 	defer func() { _ = ln.Close() }()
 	got := make(chan string, 1)
+	ready := make(chan struct{})
 	var hs rootshell.Handshake
 	var sizes [][2]uint16
 	go func() {
@@ -60,6 +61,7 @@ func TestTheRelayCarriesTheTerminal(t *testing.T) {
 			return
 		}
 		hs = h
+		close(ready)
 		_, _ = c.Write([]byte("root# "))
 		r := rootshell.NewReader(rest, func(rows, cols uint16) { sizes = append(sizes, [2]uint16{rows, cols}) })
 		buf := make([]byte, 4)
@@ -79,7 +81,11 @@ func TestTheRelayCarriesTheTerminal(t *testing.T) {
 	size := func() (uint16, uint16) { return rows, cols }
 	errc := make(chan error, 1)
 	go func() { errc <- shell.Relay(context.Background(), sock, "tkt", "xterm", pr, out, size, resize) }()
-	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the relay never connected")
+	}
 	rows, cols = 40, 100
 	resize <- struct{}{}
 	time.Sleep(100 * time.Millisecond)
