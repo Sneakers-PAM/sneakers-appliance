@@ -38,6 +38,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
@@ -222,6 +223,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Services:        initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
 		Network:         netd,
 		Paths:           paths,
+		BoxStateFile:    boxstate.File,
 		CertDir:         paths.OwnDir(),
 		Certs:           certs,
 		Elevation:       elev,

@@ -64,7 +64,7 @@ gobuild() { # out package
   GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -ldflags="-s -w ${PINS_LDFLAGS:-}" -o "$1" "$root/cmd/$2"
 }
 gobuild "$tree/sbin/init" sneakers-init
-for c in sneakers-accessd sneakers-console sneakers-firstboot sneakers-netd sneakers-osadmin sneakers-shell sneakers-sshd-run; do
+for c in sneakers-accessd sneakers-console sneakers-edgefall sneakers-firstboot sneakers-netd sneakers-osadmin sneakers-shell sneakers-sshd-run; do
   gobuild "$tree/usr/bin/$c" "$c"
 done
 # accessd runs the root shell through it, so it and every directory above it

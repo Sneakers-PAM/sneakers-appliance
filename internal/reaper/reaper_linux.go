@@ -100,9 +100,9 @@ func (r *Reaper) Start(argv []string) (services.Process, error) {
 }
 
 // StartAs starts argv like Start, under uid and gid with no supplementary
-// groups.
-func (r *Reaper) StartAs(argv []string, uid, gid uint32) (services.Process, error) {
-	return r.start(argv, &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}})
+// groups and caps as its ambient capabilities.
+func (r *Reaper) StartAs(argv []string, uid, gid uint32, caps []uintptr) (services.Process, error) {
+	return r.start(argv, &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}, AmbientCaps: caps})
 }
 
 // StartConsole starts argv with stdout, a claim on the consoles, as its

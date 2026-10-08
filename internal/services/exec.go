@@ -23,11 +23,12 @@ func (ExecRunner) Start(argv []string) (Process, error) {
 	return execProcess{cmd}, nil
 }
 
-// StartAs starts argv under uid and gid, with no supplementary groups.
-func (ExecRunner) StartAs(argv []string, uid, gid uint32) (Process, error) {
+// StartAs starts argv under uid and gid, with no supplementary groups and
+// caps as its ambient capabilities.
+func (ExecRunner) StartAs(argv []string, uid, gid uint32, caps []uintptr) (Process, error) {
 	cmd := exec.Command(argv[0], argv[1:]...) // #nosec G204 -- argv comes from the read-only service table
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid, Groups: []uint32{}}, AmbientCaps: caps}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}

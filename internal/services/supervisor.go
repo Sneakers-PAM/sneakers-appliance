@@ -33,9 +33,10 @@ type Runner interface {
 	Exists(path string) bool
 }
 
-// UserRunner starts a program under another uid and gid.
+// UserRunner starts a program under another uid and gid, keeping caps as
+// ambient capabilities.
 type UserRunner interface {
-	StartAs(argv []string, uid, gid uint32) (Process, error)
+	StartAs(argv []string, uid, gid uint32, caps []uintptr) (Process, error)
 }
 
 // ConsoleRunner starts a program with its standard output on stdout (a
@@ -359,8 +360,8 @@ func (s *Supervisor) exec(sv *Service) (Process, error) {
 	if !ok {
 		return nil, fmt.Errorf("%s runs as %s, and this runner can't change user", sv.Name, sv.User)
 	}
-	s.o.Logger.Debug("services: starting as a system user", log.F("service", sv.Name), log.F("user", sv.User), log.F("uid", a.UID))
-	return ur.StartAs(argv, uint32(a.UID), uint32(a.GID)) // #nosec G115 -- fixed system ids below 65536
+	s.o.Logger.Debug("services: starting as a system user", log.F("service", sv.Name), log.F("user", sv.User), log.F("uid", a.UID), log.F("capabilities", strings.Join(sv.Capabilities, ",")))
+	return ur.StartAs(argv, uint32(a.UID), uint32(a.GID), sv.Caps()) // #nosec G115 -- fixed system ids below 65536
 }
 
 func (s *Supervisor) launch(ctx context.Context, u *unit, backoff time.Duration) error {

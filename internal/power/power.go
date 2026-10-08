@@ -116,6 +116,10 @@ type Options struct {
 	// (power.reboot or power.shutdown) before anything stops: init puts
 	// the rebooting or shutting down screen up.
 	Announce func(action string)
+	// Keep names the services a reboot or a shutdown leaves running
+	// through the drain, until the power goes: the edge fallback, which
+	// answers 80 and 443 with the box-state page once k0s has stopped.
+	Keep []string
 }
 
 // armed is the reset osadmin armed.
@@ -245,7 +249,7 @@ func (c *Controller) finish(e osaudit.Entry, action string, forced bool) {
 	if !forced {
 		start := c.o.Clock.Mono()
 		dctx, cancel := context.WithTimeout(context.Background(), c.o.DrainTimeout)
-		err := c.o.Drainer.Drain(dctx)
+		err := c.o.Drainer.Drain(dctx, c.o.Keep...)
 		cancel()
 		if err != nil {
 			// The box still goes down: a reboot that waits forever on a

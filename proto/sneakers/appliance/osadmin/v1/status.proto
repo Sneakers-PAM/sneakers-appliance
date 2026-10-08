@@ -28,9 +28,11 @@ service StatusService {
     };
   }
   // GetPhase says whether the box is still in setup (firstboot) or set up
-  // (normal). It is public: the pages read it before anyone signs in, and
+  // (normal), and what the box is doing for the product edge's box-state
+  // page. It is public: the pages read it before anyone signs in,
   // sneakers-osadmin sends every page but /setup to /setup while setup is
-  // open. It says nothing else about the box.
+  // open, and sneakers-edgefall serves the state on 443. It says nothing
+  // else about the box.
   rpc GetPhase(GetPhaseRequest) returns (GetPhaseResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {public: true};
@@ -42,6 +44,18 @@ message GetPhaseRequest {}
 message GetPhaseResponse {
   // phase is firstboot until setup's Finish, then normal.
   string phase = 1;
+  // state is what the box is doing, as the product edge's box-state page
+  // shows it: running (the product runs), starting (it doesn't run yet,
+  // or setup isn't done), rebooting, shutting-down (init has announced
+  // the reboot or the power-off), updating (an update is being applied or
+  // reverted) or maintenance.
+  string state = 2;
+  // product_running: the product's service (k0s) runs, so its edge holds
+  // 80 and 443; while it doesn't, sneakers-edgefall answers there.
+  bool product_running = 3;
+  // product_installed: a product bundle is installed. Before one is,
+  // nothing answers 80 or 443.
+  bool product_installed = 4;
 }
 
 message GetStatusRequest {}

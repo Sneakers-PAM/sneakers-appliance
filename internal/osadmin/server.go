@@ -88,6 +88,10 @@ type Options struct {
 	Services initv1connect.ServicesServiceClient
 	Network  netdv1connect.NetworkServiceClient
 	Paths    Paths
+	// BoxStateFile is init's announcement of a reboot or a shutdown
+	// (boxstate.File on the box), which GetPhase's state reports; empty
+	// reads none.
+	BoxStateFile string
 	// Cert describes :8443's own certificate, for Status. When CertDir is
 	// set, the certificate there is read instead, on every Status.
 	Cert    CertInfo

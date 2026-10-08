@@ -1,0 +1,19 @@
+# The product edge's fallback (docs/edge-fallback.md): the box state, the
+# poller product pages load and the branded box-state page, on loopback
+# for Traefik's /_box/ route and error pages, and on 80 and 443 itself
+# while k0s doesn't run. It never serves product content or proxies.
+# Normal operation only, after accessd (it asks the public GetPhase, the
+# only call its uid may make). It runs as the edgefall user with only
+# CAP_NET_BIND_SERVICE; the pre-start runs as root and copies the box's
+# :8443 certificate (Traefik's box-tls) into /run/sneakers/edgefall. A
+# reboot's or a shutdown's drain leaves it running until the power goes.
+# INTERIM until sneakers-platformd (#99), which takes over starting and
+# stopping it around k0s (platform design, Section 3.2).
+exec: /usr/bin/sneakers-edgefall
+args: [serve]
+phases: [normal]
+after: [accessd]
+restart: always
+user: edgefall
+capabilities: [net-bind-service]
+pre-start: [/usr/bin/sneakers-edgefall, prepare]

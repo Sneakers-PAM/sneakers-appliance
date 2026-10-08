@@ -1,0 +1,153 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+//go:build linux
+
+// Command sneakers-edgefall is the product edge's fallback
+// (docs/edge-fallback.md). `prepare` runs as root before every start and
+// hands it the box's certificate; `serve` runs as the edgefall user with
+// only CAP_NET_BIND_SERVICE. It serves the box state, the poller and the
+// branded box-state page on loopback for Traefik, and on 80 and 443 itself
+// while k0s doesn't run. It never serves product content or proxies.
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"net"
+	"net/http"
+	"net/netip"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"connectrpc.com/connect"
+	log "github.com/Bugs5382/go-log"
+
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
+)
+
+// pollEvery is how often accessd is asked; the poller asks edgefall every
+// second, so a reboot reaches an open tab within about two.
+const pollEvery = 500 * time.Millisecond
+
+// askTimeout bounds one GetPhase.
+const askTimeout = time.Second
+
+type config struct {
+	osadminDir, tlsDir, accessSock, boxState, local, https, http string
+}
+
+func main() {
+	var c config
+	fs := flag.NewFlagSet("sneakers-edgefall", flag.ExitOnError)
+	fs.StringVar(&c.osadminDir, "osadmin-dir", "/var/lib/sneakers/osadmin", "osadmin's directory, where the box's :8443 certificate is")
+	fs.StringVar(&c.tlsDir, "tls-dir", "/run/sneakers/edgefall", "edgefall's own copy of the certificate")
+	fs.StringVar(&c.accessSock, "access-socket", accessapi.SocketPath, "accessd's socket")
+	fs.StringVar(&c.boxState, "box-state", boxstate.File, "init's announcement of a reboot or a shutdown")
+	fs.StringVar(&c.local, "local", edgefall.LocalAddr, "the loopback address Traefik reaches for /_box/ and its error pages")
+	fs.StringVar(&c.https, "https", ":443", "the edge's https address, held while k0s doesn't run")
+	fs.StringVar(&c.http, "http", ":80", "the edge's http address, held with https")
+	cmd := "serve"
+	args := os.Args[1:]
+	if len(args) > 0 && (args[0] == "prepare" || args[0] == "serve") {
+		cmd, args = args[0], args[1:]
+	}
+	_ = fs.Parse(args)
+	lg := log.NewLoggerWithOptions("sneakers-edgefall", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatJSON), log.WithDefaultLevel(log.LevelError))
+	var err error
+	if cmd == "prepare" {
+		err = prepare(c, lg)
+	} else {
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+		defer stop()
+		err = serve(ctx, c, lg)
+	}
+	if err != nil {
+		lg.Error(err, "edgefall: fatal", log.F("command", cmd))
+		_, _ = fmt.Fprintln(os.Stderr, "sneakers-edgefall:", err)
+		os.Exit(1)
+	}
+}
+
+func prepare(c config, lg log.Logger) error {
+	if os.Geteuid() != 0 {
+		return errors.New("prepare runs as root, before serve")
+	}
+	if err := edgefall.Prepare(c.osadminDir, c.tlsDir, accounts.EdgefallUID, accounts.EdgefallUID); err != nil {
+		return err
+	}
+	if _, err := edgefall.LoadCert(c.tlsDir)(); err != nil {
+		lg.Warn("edgefall: no box certificate yet; 443 isn't answered while k0s is down", log.F("error", err.Error()))
+	} else {
+		lg.Info("edgefall: the box certificate is in place")
+	}
+	return nil
+}
+
+func serve(ctx context.Context, c config, lg log.Logger) error {
+	if os.Geteuid() == 0 {
+		return errors.New("serve runs as the edgefall user, not root")
+	}
+	if ap, err := netip.ParseAddrPort(c.local); err != nil || !ap.Addr().IsLoopback() {
+		return fmt.Errorf("the local address %q must be a loopback address and port", c.local)
+	}
+	src := phaseSource(c.accessSock)
+	w := edgefall.NewWatcher(src, c.boxState, lg)
+	h := edgefall.NewServer(w.State)
+
+	ln, err := net.Listen("tcp", c.local)
+	if err != nil {
+		return err
+	}
+	local := edgefall.HTTPServer(h)
+	go func() {
+		if err := local.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			lg.Error(err, "edgefall: the loopback listener stopped")
+		}
+	}()
+	defer func() { _ = local.Close() }()
+	cl := edgefall.NewClaimer(edgefall.ClaimOptions{HTTPS: c.https, HTTP: c.http, Cert: edgefall.LoadCert(c.tlsDir), Handler: h, Logger: lg})
+	defer cl.Close()
+	lg.Info("edgefall: serving", log.F("local", c.local), log.F("https", c.https), log.F("http", c.http))
+
+	t := time.NewTicker(pollEvery)
+	defer t.Stop()
+	for {
+		w.Poll(ctx)
+		cl.Want(w.Claim())
+		select {
+		case <-ctx.Done():
+			lg.Info("edgefall: stopped", log.F("state", string(w.State())))
+			return nil
+		case <-t.C:
+		}
+	}
+}
+
+// phaseSource asks accessd's public GetPhase on access.sock, where the
+// edgefall uid may ask that and nothing else.
+func phaseSource(sock string) edgefall.Source {
+	tr := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{Timeout: askTimeout}).DialContext(ctx, "unix", sock)
+		},
+		MaxIdleConns: 1,
+	}
+	st := osadminv1connect.NewStatusServiceClient(&http.Client{Transport: tr, Timeout: askTimeout}, "http://access.sock")
+	return func(ctx context.Context) (edgefall.Phase, error) {
+		res, err := st.GetPhase(ctx, connect.NewRequest(&osadminv1.GetPhaseRequest{}))
+		if err != nil {
+			return edgefall.Phase{}, err
+		}
+		return edgefall.Phase{State: res.Msg.GetState(), ProductRunning: res.Msg.GetProductRunning(), ProductInstalled: res.Msg.GetProductInstalled()}, nil
+	}
+}

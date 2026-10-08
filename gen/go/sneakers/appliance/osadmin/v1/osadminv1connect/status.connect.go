@@ -54,9 +54,11 @@ type StatusServiceClient interface {
 	// reinstall. The typed confirmation is the box's host name.
 	SetSecureBoot(context.Context, *connect.Request[v1.SetSecureBootRequest]) (*connect.Response[v1.SetSecureBootResponse], error)
 	// GetPhase says whether the box is still in setup (firstboot) or set up
-	// (normal). It is public: the pages read it before anyone signs in, and
+	// (normal), and what the box is doing for the product edge's box-state
+	// page. It is public: the pages read it before anyone signs in,
 	// sneakers-osadmin sends every page but /setup to /setup while setup is
-	// open. It says nothing else about the box.
+	// open, and sneakers-edgefall serves the state on 443. It says nothing
+	// else about the box.
 	GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error)
 }
 
@@ -124,9 +126,11 @@ type StatusServiceHandler interface {
 	// reinstall. The typed confirmation is the box's host name.
 	SetSecureBoot(context.Context, *connect.Request[v1.SetSecureBootRequest]) (*connect.Response[v1.SetSecureBootResponse], error)
 	// GetPhase says whether the box is still in setup (firstboot) or set up
-	// (normal). It is public: the pages read it before anyone signs in, and
+	// (normal), and what the box is doing for the product edge's box-state
+	// page. It is public: the pages read it before anyone signs in,
 	// sneakers-osadmin sends every page but /setup to /setup while setup is
-	// open. It says nothing else about the box.
+	// open, and sneakers-edgefall serves the state on 443. It says nothing
+	// else about the box.
 	GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error)
 }
 

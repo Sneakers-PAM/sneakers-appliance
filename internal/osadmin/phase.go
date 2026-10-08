@@ -9,11 +9,14 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
 
+	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 )
 
 // The box's phases, as GetPhase and GetStatus answer them.
@@ -36,8 +39,54 @@ func (s *Server) Phase() string {
 	return PhaseFirstBoot
 }
 
-func (h *status) GetPhase(context.Context, *connect.Request[osadminv1.GetPhaseRequest]) (*connect.Response[osadminv1.GetPhaseResponse], error) {
-	return connect.NewResponse(&osadminv1.GetPhaseResponse{Phase: h.s.Phase()}), nil
+func (h *status) GetPhase(ctx context.Context, _ *connect.Request[osadminv1.GetPhaseRequest]) (*connect.Response[osadminv1.GetPhaseResponse], error) {
+	p := h.s.Phase()
+	running := h.s.productRunning(ctx)
+	return connect.NewResponse(&osadminv1.GetPhaseResponse{
+		Phase: p, State: string(h.s.boxState(p, running)), ProductRunning: running,
+		ProductInstalled: h.s.slots().Status().Installed != "",
+	}), nil
+}
+
+// boxState is what the box is doing, as the product edge's box-state page
+// shows it. An update holds over the reboot it ends in, so the page says
+// why the box went away; init's announcement of a reboot or a shutdown
+// holds over everything else.
+func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
+	announced := boxstate.State("")
+	if s.o.BoxStateFile != "" {
+		announced = boxstate.Read(s.o.BoxStateFile)
+	}
+	switch {
+	case s.Maintenance():
+		return boxstate.Updating
+	case announced != "":
+		return announced
+	case phase != PhaseNormal || !productRunning:
+		return boxstate.Starting
+	default:
+		return boxstate.Running
+	}
+}
+
+// productStatusTimeout bounds asking init about the product's service, so
+// a slow init doesn't hold up the public GetPhase.
+const productStatusTimeout = 2 * time.Second
+
+// productRunning asks init whether the product's service runs; with no
+// answer it doesn't.
+func (s *Server) productRunning(ctx context.Context) bool {
+	if s.o.Services == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(ctx, productStatusTimeout)
+	defer cancel()
+	r, err := s.o.Services.Status(ctx, connect.NewRequest(&initv1.StatusRequest{Name: ProductService}))
+	if err != nil {
+		s.o.Logger.Debug("osadmin: the product service's state isn't known", log.F("error", err.Error()))
+		return false
+	}
+	return r.Msg.GetRunning()
 }
 
 // PagesHandler is StaticHandler gated on the phase: while phase answers

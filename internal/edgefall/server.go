@@ -1,0 +1,151 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// Package edgefall is sneakers-edgefall, the product edge's fallback
+// (platform design, Section 3.2; docs/edge-fallback.md). It serves three
+// things and nothing else: the box state at /_box/state, the poller
+// product pages load from /_box/poll.js, and the branded box-state page,
+// with 503, for every other request. It never serves product content and
+// never proxies. Traefik reaches it on loopback for /_box/ and for its
+// error pages; while k0s doesn't run, edgefall answers 80 and 443 itself.
+package edgefall
+
+import (
+	"bytes"
+	"crypto/sha256"
+	_ "embed"
+	"encoding/base64"
+	"encoding/json"
+	"html/template"
+	"net/http"
+	"regexp"
+	"strings"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
+)
+
+// The paths edgefall answers with something other than the page.
+const (
+	StatePath  = "/_box/state"
+	PollerPath = "/_box/poll.js"
+)
+
+// StateHeader carries the state on the page, so the poller tells the page
+// from the product once the box is back.
+const StateHeader = "Sneakers-Box-State"
+
+// retryAfter is the page's Retry-After, in seconds.
+const retryAfter = "10"
+
+//go:embed assets/poll.js
+var poller []byte
+
+//go:embed assets/page.html
+var pageSource string
+
+//go:embed assets/page.css
+var pageStyle string
+
+// Words is what the page and the poller say for one state.
+type Words struct {
+	Title, Note string
+}
+
+// words are the page's words, the same as the poller's (a test holds them
+// together) and the console's state page.
+var words = map[boxstate.State]Words{
+	boxstate.Starting:     {"Sneakers-PAM is starting", "This page reloads by itself when it's ready."},
+	boxstate.Rebooting:    {"Sneakers-PAM is rebooting", "It comes back by itself. This page reloads when it's ready."},
+	boxstate.ShuttingDown: {"Sneakers-PAM is shutting down", "It powers off by itself. Power it on again to use it."},
+	boxstate.Updating:     {"Sneakers-PAM is updating", "It comes back by itself when the update is done. This page reloads when it's ready."},
+	boxstate.Maintenance:  {"Sneakers-PAM is in maintenance", "It comes back when the maintenance is over. This page reloads when it's ready."},
+}
+
+// WordsFor is what the page says for s; a running box behind a product
+// that doesn't answer yet is starting.
+func WordsFor(s boxstate.State) Words {
+	if w, ok := words[s]; ok {
+		return w
+	}
+	return words[boxstate.Starting]
+}
+
+var page = template.Must(template.New("page").Parse(pageSource))
+
+// Server is edgefall's handler.
+type Server struct {
+	state func() boxstate.State
+	csp   string
+}
+
+// NewServer serves the state state answers.
+func NewServer(state func() boxstate.State) *Server {
+	sum := sha256.Sum256([]byte(pageStyle))
+	csp := "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
+		"'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	return &Server{state: state, csp: csp}
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("X-Frame-Options", "DENY")
+	st := s.state()
+	read := r.Method == http.MethodGet || r.Method == http.MethodHead
+	switch {
+	case read && r.URL.Path == StatePath && r.URL.RawPath == "":
+		h.Set("Content-Type", "application/json")
+		b, _ := json.Marshal(struct {
+			State string `json:"state"`
+		}{string(st)})
+		_, _ = w.Write(b)
+	case read && r.URL.Path == PollerPath && r.URL.RawPath == "":
+		h.Set("Content-Type", "text/javascript; charset=utf-8")
+		_, _ = w.Write(poller)
+	default:
+		s.page(w, st)
+	}
+}
+
+// page is the branded page, with 503: every request but the two above.
+func (s *Server) page(w http.ResponseWriter, st boxstate.State) {
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Content-Security-Policy", s.csp)
+	h.Set("Retry-After", retryAfter)
+	h.Set(StateHeader, string(st))
+	h.Set("Connection", "close")
+	var b bytes.Buffer
+	wd := WordsFor(st)
+	_ = page.Execute(&b, struct {
+		State       string
+		Title, Note string
+		Style       template.CSS
+	}{string(st), wd.Title, wd.Note, template.CSS(pageStyle)}) // #nosec G203 -- the embedded stylesheet, pinned by the CSP's hash
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write(b.Bytes())
+}
+
+var hostname = regexp.MustCompile(`^[A-Za-z0-9.-]{1,253}$|^\[[0-9A-Fa-f:.]{2,45}\]$`)
+
+// Redirect is port 80's handler: everything goes to https on the same
+// host, as Traefik's 80 does.
+func Redirect() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if i := strings.LastIndex(host, ":"); i > 0 && !strings.HasSuffix(host, "]") {
+			host = host[:i]
+		}
+		if !hostname.MatchString(host) {
+			http.Error(w, "bad host", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Connection", "close")
+		http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusMovedPermanently) // #nosec G710 -- the same host, checked above, over https: what Traefik's 80 does
+	})
+}
+
+// LocalAddr is where Traefik reaches edgefall, on loopback only.
+const LocalAddr = "127.0.0.1:9180"

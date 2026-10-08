@@ -126,11 +126,11 @@ func (s *Server) Attach(store *access.Store, api *osadmin.Server) {
 // nobodyUID is the overflow uid, never an admin.
 const nobodyUID = 65534
 
-// PeerAllowed is access.sock's peer rule: root, the osadmin uid, or a uid
-// in the admin range (which must also belong to an admin, checked per
-// call).
+// PeerAllowed is access.sock's peer rule: root, the osadmin uid, the
+// edgefall uid (the public GetPhase only), or a uid in the admin range
+// (which must also belong to an admin, checked per call).
 func PeerAllowed(uid uint32) bool {
-	return uid == 0 || uid == accounts.OsadminUID || AdminPeer(uid)
+	return uid == 0 || uid == accounts.OsadminUID || uid == accounts.EdgefallUID || AdminPeer(uid)
 }
 
 // AdminPeer is rootshell.sock's peer rule: a uid in the admin range.
@@ -162,6 +162,15 @@ func (s *Server) Handler() http.Handler {
 			if a, err := netip.ParseAddr(r.Header.Get(accessapi.ClientHeader)); err == nil {
 				r2.RemoteAddr = a.String()
 			}
+			front.ServeHTTP(w, r2)
+		case p.UID == accounts.EdgefallUID:
+			if r.URL.Path != osadminv1connect.StatusServiceGetPhaseProcedure {
+				s.o.Logger.Warn("accessd: the edge fallback asked for more than the phase; refused", log.F("path", r.URL.Path))
+				connectDenied(w)
+				return
+			}
+			r2 := r.Clone(r.Context())
+			r2.RemoteAddr = "edgefall"
 			front.ServeHTTP(w, r2)
 		default:
 			local.ServeHTTP(w, r)
@@ -232,4 +241,11 @@ func (s *Server) caller(ctx context.Context, h http.Header, procedure string) (o
 // refuse is a refusal as the Connect error the shell reads.
 func refuse(err error) error {
 	return connect.NewError(connect.CodePermissionDenied, errors.New(codes.Describe(err)))
+}
+
+// connectDenied answers a Connect call with permission_denied.
+func connectDenied(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusForbidden)
+	_, _ = w.Write([]byte(`{"code":"permission_denied","message":"the edge fallback may ask the phase only"}`))
 }
