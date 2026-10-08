@@ -352,7 +352,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	entry := osaudit.Entry{Source: hostOf(r.RemoteAddr), Action: "upgrade.upload"}
 	sess, err := s.session(r.Header)
 	if err == nil {
-		entry.Actor, entry.KeyFP = sess.Admin, sess.KeyFP
+		entry.Actor = sess.Admin
 		_, err = s.liveRole(sess)
 	}
 	if err == nil && subtle.ConstantTimeCompare([]byte(r.Header.Get(CSRFHeader)), []byte(sess.CSRF)) != 1 {
@@ -601,7 +601,7 @@ func (s *Server) reject(path string, err error) {
 
 // by is who an update action is for, as the start of an audit entry.
 func (c *call) by(action string) osaudit.Entry {
-	return osaudit.Entry{Actor: c.session.Admin, KeyFP: c.session.KeyFP, Source: c.source, Action: action, Detail: c.detail}
+	return osaudit.Entry{Actor: c.session.Admin, Source: c.source, Action: action, Detail: c.detail}
 }
 
 func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {

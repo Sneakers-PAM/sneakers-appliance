@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,10 +31,13 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
 	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
@@ -292,7 +296,14 @@ type box struct {
 	// each signal, as a session's sneakers-elevated would on SIGTERM.
 	onSignal func(pid int)
 	keys     map[string]sshKey
-	done     bool
+	// totp are the admins' TOTP secrets; password is every admin's.
+	totp       map[string][]byte
+	pwHash     string
+	root       *rootkey.Key
+	codeSealer *memSealer
+	book       *lockout.Book
+	sshdUp     int
+	done       bool
 	// sign and enc are this test's production release and update keys.
 	mirror      *httptest.Server
 	mirrorFiles map[string][]byte
@@ -340,19 +351,50 @@ func (f *fakeServices) log() []string {
 }
 
 // newBox starts osadmin with an owner alice and, when withBob, an admin
-// bob.
+// bob, as a box whose first admin was made already.
 func newBox(t *testing.T, withBob bool) *box {
 	t.Helper()
-	b := &box{t: t, clk: clock.NewFake(), state: t.TempDir(), keys: map[string]sshKey{}, shells: &fakeShells{}}
+	return startBox(t, func(b *box) {
+		b.addAdmin("alice", access.RoleOwner)
+		if withBob {
+			b.addAdmin("bob", access.RoleAdmin)
+		}
+		if err := os.MkdirAll(filepath.Join(b.state, "setup"), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(b.state, "setup", osadmin.FirstAdminMarker), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// newFreshBox starts osadmin on a box with no admin yet: first boot.
+func newFreshBox(t *testing.T) *box {
+	t.Helper()
+	return startBox(t, func(*box) {})
+}
+
+func startBox(t *testing.T, seed func(*box)) *box {
+	t.Helper()
+	b := &box{t: t, clk: clock.NewFake(), state: t.TempDir(), keys: map[string]sshKey{}, totp: map[string][]byte{}, shells: &fakeShells{}}
 	var err error
-	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return true, b.done }})
+	b.root, err = rootkey.Load(newMemSealer(), filepath.Join(b.state, "ssh"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.addAdmin("alice", access.RoleOwner)
-	if withBob {
-		b.addAdmin("bob", access.RoleAdmin)
+	b.pwHash, err = credentials.HashPassword(b.root.Pepper(), testPassword)
+	if err != nil {
+		t.Fatal(err)
 	}
+	b.book, err = lockout.Open(filepath.Join(b.state, "access", "lockout.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.store, err = access.Open(filepath.Join(b.state, "access"), access.Options{Stage: func() (bool, bool) { return b.srv != nil && b.srv.FirstAdminDone(), b.done }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed(b)
 	b.log, err = osaudit.Open(filepath.Join(b.state, "os-audit"), osaudit.Options{Now: b.clk.Now})
 	if err != nil {
 		t.Fatal(err)
@@ -377,7 +419,7 @@ func newBox(t *testing.T, withBob bool) *box {
 		t.Fatal(err)
 	}
 	b.elev, err = elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"), Sealer: newMemSealer(),
+		SSHDir: filepath.Join(b.state, "ssh"), StateFile: filepath.Join(b.state, "access", "elevation.json"), RootKey: b.root,
 		Clock:       b.clk,
 		Maintenance: func() bool { return b.srv != nil && b.srv.Maintenance() },
 		Signal: func(pid int) error {
@@ -403,6 +445,9 @@ func newBox(t *testing.T, withBob bool) *box {
 	}))
 	t.Cleanup(b.mirror.Close)
 	mirrorClient := func() *http.Client { return b.mirror.Client() }
+	if b.codeSealer == nil {
+		b.codeSealer = newMemSealer()
+	}
 	b.srv = osadmin.New(osadmin.Options{
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: release.ChannelProduction, ReleaseKeyPEM: b.sign.PublicPEM,
@@ -420,14 +465,22 @@ func newBox(t *testing.T, withBob bool) *box {
 		Network:    netdv1connect.NewNetworkServiceClient(hc, daemons.URL),
 		Paths:      osadmin.Paths{State: b.state},
 		Elevation:  b.elev,
-		Shells:     b.shells,
-		Cert:       osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
+		RootKey:    b.root, Lockout: b.book,
+		CodeSealer:   b.codeSealer,
+		OnFirstAdmin: func() { b.sshdUp++ },
+		Shells:       b.shells,
+		Cert:         osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
 	})
 	b.ts = httptest.NewTLSServer(b.srv.Handler())
 	t.Cleanup(b.ts.Close)
 	return b
 }
 
+// testPassword is every test admin's password.
+const testPassword = "correct horse battery staple"
+
+// addAdmin adds an admin who can sign in: the test password, a TOTP
+// secret of their own, and an issued key.
 func (b *box) addAdmin(name string, role access.Role) {
 	b.t.Helper()
 	k := newKey(b.t)
@@ -435,14 +488,34 @@ func (b *box) addAdmin(name string, role access.Role) {
 	if err != nil {
 		b.t.Fatal(err)
 	}
+	secret, err := credentials.NewTOTPSecret()
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	sealed, err := credentials.SealTOTP(b.root.Pepper(), name, secret)
+	if err != nil {
+		b.t.Fatal(err)
+	}
 	if err := b.store.Update(func(st *access.State) error {
-		a := st.AddAdmin(name, role, "console", b.clk.Now())
-		a.Keys = append(a.Keys, access.AdminKey{Key: pk, Added: b.clk.Now(), AddedBy: "console", Via: access.ViaEnrol})
+		a := st.AddAdmin(name, role, "setup", b.clk.Now())
+		a.Keys = append(a.Keys, access.AdminKey{Key: pk, Added: b.clk.Now(), AddedBy: name, Via: access.ViaIssued, Serial: st.NextSerial})
+		st.NextSerial++
+		a.Password = &access.Password{Hash: b.pwHash, Changed: b.clk.Now()}
+		a.TOTP = &access.TOTP{Sealed: sealed, Added: b.clk.Now()}
 		return nil
 	}); err != nil {
 		b.t.Fatal(err)
 	}
-	b.keys[name] = k
+	b.keys[name], b.totp[name] = k, secret
+}
+
+// code is admin's TOTP code for a step not used yet: when this step's code
+// was taken already, the clock moves on to the next step first.
+func (b *box) code(admin string) string {
+	for b.book.LastStep(admin) >= credentials.Step(b.clk.Now()) {
+		b.clk.Advance(credentials.Period)
+	}
+	return credentials.TOTP(b.totp[admin], b.clk.Now())
 }
 
 // browser is one browser: its cookie jar and the CSRF token it was given.
@@ -474,25 +547,26 @@ func (b *box) browser() *browser {
 	return br
 }
 
-// signIn runs the whole SSH-attested sign-in as admin and returns the
-// session.
+// signIn signs in as admin with the password and a TOTP code and returns
+// the session.
 func (br *browser) signIn(admin string) *osadminv1.Session {
 	br.b.t.Helper()
 	si := osadminv1connect.NewSignInServiceClient(br.hc, br.b.ts.URL)
-	ctx := context.Background()
-	begin, err := si.BeginSignIn(ctx, connect.NewRequest(&osadminv1.BeginSignInRequest{}))
+	out, err := si.SignIn(context.Background(), connect.NewRequest(&osadminv1.SignInRequest{Admin: admin, Password: testPassword, TotpCode: br.b.code(admin)}))
 	if err != nil {
-		br.b.t.Fatal(err)
+		br.b.t.Fatalf("sign in as %s: %v", admin, err)
 	}
-	if err := br.b.srv.ApproveSignIn(0, begin.Msg.GetCode(), admin, br.b.keys[admin].fp, "192.0.2.77"); err != nil {
-		br.b.t.Fatal(err)
+	br.csrf = out.Msg.GetSession().GetCsrfToken()
+	return out.Msg.GetSession()
+}
+
+// stepUp gives the session a fresh TOTP code.
+func (br *browser) stepUp(admin string) {
+	br.b.t.Helper()
+	si := osadminv1connect.NewSignInServiceClient(br.hc, br.b.ts.URL)
+	if _, err := si.StepUp(context.Background(), connect.NewRequest(&osadminv1.StepUpRequest{TotpCode: br.b.code(admin)})); err != nil {
+		br.b.t.Fatalf("step up as %s: %v", admin, err)
 	}
-	poll, err := si.PollSignIn(ctx, connect.NewRequest(&osadminv1.PollSignInRequest{PollToken: begin.Msg.GetPollToken()}))
-	if err != nil || poll.Msg.GetState() != osadminv1.SignInState_SIGN_IN_STATE_APPROVED {
-		br.b.t.Fatalf("poll: %v %v", poll, err)
-	}
-	br.csrf = poll.Msg.GetSession().GetCsrfToken()
-	return poll.Msg.GetSession()
 }
 
 func (br *browser) access() osadminv1connect.AccessServiceClient {

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
@@ -20,8 +19,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 )
 
-// elevationSvc is the Shell elevation page: pending requests (approve,
-// shorten, deny), active sessions (terminate) and the history with the
+// elevationSvc is the root shells' history, ending a live one, and the
 // recordings. The rules live in package elevation; the role, step-up and
 // audit entry come from each method's Rule.
 type elevationSvc struct {
@@ -29,7 +27,7 @@ type elevationSvc struct {
 	s *Server
 }
 
-// ElevationToWire is a request as the pages and the shell show it.
+// ElevationToWire is a root shell as the pages and the shell show it.
 func ElevationToWire(r elevation.Request, auditDir string) *osadminv1.Elevation {
 	ts := func(t *time.Time) *timestamppb.Timestamp {
 		if t == nil {
@@ -40,8 +38,8 @@ func ElevationToWire(r elevation.Request, auditDir string) *osadminv1.Elevation 
 	e := &osadminv1.Elevation{
 		Id: r.ID, Admin: r.Admin, KeyFingerprint: r.KeyFP, SourceAddress: r.Source, Reason: r.Reason,
 		Minutes: int32(min(r.Minutes, 1<<30)), Requested: timestamppb.New(r.Requested), State: string(r.State), // #nosec G115 -- clamped
-		SelfApproved: r.SelfApproved, ApprovedBy: r.ApprovedBy, Approved: ts(r.Approved), Started: ts(r.Started),
-		Ended: ts(r.Ended), EndReason: r.EndReason, RecordingSha256: r.RecordingSHA256, Serial: r.Serial, ValidBefore: ts(r.ValidBefore),
+		ApprovedBy: r.ApprovedBy, Approved: ts(r.Approved), Started: ts(r.Started),
+		Ended: ts(r.Ended), EndReason: r.EndReason, RecordingSha256: r.RecordingSHA256, ValidBefore: ts(r.ValidBefore),
 	}
 	if auditDir != "" && r.Started != nil {
 		if _, err := os.Stat(osaudit.RecordingPath(auditDir, r.ID)); err == nil {
@@ -77,40 +75,6 @@ func (h *elevationSvc) ListElevations(_ context.Context, _ *connect.Request[osad
 	return connect.NewResponse(out), nil
 }
 
-func (h *elevationSvc) ApproveElevation(ctx context.Context, r *connect.Request[osadminv1.ApproveElevationRequest]) (*connect.Response[osadminv1.ApproveElevationResponse], error) {
-	svc, err := h.svc()
-	if err != nil {
-		return nil, err
-	}
-	c := callFrom(ctx)
-	c.note(r.Msg.GetId(), "minutes", strconv.Itoa(int(r.Msg.GetMinutes())))
-	approver := c.session.Admin
-	if c.detail["surface"] == osaudit.SurfaceConsole {
-		approver = elevation.ConsoleApprover
-	}
-	got, err := svc.Approve(h.s.o.Access.Read(), approver, r.Msg.GetId(), int(r.Msg.GetMinutes()))
-	if err != nil {
-		return nil, err
-	}
-	c.note(got.ID, "admin", got.Admin, "minutes", strconv.Itoa(got.Minutes), "serial", strconv.FormatUint(got.Serial, 10), "selfApproved", strconv.FormatBool(got.SelfApproved))
-	return connect.NewResponse(&osadminv1.ApproveElevationResponse{}), nil
-}
-
-func (h *elevationSvc) DenyElevation(ctx context.Context, r *connect.Request[osadminv1.DenyElevationRequest]) (*connect.Response[osadminv1.DenyElevationResponse], error) {
-	svc, err := h.svc()
-	if err != nil {
-		return nil, err
-	}
-	c := callFrom(ctx)
-	c.note(r.Msg.GetId())
-	got, err := svc.Deny(r.Msg.GetId(), c.session.Admin)
-	if err != nil {
-		return nil, err
-	}
-	c.note(got.ID, "admin", got.Admin)
-	return connect.NewResponse(&osadminv1.DenyElevationResponse{}), nil
-}
-
 func (h *elevationSvc) TerminateElevation(ctx context.Context, r *connect.Request[osadminv1.TerminateElevationRequest]) (*connect.Response[osadminv1.TerminateElevationResponse], error) {
 	svc, err := h.svc()
 	if err != nil {
@@ -137,7 +101,7 @@ func (h *elevationSvc) GetElevationRecording(ctx context.Context, r *connect.Req
 	id := r.Msg.GetId()
 	callFrom(ctx).note(id)
 	if _, ok := svc.Get(id); !ok || h.s.o.Audit == nil {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("there is no elevation request "+id))
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("there is no root shell "+id))
 	}
 	p := osaudit.RecordingPath(h.s.o.Audit.Dir(), id)
 	fi, err := os.Stat(p)

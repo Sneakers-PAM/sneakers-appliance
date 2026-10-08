@@ -38,59 +38,9 @@ func keygen(t *testing.T, bin string, args ...string) (string, error) {
 	return string(out), err
 }
 
-// OpenSSH's own ssh-keygen reads the revocation list: a used certificate's
-// serial is revoked, a fresh one isn't, and the certificate carries the
-// principal, validity, options and extensions the design names.
-func TestOpenSSHReadsTheCertificateAndTheRevocationList(t *testing.T) {
-	bin := sshKeygen(t)
-	f := newFixture(t, "alice")
-	used := f.request("bob", 30)
-	ua, err := f.svc.Approve(f.st, "alice", used.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := f.svc.Begin(ua.Certificate, 1); err != nil {
-		t.Fatal(err)
-	}
-	fresh := f.request("bob", 30)
-	fa, err := f.svc.Approve(f.st, "alice", fresh.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	usedFile, freshFile := filepath.Join(dir, "used-cert.pub"), filepath.Join(dir, "fresh-cert.pub")
-	if err := os.WriteFile(usedFile, []byte(ua.Certificate+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(freshFile, []byte(fa.Certificate+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	krl := filepath.Join(f.dir, "ssh", elevation.RevokedFile)
-	if out, err := keygen(t, bin, "-Q", "-f", krl, usedFile); err == nil || !strings.Contains(out, "REVOKED") {
-		t.Fatalf("the used certificate isn't revoked: %v %s", err, out)
-	}
-	if out, err := keygen(t, bin, "-Q", "-f", krl, freshFile); err != nil || strings.Contains(out, "REVOKED") {
-		t.Fatalf("the fresh certificate is revoked: %v %s", err, out)
-	}
-	out, err := keygen(t, bin, "-L", "-f", freshFile)
-	if err != nil {
-		t.Fatalf("%v %s", err, out)
-	}
-	for _, want := range []string{"user certificate", "elev-" + fresh.ID, "force-command /usr/libexec/sneakers-elevated", "source-address 192.0.2.50", "permit-pty"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("ssh-keygen -L has no %q:\n%s", want, out)
-		}
-	}
-	for _, refused := range []string{"permit-port-forwarding", "permit-agent-forwarding", "permit-X11-forwarding", "permit-user-rc"} {
-		if strings.Contains(out, refused) {
-			t.Errorf("ssh-keygen -L shows %q:\n%s", refused, out)
-		}
-	}
-}
-
 func TestAnEmptyRevocationListParses(t *testing.T) {
 	bin := sshKeygen(t)
-	f := newFixture(t, "alice")
+	f := newFixture(t)
 	k := f.keys["bob"]
 	file := filepath.Join(t.TempDir(), "bob.pub")
 	if err := os.WriteFile(file, ssh.MarshalAuthorizedKey(k), 0o600); err != nil {
@@ -111,51 +61,41 @@ func writeKey(t *testing.T, k ssh.PublicKey) string {
 	return file
 }
 
-// A removed login key is on the list sshd reads, whatever its authorized
-// keys file still says, beside the used certificates' serials.
-func TestOpenSSHSeesRevokedLoginKeys(t *testing.T) {
+// A removed SSH key is on the list sshd reads, by its key and its
+// certificate's serial; un-revoking drops both.
+func TestOpenSSHSeesRevokedKeysAndSerials(t *testing.T) {
 	bin := sshKeygen(t)
-	f := newFixture(t, "alice")
-	used := f.request("bob", 30)
-	ua, err := f.svc.Approve(f.st, "alice", used.ID, 0)
+	f := newFixture(t)
+	now := time.Now()
+	cert, err := f.root.IssueUserCert(f.keys["alice"], "alice", 5, now, now.Add(time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := f.svc.Begin(ua.Certificate, 1); err != nil {
+	keep, err := f.root.IssueUserCert(f.keys["bob"], "bob", 6, now, now.Add(time.Hour))
+	if err != nil {
 		t.Fatal(err)
 	}
 	st := f.st.Clone()
 	gone := st.Admins[0].Keys[0]
-	st.RevokedKeys = []access.RevokedKey{{Fingerprint: gone.Fingerprint, PublicKey: gone.PublicKey, Admin: st.Admins[0].Name}}
+	st.RevokedKeys = []access.RevokedKey{{Fingerprint: gone.Fingerprint, PublicKey: gone.PublicKey, Admin: "alice", Serial: 5}}
 	if err := f.svc.RevokeLoginKeys(st); err != nil {
 		t.Fatal(err)
 	}
 	krl := filepath.Join(f.dir, "ssh", elevation.RevokedFile)
-	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["alice"])); err == nil || !strings.Contains(out, "REVOKED") {
-		t.Fatalf("the removed key isn't revoked: %v %s", err, out)
+	for name, k := range map[string]ssh.PublicKey{"key": f.keys["alice"], "certificate": cert} {
+		if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, k)); err == nil || !strings.Contains(out, "REVOKED") {
+			t.Fatalf("the removed %s isn't revoked: %v %s", name, err, out)
+		}
 	}
-	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["bob"])); err != nil || strings.Contains(out, "REVOKED") {
-		t.Fatalf("a kept key is revoked: %v %s", err, out)
-	}
-	usedFile := filepath.Join(t.TempDir(), "used-cert.pub")
-	if err := os.WriteFile(usedFile, []byte(ua.Certificate+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if out, err := keygen(t, bin, "-Q", "-f", krl, usedFile); err == nil || !strings.Contains(out, "REVOKED") {
-		t.Fatalf("the used certificate's serial left the list: %v %s", err, out)
-	}
-
-	// Every later write of the list keeps the key, and un-revoking drops it.
-	f.request("bob", 30)
-	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["alice"])); err == nil || !strings.Contains(out, "REVOKED") {
-		t.Fatalf("a later write dropped the key: %v %s", err, out)
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, keep)); err != nil || strings.Contains(out, "REVOKED") {
+		t.Fatalf("a kept certificate is revoked: %v %s", err, out)
 	}
 	st.RevokedKeys = nil
 	if err := f.svc.RevokeLoginKeys(st); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, f.keys["alice"])); err != nil || strings.Contains(out, "REVOKED") {
-		t.Fatalf("an un-revoked key is still revoked: %v %s", err, out)
+	if out, err := keygen(t, bin, "-Q", "-f", krl, writeKey(t, cert)); err != nil || strings.Contains(out, "REVOKED") {
+		t.Fatalf("an un-revoked certificate is still revoked: %v %s", err, out)
 	}
 }
 
@@ -163,10 +103,10 @@ func TestOpenSSHSeesRevokedLoginKeys(t *testing.T) {
 // on the very first list it writes.
 func TestTheFirstListCarriesTheKeysAlreadyRevoked(t *testing.T) {
 	bin := sshKeygen(t)
-	f := newFixture(t, "alice")
+	f := newFixture(t)
 	dir := t.TempDir()
 	if _, err := elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"), Sealer: newMemSealer(),
+		RootKey: f.root, SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"),
 		RevokedKeys: []ssh.PublicKey{f.keys["bob"]},
 	}); err != nil {
 		t.Fatal(err)

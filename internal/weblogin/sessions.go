@@ -16,7 +16,8 @@ const (
 	IdleTimeout = 15 * time.Minute
 	MaxAge      = 8 * time.Hour
 	MaxPerAdmin = 5
-	// StepUpAge is how old a sign-in may be for a sensitive action.
+	// StepUpAge is how old a sign-in or a step-up may be for a sensitive
+	// action.
 	StepUpAge = 5 * time.Minute
 )
 
@@ -25,11 +26,12 @@ type Session struct {
 	ID        string
 	CSRF      string
 	Admin     string
-	KeyFP     string
 	Source    string
 	UserAgent string
 	SignedIn  time.Time
 	LastSeen  time.Time
+	// SteppedUp is the last fresh TOTP code's time; zero before one.
+	SteppedUp time.Time
 }
 
 // IdleExpires is when the session ends without another call.
@@ -38,8 +40,14 @@ func (s Session) IdleExpires() time.Time { return s.LastSeen.Add(IdleTimeout) }
 // Expires is the absolute end.
 func (s Session) Expires() time.Time { return s.SignedIn.Add(MaxAge) }
 
-// StepUpUntil is when sensitive actions need a fresh sign-in.
-func (s Session) StepUpUntil() time.Time { return s.SignedIn.Add(StepUpAge) }
+// StepUpUntil is when sensitive actions need a fresh TOTP code.
+func (s Session) StepUpUntil() time.Time {
+	last := s.SignedIn
+	if s.SteppedUp.After(last) {
+		last = s.SteppedUp
+	}
+	return last.Add(StepUpAge)
+}
 
 // Sessions is the in-memory session table.
 type Sessions struct {
@@ -55,11 +63,11 @@ func NewSessions(clk clock.Clock) *Sessions {
 
 // Create starts a session. When the admin already has MaxPerAdmin, the
 // oldest one ends.
-func (t *Sessions) Create(admin, keyFP, source, userAgent string) Session {
+func (t *Sessions) Create(admin, source, userAgent string) Session {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := t.clk.Now()
-	s := &Session{ID: Secret(), CSRF: Secret(), Admin: admin, KeyFP: keyFP, Source: source, UserAgent: userAgent, SignedIn: now, LastSeen: now}
+	s := &Session{ID: Secret(), CSRF: Secret(), Admin: admin, Source: source, UserAgent: userAgent, SignedIn: now, LastSeen: now}
 	mine := t.of(admin)
 	for len(mine) >= MaxPerAdmin {
 		delete(t.byID, mine[0].ID)
@@ -88,6 +96,19 @@ func (t *Sessions) Get(id string) (Session, bool) {
 
 // Fresh reports whether s may take a sensitive action.
 func (t *Sessions) Fresh(s Session) bool { return t.clk.Now().Before(s.StepUpUntil()) }
+
+// StepUp records a fresh TOTP code for session id and returns it.
+func (t *Sessions) StepUp(id string) (Session, bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s, ok := t.byID[id]
+	if !ok {
+		return Session{}, false
+	}
+	now := t.clk.Now()
+	s.SteppedUp, s.LastSeen = now, now
+	return *s, true
+}
 
 // End ends one session.
 func (t *Sessions) End(id string) {

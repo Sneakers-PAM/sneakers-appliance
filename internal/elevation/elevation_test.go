@@ -6,9 +6,6 @@ package elevation_test
 import (
 	"crypto/ed25519"
 	"crypto/rand"
-	"encoding/pem"
-	"errors"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -23,6 +20,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 )
 
 type memAudit struct {
@@ -49,17 +47,11 @@ func (m *memAudit) last(action string) (osaudit.Entry, bool) {
 }
 
 // memSealer stands in for init's KeyCustody.
-type memSealer struct {
-	items   map[string][]byte
-	sealErr error
-}
+type memSealer struct{ items map[string][]byte }
 
 func newMemSealer() *memSealer { return &memSealer{items: map[string][]byte{}} }
 
 func (m *memSealer) Seal(name string, secret []byte) error {
-	if m.sealErr != nil {
-		return m.sealErr
-	}
 	m.items[name] = slices.Clone(secret)
 	return nil
 }
@@ -71,10 +63,10 @@ func (m *memSealer) Unseal(name string) ([]byte, bool, error) {
 
 type fixture struct {
 	t       *testing.T
-	sealer  *memSealer
 	dir     string
 	clk     *clock.Fake
 	audit   *memAudit
+	root    *rootkey.Key
 	svc     *elevation.Service
 	st      access.State
 	keys    map[string]ssh.PublicKey
@@ -83,14 +75,19 @@ type fixture struct {
 	maint   bool
 }
 
-func newFixture(t *testing.T, owners ...string) *fixture {
+// newFixture has alice as the root operator and bob as an admin who isn't.
+func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	f := &fixture{t: t, dir: t.TempDir(), clk: clock.NewFake(), audit: &memAudit{}, keys: map[string]ssh.PublicKey{}, sealer: newMemSealer()}
-	f.st = access.State{ElevationPolicy: access.DefaultPolicy()}
-	for _, o := range owners {
-		f.addAdmin(o, access.RoleOwner)
+	f := &fixture{t: t, dir: t.TempDir(), clk: clock.NewFake(), audit: &memAudit{}, keys: map[string]ssh.PublicKey{}}
+	var err error
+	f.root, err = rootkey.Load(newMemSealer(), filepath.Join(f.dir, "ssh"), nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	f.st = access.State{AccessPolicy: access.DefaultPolicy()}
+	f.addAdmin("alice", access.RoleOwner)
 	f.addAdmin("bob", access.RoleAdmin)
+	f.st.Quorum = &access.QuorumRoster{Members: []string{"alice"}, Required: 1}
 	f.open()
 	return f
 }
@@ -98,9 +95,9 @@ func newFixture(t *testing.T, owners ...string) *fixture {
 func (f *fixture) open() {
 	f.t.Helper()
 	svc, err := elevation.Open(elevation.Options{
+		RootKey:     f.root,
 		SSHDir:      filepath.Join(f.dir, "ssh"),
 		StateFile:   filepath.Join(f.dir, "access", "elevation.json"),
-		Sealer:      f.sealer,
 		Clock:       f.clk,
 		Audit:       f.audit,
 		Maintenance: func() bool { return f.maint },
@@ -126,17 +123,37 @@ func (f *fixture) addAdmin(name string, role access.Role) {
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	f.st.Admins = append(f.st.Admins, access.Admin{Name: name, UID: access.FirstUID + len(f.st.Admins), Role: role, Keys: []access.AdminKey{{Key: k}}})
+	f.st.Admins = append(f.st.Admins, access.Admin{Name: name, UID: access.FirstUID + len(f.st.Admins), Role: role, Keys: []access.AdminKey{{Key: k, Serial: uint64(len(f.st.Admins) + 1)}}})
 	f.keys[name] = pk
 }
 
-func (f *fixture) request(admin string, minutes int) elevation.Request {
+func (f *fixture) caller(admin string) elevation.Caller {
+	return elevation.Caller{Admin: admin, KeyFP: ssh.FingerprintSHA256(f.keys[admin]), Source: "192.0.2.50"}
+}
+
+func (f *fixture) challenge(admin string) elevation.Request {
 	f.t.Helper()
-	r, err := f.svc.Request(f.st, elevation.Caller{Admin: admin, KeyFP: ssh.FingerprintSHA256(f.keys[admin]), Source: "192.0.2.50"}, "investigate kubelet", minutes)
+	r, err := f.svc.Challenge(f.st, f.caller(admin), "investigate kubelet")
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	return r
+}
+
+// opened runs a challenge, its code and the typed code, and returns the
+// ticket.
+func (f *fixture) opened(admin string) (elevation.Request, string) {
+	f.t.Helper()
+	r := f.challenge(admin)
+	_, code, err := f.svc.IssueCode(f.st, admin, r.Challenge)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	r, ticket, err := f.svc.Open(f.st, f.caller(admin), r.Challenge, code)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return r, ticket
 }
 
 func wantCode(t *testing.T, err error, code int) {
@@ -146,421 +163,217 @@ func wantCode(t *testing.T, err error, code int) {
 	}
 }
 
-func parseCert(t *testing.T, line string) *ssh.Certificate {
-	t.Helper()
-	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(line))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, ok := pk.(*ssh.Certificate)
-	if !ok {
-		t.Fatalf("not a certificate: %T", pk)
-	}
-	return c
-}
-
-func TestTheUserCAIsSealedAndMadeOnce(t *testing.T) {
-	f := newFixture(t, "alice")
-	priv := filepath.Join(f.dir, "ssh", elevation.UserCAFile)
-	if _, err := os.Stat(priv); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the CA's private key is on disk: %v", err)
-	}
-	sealed, ok := f.sealer.items[elevation.SealedName]
-	if !ok {
-		t.Fatal("the CA isn't sealed")
-	}
-	if _, err := ssh.ParsePrivateKey(sealed); err != nil {
-		t.Fatalf("the sealed CA doesn't parse: %v", err)
-	}
-	pub, err := os.ReadFile(priv + ".pub")
-	if err != nil {
-		t.Fatal(err)
-	}
-	ca, _, _, _, err := ssh.ParseAuthorizedKey(pub)
-	if err != nil || ca.Type() != ssh.KeyAlgoED25519 {
-		t.Fatalf("%v %v", ca, err)
-	}
-	before := f.svc.UserCA().Marshal()
-	f.open()
-	if !slices.Equal(before, f.svc.UserCA().Marshal()) {
-		t.Fatal("a restart made a new user CA")
-	}
-}
-
-// interimCA writes a CA key file the way accessd kept it before the CA was
-// sealed, and returns its public key.
-func interimCA(t *testing.T, dir string) ssh.PublicKey {
-	t.Helper()
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	block, err := ssh.MarshalPrivateKey(priv, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "ssh"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "ssh", elevation.UserCAFile), pem.EncodeToMemory(block), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	s, err := ssh.NewSignerFromKey(priv)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s.PublicKey()
-}
-
-func TestAnInterimCAFileMovesIntoTheSealedItem(t *testing.T) {
-	f := &fixture{t: t, dir: t.TempDir(), clk: clock.NewFake(), audit: &memAudit{}, keys: map[string]ssh.PublicKey{}, sealer: newMemSealer()}
-	want := interimCA(t, f.dir)
-	f.open()
-	if !slices.Equal(f.svc.UserCA().Marshal(), want.Marshal()) {
-		t.Fatal("the box's CA changed in the move: elevation certificates would stop working")
-	}
-	if _, err := os.Stat(filepath.Join(f.dir, "ssh", elevation.UserCAFile)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the interim file is still there: %v", err)
-	}
-	if _, ok := f.sealer.items[elevation.SealedName]; !ok {
-		t.Fatal("the CA wasn't sealed")
-	}
-	f.open()
-	if !slices.Equal(f.svc.UserCA().Marshal(), want.Marshal()) {
-		t.Fatal("the CA changed on the next start")
-	}
-}
-
-func TestAnInterimCAFileStaysUntilItIsSealed(t *testing.T) {
-	dir := t.TempDir()
-	interimCA(t, dir)
-	failing := newMemSealer()
-	failing.sealErr = errors.New("KEYCUSTODY_LOCKED: the state isn't unlocked")
-	_, err := elevation.Open(elevation.Options{
-		SSHDir: filepath.Join(dir, "ssh"), StateFile: filepath.Join(dir, "access", "elevation.json"), Sealer: failing,
-	})
-	if err == nil {
-		t.Fatal("opened without sealing the CA")
-	}
-	if _, err := os.Stat(filepath.Join(dir, "ssh", elevation.UserCAFile)); err != nil {
-		t.Fatalf("the interim file went before the CA was sealed: %v", err)
-	}
-}
-
-func TestARequestTakesTheCallersKeyAndThePolicy(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 0)
-	if r.State != elevation.Pending || r.Minutes != 60 || r.Admin != "bob" || r.Source != "192.0.2.50" || !strings.HasPrefix(r.ID, "E-") || len(r.ID) != 6 {
-		t.Fatalf("%+v", r)
-	}
-	if e, ok := f.audit.last("elevation.request"); !ok || e.Actor != "bob" || e.Target != r.ID || e.Outcome != "ok" {
-		t.Fatalf("%+v", e)
-	}
-	for _, m := range []int{14, 241} {
-		_, err := f.svc.Request(f.st, elevation.Caller{Admin: "bob", KeyFP: ssh.FingerprintSHA256(f.keys["bob"]), Source: "192.0.2.50"}, "x", m)
-		wantCode(t, err, codes.ElevMinutes)
-	}
-	_, err := f.svc.Request(f.st, elevation.Caller{Admin: "bob", KeyFP: ssh.FingerprintSHA256(f.keys["alice"]), Source: "192.0.2.50"}, "x", 30)
+func TestOnlyARootOperatorGetsAChallenge(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.svc.Challenge(f.st, f.caller("bob"), "")
 	wantCode(t, err, codes.AccessForbidden)
-	_, err = f.svc.Request(f.st, elevation.Caller{Admin: "bob", KeyFP: ssh.FingerprintSHA256(f.keys["bob"]), Source: "192.0.2.50"}, " ", 30)
-	wantCode(t, err, codes.ShellParse)
-	_, err = f.svc.Request(f.st, elevation.Caller{Admin: "bob", KeyFP: ssh.FingerprintSHA256(f.keys["bob"])}, "x", 30)
+	if e, ok := f.audit.last("rootshell.challenge"); !ok || e.Outcome != "refused" || e.Actor != "bob" {
+		t.Fatalf("the refusal wasn't audited: %+v", e)
+	}
+	c := f.caller("alice")
+	c.Source = ""
+	_, err = f.svc.Challenge(f.st, c, "")
 	wantCode(t, err, codes.AccessForbidden)
+	r := f.challenge("alice")
+	if len(r.Challenge) != 19 || r.State != elevation.Challenged || r.Minutes != access.DefaultRootMinutes {
+		t.Fatalf("challenge %+v", r)
+	}
+	if !r.ValidBefore.Equal(f.clk.Now().UTC().Truncate(time.Second).Add(10 * time.Minute)) {
+		t.Fatalf("the challenge works until %v", r.ValidBefore)
+	}
 }
 
-func TestAnApprovalSignsASingleUseCertificate(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 60)
-	a, err := f.svc.Approve(f.st, "alice", r.ID, 30)
+func TestTheCodeOpensItsChallengeOnce(t *testing.T) {
+	f := newFixture(t)
+	r := f.challenge("alice")
+	_, code, err := f.svc.IssueCode(f.st, "alice", strings.ToLower(r.Challenge))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.State != elevation.Approved || a.Minutes != 30 || a.ApprovedBy != "alice" || a.SelfApproved || a.Serial == 0 {
-		t.Fatalf("%+v", a)
+	if len(code) != 9 || code[4] != '-' {
+		t.Fatalf("code %q", code)
 	}
-	c := parseCert(t, a.Certificate)
-	now := f.clk.Now()
-	if c.CertType != ssh.UserCert || !slices.Equal(c.ValidPrincipals, []string{"elev-" + r.ID}) ||
-		c.KeyId != "elev-"+r.ID+" admin=bob fp="+ssh.FingerprintSHA256(f.keys["bob"]) || c.Serial != a.Serial {
-		t.Fatalf("%+v", c)
+	got, ticket, err := f.svc.Open(f.st, f.caller("alice"), r.Challenge, strings.ReplaceAll(code, "-", " "))
+	if err != nil || ticket == "" || got.State != elevation.Opened {
+		t.Fatalf("open: %+v %v", got, err)
 	}
-	if int64(c.ValidAfter) > now.Unix() || int64(c.ValidBefore) != now.Add(10*time.Minute).Unix() { // #nosec G115 -- test times
-		t.Fatalf("validity %d %d", c.ValidAfter, c.ValidBefore)
+	_, _, err = f.svc.Open(f.st, f.caller("alice"), r.Challenge, code)
+	wantCode(t, err, codes.RootChallenge)
+}
+
+func TestACodeIsTiedToItsChallenge(t *testing.T) {
+	f := newFixture(t)
+	a, b := f.challenge("alice"), f.challenge("alice")
+	_, codeA, err := f.svc.IssueCode(f.st, "alice", a.Challenge)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if c.CriticalOptions["force-command"] != "/usr/libexec/sneakers-elevated" || c.CriticalOptions["source-address"] != "192.0.2.50" || len(c.CriticalOptions) != 2 {
-		t.Fatalf("critical options %v", c.CriticalOptions)
+	if _, _, err := f.svc.IssueCode(f.st, "alice", b.Challenge); err != nil {
+		t.Fatal(err)
 	}
-	if len(c.Extensions) != 1 || c.Extensions["permit-pty"] != "" {
-		t.Fatalf("extensions %v", c.Extensions)
+	_, _, err = f.svc.Open(f.st, f.caller("alice"), b.Challenge, codeA)
+	wantCode(t, err, codes.RootCode)
+}
+
+func TestSomeoneElsesChallengeGetsNoCode(t *testing.T) {
+	f := newFixture(t)
+	f.st.Quorum.Members = []string{"alice", "bob"}
+	f.st.Quorum.Required = 2
+	r := f.challenge("alice")
+	_, _, err := f.svc.IssueCode(f.st, "bob", r.Challenge)
+	wantCode(t, err, codes.RootChallenge)
+	_, _, err = f.svc.IssueCode(f.st, "alice", "NOT-A-CHALLENGE")
+	wantCode(t, err, codes.RootChallenge)
+	_, _, err = f.svc.IssueCode(f.st, "alice", "0000-0000-0000-0000")
+	wantCode(t, err, codes.RootChallenge)
+}
+
+func TestACodeTypedFromAnotherAddressIsRefused(t *testing.T) {
+	f := newFixture(t)
+	r := f.challenge("alice")
+	_, code, _ := f.svc.IssueCode(f.st, "alice", r.Challenge)
+	c := f.caller("alice")
+	c.Source = "192.0.2.99"
+	_, _, err := f.svc.Open(f.st, c, r.Challenge, code)
+	wantCode(t, err, codes.RootChallenge)
+}
+
+func TestThreeWrongCodesCloseTheChallenge(t *testing.T) {
+	f := newFixture(t)
+	r := f.challenge("alice")
+	_, code, _ := f.svc.IssueCode(f.st, "alice", r.Challenge)
+	for i := range elevation.MaxCodeTries - 1 {
+		_, _, err := f.svc.Open(f.st, f.caller("alice"), r.Challenge, "0000-0000")
+		wantCode(t, err, codes.RootCode)
+		if !strings.Contains(err.Error(), "tries left") {
+			t.Fatalf("try %d: %v", i, err)
+		}
 	}
-	if !slices.Equal(c.Key.Marshal(), f.keys["bob"].Marshal()) || !slices.Equal(c.SignatureKey.Marshal(), f.svc.UserCA().Marshal()) {
-		t.Fatal("the certificate isn't for bob's key, signed by the user CA")
-	}
-	if got := f.svc.Principals(); !slices.Equal(got, []string{"elev-" + r.ID}) || f.changes == 0 {
-		t.Fatalf("principals %v, changes %d", got, f.changes)
-	}
-	if e, ok := f.audit.last("elevation.certificate"); !ok || e.Target != r.ID || e.Actor != "alice" {
-		t.Fatalf("%+v", e)
-	}
-	// The next certificate gets the next serial, across a restart.
-	f.open()
-	r2 := f.request("bob", 30)
-	a2, err := f.svc.Approve(f.st, "alice", r2.ID, 0)
-	if err != nil || a2.Serial != a.Serial+1 {
-		t.Fatalf("%+v %v", a2, err)
+	_, _, err := f.svc.Open(f.st, f.caller("alice"), r.Challenge, "0000-0000")
+	wantCode(t, err, codes.RootChallenge)
+	_, _, err = f.svc.Open(f.st, f.caller("alice"), r.Challenge, code)
+	wantCode(t, err, codes.RootChallenge)
+	got, _ := f.svc.Get(r.ID)
+	if got.State != elevation.Expired || got.EndReason != elevation.ReasonCodeTries {
+		t.Fatalf("after three wrong codes %+v", got)
 	}
 }
 
-func TestOnlyAnOwnerApprovesAndNeverLengthens(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	_, err := f.svc.Approve(f.st, "bob", r.ID, 0)
-	wantCode(t, err, codes.AccessForbidden)
-	_, err = f.svc.Approve(f.st, "alice", r.ID, 45)
-	wantCode(t, err, codes.ElevMinutes)
-	_, err = f.svc.Approve(f.st, "alice", r.ID, 10)
-	wantCode(t, err, codes.ElevMinutes)
-	_, err = f.svc.Approve(f.st, "alice", "E-ZZZZ", 0)
+func TestTheCodeLapsesAfterTheOwnersLifetime(t *testing.T) {
+	f := newFixture(t)
+	f.st.AccessPolicy.RootCodeMinutes = 3
+	r := f.challenge("alice")
+	_, code, _ := f.svc.IssueCode(f.st, "alice", r.Challenge)
+	f.clk.Advance(3 * time.Minute)
+	_, _, err := f.svc.Open(f.st, f.caller("alice"), r.Challenge, code)
+	wantCode(t, err, codes.RootChallenge)
+	got, _ := f.svc.Get(r.ID)
+	if got.State != elevation.Expired {
+		t.Fatalf("state %s", got.State)
+	}
+}
+
+func TestTheTicketStartsTheShellOnceForItsAdmin(t *testing.T) {
+	f := newFixture(t)
+	f.st.AccessPolicy.RootSessionMinutes = 25
+	r, ticket := f.opened("alice")
+	_, _, err := f.svc.Begin(ticket, "bob", 41)
 	wantCode(t, err, codes.ElevUnknown)
-	if a, err := f.svc.Approve(f.st, elevation.ConsoleApprover, r.ID, 0); err != nil || a.ApprovedBy != "console" {
-		t.Fatalf("the console approves as an owner: %+v %v", a, err)
+	got, ends, err := f.svc.Begin(ticket, "alice", 42)
+	if err != nil || got.State != elevation.Active || got.PID != 42 {
+		t.Fatalf("begin: %+v %v", got, err)
 	}
-	_, err = f.svc.Approve(f.st, "alice", r.ID, 0)
-	wantCode(t, err, codes.ElevUsed)
-}
-
-func TestTheOnlyOwnerMaySelfApproveFlagged(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("alice", 30)
-	a, err := f.svc.Approve(f.st, "alice", r.ID, 0)
-	if err != nil || !a.SelfApproved {
-		t.Fatalf("%+v %v", a, err)
+	if !ends.Equal(got.Started.Add(25 * time.Minute)) {
+		t.Fatalf("ends %v", ends)
 	}
-	if e, _ := f.audit.last("elevation.certificate"); e.Detail["selfApproved"] != "true" {
-		t.Fatalf("%+v", e)
-	}
-	f.st.ElevationPolicy.SelfApprovalWhenSingleOwner = false
-	r2 := f.request("alice", 30)
-	_, err = f.svc.Approve(f.st, "alice", r2.ID, 0)
-	wantCode(t, err, codes.ElevSelfApproval)
-}
-
-func TestWithTwoOwnersNobodyApprovesTheirOwn(t *testing.T) {
-	f := newFixture(t, "alice", "carol")
-	r := f.request("alice", 30)
-	_, err := f.svc.Approve(f.st, "alice", r.ID, 0)
-	wantCode(t, err, codes.ElevSelfApproval)
-	a, err := f.svc.Approve(f.st, "carol", r.ID, 0)
-	if err != nil || a.SelfApproved {
-		t.Fatalf("%+v %v", a, err)
-	}
-}
-
-// An owner named console is an owner like any other: the two-person rule
-// applies to them.
-func TestAnOwnerNamedConsoleIsNotTheConsole(t *testing.T) {
-	f := newFixture(t, "console", "carol")
-	r := f.request("console", 30)
-	_, err := f.svc.Approve(f.st, "console", r.ID, 0)
-	wantCode(t, err, codes.ElevSelfApproval)
-}
-
-func TestHoldsAndMaintenanceBlockApproval(t *testing.T) {
-	f := newFixture(t, "alice", "carol")
-	r := f.request("bob", 30)
-	until := f.clk.Now().Add(time.Hour)
-	f.st.Admins[0].ApprovalHoldUntil = &until
-	_, err := f.svc.Approve(f.st, "alice", r.ID, 0)
-	wantCode(t, err, codes.ElevHold)
-	f.maint = true
-	_, err = f.svc.Approve(f.st, "carol", r.ID, 0)
-	wantCode(t, err, codes.ElevMaintenance)
-}
-
-// While an update is applied, nobody gets a new elevated shell: a request,
-// an approval and the first use of an approved certificate are refused.
-func TestMaintenanceRefusesRequestsAndConnects(t *testing.T) {
-	f := newFixture(t, "alice")
-	approved := f.request("bob", 30)
-	a, err := f.svc.Approve(f.st, "alice", approved.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.maint = true
-	_, err = f.svc.Request(f.st, elevation.Caller{Admin: "bob", KeyFP: ssh.FingerprintSHA256(f.keys["bob"]), Source: "192.0.2.50"}, "investigate kubelet", 30)
-	wantCode(t, err, codes.ElevMaintenance)
-	if e, ok := f.audit.last("elevation.request"); !ok || e.Outcome != "refused" || e.Code != "ELEV_MAINTENANCE" {
-		t.Fatalf("%+v %v", e, ok)
-	}
-	_, _, err = f.svc.Begin(a.Certificate, 1)
-	wantCode(t, err, codes.ElevMaintenance)
-	f.maint = false
-	if _, _, err := f.svc.Begin(a.Certificate, 1); err != nil {
-		t.Fatalf("after the update the certificate still works in its window: %v", err)
-	}
-}
-
-func TestWithdraw(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	w, err := f.svc.Withdraw("bob", r.ID)
-	if err != nil || w.State != elevation.Withdrawn || w.EndReason != "withdrawn" {
-		t.Fatalf("%+v %v", w, err)
-	}
-	if e, ok := f.audit.last("elevation.withdraw"); !ok || e.Target != r.ID || e.Actor != "bob" {
-		t.Fatalf("%+v %v", e, ok)
-	}
-	// A withdrawn request can't be approved afterwards.
-	_, err = f.svc.Approve(f.st, "alice", r.ID, 0)
-	wantCode(t, err, codes.ElevUsed)
-	// Withdrawing it again, or a request that was never bob's, is refused.
-	_, err = f.svc.Withdraw("bob", r.ID)
-	wantCode(t, err, codes.ElevUsed)
-	r2 := f.request("bob", 30)
-	_, err = f.svc.Withdraw("alice", r2.ID)
+	_, _, err = f.svc.Begin(ticket, "alice", 43)
 	wantCode(t, err, codes.ElevUnknown)
-}
-
-func TestDenyAndExpiry(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	d, err := f.svc.Deny(r.ID, "alice")
-	if err != nil || d.State != elevation.Denied || d.EndReason != "denied" {
-		t.Fatalf("%+v %v", d, err)
+	if !f.svc.Active() {
+		t.Fatal("no active root shell")
 	}
-	_, err = f.svc.Approve(f.st, "alice", r.ID, 0)
-	wantCode(t, err, codes.ElevUsed)
-
-	r2 := f.request("bob", 30)
-	f.clk.Advance(31 * time.Minute)
-	_, err = f.svc.Approve(f.st, "alice", r2.ID, 0)
-	wantCode(t, err, codes.ElevExpired)
-	if g, _ := f.svc.Get(r2.ID); g.State != elevation.Expired {
-		t.Fatalf("%+v", g)
-	}
-
-	r3 := f.request("bob", 30)
-	a3, err := f.svc.Approve(f.st, "alice", r3.ID, 0)
-	if err != nil {
+	if err := f.svc.End(r.ID, elevation.ReasonExit, "abc"); err != nil {
 		t.Fatal(err)
 	}
-	f.clk.Advance(11 * time.Minute)
-	f.svc.Sweep()
-	if g, _ := f.svc.Get(r3.ID); g.State != elevation.Expired || len(f.svc.Principals()) != 0 {
-		t.Fatalf("%+v %v", g, f.svc.Principals())
+	got, _ = f.svc.Get(r.ID)
+	if got.State != elevation.Ended || got.RecordingSHA256 != "abc" || f.svc.Active() {
+		t.Fatalf("after the end %+v", got)
 	}
-	if !slices.Contains(f.svc.Revoked(), a3.Serial) {
-		t.Fatalf("an expired certificate's serial isn't revoked: %v", f.svc.Revoked())
-	}
-	if e, ok := f.audit.last("elevation.expire"); !ok || e.Target != r3.ID {
-		t.Fatalf("%+v", e)
+	if e, ok := f.audit.last("rootshell.end"); !ok || e.Outcome != elevation.ReasonExit {
+		t.Fatalf("end audit %+v", e)
 	}
 }
 
-func TestBeginUsesTheCertificateOnce(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	a, err := f.svc.Approve(f.st, "alice", r.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	f.clk.Advance(2 * time.Minute)
-	got, ends, err := f.svc.Begin(a.Certificate, 4242)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.State != elevation.Active || got.PID != 4242 || !ends.Equal(f.clk.Now().Add(30*time.Minute)) {
-		t.Fatalf("%+v %v", got, ends)
-	}
-	if len(f.svc.Principals()) != 0 || !slices.Contains(f.svc.Revoked(), a.Serial) || !f.svc.Active() {
-		t.Fatalf("principals %v revoked %v", f.svc.Principals(), f.svc.Revoked())
-	}
-	krl, err := os.ReadFile(filepath.Join(f.dir, "ssh", elevation.RevokedFile))
-	if err != nil || !strings.HasPrefix(string(krl), "SSHKRL\n\x00") {
-		t.Fatalf("revocation list %q %v", krl, err)
-	}
-	_, _, err = f.svc.Begin(a.Certificate, 4243)
-	wantCode(t, err, codes.ElevUsed)
-	if e, ok := f.audit.last("elevation.connect"); !ok || e.Target != r.ID || e.Actor != "bob" {
-		t.Fatalf("%+v", e)
-	}
-	if err := f.svc.End(r.ID, "exit", "abc123"); err != nil {
-		t.Fatal(err)
-	}
-	g, _ := f.svc.Get(r.ID)
-	if g.State != elevation.Ended || g.EndReason != "exit" || g.RecordingSHA256 != "abc123" || f.svc.Active() {
-		t.Fatalf("%+v", g)
-	}
-	if e, ok := f.audit.last("elevation.end"); !ok || e.Outcome != "exit" || e.Detail["recordingSha256"] != "abc123" {
-		t.Fatalf("%+v", e)
-	}
-}
-
-func TestBeginRefusesForeignAndLateCertificates(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	a, err := f.svc.Approve(f.st, "alice", r.ID, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The same certificate signed by another CA.
-	c := parseCert(t, a.Certificate)
-	_, other, _ := ed25519.GenerateKey(rand.Reader)
-	signer, _ := ssh.NewSignerFromKey(other)
-	if err := c.SignCert(rand.Reader, signer); err != nil {
-		t.Fatal(err)
-	}
-	_, _, err = f.svc.Begin(string(ssh.MarshalAuthorizedKey(c)), 1)
-	wantCode(t, err, codes.ElevUnknown)
-	f.clk.Advance(11 * time.Minute)
-	_, _, err = f.svc.Begin(a.Certificate, 1)
+func TestAnUnusedTicketExpires(t *testing.T) {
+	f := newFixture(t)
+	_, ticket := f.opened("alice")
+	f.clk.Advance(elevation.TicketLifetime)
+	_, _, err := f.svc.Begin(ticket, "alice", 1)
 	wantCode(t, err, codes.ElevExpired)
 }
 
-func TestTerminate(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	a, _ := f.svc.Approve(f.st, "alice", r.ID, 0)
-	if _, _, err := f.svc.Begin(a.Certificate, 4242); err != nil {
+func TestNoRootShellDuringAnUpdate(t *testing.T) {
+	f := newFixture(t)
+	_, ticket := f.opened("alice")
+	f.maint = true
+	_, err := f.svc.Challenge(f.st, f.caller("alice"), "")
+	wantCode(t, err, codes.ElevMaintenance)
+	_, _, err = f.svc.Begin(ticket, "alice", 1)
+	wantCode(t, err, codes.ElevMaintenance)
+}
+
+func TestTerminateEndsAShellOrClosesAChallenge(t *testing.T) {
+	f := newFixture(t)
+	r, ticket := f.opened("alice")
+	if _, _, err := f.svc.Begin(ticket, "alice", 7); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.svc.Terminate(r.ID, "alice"); err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(f.signals, []int{4242}) {
+	if !slices.Equal(f.signals, []int{7}) {
 		t.Fatalf("signals %v", f.signals)
 	}
-	// An approved, unused certificate is revoked by a terminate.
-	r2 := f.request("bob", 30)
-	a2, _ := f.svc.Approve(f.st, "alice", r2.ID, 0)
-	g, err := f.svc.Terminate(r2.ID, "alice")
-	if err != nil || g.State != elevation.Expired || g.EndReason != "terminated" || !slices.Contains(f.svc.Revoked(), a2.Serial) {
-		t.Fatalf("%+v %v", g, err)
+	c := f.challenge("alice")
+	if _, err := f.svc.Terminate(c.ID, "alice"); err != nil {
+		t.Fatal(err)
 	}
-	_, err = f.svc.Terminate(r2.ID, "alice")
-	wantCode(t, err, codes.ElevUsed)
-}
-
-func TestTheRequesterAloneFetchesTheCertificate(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
-	_, err := f.svc.Certificate("bob", r.ID)
-	wantCode(t, err, codes.ElevUnknown)
-	a, _ := f.svc.Approve(f.st, "alice", r.ID, 0)
-	_, err = f.svc.Certificate("alice", r.ID)
-	wantCode(t, err, codes.ElevUnknown)
-	got, err := f.svc.Certificate("bob", r.ID)
-	if err != nil || got.Certificate != a.Certificate {
-		t.Fatalf("%+v %v", got, err)
+	if got, _ := f.svc.Get(c.ID); got.State != elevation.Expired || got.EndReason != elevation.ReasonTerminated {
+		t.Fatalf("a closed challenge %+v", got)
 	}
 }
 
-func TestHistorySurvivesARestart(t *testing.T) {
-	f := newFixture(t, "alice")
-	r := f.request("bob", 30)
+func TestSweepExpiresAndFindsLostSessions(t *testing.T) {
+	f := newFixture(t)
+	c := f.challenge("alice")
+	r, ticket := f.opened("alice")
+	if _, _, err := f.svc.Begin(ticket, "alice", 9); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := elevation.Open(elevation.Options{
+		RootKey: f.root, SSHDir: filepath.Join(f.dir, "ssh"), StateFile: filepath.Join(f.dir, "access", "elevation.json"),
+		Clock: f.clk, Audit: f.audit, Alive: func(int) bool { return false },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.clk.Advance(11 * time.Minute)
+	svc.Sweep()
+	if got, _ := svc.Get(c.ID); got.State != elevation.Expired {
+		t.Fatalf("an old challenge %+v", got)
+	}
+	if got, _ := svc.Get(r.ID); got.State != elevation.Ended || got.EndReason != elevation.ReasonLost {
+		t.Fatalf("a lost session %+v", got)
+	}
+}
+
+func TestTheHistorySurvivesARestart(t *testing.T) {
+	f := newFixture(t)
+	r := f.challenge("alice")
 	f.open()
-	g, ok := f.svc.Get(r.ID)
-	if !ok || g.State != elevation.Pending || len(f.svc.List()) != 1 {
-		t.Fatalf("%+v %v", g, ok)
+	if got, ok := f.svc.Get(r.ID); !ok || got.Challenge != r.Challenge {
+		t.Fatalf("after a restart %+v", got)
+	}
+	if list := f.svc.List(); len(list) != 1 {
+		t.Fatalf("list %v", list)
 	}
 }

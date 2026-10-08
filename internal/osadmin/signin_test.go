@@ -5,6 +5,7 @@ package osadmin_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -17,39 +18,42 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
 
+func signInClient(br *browser) osadminv1connect.SignInServiceClient {
+	return osadminv1connect.NewSignInServiceClient(br.hc, br.b.ts.URL)
+}
+
+func trySignIn(br *browser, admin, password, code string) (*connect.Response[osadminv1.SignInResponse], error) {
+	return signInClient(br).SignIn(context.Background(), connect.NewRequest(&osadminv1.SignInRequest{Admin: admin, Password: password, TotpCode: code}))
+}
+
+// refusalOf is the SignInRefusal detail of a refused call.
+func refusalOf(t *testing.T, err error) *osadminv1.SignInRefusal {
+	t.Helper()
+	ce := new(connect.Error)
+	if !errors.As(err, &ce) {
+		t.Fatalf("not a connect error: %v", err)
+	}
+	for _, d := range ce.Details() {
+		v, derr := d.Value()
+		if r, ok := v.(*osadminv1.SignInRefusal); derr == nil && ok {
+			return r
+		}
+	}
+	t.Fatalf("no SignInRefusal detail on %v", err)
+	return nil
+}
+
 func TestSignInEndToEnd(t *testing.T) {
 	b := newBox(t, false)
 	br := b.browser()
-	si := osadminv1connect.NewSignInServiceClient(br.hc, b.ts.URL)
-	ctx := context.Background()
-	begin, err := si.BeginSignIn(ctx, connect.NewRequest(&osadminv1.BeginSignInRequest{}))
+	resp, err := trySignIn(br, "alice", testPassword, b.code("alice"))
 	if err != nil {
 		t.Fatal(err)
-	}
-	if begin.Msg.GetUserAgent() != "TestBrowser/1.0" || begin.Msg.GetSourceAddress() != "127.0.0.1" {
-		t.Fatalf("the page shows what the box sees: %v", begin.Msg)
-	}
-	if !begin.Msg.GetExpires().AsTime().Equal(b.clk.Now().Add(5 * time.Minute)) {
-		t.Fatal("a code lasts 5 minutes")
-	}
-	poll, err := si.PollSignIn(ctx, connect.NewRequest(&osadminv1.PollSignInRequest{PollToken: begin.Msg.GetPollToken()}))
-	if err != nil || poll.Msg.GetState() != osadminv1.SignInState_SIGN_IN_STATE_PENDING {
-		t.Fatalf("pending: %v %v", poll, err)
-	}
-	if err := b.srv.ApproveSignIn(0, begin.Msg.GetCode(), "alice", b.keys["alice"].fp, "192.0.2.77"); err != nil {
-		t.Fatal(err)
-	}
-	ap := lastEntry(t, b.log, "signin.approve")
-	if ap.Actor != "alice" || ap.KeyFP != b.keys["alice"].fp || ap.Detail["browser"] != "127.0.0.1" || ap.Detail["userAgent"] != "TestBrowser/1.0" {
-		t.Fatalf("the approval names the browser: %+v", ap)
-	}
-	resp, err := si.PollSignIn(ctx, connect.NewRequest(&osadminv1.PollSignInRequest{PollToken: begin.Msg.GetPollToken()}))
-	if err != nil || resp.Msg.GetState() != osadminv1.SignInState_SIGN_IN_STATE_APPROVED {
-		t.Fatalf("approved: %v %v", resp, err)
 	}
 	ck := resp.Header().Get("Set-Cookie")
 	for _, want := range []string{osadmin.CookieName + "=", "Path=/", "HttpOnly", "Secure", "SameSite=Strict"} {
@@ -61,16 +65,18 @@ func TestSignInEndToEnd(t *testing.T) {
 		t.Error("the cookie must be host-only")
 	}
 	s := resp.Msg.GetSession()
-	if s.GetAdmin() != "alice" || s.GetRole() != osadminv1.Role_ROLE_OWNER || s.GetKeyFingerprint() != b.keys["alice"].fp || s.GetCsrfToken() == "" {
+	if s.GetAdmin() != "alice" || s.GetRole() != osadminv1.Role_ROLE_OWNER || s.GetCsrfToken() == "" || !s.GetRootOperator() {
 		t.Fatalf("session %v", s)
 	}
+	if e := lastEntry(t, b.log, "signin.password"); e.Outcome != "ok" || e.Target != "alice" {
+		t.Fatalf("the sign-in is audited: %+v", e)
+	}
 	br.csrf = s.GetCsrfToken()
+	si := signInClient(br)
+	ctx := context.Background()
 	got, err := si.GetSession(ctx, connect.NewRequest(&osadminv1.GetSessionRequest{}))
 	if err != nil || got.Msg.GetSession().GetAdmin() != "alice" {
 		t.Fatalf("%v %v", got, err)
-	}
-	if again, _ := si.PollSignIn(ctx, connect.NewRequest(&osadminv1.PollSignInRequest{PollToken: begin.Msg.GetPollToken()})); again.Msg.GetState() != osadminv1.SignInState_SIGN_IN_STATE_EXPIRED {
-		t.Fatal("a code works once")
 	}
 	if _, err := si.SignOut(ctx, connect.NewRequest(&osadminv1.SignOutRequest{})); err != nil {
 		t.Fatal(err)
@@ -79,36 +85,158 @@ func TestSignInEndToEnd(t *testing.T) {
 	symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_SESSION")
 }
 
-func TestExpiredCodeCantBeApproved(t *testing.T) {
+// The sign-in code approved over SSH is gone.
+func TestTheSSHSignInCodeIsGone(t *testing.T) {
 	b := newBox(t, false)
-	si := osadminv1connect.NewSignInServiceClient(b.browser().hc, b.ts.URL)
-	begin, err := si.BeginSignIn(context.Background(), connect.NewRequest(&osadminv1.BeginSignInRequest{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	b.clk.Advance(5*time.Minute + time.Second)
-	err = b.srv.ApproveSignIn(0, begin.Msg.GetCode(), "alice", b.keys["alice"].fp, "192.0.2.77")
-	if err == nil || !strings.Contains(err.Error(), "unknown, used or expired") {
-		t.Fatalf("expired code: %v", err)
-	}
-	if lastEntry(t, b.log, "signin.approve").Code != "LOGIN_CODE" {
-		t.Fatal("refusal audited")
+	_, err := signInClient(b.browser()).BeginSignIn(context.Background(), connect.NewRequest(&osadminv1.BeginSignInRequest{}))
+	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), osadmin.NotAvailable) {
+		t.Fatalf("BeginSignIn: %v", err)
 	}
 }
 
-func TestApprovalNeedsTheAdminsOwnKeyAndUID(t *testing.T) {
+// A wrong name, a wrong password and a wrong or reused code get the same
+// answer, so the page can't tell which.
+func TestEveryWrongSignInLooksTheSame(t *testing.T) {
 	b := newBox(t, true)
-	si := osadminv1connect.NewSignInServiceClient(b.browser().hc, b.ts.URL)
-	begin, _ := si.BeginSignIn(context.Background(), connect.NewRequest(&osadminv1.BeginSignInRequest{}))
-	code := begin.Msg.GetCode()
-	if err := b.srv.ApproveSignIn(0, code, "alice", b.keys["bob"].fp, "192.0.2.77"); err == nil {
-		t.Fatal("bob's key can't approve as alice")
+	br := b.browser()
+	code := b.code("alice")
+	if _, err := trySignIn(br, "alice", testPassword, code); err != nil {
+		t.Fatal(err)
 	}
-	if err := b.srv.ApproveSignIn(20001, code, "alice", b.keys["alice"].fp, "192.0.2.77"); err == nil {
-		t.Fatal("bob's uid can't approve as alice")
+	for name, try := range map[string][3]string{
+		"unknown name":   {"zed", testPassword, code},
+		"wrong password": {"bob", testPassword + "x", credentials.TOTP(b.totp["bob"], b.clk.Now())},
+		"wrong code":     {"bob", testPassword, "000000"},
+		"reused code":    {"alice", testPassword, code},
+	} {
+		_, err := trySignIn(br, try[0], try[1], try[2])
+		symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_CREDENTIALS")
+		if !strings.Contains(err.Error(), "check the name, the password and the authenticator code") {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
-	if err := b.srv.ApproveSignIn(20000, code, "alice", b.keys["alice"].fp, "192.0.2.77"); err != nil {
-		t.Fatalf("alice's own uid: %v", err)
+}
+
+// Three failures within 15 minutes lock the account for 15 minutes, even
+// with the right password and code, and the lock is audited (NIST SP
+// 800-53 AC-7).
+func TestThreeFailedSignInsLockForFifteenMinutes(t *testing.T) {
+	b := newBox(t, false)
+	br := b.browser()
+	for i, left := range []int32{2, 1} {
+		_, err := trySignIn(br, "alice", "not the password", b.code("alice"))
+		if r := refusalOf(t, err); r.GetAttemptsLeft() != left {
+			t.Fatalf("try %d: %v", i, r)
+		}
+		b.clk.Advance(5 * time.Minute)
+	}
+	_, err := trySignIn(br, "alice", "not the password", b.code("alice"))
+	r := refusalOf(t, err)
+	if r.GetAttemptsLeft() != 0 || !r.GetLockedUntil().AsTime().Equal(b.clk.Now().Add(15*time.Minute)) {
+		t.Fatalf("the third failure: %v", r)
+	}
+	if e := lastEntry(t, b.log, "access.lockout"); e.Target != "alice" || e.Detail["until"] == "" {
+		t.Fatalf("the lock isn't audited: %+v", e)
+	}
+	_, err = trySignIn(br, "alice", testPassword, b.code("alice"))
+	symbolIn(t, err, connect.CodeResourceExhausted, "ACCESS_LOCKED")
+	b.clk.Advance(15 * time.Minute)
+	if _, err := trySignIn(br, "alice", testPassword, b.code("alice")); err != nil {
+		t.Fatalf("the lock should be over: %v", err)
+	}
+}
+
+func TestFailuresSpreadOverMoreThanFifteenMinutesDontLock(t *testing.T) {
+	b := newBox(t, false)
+	br := b.browser()
+	for range 3 {
+		_, _ = trySignIn(br, "alice", "not the password", b.code("alice"))
+		b.clk.Advance(8 * time.Minute)
+	}
+	if _, err := trySignIn(br, "alice", testPassword, b.code("alice")); err != nil {
+		t.Fatalf("locked by failures 16 minutes apart: %v", err)
+	}
+}
+
+func TestASuccessResetsTheCount(t *testing.T) {
+	b := newBox(t, false)
+	br := b.browser()
+	for range 2 {
+		_, _ = trySignIn(br, "alice", "not the password", b.code("alice"))
+	}
+	if _, err := trySignIn(br, "alice", testPassword, b.code("alice")); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		_, _ = trySignIn(br, "alice", "not the password", b.code("alice"))
+	}
+	if _, err := trySignIn(br, "alice", testPassword, b.code("alice")); err != nil {
+		t.Fatalf("a success didn't reset the count: %v", err)
+	}
+}
+
+// The owner's other lockout mode holds the lock until an owner unlocks it,
+// and the unlock is audited.
+func TestTheLockCanWaitForAnOwner(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	if _, err := alice.access().SetAccessPolicy(ctx, connect.NewRequest(&osadminv1.SetAccessPolicyRequest{Policy: &osadminv1.AccessPolicy{
+		LockoutMode: osadminv1.LockoutMode_LOCKOUT_MODE_UNTIL_UNLOCKED, RootCodeMinutes: 10, RootSessionMinutes: 10, SshKeyValidDays: 365,
+	}})); err != nil {
+		t.Fatal(err)
+	}
+	bob := b.browser()
+	for range 3 {
+		_, _ = trySignIn(bob, "bob", "not the password", b.code("bob"))
+	}
+	b.clk.Advance(48 * time.Hour)
+	_, err := trySignIn(bob, "bob", testPassword, b.code("bob"))
+	symbolIn(t, err, connect.CodeResourceExhausted, "ACCESS_LOCKED")
+	if !refusalOf(t, err).GetLockedUntilUnlocked() {
+		t.Fatal("the refusal doesn't say an owner must unlock")
+	}
+	alice.signIn("alice")
+	list, err := alice.access().ListAdmins(ctx, connect.NewRequest(&osadminv1.ListAdminsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range list.Msg.GetAdmins() {
+		if a.GetName() == "bob" && !a.GetLockedUntilUnlocked() {
+			t.Fatalf("the Access page doesn't show the lock: %v", a)
+		}
+	}
+	if _, err := alice.access().UnlockAdmin(ctx, connect.NewRequest(&osadminv1.UnlockAdminRequest{Name: "bob"})); err != nil {
+		t.Fatal(err)
+	}
+	if e := lastEntry(t, b.log, "access.admin.unlock"); e.Outcome != "ok" || e.Target != "bob" || e.Detail["wasLocked"] != "true" {
+		t.Fatalf("the unlock isn't audited: %+v", e)
+	}
+	if _, err := trySignIn(bob, "bob", testPassword, b.code("bob")); err != nil {
+		t.Fatalf("after the unlock: %v", err)
+	}
+}
+
+// One address that keeps failing is held off whatever names it tries
+// (NIST SP 800-63B), and the throttle is audited.
+func TestOneSourceIsThrottled(t *testing.T) {
+	b := newBox(t, false)
+	br := b.browser()
+	for i := range 10 {
+		_, _ = trySignIn(br, "nobody"+strings.Repeat("x", i), "guess", "000000")
+	}
+	_, err := trySignIn(br, "alice", testPassword, b.code("alice"))
+	symbolIn(t, err, connect.CodeResourceExhausted, "ACCESS_THROTTLED")
+	if refusalOf(t, err).GetRetryAfter() == nil {
+		t.Fatal("no retry time")
+	}
+	if e := lastEntry(t, b.log, "access.throttle"); e.Source != "127.0.0.1" {
+		t.Fatalf("the throttle isn't audited: %+v", e)
+	}
+	b.clk.Advance(15 * time.Minute)
+	if _, err := trySignIn(br, "alice", testPassword, b.code("alice")); err != nil {
+		t.Fatalf("after the hold: %v", err)
 	}
 }
 
@@ -128,45 +256,48 @@ func TestCSRF(t *testing.T) {
 	if _, err := br.access().ListAdmins(ctx, connect.NewRequest(&osadminv1.ListAdminsRequest{})); err != nil {
 		t.Fatalf("a read needs no CSRF token: %v", err)
 	}
-	k := newKey(t)
-	_, err := br.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: k.line}))
+	_, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
-	if e := lastEntry(t, b.log, "access.key.add"); e.Outcome != "refused" || e.Code != "ACCESS_FORBIDDEN" {
+	if e := lastEntry(t, b.log, "access.ssh-key.issue"); e.Outcome != "refused" || e.Code != "ACCESS_FORBIDDEN" {
 		t.Fatalf("refusal audited: %+v", e)
 	}
 	br.csrf = "wrong"
-	_, err = br.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: k.line}))
+	_, err = br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 	br.csrf = token
-	if _, err := br.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: k.line})); err != nil {
+	if _, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{Label: "laptop"})); err != nil {
 		t.Fatal(err)
 	}
-	if e := lastEntry(t, b.log, "access.key.add"); e.Outcome != "ok" || e.Actor != "alice" || e.Target != "alice" || e.Detail["key"] != k.fp {
+	if e := lastEntry(t, b.log, "access.ssh-key.issue"); e.Outcome != "ok" || e.Actor != "alice" || e.Target != "alice" {
 		t.Fatalf("audited: %+v", e)
 	}
 }
 
-func TestStepUp(t *testing.T) {
+// After 5 minutes a sensitive action asks for a fresh TOTP code; one used
+// already doesn't count.
+func TestStepUpTakesAFreshCode(t *testing.T) {
 	b := newBox(t, false)
 	br := b.browser()
-	first := br.signIn("alice")
+	br.signIn("alice")
 	b.clk.Advance(6 * time.Minute)
 	ctx := context.Background()
-	k := newKey(t)
-	_, err := br.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: k.line}))
+	_, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_STEPUP_REQUIRED")
 	if _, err := br.access().ListAdmins(ctx, connect.NewRequest(&osadminv1.ListAdminsRequest{})); err != nil {
 		t.Fatalf("reads need no step-up: %v", err)
 	}
-	second := br.signIn("alice")
-	if second.GetCsrfToken() == first.GetCsrfToken() {
-		t.Fatal("the step-up is a new session")
+	code := b.code("alice")
+	up, err := signInClient(br).StepUp(ctx, connect.NewRequest(&osadminv1.StepUpRequest{TotpCode: code}))
+	if err != nil || !up.Msg.GetSession().GetStepUpUntil().AsTime().Equal(b.clk.Now().Add(5*time.Minute)) {
+		t.Fatalf("step-up: %v %v", up, err)
+	}
+	_, err = signInClient(br).StepUp(ctx, connect.NewRequest(&osadminv1.StepUpRequest{TotpCode: code}))
+	symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_CREDENTIALS")
+	if _, err := br.access().IssueSshKey(ctx, connect.NewRequest(&osadminv1.IssueSshKeyRequest{})); err != nil {
+		t.Fatal(err)
 	}
 	if n := len(b.srv.Sessions().Of("alice")); n != 1 {
-		t.Fatalf("the step-up replaces the old session: %d", n)
-	}
-	if _, err := br.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: k.line})); err != nil {
-		t.Fatal(err)
+		t.Fatalf("a step-up made a second session: %d", n)
 	}
 }
 

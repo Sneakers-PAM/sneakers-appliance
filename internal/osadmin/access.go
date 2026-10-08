@@ -32,15 +32,22 @@ type accessSvc struct {
 
 func (h *accessSvc) ListAdmins(context.Context, *connect.Request[osadminv1.ListAdminsRequest]) (*connect.Response[osadminv1.ListAdminsResponse], error) {
 	st := h.s.o.Access.Read()
-	out := &osadminv1.ListAdminsResponse{
-		HostKeys: h.s.hostKeys(),
-		ElevationPolicy: &osadminv1.ElevationPolicy{
-			MaxMinutes: int32(min(st.ElevationPolicy.MaxMinutes, 1<<30)), DefaultMinutes: int32(min(st.ElevationPolicy.DefaultMinutes, 1<<30)), // #nosec G115 -- clamped
-			SelfApprovalWhenSingleOwner: st.ElevationPolicy.SelfApprovalWhenSingleOwner,
-		},
+	out := &osadminv1.ListAdminsResponse{HostKeys: h.s.hostKeys(), AccessPolicy: policyToWireAccess(st.AccessPolicy.Effective())}
+	if h.s.o.RootKey != nil {
+		out.RootKey = &osadminv1.HostKey{Type: h.s.o.RootKey.PublicKey().Type(), Fingerprint: h.s.o.RootKey.Fingerprint()}
 	}
+	now := h.s.o.Clock.Now()
 	for _, a := range st.Admins {
-		out.Admins = append(out.Admins, adminToWire(a))
+		w := adminToWire(a)
+		w.RootOperator = st.IsRootOperator(a.Name)
+		if h.s.o.Lockout != nil {
+			ls := h.s.o.Lockout.State(a.Name, now)
+			w.FailedAttempts, w.LockedUntilUnlocked = int32(min(ls.Failures, 1<<30)), ls.UntilUnlocked // #nosec G115 -- clamped
+			if !ls.LockedUntil.IsZero() {
+				w.LockedUntil = timestamppb.New(ls.LockedUntil)
+			}
+		}
+		out.Admins = append(out.Admins, w)
 	}
 	q := st.EffectiveQuorum()
 	out.Quorum = &osadminv1.Quorum{Members: q.Members, Required: int32(min(q.Required, 1<<30)), Configured: q.Configured} // #nosec G115 -- clamped
@@ -52,9 +59,18 @@ func (h *accessSvc) ListAdmins(context.Context, *connect.Request[osadminv1.ListA
 }
 
 func adminToWire(a access.Admin) *osadminv1.Admin {
-	w := &osadminv1.Admin{Name: a.Name, Uid: int32(min(a.UID, 1<<30)), Role: roleToWire(a.Role), Created: timestamppb.New(a.Created), CreatedBy: a.CreatedBy} // #nosec G115 -- clamped
-	if a.ApprovalHoldUntil != nil {
-		w.ApprovalHoldUntil = timestamppb.New(*a.ApprovalHoldUntil)
+	w := &osadminv1.Admin{Name: a.Name, Uid: int32(min(a.UID, 1<<30)), Role: roleToWire(a.Role), Created: timestamppb.New(a.Created), CreatedBy: a.CreatedBy, CredentialsSet: a.HasCredentials()} // #nosec G115 -- clamped
+	if a.Password != nil {
+		w.PasswordChanged = timestamppb.New(a.Password.Changed)
+	}
+	if a.TOTP != nil {
+		w.TotpAdded = timestamppb.New(a.TOTP.Added)
+	}
+	if a.Invite != nil {
+		w.InviteExpires = timestamppb.New(a.Invite.Expires)
+	}
+	if a.LastSignIn != nil {
+		w.LastSignIn = timestamppb.New(*a.LastSignIn)
 	}
 	for _, k := range a.Keys {
 		w.Keys = append(w.Keys, keyToWire(k))
@@ -63,18 +79,21 @@ func adminToWire(a access.Admin) *osadminv1.Admin {
 }
 
 func keyToWire(k access.AdminKey) *osadminv1.Key {
-	w := &osadminv1.Key{Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment, Added: timestamppb.New(k.Added), AddedBy: k.AddedBy, Via: k.Via}
+	w := &osadminv1.Key{Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment, Added: timestamppb.New(k.Added), AddedBy: k.AddedBy, Via: k.Via, Serial: k.Serial}
 	if k.LastUsed != nil {
 		w.LastUsed = timestamppb.New(*k.LastUsed)
+	}
+	if k.ValidBefore != nil {
+		w.ValidBefore = timestamppb.New(*k.ValidBefore)
 	}
 	return w
 }
 
-// HostKeys are the SSH host keys' types and fingerprints, for the
-// console's enrolment screen.
+// HostKeys are the SSH host keys' types and fingerprints, for the console.
 func (s *Server) HostKeys() []*osadminv1.HostKey { return s.hostKeys() }
 
-// hostKeys reads the SSH host public keys; a box before step 3 has none.
+// hostKeys reads the SSH host public keys; a box before sshd's first start
+// has none.
 func (s *Server) hostKeys() []*osadminv1.HostKey {
 	paths, _ := filepath.Glob(filepath.Join(s.o.Paths.SSHDir(), "ssh_host_*_key.pub"))
 	sort.Strings(paths)
@@ -97,29 +116,23 @@ func (s *Server) hostKeys() []*osadminv1.HostKey {
 
 func (h *accessSvc) AddAdmin(ctx context.Context, r *connect.Request[osadminv1.AddAdminRequest]) (*connect.Response[osadminv1.AddAdminResponse], error) {
 	c := callFrom(ctx)
-	c.note(r.Msg.GetName(), "role", r.Msg.GetRole().String())
+	name := r.Msg.GetName()
+	c.note(name, "role", r.Msg.GetRole().String(), "rootOperator", strconv.FormatBool(r.Msg.GetRootOperator()))
 	role, err := roleFromWire(r.Msg.GetRole())
 	if err != nil {
 		return nil, err
 	}
-	var key *access.Key
-	if strings.TrimSpace(r.Msg.GetPublicKey()) != "" {
-		k, err := access.ParseLoginKey(r.Msg.GetPublicKey())
-		if err != nil {
-			return nil, err
-		}
-		key = &k
-		c.note(r.Msg.GetName(), "key", k.Fingerprint)
-	}
+	code, invite := h.s.newInvite()
 	now := h.s.o.Clock.Now().UTC()
 	var added access.Admin
 	err = h.s.o.Access.Update(func(st *access.State) error {
-		if _, taken := st.Admin(r.Msg.GetName()); taken {
-			return codes.New(codes.AccessName, "there is already an admin named %q", r.Msg.GetName())
+		if _, taken := st.Admin(name); taken {
+			return codes.New(codes.AccessName, "there is already an admin named %q", name)
 		}
-		a := st.AddAdmin(r.Msg.GetName(), role, c.session.Admin, now)
-		if key != nil {
-			a.Keys = append(a.Keys, access.AdminKey{Key: *key, Added: now, AddedBy: c.session.Admin, Via: c.via()})
+		a := st.AddAdmin(name, role, c.session.Admin, now)
+		a.Invite = invite
+		if r.Msg.GetRootOperator() {
+			addToRoster(st, name)
 		}
 		added = *a
 		return nil
@@ -127,8 +140,31 @@ func (h *accessSvc) AddAdmin(ctx context.Context, r *connect.Request[osadminv1.A
 	if err != nil {
 		return nil, err
 	}
-	h.s.o.Logger.Info("osadmin: admin added", log.F("admin", added.Name), log.F("role", string(role)), log.F("by", c.session.Admin))
-	return connect.NewResponse(&osadminv1.AddAdminResponse{Admin: adminToWire(added)}), nil
+	h.s.o.Logger.Info("osadmin: admin added, invitation out", log.F("admin", added.Name), log.F("role", string(role)), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.AddAdminResponse{Admin: adminToWire(added), Invitation: &osadminv1.Invitation{Admin: name, Code: code, Expires: timestamppb.New(invite.Expires)}}), nil
+}
+
+// addToRoster puts name on the root-operator roster, keeping its
+// threshold.
+func addToRoster(st *access.State, name string) {
+	q := st.EffectiveQuorum()
+	if slices.Contains(q.Members, name) {
+		return
+	}
+	st.Quorum = &access.QuorumRoster{Members: append(slices.Clone(q.Members), name), Required: max(q.Required, min(2, len(q.Members)+1))}
+}
+
+// dropFromRoster takes name off the roster; the threshold shrinks with it.
+func dropFromRoster(st *access.State, name string) {
+	if st.Quorum == nil {
+		return
+	}
+	m := slices.DeleteFunc(slices.Clone(st.Quorum.Members), func(x string) bool { return x == name })
+	req := min(st.Quorum.Required, len(m))
+	if len(m) >= 2 {
+		req = max(req, 2)
+	}
+	st.Quorum = &access.QuorumRoster{Members: m, Required: req}
 }
 
 func (h *accessSvc) RemoveAdmin(ctx context.Context, r *connect.Request[osadminv1.RemoveAdminRequest]) (*connect.Response[osadminv1.RemoveAdminResponse], error) {
@@ -141,11 +177,13 @@ func (h *accessSvc) RemoveAdmin(ctx context.Context, r *connect.Request[osadminv
 			return codes.New(codes.AccessName, "there is no admin named %q", name)
 		}
 		st.Admins = slices.Delete(st.Admins, i, i+1)
+		dropFromRoster(st, name)
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
+	h.s.o.Lockout.Forget(name)
 	n := h.s.sessions.EndWhere(func(s weblogin.Session) bool { return s.Admin == name })
 	e := h.s.endElevations(c.session.Admin, func(r elevation.Request) bool { return r.Admin == name })
 	h.s.o.Logger.Info("osadmin: admin removed", log.F("admin", name), log.F("sessionsEnded", n), log.F("elevationsEnded", e), log.F("by", c.session.Admin))
@@ -182,33 +220,6 @@ func mayManageKeys(c *call, admin string) error {
 	return nil
 }
 
-func (h *accessSvc) AddKey(ctx context.Context, r *connect.Request[osadminv1.AddKeyRequest]) (*connect.Response[osadminv1.AddKeyResponse], error) {
-	c := callFrom(ctx)
-	c.note(r.Msg.GetAdmin())
-	if err := mayManageKeys(c, r.Msg.GetAdmin()); err != nil {
-		return nil, err
-	}
-	k, err := access.ParseLoginKey(r.Msg.GetPublicKey())
-	if err != nil {
-		return nil, err
-	}
-	c.note(r.Msg.GetAdmin(), "key", k.Fingerprint)
-	ak := access.AdminKey{Key: k, Added: h.s.o.Clock.Now().UTC(), AddedBy: c.session.Admin, Via: c.via()}
-	err = h.s.o.Access.Update(func(st *access.State) error {
-		a, ok := st.Admin(r.Msg.GetAdmin())
-		if !ok {
-			return codes.New(codes.AccessName, "there is no admin named %q", r.Msg.GetAdmin())
-		}
-		a.Keys = append(a.Keys, ak)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	h.s.o.Logger.Info("osadmin: key added", log.F("admin", r.Msg.GetAdmin()), log.F("key", k.Fingerprint), log.F("by", c.session.Admin))
-	return connect.NewResponse(&osadminv1.AddKeyResponse{Key: keyToWire(ak)}), nil
-}
-
 func (h *accessSvc) RemoveKey(ctx context.Context, r *connect.Request[osadminv1.RemoveKeyRequest]) (*connect.Response[osadminv1.RemoveKeyResponse], error) {
 	c := callFrom(ctx)
 	admin, fp := r.Msg.GetAdmin(), r.Msg.GetFingerprint()
@@ -231,9 +242,8 @@ func (h *accessSvc) RemoveKey(ctx context.Context, r *connect.Request[osadminv1.
 	if err != nil {
 		return nil, err
 	}
-	n := h.s.sessions.EndWhere(func(s weblogin.Session) bool { return s.Admin == admin && s.KeyFP == fp })
 	e := h.s.endElevations(c.session.Admin, func(r elevation.Request) bool { return r.KeyFP == fp })
-	h.s.o.Logger.Info("osadmin: key removed and revoked", log.F("admin", admin), log.F("key", fp), log.F("sessionsEnded", n), log.F("elevationsEnded", e), log.F("by", c.session.Admin))
+	h.s.o.Logger.Info("osadmin: key removed and revoked", log.F("admin", admin), log.F("key", fp), log.F("rootShellsEnded", e), log.F("by", c.session.Admin))
 	return connect.NewResponse(&osadminv1.RemoveKeyResponse{}), nil
 }
 
@@ -246,7 +256,7 @@ func (s *Server) endElevations(by string, match func(elevation.Request) bool) in
 	}
 	n := 0
 	for _, r := range s.o.Elevation.List() {
-		if (r.State != elevation.Active && r.State != elevation.Approved) || !match(r) {
+		if (r.State != elevation.Active && r.State != elevation.Issued && r.State != elevation.Opened && r.State != elevation.Challenged) || !match(r) {
 			continue
 		}
 		if _, err := s.o.Elevation.Terminate(r.ID, by); err != nil {
@@ -275,24 +285,6 @@ func (h *accessSvc) UnrevokeKey(ctx context.Context, r *connect.Request[osadminv
 	}
 	h.s.o.Logger.Info("osadmin: key un-revoked", log.F("key", fp), log.F("by", c.session.Admin))
 	return connect.NewResponse(&osadminv1.UnrevokeKeyResponse{}), nil
-}
-
-func (h *accessSvc) SetElevationPolicy(ctx context.Context, r *connect.Request[osadminv1.SetElevationPolicyRequest]) (*connect.Response[osadminv1.SetElevationPolicyResponse], error) {
-	c := callFrom(ctx)
-	p := r.Msg.GetPolicy()
-	c.note("elevation-policy", "maxMinutes", itoa(int(p.GetMaxMinutes())), "defaultMinutes", itoa(int(p.GetDefaultMinutes())))
-	maxM, defM := int(p.GetMaxMinutes()), int(p.GetDefaultMinutes())
-	if maxM < 15 || maxM > 240 || defM < 15 || defM > maxM {
-		return nil, codes.New(codes.AccessForbidden, "elevation lasts 15 to 240 minutes, and the default can't exceed the maximum")
-	}
-	err := h.s.o.Access.Update(func(st *access.State) error {
-		st.ElevationPolicy = access.Policy{MaxMinutes: maxM, DefaultMinutes: defM, SelfApprovalWhenSingleOwner: p.GetSelfApprovalWhenSingleOwner()}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(&osadminv1.SetElevationPolicyResponse{}), nil
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
