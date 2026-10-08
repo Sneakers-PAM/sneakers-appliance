@@ -57,7 +57,7 @@ func main() {
 	for _, e := range entries {
 		out.Write(e[:])
 	}
-	if err := os.WriteFile(os.Args[1], out.Bytes(), 0o644); err != nil { // #nosec G306 -- a file checked into the repository
+	if err := os.WriteFile(os.Args[1], out.Bytes(), 0o644); err != nil { // #nosec G306 G703 -- the build script names a file checked into the repository
 		fmt.Fprintln(os.Stderr, "breached:", err)
 		os.Exit(1)
 	}

@@ -59,8 +59,8 @@ func Normalize(s string, n int) (string, bool) {
 			raw = append(raw, '0')
 		case r == 'I' || r == 'L':
 			raw = append(raw, '1')
-		case r < 128 && strings.IndexByte(alphabet, byte(r)) >= 0:
-			raw = append(raw, byte(r))
+		case r < 128 && strings.ContainsRune(alphabet, r):
+			raw = append(raw, byte(r)) // #nosec G115 -- r is ASCII
 		default:
 			return "", false
 		}
