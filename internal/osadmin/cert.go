@@ -4,99 +4,76 @@
 package osadmin
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
+	log "github.com/Bugs5382/go-log"
 	"golang.org/x/sys/unix"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 )
 
 // The certificate files in Paths.OwnDir.
 const (
 	certFile = "tls.crt"
 	keyFile  = "tls.key"
-	// certLifetime and certRenewBefore keep the self-signed certificate
-	// inside the lifetime browsers accept.
-	certLifetime    = 397 * 24 * time.Hour
-	certRenewBefore = 30 * 24 * time.Hour
 )
 
 // CertInfo describes :8443's certificate for Status.
 type CertInfo struct {
 	Fingerprint string
 	Expires     time.Time
-	SelfSigned  bool
+	// SelfSigned is the box's own certificate: no store certificate is
+	// assigned to :8443.
+	SelfSigned bool
 }
 
-// EnsureCert loads :8443's own certificate from dir, or makes a new
-// self-signed ECDSA P-256 one when there is none, it expires within 30
-// days, or its names aren't hostname and addrs. The key never leaves dir.
+// EnsureCert loads :8443's certificate from dir. While a store certificate
+// is assigned (certstore.AssignedMarker) it is served as it is. Otherwise
+// the box's own self-signed ECDSA P-256 one is kept, or made new when
+// there is none, it expires within 30 days, or its names aren't hostname
+// and addrs. The key never leaves dir.
 func EnsureCert(dir, hostname string, addrs []string, now time.Time) (tls.Certificate, CertInfo, error) {
+	if certstore.AssignedID(dir) != "" {
+		if c, info, err := loadCert(dir); err == nil {
+			return c, info, nil
+		}
+		// An assigned certificate that doesn't load falls back to a new
+		// self-signed one, and the marker goes so the store sees it.
+		if err := os.Remove(filepath.Join(dir, certstore.AssignedMarker)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
+		}
+	}
 	want := sanList(hostname, addrs)
 	if c, info, err := loadCert(dir); err == nil {
 		leaf := c.Leaf
-		if slices.Equal(sanList(firstOr(leaf.DNSNames), ipStrings(leaf.IPAddresses)), want) && now.Add(certRenewBefore).Before(leaf.NotAfter) {
+		if slices.Equal(sanList(firstOr(leaf.DNSNames), ipStrings(leaf.IPAddresses)), want) && now.Add(certstore.RenewBefore).Before(leaf.NotAfter) {
 			return c, info, nil
 		}
 	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
 	}
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	crt, key, err := certstore.NewSelfSigned(hostname, addrs, now)
 	if err != nil {
-		return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
-	}
-	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
-	if err != nil {
-		return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
-	}
-	cn := hostname
-	if cn == "" && len(addrs) > 0 {
-		cn = addrs[0]
-	}
-	tmpl := &x509.Certificate{
-		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: cn, Organization: []string{"Sneakers-PAM appliance admin"}},
-		NotBefore:    now.Add(-time.Hour),
-		NotAfter:     now.Add(certLifetime),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-	if hostname != "" {
-		tmpl.DNSNames = []string{hostname}
-	}
-	for _, a := range addrs {
-		if ip := net.ParseIP(a); ip != nil {
-			tmpl.IPAddresses = append(tmpl.IPAddresses, ip)
-		}
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
-	}
-	kder, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
-	}
-	if err := writeAtomic(filepath.Join(dir, keyFile), pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder})); err != nil {
 		return tls.Certificate{}, CertInfo{}, err
 	}
-	if err := writeAtomic(filepath.Join(dir, certFile), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})); err != nil {
+	if err := writeAtomic(filepath.Join(dir, keyFile), key); err != nil {
+		return tls.Certificate{}, CertInfo{}, err
+	}
+	if err := writeAtomic(filepath.Join(dir, certFile), crt); err != nil {
 		return tls.Certificate{}, CertInfo{}, err
 	}
 	return loadCert(dir)
@@ -112,7 +89,7 @@ func loadCert(dir string) (tls.Certificate, CertInfo, error) {
 		return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
 	}
 	c.Leaf = leaf
-	return c, CertInfo{Fingerprint: Fingerprint(leaf.Raw), Expires: leaf.NotAfter, SelfSigned: leaf.Subject.String() == leaf.Issuer.String()}, nil
+	return c, CertInfo{Fingerprint: Fingerprint(leaf.Raw), Expires: leaf.NotAfter, SelfSigned: certstore.AssignedID(dir) == ""}, nil
 }
 
 // ReadCertInfo describes the certificate in dir without reading its key.
@@ -135,19 +112,68 @@ func ReadCertInfo(dir string) (CertInfo, error) {
 	if err != nil {
 		return CertInfo{}, fmt.Errorf("tls: %w", err)
 	}
-	return CertInfo{Fingerprint: Fingerprint(leaf.Raw), Expires: leaf.NotAfter, SelfSigned: leaf.Subject.String() == leaf.Issuer.String()}, nil
+	return CertInfo{Fingerprint: Fingerprint(leaf.Raw), Expires: leaf.NotAfter, SelfSigned: certstore.AssignedID(dir) == ""}, nil
 }
 
 // Fingerprint is a certificate's SHA-256 as colon-separated hex, the form
 // the console shows for checking on first visit.
-func Fingerprint(der []byte) string {
-	sum := sha256.Sum256(der)
-	h := strings.ToUpper(hex.EncodeToString(sum[:]))
-	parts := make([]string, 0, len(sum))
-	for i := 0; i < len(h); i += 2 {
-		parts = append(parts, h[i:i+2])
+func Fingerprint(der []byte) string { return certstore.Fingerprint(der) }
+
+// CertSource serves :8443's certificate and re-reads it when accessd
+// swaps the files, so a new certificate needs no restart. A pair that
+// doesn't load (the key written, the certificate not yet) keeps the last
+// good one until the next handshake.
+type CertSource struct {
+	dir    string
+	logger log.Logger
+	mu     sync.Mutex
+	cur    *tls.Certificate
+	stamp  string
+}
+
+// NewCertSource starts from c, the certificate EnsureCert loaded from dir.
+func NewCertSource(dir string, c tls.Certificate, lg log.Logger) *CertSource {
+	if lg == nil {
+		lg = log.Nop()
 	}
-	return strings.Join(parts, ":")
+	src := &CertSource{dir: dir, logger: lg, cur: &c}
+	src.stamp = src.stat()
+	return src
+}
+
+// GetCertificate is the tls.Config callback.
+func (c *CertSource) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if st := c.stat(); st != c.stamp {
+		next, info, err := loadCert(c.dir)
+		if err != nil {
+			c.logger.Warn("osadmin: the new :8443 certificate doesn't load yet; serving the previous one", log.F("error", err.Error()))
+			return c.cur, nil
+		}
+		c.cur, c.stamp = &next, st
+		c.logger.Info("osadmin: :8443 certificate reloaded", log.F("fingerprint", info.Fingerprint), log.F("expires", info.Expires), log.F("selfSigned", info.SelfSigned))
+	}
+	return c.cur, nil
+}
+
+// stat identifies the current files: a swap renames new files in, so the
+// inode changes.
+func (c *CertSource) stat() string {
+	var b strings.Builder
+	for _, name := range []string{certFile, keyFile} {
+		fi, err := os.Lstat(filepath.Join(c.dir, name))
+		if err != nil {
+			b.WriteString("-;")
+			continue
+		}
+		ino := uint64(0)
+		if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+			ino = st.Ino
+		}
+		fmt.Fprintf(&b, "%d:%d:%d;", ino, fi.Size(), fi.ModTime().UnixNano())
+	}
+	return b.String()
 }
 
 func sanList(hostname string, addrs []string) []string {

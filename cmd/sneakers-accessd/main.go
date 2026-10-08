@@ -32,11 +32,13 @@ import (
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
+	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
@@ -191,6 +193,24 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if perr != nil {
 		lg.Error(perr, "accessd: this build carries no release pins; updates can't be verified, so none will stage")
 	}
+	// The certificate store: keys sealed through KeyCustody, :8443's files
+	// handed to the osadmin user (docs/certificates.md).
+	certs, err := certstore.Open(certstore.Options{
+		Dir: filepath.Join(paths.APIDir(), "tls"), AdminDir: paths.OwnDir(),
+		Sealer: accessd.CustodySealer{Client: custody},
+		Names: func(ctx context.Context) (string, []string, error) {
+			st, err := netd.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
+			if err != nil {
+				return "", nil, err
+			}
+			return st.Msg.GetHostname(), st.Msg.GetManagementAddresses(), nil
+		},
+		Own:    func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
+		Logger: lg,
+	})
+	if err != nil {
+		return err
+	}
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{},
 		KeyCustody: custody,
@@ -201,6 +221,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Network:         netd,
 		Paths:           paths,
 		CertDir:         paths.OwnDir(),
+		Certs:           certs,
 		Elevation:       elev,
 		RootKey:         root,
 		CodeSealer:      accessd.CustodySealer{Client: custody},
@@ -302,7 +323,7 @@ func dirs(p osadmin.Paths) error {
 	if err := os.Chown(p.OwnDir(), accounts.OsadminUID, accounts.OsadminUID); err != nil {
 		return err
 	}
-	for _, name := range []string{"tls.crt", "tls.key"} {
+	for _, name := range []string{"tls.crt", "tls.key", certstore.AssignedMarker} {
 		err := os.Lchown(filepath.Join(p.OwnDir(), name), accounts.OsadminUID, accounts.OsadminUID)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err

@@ -10,8 +10,9 @@ answers Connect `unavailable` ("the appliance services are unavailable").
 ## Calling it
 
 - **Transport.** HTTPS on port 8443 of each management address only, with the box's own certificate
-  (ECDSA P-256, self-signed, names = the host name and the management addresses). Check its
-  SHA-256 fingerprint against the console on the first visit.
+  (ECDSA P-256, self-signed, names = the host name and the management addresses) until an owner
+  assigns one from the certificate store. Check its SHA-256 fingerprint against the console on the
+  first visit.
 - **Session.** The `__Host-osadmin-session` cookie, set by `SignInService.PollSignIn` once the code
   is approved over SSH.
 - **CSRF.** Every call that changes something sends the session's `csrf_token` in the
@@ -109,6 +110,16 @@ minutes.
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
 | `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
 | `ElevationService.GetElevationRecording` | owner | no | `elevation.recording.view` |
+| `TlsService.GetCertificateStore` | admin | no | |
+| `TlsService.GenerateCsr` | owner | yes | `tls.csr.generate` |
+| `TlsService.CompleteCsr` | owner | yes | `tls.csr.complete` |
+| `TlsService.DiscardCsr` | owner | yes | `tls.csr.discard` |
+| `TlsService.ImportCertificate` | owner | yes | `tls.certificate.import` |
+| `TlsService.DeleteCertificate` | owner | yes | `tls.certificate.delete` |
+| `TlsService.AssignCertificate` | owner | yes | `tls.endpoint.assign` |
+| `TlsService.RevertToSelfSigned` | owner | yes | `tls.endpoint.revert` |
+| `TlsService.SetAcme` | owner | yes | `tls.acme.set` |
+| `TlsService.RenewNow` | owner | yes | `tls.acme.renew` |
 | `RootShellService.IssueRootShellCode` | admin | no | `rootshell.code.issue` |
 
 Sessions: `ListSessions` lists every live session on the box, oldest first, each an
@@ -124,6 +135,27 @@ SIGKILL if it is still there 5 seconds later), and an elevated shell is ended as
 `TerminateElevation` ends it. The audit entry's detail records `kind`, `admin` and `source`. A
 browser's `id` is derived from its session and is never its cookie. An `id` that names no live
 session answers `NotFound`.
+
+Certificates: `TlsService` runs the box's certificate store ([certificates.md](certificates.md)).
+`GetCertificateStore` lists the store's certificates (`StoredCertificate`: subject, issuer, SANs,
+not-before and not-after, SHA-256 fingerprint, key type, chain, source and the endpoints that use
+it), the pending CSRs, the endpoints (`admin` for :8443 and `product` for 443, which answers
+"Available when the product is installed") and the ACME state. `ImportCertificate` takes a PFX
+(PKCS#12) with its password, the main path, or PEM; the password is never stored and the PFX is
+never kept. `GenerateCsr` makes the key on the box (RSA 4096 by default; RSA 3072, ECDSA P-256 or
+P-384), seals it, and returns the CSR for one extra name plus the host name and the management
+addresses; a wildcard or a second extra name is refused (`TLS_INVALID`). `CompleteCsr` takes the
+signed certificate and chain for a pending CSR. `ImportCertificate` and `CompleteCsr` check the key, the usage, the chain to a root (one in the
+chain, or `root_pem`), the SANs (a wildcard covers one label) and the validity, and refuse RSA below 3072 bits; a refusal's error names the first failure and
+carries every check as a `ValidationReport` detail, and nothing is stored. `AssignCertificate` makes
+:8443 serve a store certificate without a restart, checks it with a handshake to each management
+address, and answers `TLS_NOT_SERVED` with the previous certificate back in place if it isn't served
+within 15 seconds. `RevertToSelfSigned` puts the box's own certificate back. `DeleteCertificate` is
+refused while an endpoint uses the certificate. `SetAcme` and `RenewNow` answer
+`TLS_ACME_UNAVAILABLE` until the product bundle brings cert-manager. The earlier `GetTls`,
+`CreateCsr`, `UploadCertificate` and `SetAdminCertificate` stay Not available; the store methods
+replace them. Every change's audit entry records the method, the store id, the fingerprint, the SANs
+and the expiry.
 
 Root shells: `ApproveElevation` and `DenyElevation` are gone (deprecated in the proto, answering
 `Unimplemented`); a root shell needs no approval, only the challenge and the code

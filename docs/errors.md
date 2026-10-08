@@ -61,6 +61,25 @@ shell, the console and :8443 show the same sentence.
 | 3702 | `SHELL_UNKNOWN` | there is no such command; `help` lists them |
 | 3703 | `NOT_AVAILABLE` | not available in this release, or the appliance services aren't answering |
 
+## Certificates (38xx)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3801 | `TLS_INVALID` | a field of the request fails validation (the error names it) |
+| 3802 | `TLS_FORMAT` | a certificate, key or PKCS#12 file doesn't parse, is encrypted, or the PKCS#12 password is wrong |
+| 3803 | `TLS_KEY_MISMATCH` | the certificate isn't for the private key given, or for the CSR's key |
+| 3804 | `TLS_KEY_TYPE` | the key isn't RSA of 3072 bits or more, or ECDSA P-256 or P-384 |
+| 3805 | `TLS_CHAIN` | the chain doesn't build to a root (the error names the missing issuer) or a certificate in it is invalid |
+| 3806 | `TLS_NAMES` | the certificate's SANs cover none of the box's management names and addresses, or of the endpoint's |
+| 3807 | `TLS_VALIDITY` | the certificate has expired or isn't valid yet |
+| 3808 | `TLS_USAGE` | the certificate is a CA certificate or isn't for TLS servers |
+| 3809 | `TLS_UNKNOWN` | no certificate, CSR or endpoint has that id |
+| 3810 | `TLS_IN_USE` | the certificate is in use by an endpoint, or is the box's self-signed one |
+| 3811 | `TLS_LIMIT` | the store already holds 32 certificates or 8 pending CSRs |
+| 3812 | `TLS_ENDPOINT_UNAVAILABLE` | the endpoint isn't on this box yet (the product endpoint needs the product installed) |
+| 3813 | `TLS_NOT_SERVED` | the new certificate wasn't served within 15 seconds, so the previous one was put back |
+| 3814 | `TLS_ACME_UNAVAILABLE` | ACME through cert-manager isn't available yet; it comes with the product bundle |
+
 ## Build kit and boot (1xxx and 2xxx)
 
 | Code | Symbol | Meaning |
