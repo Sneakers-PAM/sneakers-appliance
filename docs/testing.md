@@ -35,6 +35,16 @@ every lab file name says which commit it is (`sneakers-0.0.0-lab.20261007d-g1a2b
 the `.ova` and the `.bin` likewise); the version it used is in `$OUT/version`. In
 CI the keys live on a tmpfs that's unmounted at the end of the job; nothing built is uploaded.
 
+`build/keys/lab-keys.sh` refuses to touch a `KEYS` directory that already holds a key set, so a
+build pointed at a shared, on-disk lab key folder can never silently replace its private keys:
+`NEW_KEYS=1` replaces the set on purpose, `REUSE_KEYS=1` keeps it as is (refused if the set is only
+partial, e.g. an interrupted earlier run). CI always passes a fresh, empty tmpfs directory, so
+neither flag is needed there. Every lab build records which key set it used in `$OUT/keys.txt`,
+the SHA-256 fingerprint of PK, KEK and db (the certificate), the release cosign key and the update
+key's recipient, in the `fingerprints.txt` format
+[production-keys.md](runbooks/production-keys.md) and `build/release/check-fingerprints.sh` use
+for a production key set.
+
 ## The QEMU harness
 
 `test/image/harness` boots a disk on q35 with SMM and OVMF's Secure Boot build and a vars store in

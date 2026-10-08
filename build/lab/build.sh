@@ -17,7 +17,11 @@
 #                mke2fs-amd64 and sgdisk-amd64 (build/static), which go into
 #                the root; first boot needs cryptsetup and mkfs.ext4 to make
 #                the state volumes
-#   KEYS         an empty directory for the lab keys (CI passes a tmpfs one)
+#   KEYS         a directory for the lab keys (CI passes a fresh tmpfs one
+#                every run). An existing key set there is refused, to
+#                protect a shared on-disk one; REUSE_KEYS=1 keeps it as is
+#                and NEW_KEYS=1 replaces it on purpose
+#                (build/keys/lab-keys.sh)
 #   OUT          the output directory
 #   VERSION      the lab version (default 0.0.1); the build number,
 #                g<the short commit>, is appended to it, git-describe style,
@@ -30,7 +34,9 @@
 #                (spec.kitMin; default 0.0.0-0, any)
 #
 # Output: $OUT/version (the version with the build number, which every
-# file name below carries), $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
+# file name below carries), $OUT/keys.txt (the SHA-256 fingerprint of each
+# key in the set this run used, in build/release/check-fingerprints.sh's
+# format), $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
 # signed OCI layout), $OUT/sneakers-kit (a kit pinned to this run's keys),
 # and the lab product bundle next to them:
 # $OUT/product/sneakers-product-<version>-amd64-LAB.bin with its
@@ -66,6 +72,17 @@ mkdir -p "$work"
 
 echo "lab: keys"
 bash "$root/build/keys/lab-keys.sh" "$KEYS"
+# Record which key set this run used: the same fingerprints
+# build/release/check-fingerprints.sh checks a production key set against,
+# so a lab build's log or $OUT/keys.txt says which keys signed it.
+{
+  for role in PK KEK db; do
+    printf '%s %s\n' "$role" "$(openssl x509 -in "$KEYS/$role.crt" -outform DER | sha256sum | cut -d' ' -f1)"
+  done
+  printf 'release-cosign %s\n' "$(openssl pkey -pubin -in "$KEYS/cosign.pub" -outform DER | sha256sum | cut -d' ' -f1)"
+  printf 'update-recipient %s\n' "$(grep -v '^#' "$KEYS/update.pub" | tr -d '\n' | sha256sum | cut -d' ' -f1)"
+} > "$OUT/keys.txt"
+while read -r role fingerprint; do echo "lab: key $role $fingerprint"; done < "$OUT/keys.txt"
 
 # shellcheck source=build/ci/versions.env
 source "$root/build/ci/versions.env"

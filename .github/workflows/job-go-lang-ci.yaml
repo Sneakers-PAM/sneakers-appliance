@@ -118,6 +118,8 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/
+      - name: Lab keys never silently regenerate an existing set
+        run: bash build/keys/lab-keys_test.sh
       - name: Root image is reproducible and holds the declared tree
         run: bash build/root/build_test.sh
       - name: Release guard, production fingerprint check and kit floor
