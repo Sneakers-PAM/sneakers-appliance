@@ -918,7 +918,7 @@ func (x *AddAdminRequest) GetRootOperator() bool {
 type Invitation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Admin string                 `protobuf:"bytes,1,opt,name=admin,proto3" json:"admin,omitempty"`
-	// code is XXXX-XXXX.
+	// code is XXXX-XXXX-XXXX-XXXX.
 	Code          string                 `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
 	Expires       *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=expires,proto3" json:"expires,omitempty"`
 	unknownFields protoimpl.UnknownFields

@@ -643,7 +643,8 @@ type SetupServiceClient interface {
 	// (root only).
 	WatchConsoleInfo(context.Context, *connect.Request[v1.WatchConsoleInfoRequest]) (*connect.ServerStreamForClient[v1.WatchConsoleInfoResponse], error)
 	// ResetSetupCode stops a browser setup that hasn't made the first admin
-	// yet and shows a new code: the console's "this isn't you" (root only).
+	// yet, or clears a locked code, and shows a new code: the console's "this
+	// isn't you" and "new code" (root only).
 	ResetSetupCode(context.Context, *connect.Request[v1.ResetSetupCodeRequest]) (*connect.Response[v1.ResetSetupCodeResponse], error)
 	// BeginRecoverAccess issues the console's Recover access code (root
 	// only): on :8443 it gives an owner a new password and authenticator,
@@ -803,7 +804,8 @@ type SetupServiceHandler interface {
 	// (root only).
 	WatchConsoleInfo(context.Context, *connect.Request[v1.WatchConsoleInfoRequest], *connect.ServerStream[v1.WatchConsoleInfoResponse]) error
 	// ResetSetupCode stops a browser setup that hasn't made the first admin
-	// yet and shows a new code: the console's "this isn't you" (root only).
+	// yet, or clears a locked code, and shows a new code: the console's "this
+	// isn't you" and "new code" (root only).
 	ResetSetupCode(context.Context, *connect.Request[v1.ResetSetupCodeRequest]) (*connect.Response[v1.ResetSetupCodeResponse], error)
 	// BeginRecoverAccess issues the console's Recover access code (root
 	// only): on :8443 it gives an owner a new password and authenticator,

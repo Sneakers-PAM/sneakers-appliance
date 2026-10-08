@@ -98,7 +98,8 @@ service SetupService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // ResetSetupCode stops a browser setup that hasn't made the first admin
-  // yet and shows a new code: the console's "this isn't you" (root only).
+  // yet, or clears a locked code, and shows a new code: the console's "this
+  // isn't you" and "new code" (root only).
   rpc ResetSetupCode(ResetSetupCodeRequest) returns (ResetSetupCodeResponse);
   // BeginRecoverAccess issues the console's Recover access code (root
   // only): on :8443 it gives an owner a new password and authenticator,
@@ -581,11 +582,13 @@ enum SetupState {
 // ConsoleInfo is what the console shows about access.
 message ConsoleInfo {
   SetupState state = 1;
-  // setup_code is XXXX-XXXX while the state is not started.
+  // setup_code is XXXX-XXXX-XXXX-XXXX while the state is not started and
+  // the code isn't locked. Only this message carries it, to the console; no
+  // :8443 call returns it.
   string setup_code = 2;
-  // code_expires is when a new code replaces it.
+  // code_expires is when a new code replaces it (60 minutes).
   google.protobuf.Timestamp code_expires = 3;
-  // attempts_left is the wrong tries left before a new code replaces it.
+  // attempts_left is the wrong tries left before the code locks.
   int32 attempts_left = 4;
   // url is :8443 on the first management address, https://<address>:8443.
   string url = 5;
@@ -614,11 +617,14 @@ message ConsoleInfo {
   // set; empty before. The console shows https://<fqdn>:8443 under the
   // address when it's set.
   string fqdn = 18;
+  // code_locked: five wrong tries locked the setup code out; none works
+  // until the console asks for a new one (ResetSetupCode).
+  bool code_locked = 19;
 }
 
 // RecoverAccess is a live Recover access code.
 message RecoverAccess {
-  // code is XXXX-XXXX.
+  // code is XXXX-XXXX-XXXX-XXXX.
   string code = 1;
   google.protobuf.Timestamp expires = 2;
   int32 attempts_left = 3;

@@ -3453,11 +3453,13 @@ func (x *GetBindingResponse) GetManagementAddresses() []string {
 type ConsoleInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	State SetupState             `protobuf:"varint,1,opt,name=state,proto3,enum=sneakers.appliance.access.v1.SetupState" json:"state,omitempty"`
-	// setup_code is XXXX-XXXX while the state is not started.
+	// setup_code is XXXX-XXXX-XXXX-XXXX while the state is not started and
+	// the code isn't locked. Only this message carries it, to the console; no
+	// :8443 call returns it.
 	SetupCode string `protobuf:"bytes,2,opt,name=setup_code,json=setupCode,proto3" json:"setup_code,omitempty"`
-	// code_expires is when a new code replaces it.
+	// code_expires is when a new code replaces it (60 minutes).
 	CodeExpires *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=code_expires,json=codeExpires,proto3" json:"code_expires,omitempty"`
-	// attempts_left is the wrong tries left before a new code replaces it.
+	// attempts_left is the wrong tries left before the code locks.
 	AttemptsLeft int32 `protobuf:"varint,4,opt,name=attempts_left,json=attemptsLeft,proto3" json:"attempts_left,omitempty"`
 	// url is :8443 on the first management address, https://<address>:8443.
 	Url string `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
@@ -3485,7 +3487,10 @@ type ConsoleInfo struct {
 	// fqdn is the box's fully qualified name once a host name or domain is
 	// set; empty before. The console shows https://<fqdn>:8443 under the
 	// address when it's set.
-	Fqdn          string `protobuf:"bytes,18,opt,name=fqdn,proto3" json:"fqdn,omitempty"`
+	Fqdn string `protobuf:"bytes,18,opt,name=fqdn,proto3" json:"fqdn,omitempty"`
+	// code_locked: five wrong tries locked the setup code out; none works
+	// until the console asks for a new one (ResetSetupCode).
+	CodeLocked    bool `protobuf:"varint,19,opt,name=code_locked,json=codeLocked,proto3" json:"code_locked,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3646,10 +3651,17 @@ func (x *ConsoleInfo) GetFqdn() string {
 	return ""
 }
 
+func (x *ConsoleInfo) GetCodeLocked() bool {
+	if x != nil {
+		return x.CodeLocked
+	}
+	return false
+}
+
 // RecoverAccess is a live Recover access code.
 type RecoverAccess struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// code is XXXX-XXXX.
+	// code is XXXX-XXXX-XXXX-XXXX.
 	Code         string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
 	Expires      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires,proto3" json:"expires,omitempty"`
 	AttemptsLeft int32                  `protobuf:"varint,3,opt,name=attempts_left,json=attemptsLeft,proto3" json:"attempts_left,omitempty"`
@@ -4740,7 +4752,7 @@ const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\x11GetBindingRequest\"c\n" +
 	"\x12GetBindingResponse\x12\x1a\n" +
 	"\bhostname\x18\x01 \x01(\tR\bhostname\x121\n" +
-	"\x14management_addresses\x18\x02 \x03(\tR\x13managementAddresses\"\xa9\x06\n" +
+	"\x14management_addresses\x18\x02 \x03(\tR\x13managementAddresses\"\xca\x06\n" +
 	"\vConsoleInfo\x12>\n" +
 	"\x05state\x18\x01 \x01(\x0e2(.sneakers.appliance.access.v1.SetupStateR\x05state\x12\x1d\n" +
 	"\n" +
@@ -4764,7 +4776,9 @@ const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\thost_keys\x18\x0f \x03(\v2&.sneakers.appliance.osadmin.v1.HostKeyR\bhostKeys\x12E\n" +
 	"\arecover\x18\x10 \x01(\v2+.sneakers.appliance.access.v1.RecoverAccessR\arecover\x124\n" +
 	"\aupdated\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\aupdated\x12\x12\n" +
-	"\x04fqdn\x18\x12 \x01(\tR\x04fqdn\"\xbf\x01\n" +
+	"\x04fqdn\x18\x12 \x01(\tR\x04fqdn\x12\x1f\n" +
+	"\vcode_locked\x18\x13 \x01(\bR\n" +
+	"codeLocked\"\xbf\x01\n" +
 	"\rRecoverAccess\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x124\n" +
 	"\aexpires\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aexpires\x12#\n" +

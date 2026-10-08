@@ -295,7 +295,7 @@ message AddAdminRequest {
 // authenticator on :8443. Shown once.
 message Invitation {
   string admin = 1;
-  // code is XXXX-XXXX.
+  // code is XXXX-XXXX-XXXX-XXXX.
   string code = 2;
   google.protobuf.Timestamp expires = 3;
 }

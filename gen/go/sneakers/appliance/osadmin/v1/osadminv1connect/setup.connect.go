@@ -84,11 +84,12 @@ type SetupServiceClient interface {
 	// GetSetup is where setup is. A code session (before the first admin
 	// exists) sees the steps and the protection, not the keys.
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
-	// RedeemCode takes a one-time code (8 characters, Crockford base32;
-	// dashes, spaces and case don't matter) and sets the code session's
-	// cookie. Only allow-listed sources may try. A wrong code is refused
-	// with a SignInRefusal detail; after 5 wrong tries the code is replaced
-	// (the console shows the new one). A setup code works for 30 minutes,
+	// RedeemCode takes a one-time code (16 characters, Crockford base32;
+	// dashes, spaces and case don't matter, O reads as 0 and I and L as 1)
+	// and sets the code session's cookie. Only allow-listed sources may try.
+	// A wrong code is refused with a SignInRefusal detail; after 5 wrong
+	// tries the setup code locks until the console asks for a new one, and
+	// a Recover access code is withdrawn. A setup code works for 60 minutes,
 	// an invitation for 24 hours, a Recover access code for 30 minutes.
 	RedeemCode(context.Context, *connect.Request[v1.RedeemCodeRequest]) (*connect.Response[v1.RedeemCodeResponse], error)
 	// CheckPassword says whether a password would be taken: at least 12
@@ -279,11 +280,12 @@ type SetupServiceHandler interface {
 	// GetSetup is where setup is. A code session (before the first admin
 	// exists) sees the steps and the protection, not the keys.
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
-	// RedeemCode takes a one-time code (8 characters, Crockford base32;
-	// dashes, spaces and case don't matter) and sets the code session's
-	// cookie. Only allow-listed sources may try. A wrong code is refused
-	// with a SignInRefusal detail; after 5 wrong tries the code is replaced
-	// (the console shows the new one). A setup code works for 30 minutes,
+	// RedeemCode takes a one-time code (16 characters, Crockford base32;
+	// dashes, spaces and case don't matter, O reads as 0 and I and L as 1)
+	// and sets the code session's cookie. Only allow-listed sources may try.
+	// A wrong code is refused with a SignInRefusal detail; after 5 wrong
+	// tries the setup code locks until the console asks for a new one, and
+	// a Recover access code is withdrawn. A setup code works for 60 minutes,
 	// an invitation for 24 hours, a Recover access code for 30 minutes.
 	RedeemCode(context.Context, *connect.Request[v1.RedeemCodeRequest]) (*connect.Response[v1.RedeemCodeResponse], error)
 	// CheckPassword says whether a password would be taken: at least 12
