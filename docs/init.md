@@ -77,8 +77,8 @@ Init serves its local API (Connect, which also speaks the gRPC protocol) on `/ru
 ones whose bodies later work adds answer `Unimplemented` until then. `KeyCustodyService` serves
 `Mode`, `Protection`, `Seal`, `Unseal` and `Escrow` over the custody init unlocked
 ([key-custody.md](key-custody.md#the-keycustody-service)). `ImageService` serves `Status`,
-`Stage`, `Activate` and `Rollback` from the image stager once the state is unlocked and the ESP is
-mounted ([upgrades.md](upgrades.md)); `MarkGood` is still `Unimplemented`. `ServicesService` starts, stops and
+`Stage`, `Activate`, `MarkGood` and `Rollback` from the image stager once the state is unlocked and
+the ESP is mounted ([upgrades.md](upgrades.md)). `ServicesService` starts, stops and
 reports the table's on-demand services and the ones with `start-when`.
 
 `PowerService` (reboot, power-off, and arming, cancelling and running the factory reset) is also

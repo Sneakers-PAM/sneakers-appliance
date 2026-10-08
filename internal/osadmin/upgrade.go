@@ -30,11 +30,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
+	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
@@ -649,6 +651,37 @@ func (s *Server) apply(ctx context.Context, by osaudit.Entry, o *osadminv1.Eleva
 	s.history("apply", v, actor, err, overrideDetail(overrode))
 	s.o.Logger.Info("osadmin: apply", log.F("version", v), log.F("by", actor), log.F("ok", err == nil))
 	return v, overrode, err
+}
+
+// MarkGood commits the release the box booted, the upgrades design's
+// commit step: once setup is done and init and netd answer, init drops the
+// running entry's boot counter, so boot counting no longer falls back from
+// it. Until platformd's health gate exists those are the health checks; a
+// box with no product depends on nothing else. It waits while an apply or
+// revert is under way: a revert has marked the running release bad, and
+// marking it good before the reboot would undo that. The command calls it
+// at start and each minute until it succeeds.
+func (s *Server) MarkGood(ctx context.Context) error {
+	if !s.SetupDone() {
+		return errors.New("osadmin: setup isn't done; the release isn't marked good yet")
+	}
+	if s.Maintenance() {
+		return errors.New("osadmin: an update is being applied or reverted; the release isn't marked good")
+	}
+	if _, err := s.o.KeyCustody.Protection(ctx, connect.NewRequest(&initv1.ProtectionRequest{})); err != nil {
+		s.o.Logger.Warn("osadmin: init doesn't answer; the release isn't marked good yet", log.F("error", err.Error()))
+		return err
+	}
+	if _, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{})); err != nil {
+		s.o.Logger.Warn("osadmin: netd doesn't answer; the release isn't marked good yet", log.F("error", err.Error()))
+		return err
+	}
+	if _, err := s.o.Image.MarkGood(ctx, connect.NewRequest(&initv1.MarkGoodRequest{})); err != nil {
+		s.o.Logger.Error(err, "osadmin: the release wasn't marked good")
+		return err
+	}
+	s.o.Logger.Info("osadmin: the running release is marked good", log.F("version", release.Version))
+	return nil
 }
 
 func overrideDetail(id string) string {

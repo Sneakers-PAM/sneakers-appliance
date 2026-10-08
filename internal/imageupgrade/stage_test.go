@@ -5,6 +5,8 @@ package imageupgrade_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -71,6 +73,9 @@ func (e dirESP) Rename(a, b string) error {
 	return os.Rename(filepath.Join(e.dir, a), filepath.Join(e.dir, b))
 }
 func (e dirESP) Remove(rel string) error { return os.Remove(filepath.Join(e.dir, rel)) }
+func (e dirESP) Open(rel string) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(e.dir, rel)) // #nosec G304 -- test-only
+}
 
 type fakeSlots struct {
 	written  int64
@@ -209,5 +214,47 @@ func TestStageOnAnOlderLabInit(t *testing.T) {
 	s.InitVersion = "0.0.0-lab.20261007e-gabc1234"
 	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
 		t.Fatalf("a newer release must stage on the previous build's init: %v", err)
+	}
+}
+
+func TestKeptNamesEveryUKIOnTheESPAndTheInstallCopy(t *testing.T) {
+	s, dir, _, _, _ := stager(t, "0.0.9")
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	names, _ := s.ESP.List(imageupgrade.UKIDir)
+	want := map[string]bool{"": true}
+	for _, n := range names {
+		f, err := s.ESP.Open(filepath.Join(imageupgrade.UKIDir, n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := sha256.New()
+		_, _ = io.Copy(h, f)
+		_ = f.Close()
+		want[hex.EncodeToString(h.Sum(nil))] = true
+	}
+	kept, err := s.Kept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kept) != 3 || len(want) != 3 {
+		t.Fatalf("kept %v; want the running and the staged UKI and the install copy", kept)
+	}
+	for _, k := range kept {
+		if !want[k] {
+			t.Fatalf("kept %v; want %v", kept, want)
+		}
+	}
+}
+
+func TestMarkGoodLeavesAnUncountedEntryAlone(t *testing.T) {
+	s, _, _, _, _ := stager(t, "0.0.9")
+	if err := s.MarkGood(ctx, []string{""}); err != nil {
+		t.Fatal(err)
+	}
+	names, _ := s.ESP.List(imageupgrade.UKIDir)
+	if len(names) != 1 || names[0] != imageupgrade.GoodName("0.0.9") {
+		t.Fatalf("entries %v", names)
 	}
 }

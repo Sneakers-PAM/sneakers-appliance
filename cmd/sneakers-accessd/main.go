@@ -270,6 +270,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	// netd keeps the product's ports only while it runs: open them again
 	// at start, and each minute until that works.
 	portsOpen := api.OpenProductPorts(ctx) == nil
+	// The release the box booted is committed once the box is healthy on
+	// it; until then boot counting would fall back from it.
+	good := api.MarkGood(ctx) == nil
 	minute := time.NewTicker(time.Minute)
 	defer minute.Stop()
 	for {
@@ -282,6 +285,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			api.UpgradeWindowTick(ctx)
 			if !portsOpen {
 				portsOpen = api.OpenProductPorts(ctx) == nil
+			}
+			if !good {
+				good = api.MarkGood(ctx) == nil
 			}
 			d.RefreshStatus(ctx)
 		}

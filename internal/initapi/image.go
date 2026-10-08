@@ -26,10 +26,11 @@ type Images interface {
 	Stage(ctx context.Context, src verify.Source, arch string) (string, error)
 	Status() (imageupgrade.Status, error)
 	Rollback() error
+	MarkGood(ctx context.Context, keep []string) error
+	Kept() ([]string, error)
 }
 
-// imageHandler serves ImageService. MarkGood stays unimplemented until the
-// post-boot health check that calls it exists.
+// imageHandler serves ImageService.
 type imageHandler struct {
 	initv1connect.UnimplementedImageServiceHandler
 	// mu serializes the calls that write the ESP or a slot.
@@ -77,6 +78,25 @@ func (h *imageHandler) Activate(context.Context, *connect.Request[initv1.Activat
 	}
 	h.log.Info("initapi: Image.Activate", log.F("version", st.Staged))
 	return connect.NewResponse(&initv1.ActivateResponse{}), nil
+}
+
+// MarkGood commits the running release: its entry loses the boot counter,
+// so systemd-boot no longer falls back from it, and the sealed copies for
+// UKIs no longer on the ESP are pruned. osadmin calls it once the box is up
+// and healthy on the release (docs/upgrades.md).
+func (h *imageHandler) MarkGood(ctx context.Context, _ *connect.Request[initv1.MarkGoodRequest]) (*connect.Response[initv1.MarkGoodResponse], error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	keep, err := h.im.Kept()
+	if err == nil {
+		err = h.im.MarkGood(ctx, keep)
+	}
+	if err != nil {
+		h.log.Warn("initapi: Image.MarkGood failed", log.F("error", codes.Describe(err)))
+		return nil, toConnect(err)
+	}
+	h.log.Info("initapi: Image.MarkGood", log.F("kept", len(keep)))
+	return connect.NewResponse(&initv1.MarkGoodResponse{}), nil
 }
 
 func (h *imageHandler) Rollback(context.Context, *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {

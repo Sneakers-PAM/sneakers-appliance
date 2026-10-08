@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,10 @@ func (e espDir) Rename(a, b string) error {
 
 func (e espDir) Remove(rel string) error { return os.Remove(filepath.Join(string(e), rel)) }
 
+func (e espDir) Open(rel string) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(string(e), rel)) // #nosec G304 -- test-only
+}
+
 type discardSlots struct{}
 
 func (discardSlots) WriteInactive(_ context.Context, r io.Reader, _ int64, _ string) error {
@@ -63,6 +68,13 @@ type noSeal struct{}
 
 func (noSeal) SealForImage(context.Context, string, []byte) error { return nil }
 func (noSeal) Prune(context.Context, []string) error              { return nil }
+
+type keptSeal struct {
+	noSeal
+	kept []string
+}
+
+func (k *keptSeal) Prune(_ context.Context, keep []string) error { k.kept = keep; return nil }
 
 // serveImages serves a stager running an older lab build, as a box on the
 // previous build would be.
@@ -115,5 +127,32 @@ func TestImageServiceIsUnimplementedWithoutImages(t *testing.T) {
 	_, err := c.Status(context.Background(), connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestImageServiceMarksTheRunningReleaseGood(t *testing.T) {
+	const running = "0.0.0-lab.20261007e1-gabc1234"
+	esp := espDir(t.TempDir())
+	for name, body := range map[string]string{
+		imageupgrade.EntryName(running, 2, 1):                 "red",
+		imageupgrade.GoodName("0.0.0-lab.20261007e-gabc1234"): "blue",
+	} {
+		if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, name), strings.NewReader(body)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seal := &keptSeal{}
+	c := serveImages(t, &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: seal, Running: running, WorkDir: t.TempDir()})
+	if _, err := c.MarkGood(context.Background(), connect.NewRequest(&initv1.MarkGoodRequest{})); err != nil {
+		t.Fatalf("mark good: %v", err)
+	}
+	names, _ := esp.List(imageupgrade.UKIDir)
+	slices.Sort(names)
+	if want := []string{imageupgrade.GoodName("0.0.0-lab.20261007e-gabc1234"), imageupgrade.GoodName(running)}; !slices.Equal(names, want) {
+		t.Fatalf("entries %v; want %v", names, want)
+	}
+	// Both UKIs stay bootable: neither one's sealed copy is pruned.
+	if len(seal.kept) != 3 {
+		t.Fatalf("kept %v; want both UKIs and the install copy", seal.kept)
 	}
 }
