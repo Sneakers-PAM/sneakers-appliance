@@ -4,17 +4,17 @@
     can change this box's software and read its data.
     Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
 
-   1  status                             12  recovery-key add
-   2  network show                       13  tls show
-   3  network set                        14  backup
-   4  network confirm                    15  restore
-   5  network allow-list reset           16  upgrade
-   6  keys list                          17  mcp
-   7  keys add                           18  resources
-   8  keys remove                        19  reboot
-   9  admins list                        20  poweroff
-  10  admins add                         21  Recover access
-  11  admins remove                      22  Recent messages
+   1  status                             10  backup
+   2  network show                       11  restore
+   3  network set                        12  upgrade
+   4  network confirm                    13  mcp
+   5  network allow-list reset           14  resources
+   6  keys list                          15  reboot
+   7  admins list                        16  poweroff
+   8  recovery-key add                   17  Recover access
+   9  tls show                           18  Recent messages
+
+
 
 
 

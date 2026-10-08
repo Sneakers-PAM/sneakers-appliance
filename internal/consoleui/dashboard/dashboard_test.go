@@ -21,11 +21,9 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/consoletest"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/dashboard"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/enrolment"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui/tuitest"
@@ -213,7 +211,7 @@ func newEnv(t *testing.T) *env {
 		Shell:        e.be,
 		Access:       e.box.Access(),
 		Local:        e.local,
-		Enrol:        enrolment.Deps{Window: e.box.Window(), Addresses: func(context.Context) ([]string, error) { return []string{"192.0.2.10/24"}, nil }, SSH: func(context.Context) error { return nil }, Now: func() time.Time { return now }},
+		Setup:        e.box.Setup(),
 		MessagesFile: msgs,
 		Refresh:      time.Millisecond,
 		Now:          func() time.Time { return now },
@@ -259,7 +257,7 @@ func TestTheMenuRunsConsoleCommands(t *testing.T) {
 	if strings.Contains(menu, " login") || !strings.Contains(menu, "network allow-list reset") {
 		t.Fatalf("menu:\n%s", menu)
 	}
-	d.Type(t, "9")
+	d.Type(t, "7")
 	d.Expect(t, "alice  owner  1 key")
 	d.Type(t, "")
 	d.Expect(t, "Recover access")
@@ -295,59 +293,16 @@ func TestAllowListResetConsoleOnly(t *testing.T) {
 	}
 }
 
-// Recover access for an existing owner: the key lands under the 24-hour
-// hold, as a console recovery.
-func TestRecoverAccessHoldsApprovals(t *testing.T) {
+// Recover access shows a one-time code and the page it opens on :8443.
+func TestRecoverAccessShowsACode(t *testing.T) {
 	e := newEnv(t)
 	d := start(t, e)
 	d.Expect(t, "Enter: menu")
 	d.Type(t, "")
 	d.Expect(t, "Recover access")
 	d.Type(t, itoa(len(shell.Commands(shell.OriginConsole))+1))
-	d.Expect(t, "Owners: alice, carol")
-	d.Type(t, "carol")
-	d.Expect(t, "ssh enrol@192.0.2.10")
-	d.Expect(t, "can't approve elevations for 24 hours")
-	line, fp := consoletest.Key(t, "carol@spare")
-	if _, err := e.box.Enrol.Submit(e.box.Enrol.Get().Code, line, "192.0.2.77"); err != nil {
-		t.Fatal(err)
-	}
-	d.Expect(t, fp)
-	d.Type(t, "yes")
-	d.Expect(t, "Keys enrolled so far: 1")
-	d.Type(t, "d")
-	d.Expect(t, "1 key(s) added to carol with Recover access.")
-	st := e.box.Store.Read()
-	a, _ := st.Admin("carol")
-	if a.ApprovalHoldUntil == nil || a.ApprovalHoldUntil.Sub(e.box.Clock.Now()) != 24*time.Hour || a.Keys[0].Via != access.ViaConsoleRecovery {
-		t.Fatalf("%+v", a)
-	}
-}
-
-// Recover access can make a new owner, whose first key is typed here.
-func TestRecoverAccessMakesANewOwner(t *testing.T) {
-	e := newEnv(t)
-	d := start(t, e)
-	d.Expect(t, "Enter: menu")
-	d.Type(t, "")
-	d.Expect(t, "Recover access")
-	d.Type(t, itoa(len(shell.Commands(shell.OriginConsole))+1))
-	d.Type(t, "Root")
-	d.Expect(t, `"Root" can't be an admin name`)
-	d.Type(t, "dave")
-	d.Expect(t, "Enrol an SSH key for owner dave.")
-	d.Type(t, "t")
-	line, fp := consoletest.Key(t, "dave@laptop")
-	d.Type(t, line)
-	d.Expect(t, fp)
-	d.Type(t, "yes")
-	d.Type(t, "d")
-	d.Expect(t, "added to dave")
-	st := e.box.Store.Read()
-	a, ok := st.Admin("dave")
-	if !ok || a.Role != access.RoleOwner || len(a.Keys) != 1 || a.ApprovalHoldUntil == nil {
-		t.Fatalf("%+v", a)
-	}
+	d.Expect(t, consoletest.RecoverCode)
+	d.Expect(t, "https://192.0.2.10:8443/recover")
 }
 
 // A factory reset counting down shows on the status view and can be

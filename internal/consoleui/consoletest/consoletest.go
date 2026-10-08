@@ -1,9 +1,9 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package consoletest is a box for the console's tests: accessd's
-// enrolment window, admins and setup state over the real enrolment window
-// and access store, and fakes of init's services and netd.
+// Package consoletest is a box for the console's tests: accessd's admins
+// and setup state over the real access store, and fakes of init's services
+// and netd.
 package consoletest
 
 import (
@@ -20,6 +20,7 @@ import (
 
 	"connectrpc.com/connect"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	accessv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
@@ -28,15 +29,13 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 )
 
-// Box is the access side of a box: the store and the enrolment window,
-// served as accessd serves them to the console.
+// Box is the access side of a box: the store, served as accessd serves it
+// to the console.
 type Box struct {
 	Store *access.Store
-	Enrol *enrol.Service
 	Clock *clock.Fake
 
 	mu       sync.Mutex
@@ -76,7 +75,17 @@ func NewBox(t *testing.T, owners ...string) *Box {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	return &Box{Store: st, Enrol: enrol.New(enrol.Options{Store: st, Clock: clk}), Clock: clk}
+	return &Box{Store: st, Clock: clk}
+}
+
+// AddOwner adds an owner, as the :8443 setup page makes the first admin.
+func (b *Box) AddOwner(name string) {
+	if err := b.Store.Update(func(s *access.State) error {
+		s.AddAdmin(name, access.RoleOwner, "setup", b.Clock.Now())
+		return nil
+	}); err != nil {
+		panic(err)
+	}
 }
 
 // SetRecovery sets the recovery keys GetSetup reports.
@@ -112,61 +121,6 @@ func coded(err error) error {
 		return nil
 	}
 	return connect.NewError(connect.CodeFailedPrecondition, errors.New(codes.Describe(err)))
-}
-
-// Window is accessd's EnrolmentService.
-func (b *Box) Window() accessv1connect.EnrolmentServiceClient { return window{b: b} }
-
-type window struct {
-	accessv1connect.UnimplementedEnrolmentServiceHandler
-	b *Box
-}
-
-func wire(v enrol.View) *accessv1.Enrolment {
-	e := &accessv1.Enrolment{Open: v.Open, Admin: v.Admin, Code: v.Code, AttemptsLeft: int32(v.AttemptsLeft), Enrolled: int32(v.Enrolled), ClosedReason: v.ClosedReason, Recovery: v.Recovery} // #nosec G115 -- small counts
-	for _, k := range v.Keys {
-		e.Keys = append(e.Keys, &accessv1.EnrolmentKey{Id: k.ID, Fingerprint: k.Fingerprint, Type: k.Type, Comment: k.Comment, SourceAddress: k.Source, State: string(k.State), Via: k.Via})
-	}
-	return e
-}
-
-func (w window) OpenEnrolment(_ context.Context, r *connect.Request[accessv1.OpenEnrolmentRequest]) (*connect.Response[accessv1.OpenEnrolmentResponse], error) {
-	v, err := w.b.Enrol.OpenWith(r.Msg.GetAdmin(), enrol.OpenOptions{Recovery: r.Msg.GetRecovery()})
-	if err != nil {
-		return nil, coded(err)
-	}
-	return connect.NewResponse(&accessv1.OpenEnrolmentResponse{Enrolment: wire(v)}), nil
-}
-
-func (w window) GetEnrolment(context.Context, *connect.Request[accessv1.GetEnrolmentRequest]) (*connect.Response[accessv1.GetEnrolmentResponse], error) {
-	return connect.NewResponse(&accessv1.GetEnrolmentResponse{Enrolment: wire(w.b.Enrol.Get())}), nil
-}
-
-func (w window) AcceptEnrolmentKey(_ context.Context, r *connect.Request[accessv1.AcceptEnrolmentKeyRequest]) (*connect.Response[accessv1.AcceptEnrolmentKeyResponse], error) {
-	if _, err := w.b.Enrol.Accept(r.Msg.GetId(), r.Msg.GetConfirm()); err != nil {
-		return nil, coded(err)
-	}
-	return connect.NewResponse(&accessv1.AcceptEnrolmentKeyResponse{}), nil
-}
-
-func (w window) RejectEnrolmentKey(_ context.Context, r *connect.Request[accessv1.RejectEnrolmentKeyRequest]) (*connect.Response[accessv1.RejectEnrolmentKeyResponse], error) {
-	if err := w.b.Enrol.Reject(r.Msg.GetId()); err != nil {
-		return nil, coded(err)
-	}
-	return connect.NewResponse(&accessv1.RejectEnrolmentKeyResponse{}), nil
-}
-
-func (w window) CloseEnrolment(context.Context, *connect.Request[accessv1.CloseEnrolmentRequest]) (*connect.Response[accessv1.CloseEnrolmentResponse], error) {
-	w.b.Enrol.Close(enrol.ReasonDone)
-	return connect.NewResponse(&accessv1.CloseEnrolmentResponse{}), nil
-}
-
-func (w window) OfferEnrolmentKey(_ context.Context, r *connect.Request[accessv1.OfferEnrolmentKeyRequest]) (*connect.Response[accessv1.OfferEnrolmentKeyResponse], error) {
-	k, err := w.b.Enrol.Offer(r.Msg.GetPublicKey(), r.Msg.GetVia(), r.Msg.GetFrom())
-	if err != nil {
-		return nil, coded(err)
-	}
-	return connect.NewResponse(&accessv1.OfferEnrolmentKeyResponse{Key: &accessv1.EnrolmentKey{Id: k.ID, Fingerprint: k.Fingerprint, State: string(k.State), Via: k.Via}}), nil
 }
 
 // Access is accessd's AccessService: the admins.
@@ -216,6 +170,16 @@ type setupSvc struct {
 	accessv1connect.UnimplementedSetupServiceHandler
 	b *Box
 }
+
+// BeginRecoverAccess issues a Recover access code, as accessd does.
+func (s setupSvc) BeginRecoverAccess(context.Context, *connect.Request[accessv1.BeginRecoverAccessRequest]) (*connect.Response[accessv1.BeginRecoverAccessResponse], error) {
+	return connect.NewResponse(&accessv1.BeginRecoverAccessResponse{Recover: &accessv1.RecoverAccess{
+		Code: RecoverCode, Url: "https://192.0.2.10:8443/recover", Expires: timestamppb.New(s.b.Clock.Now().Add(30 * time.Minute)), AttemptsLeft: 5,
+	}}), nil
+}
+
+// RecoverCode is the fake's Recover access code.
+const RecoverCode = "7PQK-NMS9"
 
 // WatchConsoleInfo is the client side of the stream, which the fake
 // doesn't serve.

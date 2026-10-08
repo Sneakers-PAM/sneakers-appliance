@@ -6,7 +6,6 @@ package dashboard
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -23,12 +22,9 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/enrolment"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/enrol"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
@@ -48,8 +44,8 @@ type Deps struct {
 	Shell  shell.Backend
 	Access accessv1connect.AccessServiceClient
 	Local  osadminv1connect.LocalServiceClient
-	// Enrol is the enrolment window's, for Recover access.
-	Enrol        enrolment.Deps
+	// Setup is accessd's SetupService, for the Recover access code.
+	Setup        accessv1connect.SetupServiceClient
 	MessagesFile string
 	// Refresh is how often the status is read again; zero is 5 seconds.
 	Refresh time.Duration
@@ -358,60 +354,33 @@ func (k *console) transcript(ctx context.Context, line string, in io.Reader, run
 	}
 }
 
-// recoverAccess is the console's Recover access: an owner's name, or a
-// new one, then the enrolment window with the recovery hold.
+// recoverAccess is the console's Recover access: a one-time code that
+// opens :8443's /recover page, where an owner gets a new password and
+// authenticator, or a new owner is made.
 func (k *console) recoverAccess(ctx context.Context) error {
-	errLine := ""
-	for {
-		var owners []string
-		existing := map[string]bool{}
-		if l, err := k.d.Access.ListAdmins(ctx, connect.NewRequest(&accessv1.ListAdminsRequest{})); err == nil {
-			for _, a := range l.Msg.GetAdmins() {
-				existing[a.GetName()] = true
-				if a.GetRole() == osadminv1.Role_ROLE_OWNER {
-					owners = append(owners, a.GetName())
-				}
-			}
-		} else if errLine == "" {
-			errLine = "The admins can't be listed: " + consoleui.Describe(err)
-		}
-		line, _, err := k.u.Ask(ctx, tui.Static(RecoverPage(k.c, owners, errLine)))
-		if err != nil {
-			return err
-		}
-		name := strings.TrimSpace(line)
-		if name == "" {
-			return nil
-		}
-		if !existing[name] {
-			if !access.ValidName(name) {
-				errLine = fmt.Sprintf("%q can't be an admin name: use 2 to 31 lowercase letters, digits, _ or -, starting with a letter, and not a reserved name.", name)
-				continue
-			}
-			if _, err := k.d.Access.AddAdmin(ctx, connect.NewRequest(&accessv1.AddAdminRequest{Name: name, Role: osadminv1.Role_ROLE_OWNER})); err != nil {
-				errLine = consoleui.Describe(err)
-				continue
-			}
-			k.d.Logger.Info("console: Recover access made a new owner", log.F("admin", name))
-		}
-		ed := k.d.Enrol
-		ed.Page = func(title string, body []tui.Line, keys, prompt string) tui.Page {
-			return k.c.Page(title, body, keys, prompt)
-		}
-		n, err := enrolment.Run(ctx, k.u, ed, name, true)
-		if err != nil {
-			if ctx.Err() != nil || errors.Is(err, tui.ErrClosed) {
-				return err
-			}
-			errLine = consoleui.Describe(err)
-			continue
-		}
-		k.d.Logger.Info("console: Recover access", log.F("admin", name), log.F("keys", n))
-		if _, _, err := k.u.Ask(ctx, tui.Static(RecoverDonePage(k.c, name, n, k.d.Now().Add(enrol.RecoveryHold)))); err != nil {
-			return err
-		}
-		return nil
+	if k.d.Setup == nil {
+		_, _, err := k.u.Ask(ctx, tui.Static(k.c.Page("Recover access", tui.WrapStyled(tui.Alert, "Recover access isn't available on this box.", consoleui.Width, ""), "Enter: back", "> ")))
+		return err
 	}
+	r, err := k.d.Setup.BeginRecoverAccess(ctx, connect.NewRequest(&accessv1.BeginRecoverAccessRequest{}))
+	var body []tui.Line
+	if err != nil {
+		body = tui.WrapStyled(tui.Alert, "The Recover access code can't be made: "+consoleui.Describe(err), consoleui.Width, "")
+	} else {
+		rec := r.Msg.GetRecover()
+		k.d.Logger.Info("console: Recover access code shown")
+		for _, l := range []string{
+			"Open " + rec.GetUrl() + " and type this code:",
+			"",
+			"    " + rec.GetCode(),
+			"",
+			"It works once, until " + rec.GetExpires().AsTime().Local().Format("15:04") + ".",
+		} {
+			body = append(body, tui.WrapStyled(tui.Normal, l, consoleui.Width, "")...)
+		}
+	}
+	_, _, err = k.u.Ask(ctx, tui.Static(k.c.Page("Recover access", body, "Enter: back", "> ")))
+	return err
 }
 
 // messages shows the tail of the shared output.
