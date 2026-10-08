@@ -95,14 +95,23 @@ func recoveryToWire(r access.RecoveryKey) *osadminv1.RecoveryKey {
 	return &osadminv1.RecoveryKey{Fingerprint: r.Fingerprint, Type: r.Type, Label: r.Label, Set: timestamppb.New(r.Set), SetBy: r.SetBy}
 }
 
+// recoveryKeyName is a recovery key in words: its label.
+func recoveryKeyName(label string) string {
+	if label == "" {
+		return "recovery key"
+	}
+	return "recovery key " + label
+}
+
 func (h *setup) AddRecoveryKey(ctx context.Context, r *connect.Request[osadminv1.AddRecoveryKeyRequest]) (*connect.Response[osadminv1.AddRecoveryKeyResponse], error) {
 	c := callFrom(ctx)
 	k, err := access.ParseRecoveryKey(r.Msg.GetPublicKey())
 	if err != nil {
 		return nil, err
 	}
-	c.note(k.Fingerprint)
-	rk, err := h.s.addRecoveryKey(ctx, k, strings.TrimSpace(r.Msg.GetLabel()), c.session.Admin)
+	label := strings.TrimSpace(r.Msg.GetLabel())
+	c.note(recoveryKeyName(label), "fingerprint", k.Fingerprint)
+	rk, err := h.s.addRecoveryKey(ctx, k, label, c.session.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +142,7 @@ func (h *setup) GenerateRecoveryKey(ctx context.Context, r *connect.Request[osad
 	if err != nil {
 		return nil, err
 	}
-	c.note(k.Fingerprint)
+	c.note(recoveryKeyName(label), "fingerprint", k.Fingerprint)
 	rk, err := h.s.addRecoveryKey(ctx, k, label, c.session.Admin)
 	if err != nil {
 		return nil, err
@@ -176,7 +185,13 @@ func (s *Server) addRecoveryKey(ctx context.Context, k access.Key, label, admin 
 func (h *setup) RemoveRecoveryKey(ctx context.Context, r *connect.Request[osadminv1.RemoveRecoveryKeyRequest]) (*connect.Response[osadminv1.RemoveRecoveryKeyResponse], error) {
 	c := callFrom(ctx)
 	fp := r.Msg.GetFingerprint()
-	c.note(fp)
+	label := ""
+	for _, k := range h.s.o.Access.Read().RecoveryKeys {
+		if k.Fingerprint == fp {
+			label = k.Label
+		}
+	}
+	c.note(recoveryKeyName(label), "fingerprint", fp)
 	if err := h.s.changeRecoveryKeys(ctx, func(st *access.State) error {
 		i := slices.IndexFunc(st.RecoveryKeys, func(k access.RecoveryKey) bool { return k.Fingerprint == fp })
 		if i < 0 {

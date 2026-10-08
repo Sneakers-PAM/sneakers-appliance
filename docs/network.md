@@ -36,6 +36,22 @@ Only one change waits at a time: a second one is refused naming `pending` until 
 confirmed or reverted. If applying a change fails outright, the previous settings are applied again
 straight away and the error is returned.
 
+Each change has an id (logs and audit) and a token (what `Confirm` takes). `Get` returns the
+pending change's token, id and seconds left, and how the last change ended (`last`: confirmed or
+reverted), so a page that was reloaded, or opened at the change's new address, can still confirm.
+osadmin's `GetNetwork` passes the seconds left to every admin and the token to owners only.
+`SetNetwork` says what the change moves: `moves_management` when the management interface or its
+addressing changes, with `new_url` (`https://<address>:8443/`) when the change sets a static
+address, and `new_certificate` when the host name or the address changes, so the box makes a new
+self-signed :8443 certificate (unless an owner assigned one) and a browser that trusted the old one
+asks again. The page then has to be opened at the new address, signed in again and the change
+confirmed there within the window.
+
+The audit has `network.set` and `network.confirm` with the change id in `detail.change`. A change
+that reverts is recorded as `network.revert` (actor `netd`, code `NET_REVERTED`): osadmin asks
+netd how the change ended a few seconds after its window, and again on the next `GetNetwork`, and
+writes the entry once.
+
 The window survives a restart: while a change waits, netd keeps the previous settings in
 `network.prev.yaml` next to `network.yaml`. If netd stops or the box loses power inside the
 window, the next start applies `network.prev.yaml` again, so an unconfirmed change is undone.

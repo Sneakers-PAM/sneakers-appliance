@@ -50,6 +50,14 @@ message GetNetworkResponse {
   repeated string service_addresses = 4;
   bool ntp_synced = 5;
   int64 ntp_offset_ms = 6;
+  // pending_token is what ConfirmNetwork takes for the pending change. Only
+  // an owner's session gets it, so a reloaded page, or one opened at the
+  // change's new address, can still confirm.
+  string pending_token = 7;
+  // pending_change_id names the pending change in the audit.
+  string pending_change_id = 8;
+  // revert_seconds_left is how long the pending change still waits.
+  int32 revert_seconds_left = 9;
 }
 
 message SetNetworkRequest {
@@ -60,6 +68,17 @@ message SetNetworkResponse {
   // token is what ConfirmNetwork takes.
   string token = 1;
   int32 revert_after_seconds = 2;
+  // moves_management is true when the change moves the management
+  // address: the page that applied it loses the box and has to confirm from
+  // new_url.
+  bool moves_management = 3;
+  // new_url is the admin page at the new static management address, when
+  // the change sets one.
+  string new_url = 4;
+  // new_certificate is true when the host name or management address
+  // changes, so the box makes a new self-signed :8443 certificate (unless an
+  // owner assigned one). A browser that trusted the old one asks again.
+  bool new_certificate = 5;
 }
 
 message ConfirmNetworkRequest {

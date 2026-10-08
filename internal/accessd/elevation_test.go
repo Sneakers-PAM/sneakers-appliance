@@ -237,7 +237,7 @@ func TestARecordingIsReadAndVerified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rec := osaudit.NewRecorder(f, b.log, r.ID)
+	rec := osaudit.NewRecorder(f, b.log, r.ID, r.Admin)
 	_, _ = rec.Write([]byte("# id\r\nuid=0(root)\r\n"))
 	if err := rec.Close("exit"); err != nil {
 		t.Fatal(err)

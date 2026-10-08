@@ -125,3 +125,49 @@ func TestFailedApplyRestoresPrevious(t *testing.T) {
 		t.Fatalf("applied %v", got)
 	}
 }
+
+func TestPendingChangeAfterAReload(t *testing.T) {
+	clk := clock.NewFake()
+	r := network.NewReverter(clk)
+	var rec recorder
+	if _, ok := r.PendingChange(); ok {
+		t.Fatal("nothing pending yet")
+	}
+	token, err := r.Apply(named("old"), named("new"), rec.apply)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(30 * time.Second)
+	p, ok := r.PendingChange()
+	if !ok || p.Token != token || p.ID == "" || p.ID == token {
+		t.Fatalf("pending %+v %v, want the token and a separate id", p, ok)
+	}
+	if left := p.Left(clk.Now()); left != 90*time.Second {
+		t.Fatalf("left %v, want 90s", left)
+	}
+	if _, ok := r.Last(); ok {
+		t.Fatal("no change has ended yet")
+	}
+	if err := r.Confirm(p.Token); err != nil {
+		t.Fatal(err)
+	}
+	last, ok := r.Last()
+	if !ok || last.ID != p.ID || last.Reverted || !last.At.Equal(clk.Now()) {
+		t.Fatalf("last %+v %v, want the confirmed change", last, ok)
+	}
+}
+
+func TestLastRecordsTheRevert(t *testing.T) {
+	clk := clock.NewFake()
+	r := network.NewReverter(clk)
+	var rec recorder
+	if _, err := r.Apply(named("old"), named("new"), rec.apply); err != nil {
+		t.Fatal(err)
+	}
+	p, _ := r.PendingChange()
+	clk.Advance(network.RevertAfter)
+	last, ok := r.Last()
+	if !ok || last.ID != p.ID || !last.Reverted {
+		t.Fatalf("last %+v %v, want the reverted change", last, ok)
+	}
+}

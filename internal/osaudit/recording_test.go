@@ -26,7 +26,7 @@ func writeN(t *testing.T, r *osaudit.Recorder, n int) {
 func TestRecordingPrefixVerifiable(t *testing.T) {
 	l := openLog(t)
 	var buf bytes.Buffer
-	r := osaudit.NewRecorder(&buf, l, "E-7K2Q")
+	r := osaudit.NewRecorder(&buf, l, "E-7K2Q", "alice")
 	writeN(t, r, 200*1024) // three full chunks and a partial
 	// no Close: the session was killed
 	mustNoErr(t, osaudit.VerifyRecording(buf.Bytes(), l, "E-7K2Q"))
@@ -41,7 +41,7 @@ func TestRecordingPrefixVerifiable(t *testing.T) {
 func TestRecordingClosedCoversEverything(t *testing.T) {
 	l := openLog(t)
 	var buf bytes.Buffer
-	r := osaudit.NewRecorder(&buf, l, "E-AAAA")
+	r := osaudit.NewRecorder(&buf, l, "E-AAAA", "alice")
 	mustNoErr(t, r.Input([]byte("id -u\r")))
 	writeN(t, r, 70*1024)
 	mustNoErr(t, r.Close("exit"))
@@ -55,7 +55,7 @@ func TestRecordingClosedCoversEverything(t *testing.T) {
 func TestRecordingTamperDetected(t *testing.T) {
 	l := openLog(t)
 	var buf bytes.Buffer
-	r := osaudit.NewRecorder(&buf, l, "E-BBBB")
+	r := osaudit.NewRecorder(&buf, l, "E-BBBB", "alice")
 	writeN(t, r, 100*1024)
 	mustNoErr(t, r.Close("time box"))
 	data := bytes.Clone(buf.Bytes())
@@ -74,7 +74,7 @@ func TestRecordingTamperDetected(t *testing.T) {
 func TestRecordingIsAsciicast(t *testing.T) {
 	l := openLog(t)
 	var buf bytes.Buffer
-	r := osaudit.NewRecorder(&buf, l, "E-CCCC")
+	r := osaudit.NewRecorder(&buf, l, "E-CCCC", "alice")
 	mustNoErr(t, r.Input([]byte("ls\r")))
 	_, err := r.Write([]byte("bin\r\n"))
 	mustNoErr(t, err)

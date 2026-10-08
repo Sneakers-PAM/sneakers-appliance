@@ -96,3 +96,27 @@ func TestTheAPIOverConnect(t *testing.T) {
 		t.Fatalf("second event %v %v", stream.Msg(), stream.Err())
 	}
 }
+
+func TestGetCarriesThePendingChange(t *testing.T) {
+	b := newBox(t, eth0, eth1)
+	b.writeSettings("network.yaml", static("eth0"))
+	b.start()
+	c := serve(t, b)
+	ctx := context.Background()
+	next := network.ToWire(static("eth0"))
+	next.Ntp = []string{"192.0.2.124"}
+	set, err := c.Set(ctx, connect.NewRequest(&netdv1.SetRequest{Settings: next}))
+	if err != nil || set.Msg.GetChangeId() == "" {
+		t.Fatalf("set %v %v", set, err)
+	}
+	b.clk.Advance(20 * time.Second)
+	got, err := c.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
+	if err != nil || !got.Msg.GetPending() || got.Msg.GetToken() != set.Msg.GetToken() || got.Msg.GetChangeId() != set.Msg.GetChangeId() || got.Msg.GetSecondsLeft() != 100 {
+		t.Fatalf("get %v %v, want the pending token, id and 100 seconds left", got, err)
+	}
+	b.clk.Advance(network.RevertAfter)
+	got, err = c.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
+	if err != nil || got.Msg.GetPending() || got.Msg.GetToken() != "" || got.Msg.GetLast().GetChangeId() != set.Msg.GetChangeId() || !got.Msg.GetLast().GetReverted() {
+		t.Fatalf("get after the revert %v %v", got, err)
+	}
+}

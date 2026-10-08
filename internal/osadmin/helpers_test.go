@@ -38,6 +38,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit/audittest"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
@@ -235,6 +236,8 @@ type fakeNetd struct {
 	mu        sync.Mutex
 	settings  *netdv1.Settings
 	pending   string
+	changeID  string
+	last      *netdv1.ChangeOutcome
 	confirmed int
 	// mgmt are the management addresses as netd gives them: interface
 	// prefixes.
@@ -250,15 +253,27 @@ type fakeNetd struct {
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return connect.NewResponse(&netdv1.GetResponse{Settings: n.settings, Pending: n.pending != ""}), nil
+	out := &netdv1.GetResponse{Settings: n.settings, Pending: n.pending != "", Last: n.last}
+	if n.pending != "" {
+		out.Token, out.ChangeId, out.SecondsLeft = n.pending, n.changeID, 95
+	}
+	return connect.NewResponse(out), nil
+}
+
+// revert undoes the pending change, as netd does when no Confirm comes.
+func (n *fakeNetd) revert() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.last = &netdv1.ChangeOutcome{ChangeId: n.changeID, Reverted: true}
+	n.pending = ""
 }
 
 func (n *fakeNetd) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) (*connect.Response[netdv1.SetResponse], error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.settings = r.Msg.GetSettings()
-	n.pending = "tok-1"
-	return connect.NewResponse(&netdv1.SetResponse{Token: n.pending, RevertAfterSeconds: 120}), nil
+	n.pending, n.changeID = "tok-1", "chg-1"
+	return connect.NewResponse(&netdv1.SetResponse{Token: n.pending, RevertAfterSeconds: 120, ChangeId: n.changeID}), nil
 }
 
 func (n *fakeNetd) Confirm(_ context.Context, r *connect.Request[netdv1.ConfirmRequest]) (*connect.Response[netdv1.ConfirmResponse], error) {
@@ -268,6 +283,7 @@ func (n *fakeNetd) Confirm(_ context.Context, r *connect.Request[netdv1.ConfirmR
 		return nil, connect.NewError(connect.CodeInvalidArgument, codes.New(codes.NetInvalid, "token: that isn't the pending change"))
 	}
 	n.pending = ""
+	n.last = &netdv1.ChangeOutcome{ChangeId: n.changeID}
 	n.confirmed++
 	return connect.NewResponse(&netdv1.ConfirmResponse{}), nil
 }
@@ -425,6 +441,7 @@ func startBox(t *testing.T, mods []func(*box, *osadmin.Options), seed func(*box)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { audittest.CheckTargets(t, b.log) })
 	b.init = &fakeInit{level: initv1.ProtectionLevel_PROTECTION_LEVEL_FULL}
 	b.netd = &fakeNetd{settings: defaultSettings(), mgmt: []string{"192.0.2.10/24"}, hostname: "box1.sneakers.example.org", ntp: true}
 	mux := http.NewServeMux()

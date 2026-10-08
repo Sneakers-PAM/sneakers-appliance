@@ -171,7 +171,7 @@ func (s *Server) expireReset(r *resetRequest) {
 	}
 	s.resets.cur = nil
 	s.resets.mu.Unlock()
-	s.write(osaudit.Entry{Actor: "osadmin", Action: "power.factory-reset.expire", Target: r.id}, codes.New(codes.ResetCancelled, "the quorum didn't approve within %d minutes", int(ResetPendingLifetime.Minutes())))
+	s.write(osaudit.Entry{Actor: "osadmin", Action: "power.factory-reset.expire", Target: "factory reset", Detail: map[string]string{"reset": r.id}}, codes.New(codes.ResetCancelled, "the quorum didn't approve within %d minutes", int(ResetPendingLifetime.Minutes())))
 }
 
 func (s *Server) runReset(r *resetRequest) {
@@ -186,7 +186,7 @@ func (s *Server) runReset(r *resetRequest) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	_, err := s.o.Power.FactoryReset(ctx, connect.NewRequest(&initv1.FactoryResetRequest{Id: r.id, StartedBy: r.startedBy, Approvals: r.approvals}))
-	s.write(osaudit.Entry{Actor: r.startedBy, Action: "power.factory-reset.run", Target: r.id, Detail: map[string]string{"approvals": strings.Join(r.approvals, ",")}}, err)
+	s.write(osaudit.Entry{Actor: r.startedBy, Action: "power.factory-reset.run", Target: "factory reset", Detail: map[string]string{"reset": r.id, "approvals": strings.Join(r.approvals, ",")}}, err)
 	if err != nil {
 		s.o.Logger.Error(err, "osadmin: factory reset failed", log.F("id", r.id))
 	}

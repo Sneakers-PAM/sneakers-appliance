@@ -70,7 +70,7 @@ func (h *tlsSvc) GenerateCsr(ctx context.Context, r *connect.Request[osadminv1.G
 		Names: m.GetNames(), CommonName: m.GetCommonName(), Organization: m.GetOrganization(), OrganizationalUnit: m.GetOrganizationalUnit(),
 		Locality: m.GetLocality(), Province: m.GetProvince(), Country: m.GetCountry(), KeyType: kt,
 	})
-	callFrom(ctx).note(csr.ID, "method", "csr", "names", strings.Join(csr.Names, ","), "keyType", csr.KeyType)
+	callFrom(ctx).noteID(csrName(csr.Names), "csr", csr.ID, "method", "csr", "names", strings.Join(csr.Names, ","), "keyType", csr.KeyType)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (h *tlsSvc) CompleteCsr(ctx context.Context, r *connect.Request[osadminv1.C
 		return nil, err
 	}
 	c, checks, err := st.CompleteCSR(ctx, r.Msg.GetCsrId(), r.Msg.GetCertificatePem(), r.Msg.GetChainPem(), r.Msg.GetRootPem())
-	callFrom(ctx).note(c.ID, append([]string{"method", "csr", "csr", r.Msg.GetCsrId()}, certDetail(c)...)...)
+	callFrom(ctx).noteID(certName(c), "certificate", c.ID, append([]string{"method", "csr", "csr", r.Msg.GetCsrId()}, certDetail(c)...)...)
 	if err != nil {
 		return nil, withReport(err)
 	}
@@ -95,7 +95,15 @@ func (h *tlsSvc) DiscardCsr(ctx context.Context, r *connect.Request[osadminv1.Di
 	if err != nil {
 		return nil, err
 	}
-	callFrom(ctx).note(r.Msg.GetCsrId())
+	var names []string
+	if snap, err := st.Snapshot(ctx); err == nil {
+		for _, csr := range snap.CSRs {
+			if csr.ID == r.Msg.GetCsrId() {
+				names = csr.Names
+			}
+		}
+	}
+	callFrom(ctx).noteID(csrName(names), "csr", r.Msg.GetCsrId(), "names", strings.Join(names, ","))
 	if err := st.DiscardCSR(r.Msg.GetCsrId()); err != nil {
 		return nil, err
 	}
@@ -116,7 +124,7 @@ func (h *tlsSvc) ImportCertificate(ctx context.Context, r *connect.Request[osadm
 		CertificatePEM: m.GetCertificatePem(), ChainPEM: m.GetChainPem(), KeyPEM: m.GetKeyPem(),
 		PKCS12: m.GetPkcs12(), PKCS12Password: m.GetPkcs12Password(), RootPEM: m.GetRootPem(),
 	})
-	callFrom(ctx).note(c.ID, append([]string{"method", "upload", "format", format}, certDetail(c)...)...)
+	callFrom(ctx).noteID(certName(c), "certificate", c.ID, append([]string{"method", "upload", "format", format}, certDetail(c)...)...)
 	if err != nil {
 		return nil, withReport(err)
 	}
@@ -128,7 +136,16 @@ func (h *tlsSvc) DeleteCertificate(ctx context.Context, r *connect.Request[osadm
 	if err != nil {
 		return nil, err
 	}
-	callFrom(ctx).note(r.Msg.GetCertificateId())
+	// Look the certificate up first, so the entry keeps its names.
+	var gone certstore.Certificate
+	if snap, err := st.Snapshot(ctx); err == nil {
+		for _, c := range snap.Certificates {
+			if c.ID == r.Msg.GetCertificateId() {
+				gone = c
+			}
+		}
+	}
+	callFrom(ctx).noteID(certName(gone), "certificate", r.Msg.GetCertificateId(), certDetail(gone)...)
 	if err := st.Delete(r.Msg.GetCertificateId()); err != nil {
 		return nil, err
 	}
@@ -223,6 +240,25 @@ func withReport(err error) error {
 		out.AddDetail(d)
 	}
 	return out
+}
+
+// certName is a certificate in words: its names, else its subject.
+func certName(c certstore.Certificate) string {
+	if n := sanNames(c); len(n) > 0 {
+		return "certificate " + strings.Join(n, ", ")
+	}
+	if c.Leaf != nil && c.Leaf.Subject.CommonName != "" {
+		return "certificate " + c.Leaf.Subject.CommonName
+	}
+	return "certificate"
+}
+
+// csrName is a CSR in words: the names it asks for.
+func csrName(names []string) string {
+	if len(names) == 0 {
+		return "CSR"
+	}
+	return "CSR for " + strings.Join(names, ", ")
 }
 
 func certDetail(c certstore.Certificate) []string {

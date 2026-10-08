@@ -97,23 +97,23 @@ func (h *power) StartFactoryReset(ctx context.Context, r *connect.Request[osadmi
 	if err != nil {
 		return nil, err
 	}
-	c.note(fr.GetId())
+	c.noteID("factory reset", "reset", fr.GetId())
 	return connect.NewResponse(&osadminv1.StartFactoryResetResponse{FactoryReset: fr}), nil
 }
 
 func (h *power) ApproveFactoryReset(ctx context.Context, r *connect.Request[osadminv1.ApproveFactoryResetRequest]) (*connect.Response[osadminv1.ApproveFactoryResetResponse], error) {
 	c := callFrom(ctx)
-	c.note(r.Msg.GetId())
+	c.noteID("factory reset", "reset", r.Msg.GetId())
 	fr, err := h.s.approveReset(r.Msg.GetId(), c.session.Admin)
 	if err != nil {
 		return nil, err
 	}
-	c.note(fr.GetId(), "approvals", itoa(len(fr.GetApprovals())), "required", itoa(int(fr.GetRequired())))
+	c.noteID("factory reset", "reset", fr.GetId(), "approvals", itoa(len(fr.GetApprovals())), "required", itoa(int(fr.GetRequired())))
 	return connect.NewResponse(&osadminv1.ApproveFactoryResetResponse{FactoryReset: fr}), nil
 }
 
 func (h *power) CancelFactoryReset(ctx context.Context, r *connect.Request[osadminv1.CancelFactoryResetRequest]) (*connect.Response[osadminv1.CancelFactoryResetResponse], error) {
-	callFrom(ctx).note(r.Msg.GetId())
+	callFrom(ctx).noteID("factory reset", "reset", r.Msg.GetId())
 	if err := h.s.cancelReset(r.Msg.GetId()); err != nil {
 		return nil, err
 	}

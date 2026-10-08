@@ -373,7 +373,10 @@ Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`, `
 `sneakers-osadmin` runs as `osadmin` and refuses to run as root. It asks accessd for the management
 addresses and host name (`BindingService.GetBinding`, from netd), makes or reuses its certificate in
 `/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when the addresses or the host
-name change it rebinds with a matching certificate. Port 8443 speaks TLS only: a browser that asks
+name change it rebinds with a matching certificate. A rebind opens and closes only the addresses
+that changed: a listener on an address that stays keeps running and its connections stay up, and a
+new certificate reaches new handshakes only, so the Network page that made the change can still
+confirm it. Port 8443 speaks TLS only: a browser that asks
 for `http://<box>:8443/` gets a `301` to the same host, port and path over `https://`, with a short
 "Redirecting you to https…" page and the link, and nothing else is served over plain HTTP. It serves the static pages and forwards the API,
 `POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Until

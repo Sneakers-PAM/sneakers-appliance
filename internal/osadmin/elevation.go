@@ -81,12 +81,15 @@ func (h *elevationSvc) TerminateElevation(ctx context.Context, r *connect.Reques
 		return nil, err
 	}
 	c := callFrom(ctx)
-	c.note(r.Msg.GetId())
+	c.noteID("root shell", "request", r.Msg.GetId())
+	if cur, ok := svc.Get(r.Msg.GetId()); ok {
+		c.noteID(cur.Name(), "request", cur.ID)
+	}
 	got, err := svc.Terminate(r.Msg.GetId(), c.session.Admin)
 	if err != nil {
 		return nil, err
 	}
-	c.note(got.ID, "admin", got.Admin, "was", string(got.State))
+	c.noteID(got.Name(), "request", got.ID, "admin", got.Admin, "was", string(got.State))
 	return connect.NewResponse(&osadminv1.TerminateElevationResponse{}), nil
 }
 
@@ -99,8 +102,9 @@ func (h *elevationSvc) GetElevationRecording(ctx context.Context, r *connect.Req
 		return nil, err
 	}
 	id := r.Msg.GetId()
-	callFrom(ctx).note(id)
-	if _, ok := svc.Get(id); !ok || h.s.o.Audit == nil {
+	req, ok := svc.Get(id)
+	callFrom(ctx).noteID(req.Name()+" recording", "request", id)
+	if !ok || h.s.o.Audit == nil {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("there is no root shell "+id))
 	}
 	p := osaudit.RecordingPath(h.s.o.Audit.Dir(), id)

@@ -170,7 +170,7 @@ func TestAnOwnerEndsABrowserSession(t *testing.T) {
 		t.Fatalf("sessions %v", got)
 	}
 	e := lastEntry(t, b.log, "session.end")
-	if e.Actor != "alice" || e.Target != bobs.GetId() || e.Detail["kind"] != "browser" || e.Detail["admin"] != "bob" {
+	if e.Actor != "alice" || e.Target != "bob's browser session from 127.0.0.1" || e.Detail["session"] != bobs.GetId() || e.Detail["kind"] != "browser" || e.Detail["admin"] != "bob" {
 		t.Fatalf("audit %+v", e)
 	}
 }
