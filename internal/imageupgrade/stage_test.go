@@ -203,3 +203,11 @@ func TestRollbackWithoutAPreviousRelease(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestStageOnAnOlderLabInit(t *testing.T) {
+	s, dir, _, _, _ := stager(t, "0.0.0-lab.20261007e-gabc1234")
+	s.InitVersion = "0.0.0-lab.20261007e-gabc1234"
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatalf("a newer release must stage on the previous build's init: %v", err)
+	}
+}

@@ -16,8 +16,10 @@ A box holds at most two releases: the one it runs and one more (the next, or the
 - systemd-boot boots the newest entry; each attempt moves one try from left to done
   (`+2-1`, `+1-2`, ...). An entry with no tries left is bad and sorts last, so after three failed
   boots the box falls back to the previous release, and `Image.Status` reports the failed version.
+- `Image.Activate` checks a release is staged (`UPGRADE_NOT_STAGED` otherwise); its entry already
+  has boot tries, so the reboot that follows boots it.
 - `Image.MarkGood`, after the health checks, renames the running entry to `sneakers-<version>.efi`
-  and prunes sealed copies for UKIs no longer kept.
+  and prunes sealed copies for UKIs no longer kept. init doesn't serve it yet (`Unimplemented`).
 - `Image.Rollback` marks the running release bad (`+0-n`), so the next boot is the previous one.
   With no previous release it's `UPGRADE_NO_PREVIOUS`.
 - With Secure Boot off (TPM mode), the new release's PCR 4 must be predicted from the firmware's

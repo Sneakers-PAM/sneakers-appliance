@@ -95,6 +95,7 @@ func assembleCmd() *cobra.Command {
 	f.StringVar(&in.Arch, "arch", "amd64", "amd64 or arm64")
 	f.StringVar(&in.Version, "version", "", "release version")
 	f.StringVar(&in.Channel, "channel", release.ChannelLab, "production or lab")
+	f.StringVar(&in.KitMin, "kit-min", artifact.DefaultKitMin, "the oldest kit or init version that may verify this release (spec.kitMin)")
 	f.StringVar(&in.Systemd, "systemd", "", "systemd-boot version")
 	f.StringVar(&releaseF, "release", "", "release.yaml")
 	f.StringVar(&releaseSig, "release-sig", "", "release.yaml's signature bundle")

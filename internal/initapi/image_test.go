@@ -1,0 +1,119 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+package initapi_test
+
+import (
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"connectrpc.com/connect"
+
+	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/imageupgrade"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
+)
+
+type espDir string
+
+func (e espDir) List(rel string) ([]string, error) {
+	ents, err := os.ReadDir(filepath.Join(string(e), rel))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	var out []string
+	for _, x := range ents {
+		out = append(out, x.Name())
+	}
+	return out, err
+}
+
+func (e espDir) WriteFile(rel string, r io.Reader) error {
+	p := filepath.Join(string(e), rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		return err
+	}
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(p, b, 0o600)
+}
+
+func (e espDir) Rename(a, b string) error {
+	return os.Rename(filepath.Join(string(e), a), filepath.Join(string(e), b))
+}
+
+func (e espDir) Remove(rel string) error { return os.Remove(filepath.Join(string(e), rel)) }
+
+type discardSlots struct{}
+
+func (discardSlots) WriteInactive(_ context.Context, r io.Reader, _ int64, _ string) error {
+	_, err := io.Copy(io.Discard, r)
+	return err
+}
+
+type noSeal struct{}
+
+func (noSeal) SealForImage(context.Context, string, []byte) error { return nil }
+func (noSeal) Prune(context.Context, []string) error              { return nil }
+
+// serveImages serves a stager running an older lab build, as a box on the
+// previous build would be.
+func serveImages(t *testing.T, images initapi.Images) initv1connect.ImageServiceClient {
+	t.Helper()
+	sock := filepath.Join(t.TempDir(), "init.sock")
+	srv, err := initapi.Listen(sock, initapi.Options{Allow: func(uint32) bool { return true }, Images: images})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(srv.Stop)
+	return initv1connect.NewImageServiceClient(client(sock), "http://init.sock")
+}
+
+func TestImageServiceStagesAndReportsThroughInit(t *testing.T) {
+	dir, pins := fixtures.Build(t, fixtures.Options{})
+	const running = "0.0.0-lab.20261007e-gabc1234"
+	esp := espDir(t.TempDir())
+	if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(running)), strings.NewReader("running")); err != nil {
+		t.Fatal(err)
+	}
+	c := serveImages(t, &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Pins: pins, Running: running, InitVersion: running, WorkDir: t.TempDir()})
+	ctx := context.Background()
+
+	st, err := c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil || st.Msg.GetRunningVersion() != running || st.Msg.GetStagedVersion() != "" {
+		t.Fatalf("status before staging: %v %v", st, err)
+	}
+	if _, err := c.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{})); err == nil || !strings.Contains(err.Error(), "UPGRADE_NOT_STAGED") {
+		t.Fatalf("activate with nothing staged: %v", err)
+	}
+	got, err := c.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir}))
+	if err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	if got.Msg.GetVersion() != fixtures.Version {
+		t.Fatalf("staged %q", got.Msg.GetVersion())
+	}
+	st, err = c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil || st.Msg.GetStagedVersion() != fixtures.Version {
+		t.Fatalf("status after staging: %v %v", st, err)
+	}
+	if _, err := c.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{})); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+}
+
+func TestImageServiceIsUnimplementedWithoutImages(t *testing.T) {
+	c := serveImages(t, nil)
+	_, err := c.Status(context.Background(), connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if connect.CodeOf(err) != connect.CodeUnimplemented {
+		t.Fatalf("got %v", err)
+	}
+}

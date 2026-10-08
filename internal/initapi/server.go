@@ -60,7 +60,10 @@ type Options struct {
 	KeyCustody *keycustody.Custody
 	// SecureBoot is what the firmware reported at boot, for Protection.
 	SecureBoot secureboot.State
-	Logger     log.Logger
+	// Images serves ImageService; nil leaves it unimplemented (the install
+	// medium and a box whose state is still locked have nothing to stage).
+	Images Images
+	Logger log.Logger
 }
 
 // Server is the running API.
@@ -82,7 +85,7 @@ func Listen(path string, o Options) (*Server, error) {
 		mux.Handle(initv1connect.NewKeyCustodyServiceHandler(initv1connect.UnimplementedKeyCustodyServiceHandler{}))
 	}
 	mux.Handle(initv1connect.NewPlatformServiceHandler(initv1connect.UnimplementedPlatformServiceHandler{}))
-	mux.Handle(initv1connect.NewImageServiceHandler(initv1connect.UnimplementedImageServiceHandler{}))
+	mux.Handle(imageHandlerFor(o))
 	mux.Handle(powerHandlerFor(o))
 	mux.Handle(initv1connect.NewServicesServiceHandler(&servicesHandler{s: o.Supervisor, log: o.Logger}))
 	return listen(path, 0o600, mux, o)
