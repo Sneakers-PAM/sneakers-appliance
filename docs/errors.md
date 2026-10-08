@@ -80,6 +80,7 @@ shell, the console and :8443 show the same sentence.
 | 3812 | `TLS_ENDPOINT_UNAVAILABLE` | the endpoint isn't on this box yet (the product endpoint needs the product installed) |
 | 3813 | `TLS_NOT_SERVED` | the new certificate wasn't served within 15 seconds, so the previous one was put back |
 | 3814 | `TLS_ACME_UNAVAILABLE` | ACME through cert-manager isn't available yet; it comes with the product bundle |
+| 3815 | `TLS_NO_HOSTNAME` | the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network |
 
 ## Build kit and boot (1xxx and 2xxx)
 

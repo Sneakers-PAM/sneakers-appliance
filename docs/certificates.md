@@ -11,6 +11,22 @@ assigns one to each endpoint.
 | `admin` | :8443 on each management address | the host name or a management address | live |
 | `product` | 443, every product route on one host | the product host | "Available when the product is installed" |
 
+### The box's names
+
+The names a certificate is checked against are the box's **host name** and its **management
+addresses**. A certificate passes when it covers any one of them: covering the host name is enough,
+and the certificate needn't list an address. The host name is a fully qualified name such as
+`appliance.example.org`: the one set in the Hostname field on the :8443 Network page, or else the
+one DHCP hands out (option 12, with option 15's domain added when the name has no dot). The box
+never looks its own name up in DNS, so a box reached as `appliance.example.org` only knows that
+name once it's set on Network or comes from DHCP. Setting it is a network change like any other: it
+reverts unless confirmed, and the self-signed certificate is made again for the new name.
+
+With no host name, the box can only check its addresses, so a wildcard such as `*.example.org` is
+refused with `TLS_NO_HOSTNAME`, which says to set the host name first. The Certificates page shows
+the names the box checks, and when there's no host name a notice links to Network. The same names
+go into every CSR and into the `admin` endpoint's state.
+
 A management address here is the bare address (`192.0.2.10`), never the interface prefix netd
 reports (`192.0.2.10/24`), and link-local addresses are left out. That's what a CSR names, what the
 names check and Revert compare and what the :8443 check below connects to.
@@ -42,7 +58,7 @@ Every way in is checked before anything is stored, and a refusal names the first
 | key | the certificate is for the CSR's key, or for the uploaded key; RSA 3072 or more, or ECDSA P-256 or P-384 |
 | usage | a TLS server certificate, not a CA |
 | chain | it builds to a root: a self-signed certificate in the chain, or the root uploaded on its own. A missing link is named |
-| names | its SANs cover the host name or a management address. A wildcard `*.domain` covers exactly one label |
+| names | its SANs cover the host name or a management address (either one is enough). A wildcard `*.domain` covers exactly one label. A refusal lists the names the box checked and the names the certificate covers; with no host name it is `TLS_NO_HOSTNAME` |
 | validity | today is between not-before and not-after |
 
 ## Applying

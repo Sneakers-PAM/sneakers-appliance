@@ -21,6 +21,7 @@ const (
 	TLSEndpointUnavailable = 3812
 	TLSNotServed           = 3813
 	TLSACMEUnavailable     = 3814
+	TLSNoHostname          = 3815
 )
 
 var tlsEntries = []apperr.Entry{
@@ -38,6 +39,7 @@ var tlsEntries = []apperr.Entry{
 	{Code: TLSEndpointUnavailable, Symbol: "TLS_ENDPOINT_UNAVAILABLE", Title: "tls", Cause: "the endpoint isn't on this box yet (the product endpoint needs the product installed)"},
 	{Code: TLSNotServed, Symbol: "TLS_NOT_SERVED", Title: "tls", Cause: "the new certificate wasn't served within 15 seconds, so the previous one was put back"},
 	{Code: TLSACMEUnavailable, Symbol: "TLS_ACME_UNAVAILABLE", Title: "tls", Cause: "ACME through cert-manager isn't available yet; it comes with the product bundle"},
+	{Code: TLSNoHostname, Symbol: "TLS_NO_HOSTNAME", Title: "tls", Cause: "the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network"},
 }
 
 func init() { Entries = append(Entries, tlsEntries...) }
