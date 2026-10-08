@@ -76,11 +76,15 @@ func (s *Stager) NextStageRemoves() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return versionsOf(Retain(entries, s.Running, s.Keeps())), nil
+}
+
+func versionsOf(es []Entry) []string {
 	out := []string{}
-	for _, e := range Retain(entries, s.Running, s.Keeps()) {
+	for _, e := range es {
 		out = append(out, e.Version)
 	}
-	return out, nil
+	return out
 }
 
 // tidyESP removes the .tmp files an ESP write cut off before its rename

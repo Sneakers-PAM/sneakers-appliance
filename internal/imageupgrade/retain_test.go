@@ -149,3 +149,19 @@ func treeSize(t *testing.T, dir string) int64 {
 	}
 	return n
 }
+
+func TestStatusNamesWhatTheNextStageRemoves(t *testing.T) {
+	s, dir, _, _, _ := stager(t, "0.0.9")
+	if err := os.WriteFile(filepath.Join(s.ESP.(orderESP).dir, imageupgrade.UKIDir, imageupgrade.GoodName("0.0.8")), []byte("previous"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Status(); !reflect.DeepEqual(st.NextStageRemoves, []string{"0.0.8"}) {
+		t.Fatalf("with a previous release: %+v", st)
+	}
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Status(); !reflect.DeepEqual(st.NextStageRemoves, []string{fixtures.Version}) {
+		t.Fatalf("with a staged release: %+v", st)
+	}
+}

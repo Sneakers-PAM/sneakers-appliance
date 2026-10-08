@@ -398,6 +398,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
 		out.PreviousVersion, out.PreviousSlot = h.s.previous(st.Msg)
+		out.NextStageRemoves = st.Msg.GetNextStageRemoves()
 	}
 	if h.s.o.Elevation != nil {
 		auditDir := ""

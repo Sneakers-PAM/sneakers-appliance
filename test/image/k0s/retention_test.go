@@ -84,11 +84,22 @@ func TestThreeUpdatesInARowKeepTwoReleases(t *testing.T) {
 		}
 	}
 
-	running, prev := boot(vm, first), first
+	running, prev, older := boot(vm, first), first, ""
 	var espSizes, stateSizes []int64
 	for i, bin := range bins {
 		v := vers[i]
 		adm := signIn(t, adminPort, alice)
+		var up struct {
+			NextStageRemoves []string `json:"nextStageRemoves"`
+		}
+		adm.call(t, "UpgradeService/GetUpgrades", map[string]any{}, &up)
+		wantRemoves := []string{}
+		if i > 0 {
+			wantRemoves = []string{older}
+		}
+		if !sameSet(up.NextStageRemoves, wantRemoves) {
+			t.Fatalf("update %d: Updates says the stage removes %v; want %v", i+1, up.NextStageRemoves, wantRemoves)
+		}
 		adm.call(t, "UpgradeService/StageUpdate", map[string]any{"uploadId": adm.upload(t, bin)}, &struct{}{})
 		want := []string{imageupgrade.GoodName(prev), imageupgrade.EntryName(v, imageupgrade.Tries, 0)}
 		if got := strings.Fields(entries(t, running.Disk(0))); !sameSet(got, want) {
@@ -108,7 +119,7 @@ func TestThreeUpdatesInARowKeepTwoReleases(t *testing.T) {
 		_, _ = fmt.Sscan(st.Disk.UsedBytes, &used)
 		espSizes, stateSizes = append(espSizes, espBytes(t, running.Disk(0))), append(stateSizes, used)
 		t.Logf("update %d: %s runs; ESP %d bytes, state volume %d bytes used", i+1, v, espSizes[i], used)
-		prev = v
+		older, prev = prev, v
 	}
 	for i := 2; i < len(bins); i++ {
 		if d := espSizes[i] - espSizes[1]; d > espSlack || d < -espSlack {

@@ -190,3 +190,21 @@ func TestImageStageNamesTheReleasesItRemoved(t *testing.T) {
 		t.Fatalf("removed %v; want %s", r, previous)
 	}
 }
+
+func TestImageStatusNamesWhatTheNextStageRemoves(t *testing.T) {
+	const previous, running = "0.0.8", "0.0.9"
+	esp := espDir(t.TempDir())
+	for _, v := range []string{previous, running} {
+		if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(v)), strings.NewReader(v)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := serveImages(t, &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Running: running, WorkDir: t.TempDir()})
+	st, err := c.Status(context.Background(), connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := st.Msg.GetNextStageRemoves(); len(r) != 1 || r[0] != previous {
+		t.Fatalf("next stage removes %v; want %s", r, previous)
+	}
+}

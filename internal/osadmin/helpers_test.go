@@ -85,8 +85,10 @@ type fakeInit struct {
 	// what it reports it removed.
 	layoutSeen bool
 	removes    []string
-	activated  int
-	rollbacks  int
+	// nextRemoves is what Status says the next stage removes.
+	nextRemoves []string
+	activated   int
+	rollbacks   int
 	// revertedBy is the admin the last Rollback named; Status then reports
 	// the staged release as reverted from.
 	revertedBy string
@@ -185,7 +187,7 @@ type fakeImage struct {
 func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceStatusRequest]) (*connect.Response[initv1.ImageServiceStatusResponse], error) {
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
-	out := &initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer, PreviousVersion: i.f.previousVer}
+	out := &initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer, PreviousVersion: i.f.previousVer, NextStageRemoves: i.f.nextRemoves}
 	if i.f.revertedBy != "" {
 		out.StagedVersion, out.RevertedVersion, out.RevertedBy, out.RevertedAt = "", "0.2.0", i.f.revertedBy, timestamppb.New(time.Date(2026, 10, 8, 14, 5, 0, 0, time.UTC))
 	}

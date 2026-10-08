@@ -134,6 +134,20 @@ func TestAStageRemovesItsFilesAndAuditsTheOlderRelease(t *testing.T) {
 	}
 }
 
+func TestUpdatesNamesWhatTheNextStageRemoves(t *testing.T) {
+	b := newBox(t, false)
+	b.init.nextRemoves = []string{"0.0.9"}
+	alice := b.browser()
+	alice.signIn("alice")
+	g, err := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := g.Msg.GetNextStageRemoves(); len(r) != 1 || r[0] != "0.0.9" {
+		t.Fatalf("next stage removes %v; want 0.0.9", r)
+	}
+}
+
 func TestAnUnverifiedBinIsNeverUnpacked(t *testing.T) {
 	b := newBox(t, false)
 	alice := b.browser()

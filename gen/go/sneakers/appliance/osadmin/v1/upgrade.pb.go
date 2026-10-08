@@ -619,8 +619,11 @@ type GetUpgradesResponse struct {
 	// to revert to.
 	PreviousVersion string `protobuf:"bytes,13,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
 	PreviousSlot    string `protobuf:"bytes,14,opt,name=previous_slot,json=previousSlot,proto3" json:"previous_slot,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// next_stage_removes are the releases staging a base update removes,
+	// with their files, so Updates can say so before the stage.
+	NextStageRemoves []string `protobuf:"bytes,15,rep,name=next_stage_removes,json=nextStageRemoves,proto3" json:"next_stage_removes,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetUpgradesResponse) Reset() {
@@ -749,6 +752,13 @@ func (x *GetUpgradesResponse) GetPreviousSlot() string {
 		return x.PreviousSlot
 	}
 	return ""
+}
+
+func (x *GetUpgradesResponse) GetNextStageRemoves() []string {
+	if x != nil {
+		return x.NextStageRemoves
+	}
+	return nil
 }
 
 type FetchUpdateRequest struct {
@@ -1424,7 +1434,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x04code\x18\x06 \x01(\tR\x04code\x12\x16\n" +
 	"\x06detail\x18\a \x01(\tR\x06detail\x12C\n" +
 	"\x06target\x18\b \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x14\n" +
-	"\x12GetUpgradesRequest\"\xda\x05\n" +
+	"\x12GetUpgradesRequest\"\x88\x06\n" +
 	"\x13GetUpgradesResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
@@ -1443,7 +1453,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\vreverted_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revertedAt\x12)\n" +
 	"\x10previous_version\x18\r \x01(\tR\x0fpreviousVersion\x12#\n" +
-	"\rprevious_slot\x18\x0e \x01(\tR\fpreviousSlot\"1\n" +
+	"\rprevious_slot\x18\x0e \x01(\tR\fpreviousSlot\x12,\n" +
+	"\x12next_stage_removes\x18\x0f \x03(\tR\x10nextStageRemoves\"1\n" +
 	"\x12FetchUpdateRequest\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\"J\n" +
 	"\x13FetchUpdateResponse\x12\x1b\n" +

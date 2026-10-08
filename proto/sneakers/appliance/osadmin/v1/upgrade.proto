@@ -196,6 +196,9 @@ message GetUpgradesResponse {
   // to revert to.
   string previous_version = 13;
   string previous_slot = 14;
+  // next_stage_removes are the releases staging a base update removes,
+  // with their files, so Updates can say so before the stage.
+  repeated string next_stage_removes = 15;
 }
 
 message FetchUpdateRequest {
