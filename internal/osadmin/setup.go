@@ -5,6 +5,9 @@ package osadmin
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +17,7 @@ import (
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
+	"golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
@@ -98,17 +102,75 @@ func (h *setup) AddRecoveryKey(ctx context.Context, r *connect.Request[osadminv1
 		return nil, err
 	}
 	c.note(k.Fingerprint)
-	rk := access.RecoveryKey{Key: k, Label: strings.TrimSpace(r.Msg.GetLabel()), Set: h.s.o.Clock.Now().UTC(), SetBy: c.session.Admin}
-	if err := h.s.changeRecoveryKeys(ctx, func(st *access.State) error {
-		if len(st.RecoveryKeys) >= access.MaxRecoveryKeys {
-			return codes.New(codes.AccessRecoveryKeyLimit, "a box holds at most %d recovery keys; remove one first", access.MaxRecoveryKeys)
-		}
-		st.RecoveryKeys = append(st.RecoveryKeys, rk)
-		return nil
-	}); err != nil {
+	rk, err := h.s.addRecoveryKey(ctx, k, strings.TrimSpace(r.Msg.GetLabel()), c.session.Admin)
+	if err != nil {
 		return nil, err
 	}
 	return connect.NewResponse(&osadminv1.AddRecoveryKeyResponse{RecoveryKey: recoveryToWire(rk)}), nil
+}
+
+// GenerateRecoveryKey makes an ed25519 key pair, adds its public half as a
+// recovery key exactly as AddRecoveryKey does, and returns the private key
+// this once. It never reaches the store, the audit entry or the log.
+func (h *setup) GenerateRecoveryKey(ctx context.Context, r *connect.Request[osadminv1.GenerateRecoveryKeyRequest]) (*connect.Response[osadminv1.GenerateRecoveryKeyResponse], error) {
+	c := callFrom(ctx)
+	label := strings.TrimSpace(r.Msg.GetLabel())
+	if len(label) > 64 || strings.ContainsAny(label, "\r\n") {
+		return nil, codes.New(codes.AccessName, "a key's label is one line of at most 64 characters")
+	}
+	if n := len(h.s.o.Access.Read().RecoveryKeys); n >= access.MaxRecoveryKeys {
+		return nil, recoveryKeyLimit()
+	}
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("recovery key: %w", err)
+	}
+	spk, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return nil, fmt.Errorf("recovery key: %w", err)
+	}
+	k, err := access.ParseRecoveryKey(strings.TrimSpace(string(ssh.MarshalAuthorizedKey(spk))))
+	if err != nil {
+		return nil, err
+	}
+	c.note(k.Fingerprint)
+	rk, err := h.s.addRecoveryKey(ctx, k, label, c.session.Admin)
+	if err != nil {
+		return nil, err
+	}
+	comment := "sneakers-appliance recovery key"
+	if label != "" {
+		comment += " " + label
+	}
+	block, err := ssh.MarshalPrivateKey(priv, comment)
+	if err != nil {
+		return nil, fmt.Errorf("recovery key: %w", err)
+	}
+	h.s.o.Logger.Info("osadmin: recovery key generated on the box", log.F("admin", c.session.Admin), log.F("key", rk.Fingerprint))
+	return connect.NewResponse(&osadminv1.GenerateRecoveryKeyResponse{
+		RecoveryKey: recoveryToWire(rk),
+		PrivateKey:  string(pem.EncodeToMemory(block)),
+		PublicKey:   rk.PublicKey,
+		FileName:    "sneakers-recovery-" + rk.Set.Format("20060102T150405Z"),
+	}), nil
+}
+
+func recoveryKeyLimit() error {
+	return codes.New(codes.AccessRecoveryKeyLimit, "a box holds at most %d recovery keys; remove one first", access.MaxRecoveryKeys)
+}
+
+// addRecoveryKey stores k as a recovery key set by admin and writes a new
+// escrow to the whole set (changeRecoveryKeys).
+func (s *Server) addRecoveryKey(ctx context.Context, k access.Key, label, admin string) (access.RecoveryKey, error) {
+	rk := access.RecoveryKey{Key: k, Label: label, Set: s.o.Clock.Now().UTC(), SetBy: admin}
+	err := s.changeRecoveryKeys(ctx, func(st *access.State) error {
+		if len(st.RecoveryKeys) >= access.MaxRecoveryKeys {
+			return recoveryKeyLimit()
+		}
+		st.RecoveryKeys = append(st.RecoveryKeys, rk)
+		return nil
+	})
+	return rk, err
 }
 
 func (h *setup) RemoveRecoveryKey(ctx context.Context, r *connect.Request[osadminv1.RemoveRecoveryKeyRequest]) (*connect.Response[osadminv1.RemoveRecoveryKeyResponse], error) {

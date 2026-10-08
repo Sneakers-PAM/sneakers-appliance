@@ -66,6 +66,7 @@ minutes.
 | `SetupService.CompleteCredentials` | code session | no | `setup.credentials.complete` |
 | `SetupService.AcknowledgeStep` | owner | no | `setup.step.acknowledge` |
 | `SetupService.AddRecoveryKey` | owner | yes | `setup.recovery-key.add` |
+| `SetupService.GenerateRecoveryKey` | owner | yes | `setup.recovery-key.generate` |
 | `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |
 | `SetupService.DownloadEscrow` | owner | no | `setup.escrow.download` |
 | `SetupService.AcknowledgeSingleAdmin` | owner | no | `setup.single-admin.acknowledge` |
