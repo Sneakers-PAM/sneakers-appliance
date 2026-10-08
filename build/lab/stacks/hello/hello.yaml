@@ -3,9 +3,10 @@
 #
 # THROWAWAY, LAB ONLY: a hello-world workload that shows k0s runs on the
 # box, until sneakers-platformd deploys the real platform (#99), which
-# removes it. Lab builds only (build/lab/overlay). k0s applies it from
-# /var/lib/k0s/manifests/hello/. It answers "hello from sneakers-appliance"
-# on NodePort 30080; the management firewall doesn't open that port.
+# removes it. It ships in the lab product bundle (build/lab/stacks), and
+# k0s applies it from /var/lib/k0s/manifests/hello/. It answers "hello
+# from sneakers-appliance" on NodePort 30080, which the edge stack serves
+# on 443 (build/lab/stacks/edge).
 apiVersion: v1
 kind: Namespace
 metadata:

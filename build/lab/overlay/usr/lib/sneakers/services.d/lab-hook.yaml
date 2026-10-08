@@ -1,9 +1,9 @@
 # LAB ONLY (build/lab/overlay): the image suite's hook. It does nothing
 # unless the ESP holds a file named lab-hook, which only the image suite
-# writes. Then, in first boot, it marks setup done (so the next boot is
-# normal, until the first-boot steps can be driven from the suite), and in
-# normal operation it checks k0s and the hello stack and prints the result.
+# writes. In normal operation it reports whether k0s runs before a product
+# bundle is installed, then checks k0s, the hello stack and the edge once
+# one is, and prints the result.
 exec: /bin/sh
 args: [/usr/libexec/sneakers/lab-hook]
-phases: [firstboot, normal]
+phases: [normal]
 restart: never

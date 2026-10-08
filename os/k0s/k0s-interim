@@ -8,8 +8,13 @@
 # directory and the node's address, and starts k0s; it does only what k0s
 # can't start without on a read-only, systemd-free root. docs/k0s.md has
 # the layout. busybox's sh here has no arithmetic: counters are strings.
+#
+# k0s itself, its images and its stacks come from the installed product
+# bundle's current slot (internal/product), never from the base root; the
+# service entry doesn't start without one (start-when).
 set -eu
 data=/var/lib/k0s
+product=/var/lib/sneakers/product/current
 # The node's name, made once per box and kept on the state volume, so it
 # doesn't follow the host name netd sets and stays unique when more nodes
 # join (spec 3, Section 2.12).
@@ -23,6 +28,10 @@ service_cidr=10.96.0.0/12 # scrub:allow=private-ip -- the k0s default
 say() { echo "k0s-interim: $*"; }
 
 prepare() {
+  if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
+    say "no product bundle is installed; k0s comes with it (Updates)"
+    exit 1
+  fi
   # cgroup v2 for containerd and the kubelet.
   if ! grep -q '^[^ ]* /sys/fs/cgroup cgroup2 ' /proc/mounts; then
     mount -t cgroup2 -o nosuid,nodev,noexec cgroup2 /sys/fs/cgroup
@@ -76,37 +85,58 @@ prepare() {
   # real one.
   [ -e /run/sneakers/resolv.conf ] || : > /run/sneakers/resolv.conf
 
-  # The airgap bundle: k0s imports every archive in $data/images when its
-  # worker starts. Links into the read-only root, so the images aren't
-  # copied; links an earlier release left are replaced.
+  # The airgap images: k0s imports every archive in $data/images when its
+  # worker starts. Links into the current product slot, so the images
+  # aren't copied; links an earlier bundle left are replaced.
   mkdir -p "$data/images"
   for l in "$data"/images/*.tar; do
     if [ -L "$l" ]; then rm -f "$l"; fi
   done
+  slot="$(readlink -f "$product")"
   n=""
-  for f in /usr/share/sneakers/images/*.tar; do
+  for f in "$slot"/images/*.tar; do
     [ -f "$f" ] || continue
     ln -s "$f" "$data/images/"
     n="$n."
   done
-  say "linked ${#n} bundled images into $data/images"
+  say "linked ${#n} images from the product bundle $(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json") into $data/images"
 
-  # Stacks k0s applies on its own: each /usr/share/sneakers/manifests/<name>/
-  # is copied to $data/manifests/<name>/.
-  for d in /usr/share/sneakers/manifests/*/; do
+  # Stacks k0s applies on its own: each <slot>/manifests/<name>/ is copied
+  # to $data/manifests/<name>/, replacing what an earlier bundle put there.
+  for d in "$slot"/manifests/*/; do
     [ -d "$d" ] || continue
     stack="$(basename "$d")"
+    rm -rf "$data/manifests/$stack"
     mkdir -p "$data/manifests/$stack"
     cp "$d"*.yaml "$data/manifests/$stack/"
     say "stack $stack in place"
   done
+
+  # INTERIM, until Traefik comes with the platform (#102): the box's own
+  # :8443 certificate as the box-tls Secret for the edge, refreshed on
+  # every start (osadmin renews it). It stays on the encrypted state
+  # volume, in k0s's manifests and etcd.
+  tls=/var/lib/sneakers/osadmin
+  if [ -s "$tls/tls.crt" ] && [ -s "$tls/tls.key" ]; then
+    mkdir -p "$data/manifests/box-tls"
+    umask 077
+    {
+      printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sneakers-edge\n---\n'
+      printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: box-tls\n  namespace: sneakers-edge\ntype: kubernetes.io/tls\nstringData:\n'
+      printf '  tls.crt: |\n'; sed 's/^/    /' "$tls/tls.crt"
+      printf '  tls.key: |\n'; sed 's/^/    /' "$tls/tls.key"
+    } > "$data/manifests/box-tls/box-tls.yaml.new"
+    mv "$data/manifests/box-tls/box-tls.yaml.new" "$data/manifests/box-tls/box-tls.yaml"
+    umask 022
+    say "the box's certificate is in place for the edge"
+  fi
 }
 
 run() {
   read -r name < "$name_file"
   # k0s puts its own binaries first; the kubelet finds mount(8) in /bin.
   export PATH=/usr/sbin:/usr/bin:/sbin:/bin
-  exec /usr/bin/k0s controller --enable-worker --no-taints \
+  exec "$product/k0s" controller --enable-worker --no-taints \
     --config /run/sneakers/k0s/k0s.yaml --data-dir "$data" \
     --disable-components konnectivity-server,metrics-server,update-prober,autopilot \
     --kubelet-extra-args="--hostname-override=$name --node-ip=$node_ip"

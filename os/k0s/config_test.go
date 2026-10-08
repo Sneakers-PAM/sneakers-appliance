@@ -8,6 +8,7 @@ package k0s_test
 import (
 	"bufio"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/services"
 )
 
@@ -150,23 +152,29 @@ func TestContainerdSandboxIsTheBundledPause(t *testing.T) {
 	}
 }
 
-func TestHelloStackUsesOnlyTheBundledImage(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "overlay", "usr", "share", "sneakers", "manifests", "hello", "hello.yaml"))
-	if err != nil {
-		t.Fatal(err)
+func TestTheLabStacksUseOnlyBundledImages(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("..", "..", "build", "lab", "stacks", "*", "*.yaml"))
+	if err != nil || len(files) < 2 {
+		t.Fatalf("the lab stacks: %v %v", files, err)
 	}
 	third := labImages(t)["thirdParty"]
-	images := regexp.MustCompile(`(?m)^\s*image:\s*(\S+)@(sha256:[0-9a-f]{64})\s*$`).FindAllStringSubmatch(string(b), -1)
-	if len(images) == 0 {
-		t.Fatal("the hello stack names no image by digest")
-	}
-	for _, m := range images {
-		if third[m[1]] != m[2] {
-			t.Errorf("the hello stack runs %s@%s, which build/lab/images.txt doesn't bundle", m[1], m[2])
+	for _, f := range files {
+		b, err := os.ReadFile(f) // #nosec G304 -- the repo's own stacks
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	if n := strings.Count(string(b), "imagePullPolicy: Never"); n != len(images) {
-		t.Errorf("%d of %d containers say imagePullPolicy: Never", n, len(images))
+		images := regexp.MustCompile(`(?m)^\s*image:\s*(\S+)@(sha256:[0-9a-f]{64})\s*$`).FindAllStringSubmatch(string(b), -1)
+		if len(images) == 0 {
+			t.Fatalf("%s names no image by digest", f)
+		}
+		for _, m := range images {
+			if third[m[1]] != m[2] {
+				t.Errorf("%s runs %s@%s, which build/lab/images.txt doesn't bundle", f, m[1], m[2])
+			}
+		}
+		if n := strings.Count(string(b), "imagePullPolicy: Never"); n != len(images) {
+			t.Errorf("%s: %d of %d containers say imagePullPolicy: Never", f, n, len(images))
+		}
 	}
 }
 
@@ -205,11 +213,18 @@ func TestServiceTableRunsK0sInNormalOnly(t *testing.T) {
 	if k.User != "" || k.Restart != services.RestartAlways || !slices.Contains(k.After, "netd") {
 		t.Errorf("k0s runs as %q with restart %q after %v; want root, always, after netd", k.User, k.Restart, k.After)
 	}
+	// Nothing starts before the first admin exists or without an installed
+	// product bundle (docs/k0s.md).
+	installed := path.Join(product.Dir, "current", product.BundleFile)
+	if !slices.Contains(k.StartWhen, "/var/lib/sneakers/setup/done") || !slices.Contains(k.StartWhen, installed) {
+		t.Errorf("k0s starts when %v; want setup/done and %s", k.StartWhen, installed)
+	}
 	b, err := os.ReadFile("k0s-interim")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"exec /usr/bin/k0s controller --enable-worker --no-taints", "--config /run/sneakers/k0s/k0s.yaml", `--data-dir "$data"`, "data=/var/lib/k0s"} {
+	for _, want := range []string{`exec "$product/k0s" controller --enable-worker --no-taints`, "product=" + path.Join(product.Dir, "current"),
+		`[ ! -s "$product/` + product.BundleFile + `" ]`, "--config /run/sneakers/k0s/k0s.yaml", `--data-dir "$data"`, "data=/var/lib/k0s"} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("k0s-interim doesn't start k0s with %q", want)
 		}

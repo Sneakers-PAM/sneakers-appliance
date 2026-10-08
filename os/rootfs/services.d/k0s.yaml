@@ -3,6 +3,10 @@
 # nodes can join later. Normal operation only, once the state is mounted
 # (/var/lib/k0s is on it), after netd. Root; its output goes to init's
 # console.
+# k0s isn't in the base image: it comes with the product bundle, installed
+# from Updates into /var/lib/sneakers/product (docs/k0s.md). It waits until
+# the first admin exists (setup/done) and a bundle is installed; a product
+# apply or revert restarts it through the Services API.
 # INTERIM until sneakers-platformd (#99): os/k0s/k0s-interim prepares the
 # box and starts `k0s controller --enable-worker --no-taints` with the
 # box's node name; platformd takes both over and the entry gets
@@ -12,5 +16,6 @@ args: [/usr/libexec/sneakers/k0s-interim, run]
 phases: [normal]
 after: [netd]
 restart: always
+start-when: [/var/lib/sneakers/setup/done, /var/lib/sneakers/product/current/bundle.json]
 pre-start: [/bin/sh, /usr/libexec/sneakers/k0s-interim, prepare]
 stop-timeout: 2m

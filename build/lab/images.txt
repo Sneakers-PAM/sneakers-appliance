@@ -15,3 +15,6 @@ k0s cni-node quay.io/k0sproject/cni-node sha256:2d1bf841d4773aa00cc4b2e5efcf39f2
 # INTERIM, removed with the hello stack when sneakers-platformd lands (#99):
 # busybox 1.37.0 for the throwaway hello-world workload.
 thirdParty hello docker.io/library/busybox sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+# INTERIM, until Traefik comes with the platform (#102): Traefik v3.7.14
+# as the lab bundle's edge on 443 and 80 (build/lab/stacks/hello/edge.yaml).
+thirdParty edge docker.io/library/traefik sha256:e849695bc5c317da0cec22bfee4794fd9e15871fe554f864d31b625983e883ff

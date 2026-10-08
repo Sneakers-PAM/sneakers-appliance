@@ -1,0 +1,114 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# INTERIM, LAB ONLY, until Traefik comes with the platform (#102): a
+# minimal edge that serves the hello stack on the box's normal ports.
+# Traefik runs on the host network and listens on 443 (TLS with the box's
+# own certificate, the :8443 one, which k0s-interim hands in as the
+# box-tls Secret; without it Traefik's own self-signed default) and on 80,
+# which redirects to https. It forwards to the hello NodePort on the node
+# address. accessd opens 80 and 443 on the service interface once the
+# product bundle is installed (docs/k0s.md).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sneakers-edge
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edge
+  namespace: sneakers-edge
+data:
+  dynamic.yaml: |
+    http:
+      routers:
+        hello:
+          rule: PathPrefix(`/`)
+          entryPoints: [websecure]
+          service: hello
+          tls: {}
+      services:
+        hello:
+          loadBalancer:
+            servers:
+              - url: http://198.18.0.1:30080
+    tls:
+      stores:
+        default:
+          defaultCertificate:
+            certFile: /tls/tls.crt
+            keyFile: /tls/tls.key
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge
+  namespace: sneakers-edge
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: edge
+  template:
+    metadata:
+      labels:
+        app: edge
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: traefik
+          image: docker.io/library/traefik@sha256:e849695bc5c317da0cec22bfee4794fd9e15871fe554f864d31b625983e883ff
+          imagePullPolicy: Never
+          args:
+            - --entryPoints.web.address=:80
+            - --entryPoints.web.http.redirections.entryPoint.to=websecure
+            - --entryPoints.web.http.redirections.entryPoint.scheme=https
+            - --entryPoints.websecure.address=:443
+            - --providers.file.filename=/etc/traefik/dynamic.yaml
+            - --global.checkNewVersion=false
+            - --global.sendAnonymousUsage=false
+            - --ping=true
+            - --ping.entryPoint=websecure
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 443
+              scheme: HTTPS
+          securityContext:
+            # Root only to bind 80 and 443 on the host network; every other
+            # capability is dropped.
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+              add: [NET_BIND_SERVICE]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/traefik
+              readOnly: true
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: edge
+        - name: tls
+          secret:
+            secretName: box-tls
+            optional: true
