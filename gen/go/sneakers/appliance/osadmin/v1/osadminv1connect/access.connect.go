@@ -119,8 +119,9 @@ type AccessServiceClient interface {
 	// sign it with the box's root key as an SSH user certificate (principal:
 	// the admin's name; valid for valid_days, default from the access
 	// policy). The private key is returned once and never kept; the box
-	// keeps the public key and the certificate. TOTP is still asked at
-	// every SSH login.
+	// keeps the public key and the certificate. It takes a fresh TOTP code
+	// every time (code_each_call), not the step-up window, since the private
+	// key leaves the box. TOTP is still asked at every SSH login.
 	IssueSshKey(context.Context, *connect.Request[v1.IssueSshKeyRequest]) (*connect.Response[v1.IssueSshKeyResponse], error)
 	// ChangePassword sets the caller's new password; the current one is
 	// checked first.
@@ -391,8 +392,9 @@ type AccessServiceHandler interface {
 	// sign it with the box's root key as an SSH user certificate (principal:
 	// the admin's name; valid for valid_days, default from the access
 	// policy). The private key is returned once and never kept; the box
-	// keeps the public key and the certificate. TOTP is still asked at
-	// every SSH login.
+	// keeps the public key and the certificate. It takes a fresh TOTP code
+	// every time (code_each_call), not the step-up window, since the private
+	// key leaves the box. TOTP is still asked at every SSH login.
 	IssueSshKey(context.Context, *connect.Request[v1.IssueSshKeyRequest]) (*connect.Response[v1.IssueSshKeyResponse], error)
 	// ChangePassword sets the caller's new password; the current one is
 	// checked first.

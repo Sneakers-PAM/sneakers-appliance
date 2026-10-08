@@ -89,7 +89,7 @@ after setup, and invitations and Recover access codes still use the code pages.
 | `AccessService.UnrevokeKey` | owner | yes | `access.key.unrevoke` |
 | `AccessService.SetElevationPolicy` | owner | yes | `access.elevation-policy.set` |
 | `AccessService.SetQuorum` | owner | yes | `access.quorum.set` |
-| `AccessService.IssueSshKey` | admin | yes | `access.ssh-key.issue` |
+| `AccessService.IssueSshKey` | admin | every call | `access.ssh-key.issue` |
 | `AccessService.ChangePassword` | admin | yes | `access.password.change` |
 | `AccessService.BeginTotpReplacement` | admin | yes | `access.totp.begin` |
 | `AccessService.CompleteTotpReplacement` | admin | yes | `access.totp.replace` |

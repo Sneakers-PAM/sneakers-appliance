@@ -397,6 +397,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
+		out.PreviousVersion, out.PreviousSlot = h.s.previous(st.Msg)
 	}
 	if h.s.o.Elevation != nil {
 		auditDir := ""
@@ -532,6 +533,15 @@ func (s *Server) otherSlot() string {
 		return "A"
 	}
 	return ""
+}
+
+// previous is the release kept for a revert and the slot it's in: the one
+// the box isn't running from.
+func (s *Server) previous(st *initv1.ImageServiceStatusResponse) (version, slot string) {
+	if v := st.GetPreviousVersion(); v != "" {
+		return v, s.otherSlot()
+	}
+	return "", ""
 }
 
 func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage, error) {

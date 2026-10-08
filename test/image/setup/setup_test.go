@@ -245,7 +245,7 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 		PrivateKey  string `json:"privateKey"`
 		Certificate string `json:"certificate"`
 	}
-	connectCall(t, hc, base, csrf, api+"AccessService/IssueSshKey", map[string]any{"label": "image suite"}, &issued)
+	connectCall(t, hc, base, csrf, api+"AccessService/IssueSshKey", map[string]any{"label": "image suite", "totpCode": codes.next()}, &issued)
 	alice := filepath.Join(t.TempDir(), "alice")
 	if err := os.WriteFile(alice, []byte(issued.PrivateKey), 0o600); err != nil {
 		t.Fatal(err)

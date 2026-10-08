@@ -84,10 +84,15 @@ shell's TOTP check, the root-shell code page and wrong root-shell codes:
 
 ## Issued SSH keys
 
-`AccessService.IssueSshKey` (step-up) makes an ed25519 key pair for the caller and signs an SSH
-user certificate for it with the root key: principal the admin's name, valid for the policy's days
+`AccessService.IssueSshKey` makes an ed25519 key pair for the caller and signs an SSH user
+certificate for it with the root key: principal the admin's name, valid for the policy's days
 (default 365, 1 to 1825), `permit-pty` only, a serial from `nextSerial`. The private key is
 returned once and never kept. Admins never bring their own login keys.
+
+Issuing a key takes its own fresh code from the admin's authenticator (`totp_code`) every time, like
+an update's Apply and Revert: a sign-in or step-up in the last 5 minutes doesn't count, because the
+private key leaves the box. An empty code is `ACCESS_CONFIRM`; a wrong or reused one is
+`ACCESS_CREDENTIALS` and counts toward the sign-in lockout.
 
 So the first SSH login starts on :8443: get the key on Access, then `ssh -i <key file>
 <name>@<box>`, then the TOTP code in the closed shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)).
@@ -237,7 +242,8 @@ The first admin is an owner and the first root operator; the last owner can't be
 (`ACCESS_LAST_OWNER`).
 
 Sensitive actions need a sign-in or a fresh TOTP code (`SignInService.StepUp`) from the last 5
-minutes (`ACCESS_STEPUP_REQUIRED`). [osadmin-api.md](osadmin-api.md) lists the role, step-up and
+minutes (`ACCESS_STEPUP_REQUIRED`). Issuing an SSH key, applying an update and reverting one take
+their own fresh code on every call instead. [osadmin-api.md](osadmin-api.md) lists the role, step-up and
 audit action of every method.
 
 ## Status, Network, Logs and Power

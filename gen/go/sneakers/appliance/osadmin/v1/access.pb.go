@@ -1637,7 +1637,9 @@ type IssueSshKeyRequest struct {
 	// label names the key on the Access page (a laptop, say).
 	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
 	// valid_days is 0 for the access policy's default.
-	ValidDays     int32 `protobuf:"varint,2,opt,name=valid_days,json=validDays,proto3" json:"valid_days,omitempty"`
+	ValidDays int32 `protobuf:"varint,2,opt,name=valid_days,json=validDays,proto3" json:"valid_days,omitempty"`
+	// totp_code is a fresh code from the caller's authenticator.
+	TotpCode      string `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1684,6 +1686,13 @@ func (x *IssueSshKeyRequest) GetValidDays() int32 {
 		return x.ValidDays
 	}
 	return 0
+}
+
+func (x *IssueSshKeyRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
 }
 
 type IssueSshKeyResponse struct {
@@ -2385,11 +2394,12 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x10SetQuorumRequest\x12\x18\n" +
 	"\amembers\x18\x01 \x03(\tR\amembers\x12\x1a\n" +
 	"\brequired\x18\x02 \x01(\x05R\brequired\"\x13\n" +
-	"\x11SetQuorumResponse\"I\n" +
+	"\x11SetQuorumResponse\"f\n" +
 	"\x12IssueSshKeyRequest\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
-	"valid_days\x18\x02 \x01(\x05R\tvalidDays\"\xca\x01\n" +
+	"valid_days\x18\x02 \x01(\x05R\tvalidDays\x12\x1b\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\xca\x01\n" +
 	"\x13IssueSshKeyResponse\x124\n" +
 	"\x03key\x18\x01 \x01(\v2\".sneakers.appliance.osadmin.v1.KeyR\x03key\x12\x1f\n" +
 	"\vprivate_key\x18\x02 \x01(\tR\n" +
@@ -2436,7 +2446,7 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\vUnrevokeKey\x121.sneakers.appliance.osadmin.v1.UnrevokeKeyRequest\x1a2.sneakers.appliance.osadmin.v1.UnrevokeKeyResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13access.key.unrevoke\x12\xb3\x01\n" +
 	"\x12SetElevationPolicy\x128.sneakers.appliance.osadmin.v1.SetElevationPolicyRequest\x1a9.sneakers.appliance.osadmin.v1.SetElevationPolicyResponse\"(\xc2\xf3\x18!\x10\x02\x18\x01\"\x1baccess.elevation-policy.set\x88\x02\x01\x12\x8b\x01\n" +
 	"\tSetQuorum\x12/.sneakers.appliance.osadmin.v1.SetQuorumRequest\x1a0.sneakers.appliance.osadmin.v1.SetQuorumResponse\"\x1b\xc2\xf3\x18\x17\x10\x02\x18\x01\"\x11access.quorum.set\x12\x94\x01\n" +
-	"\vIssueSshKey\x121.sneakers.appliance.osadmin.v1.IssueSshKeyRequest\x1a2.sneakers.appliance.osadmin.v1.IssueSshKeyResponse\"\x1e\xc2\xf3\x18\x1a\x10\x01\x18\x01\"\x14access.ssh-key.issue\x12\x9f\x01\n" +
+	"\vIssueSshKey\x121.sneakers.appliance.osadmin.v1.IssueSshKeyRequest\x1a2.sneakers.appliance.osadmin.v1.IssueSshKeyResponse\"\x1e\xc2\xf3\x18\x1a\x10\x01\"\x14access.ssh-key.issue8\x01\x12\x9f\x01\n" +
 	"\x0eChangePassword\x124.sneakers.appliance.osadmin.v1.ChangePasswordRequest\x1a5.sneakers.appliance.osadmin.v1.ChangePasswordResponse\" \xc2\xf3\x18\x1c\x10\x01\x18\x01\"\x16access.password.change\x12\xac\x01\n" +
 	"\x14BeginTotpReplacement\x12:.sneakers.appliance.osadmin.v1.BeginTotpReplacementRequest\x1a;.sneakers.appliance.osadmin.v1.BeginTotpReplacementResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11access.totp.begin\x12\xb7\x01\n" +
 	"\x17CompleteTotpReplacement\x12=.sneakers.appliance.osadmin.v1.CompleteTotpReplacementRequest\x1a>.sneakers.appliance.osadmin.v1.CompleteTotpReplacementResponse\"\x1d\xc2\xf3\x18\x19\x10\x01\x18\x01\"\x13access.totp.replace\x12\x9b\x01\n" +

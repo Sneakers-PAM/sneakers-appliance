@@ -497,6 +497,12 @@ type GetStatusResponse struct {
 	RevertedVersion string                 `protobuf:"bytes,20,opt,name=reverted_version,json=revertedVersion,proto3" json:"reverted_version,omitempty"`
 	RevertedBy      string                 `protobuf:"bytes,21,opt,name=reverted_by,json=revertedBy,proto3" json:"reverted_by,omitempty"`
 	RevertedAt      *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=reverted_at,json=revertedAt,proto3" json:"reverted_at,omitempty"`
+	// previous_version is the older release kept in the other slot for a
+	// revert, and previous_slot that slot, A or B (empty when the box can't
+	// tell which slot it runs from). Both are empty when there's no release
+	// to revert to.
+	PreviousVersion string `protobuf:"bytes,23,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
+	PreviousSlot    string `protobuf:"bytes,24,opt,name=previous_slot,json=previousSlot,proto3" json:"previous_slot,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -685,6 +691,20 @@ func (x *GetStatusResponse) GetRevertedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *GetStatusResponse) GetPreviousVersion() string {
+	if x != nil {
+		return x.PreviousVersion
+	}
+	return ""
+}
+
+func (x *GetStatusResponse) GetPreviousSlot() string {
+	if x != nil {
+		return x.PreviousSlot
+	}
+	return ""
+}
+
 type SetSecureBootRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	On              bool                   `protobuf:"varint,1,opt,name=on,proto3" json:"on,omitempty"`
@@ -795,7 +815,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
 	"totalBytes\x12/\n" +
-	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\x85\b\n" +
+	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xd5\b\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1a\n" +
@@ -825,7 +845,9 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\vreverted_by\x18\x15 \x01(\tR\n" +
 	"revertedBy\x12;\n" +
 	"\vreverted_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"revertedAt\"Q\n" +
+	"revertedAt\x12)\n" +
+	"\x10previous_version\x18\x17 \x01(\tR\x0fpreviousVersion\x12#\n" +
+	"\rprevious_slot\x18\x18 \x01(\tR\fpreviousSlot\"Q\n" +
 	"\x14SetSecureBootRequest\x12\x0e\n" +
 	"\x02on\x18\x01 \x01(\bR\x02on\x12)\n" +
 	"\x10confirm_hostname\x18\x02 \x01(\tR\x0fconfirmHostname\"\x17\n" +

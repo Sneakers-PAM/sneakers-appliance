@@ -166,6 +166,10 @@ message ImageServiceStatusResponse {
   string reverted_version = 4;
   string reverted_by = 5;
   google.protobuf.Timestamp reverted_at = 6;
+  // previous_version is the older release kept for a revert: the one
+  // Rollback would boot. Empty when there's none, as after a revert or
+  // while a newer release is staged.
+  string previous_version = 7;
 }
 
 // Power reboots, powers off or factory resets the box.

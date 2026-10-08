@@ -86,7 +86,10 @@ type fakeInit struct {
 	// revertedBy is the admin the last Rollback named; Status then reports
 	// the staged release as reverted from.
 	revertedBy string
-	markedGood int
+	// previousVer is the older release kept for a revert, as Status
+	// reports it.
+	previousVer string
+	markedGood  int
 	// activateErr fails Activate; duringActivate runs inside it, as the
 	// box is mid-apply.
 	activateErr    error
@@ -178,7 +181,7 @@ type fakeImage struct {
 func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceStatusRequest]) (*connect.Response[initv1.ImageServiceStatusResponse], error) {
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
-	out := &initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer}
+	out := &initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer, PreviousVersion: i.f.previousVer}
 	if i.f.revertedBy != "" {
 		out.StagedVersion, out.RevertedVersion, out.RevertedBy, out.RevertedAt = "", "0.2.0", i.f.revertedBy, timestamppb.New(time.Date(2026, 10, 8, 14, 5, 0, 0, time.UTC))
 	}

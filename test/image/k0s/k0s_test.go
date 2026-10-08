@@ -218,7 +218,7 @@ func firstBoot(t *testing.T, vm *harness.VM, adminPort int) *lab {
 		PrivateKey  string `json:"privateKey"`
 		Certificate string `json:"certificate"`
 	}
-	a.call(t, "AccessService/IssueSshKey", map[string]any{"label": "image suite"}, &issued)
+	a.call(t, "AccessService/IssueSshKey", map[string]any{"label": "image suite", "totpCode": alice.code()}, &issued)
 	alice.key = filepath.Join(t.TempDir(), "alice")
 	if err := os.WriteFile(alice.key, []byte(issued.PrivateKey), 0o600); err != nil {
 		t.Fatal(err)
