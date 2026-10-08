@@ -43,7 +43,7 @@ func NewSelfSigned(hostname string, addrs []string, now time.Time) (certPEM, key
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: cn, Organization: []string{"Sneakers-PAM appliance admin"}},
+		Subject:      pkix.Name{CommonName: cn, Organization: []string{"Sneakers-PAM Appliance admin"}},
 		NotBefore:    now.Add(-time.Hour),
 		NotAfter:     now.Add(SelfSignedLifetime),
 		KeyUsage:     x509.KeyUsageDigitalSignature,

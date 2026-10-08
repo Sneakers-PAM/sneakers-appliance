@@ -8,7 +8,8 @@
 |                     |   |_|            '\                    |
 |                    (=====================)                   |
 |                                                              |
-|                Sneakers-PAM appliance  0.1.0                 |
+|                    Sneakers-PAM Appliance                    |
+|                            0.1.0                             |
 |                                                              |
 |   Starting up. Leave it running.                             |
 |                                                              |
@@ -16,7 +17,6 @@
 |      [ok]  encrypted data disk                               |
 |      [..]  network   0:42                                    |
 |      [  ]  setup page                                        |
-|                                                              |
 |                                                              |
 |                                                              |
 |                                                              |

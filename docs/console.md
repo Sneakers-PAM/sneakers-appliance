@@ -43,8 +43,8 @@ to fit the smallest.
 Every screen is a frame round the whole terminal, every row the full width and ending in the same
 column, with a body block of at most 56 columns centred in it. A row is always written in full, so
 a redraw needs no erase that would clear the frame's right edge. The start-up and the setup info
-screens carry the Sneakers-PAM mark (the sneaker with the keyhole) and the wordmark with the
-version; the others have a one-row header with a small mark, the wordmark, the version, the slot
+screens carry the Sneakers-PAM mark (the sneaker with the keyhole), the wordmark and, on its own dim
+line under it, the version; the others have a one-row header with a small mark, the wordmark, the version, the slot
 and the node count, and the keys in a dim row at the bottom, each ruled off. Keys are single
 letters or digits, typed and then Enter (the consoles stay in the kernel's line mode, which works
 the same on a VMware screen and a serial line); a screen with nothing to type hides the cursor.
@@ -58,7 +58,8 @@ the same on a VMware screen and a serial line); a screen with nothing to type hi
 |                     |   |_|            '\                    |
 |                    (=====================)                   |
 |                                                              |
-|                Sneakers-PAM appliance  0.1.0                 |
+|                    Sneakers-PAM Appliance                    |
+|                            0.1.0                             |
 |                                                              |
 |   Open this address in your browser:                         |
 |      https://192.0.2.10:8443                                 |
@@ -72,21 +73,25 @@ the same on a VMware screen and a serial line); a screen with nothing to type hi
 |   Protection  REDUCED  no TPM, no Secure Boot                |
 |                                                              |
 |                                                              |
-|                                                              |
 +--------------------------------------------------------------+
 ```
 
 Colour is the brand palette in the console's 16 colours, foreground only (no backgrounds or
 reverse video):
 
-| What | SGR | On the VGA palette |
-|---|---|---|
-| The frame and the mark | `34` | the primary blue |
-| The keyhole | `1;34` | the bright blue |
-| The setup code and the mark's sole (the one accent) | `33` | brown, the console's orange |
-| OK, a warning, danger | `1;32`, `1;33`, `1;31` | green, yellow, red |
-| Secondary text | `2` | dim |
-| What is read aloud or typed | `1;37` | bold white |
+| What | SGR | VT slot | Colour |
+|---|---|---|---|
+| The frame and the mark | `34` | 4 | the primary blue `#2F5BD3` |
+| The keyhole | `1;34` | 12 | the bright blue `#7FA3F0` |
+| The setup code and the mark's sole (the one accent) | `33` | 3 | the approved orange `#E8742A` |
+| OK, a warning, danger | `1;32`, `1;33`, `1;31` | 10, 11, 9 | green `#6FD39B`, yellow `#F2C04B`, red `#F06B5F` |
+| Secondary text | `2` | 8 (half-bright) | dim grey `#8B94A6` |
+| What is read aloud or typed | `1;37` | 15 | bold white `#FFFFFF` |
+
+The VT's default palette is VGA's, where slot 3 is brown (`#AA5500`), so the UKI's command line
+loads the palette above into the VT (`vt.default_red=`, `vt.default_grn=`, `vt.default_blu=`, 16
+values each, from `tui.Palette`); the slots no style uses keep VGA's colours. It applies to the
+screen only: a serial terminal keeps its own palette, where `33` is whatever it calls yellow.
 
 Nothing depends on colour: every status is a word (`OK`, `REDUCED`, `UNSYNCED`) and every warning
 starts with `!`. `sneakers.console=plain` on the kernel command line, or `TERM=dumb`, turns colour
@@ -150,7 +155,7 @@ invariant applies.
 
 ```
 +--------------------------------------------------------------+
-|  /o\__  Sneakers-PAM appliance   0.1.0  slot A  1 node       |
+|  /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node       |
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        OK      all services running                 |

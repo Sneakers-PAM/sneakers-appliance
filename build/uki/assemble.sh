@@ -29,8 +29,13 @@ hashoffset="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["h
 [[ "$roothash" =~ ^[0-9a-f]{64}$ ]] || { echo "uki: bad roothash in $VERITY_JSON" >&2; exit 1; }
 [[ "$hashoffset" =~ ^[0-9]+$ ]] || { echo "uki: bad hashOffset in $VERITY_JSON" >&2; exit 1; }
 
+# The screen's 16 colours, the console's palette (tui.Palette): VGA's,
+# with the approved orange in place of brown and the brand blues, status
+# colours, dim grey and white. internal/console's font test checks them.
+vtpalette="vt.default_red=0x00,0xaa,0x00,0xe8,0x2f,0xaa,0x00,0xaa,0x8b,0xf0,0x6f,0xf2,0x7f,0xff,0x55,0xff vt.default_grn=0x00,0x00,0xaa,0x74,0x5b,0x00,0xaa,0xaa,0x94,0x6b,0xd3,0xc0,0xa3,0x55,0xff,0xff vt.default_blu=0x00,0x00,0x00,0x2a,0xd3,0xaa,0xaa,0xaa,0xa6,0x5f,0x9b,0x4b,0xf0,0xff,0xff,0xff"
+
 # The command line of spec 1 Section 3.3. Only the signed UKI carries it.
-cmdline="sneakers.roothash=$roothash sneakers.hashoffset=$hashoffset sneakers.version=$VERSION quiet console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity"
+cmdline="sneakers.roothash=$roothash sneakers.hashoffset=$hashoffset sneakers.version=$VERSION quiet console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity $vtpalette"
 
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH

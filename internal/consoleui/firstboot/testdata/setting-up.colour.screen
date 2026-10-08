@@ -5,7 +5,8 @@
 \e[34m|\e[0m                   \e[34m  |   \e[0m\e[1;34m|_|\e[0m\e[34m            '\\e[0m                    \e[34m|\e[0m
 \e[34m|\e[0m                   \e[33m (=====================)\e[0m                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                \e[1;37mSneakers-PAM appliance\e[0m\e[2m  0.1.0\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m                    \e[1;37mSneakers-PAM Appliance\e[0m                    \e[34m|\e[0m
+\e[34m|\e[0m                            \e[2m0.1.0\e[0m                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;37mSetup is running in a browser.\e[0m                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
@@ -17,7 +18,6 @@
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   If this isn't you, press X: it stops that setup and        \e[34m|\e[0m
 \e[34m|\e[0m   shows a new code.                                          \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m  \e[2mX  Stop this setup and show a new code\e[0m                      \e[34m|\e[0m

@@ -5,7 +5,8 @@
 |                             |   |_|            '\                            |
 |                            (=====================)                           |
 |                                                                              |
-|                        Sneakers-PAM appliance  0.1.0                         |
+|                            Sneakers-PAM Appliance                            |
+|                                    0.1.0                                     |
 |                                                                              |
 |           Setup is running in a browser.                                     |
 |                                                                              |
@@ -17,7 +18,6 @@
 |                                                                              |
 |           If this isn't you, press X: it stops that setup and                |
 |           shows a new code.                                                  |
-|                                                                              |
 |                                                                              |
 +------------------------------------------------------------------------------+
 |          X  Stop this setup and show a new code                              |

@@ -14,7 +14,7 @@
     </Network>
   </NetworkSection>
   <VirtualSystem ovf:id="{{.Name}}">
-    <Info>Sneakers-PAM appliance {{.Version}}</Info>
+    <Info>Sneakers-PAM Appliance {{.Version}}</Info>
     <Name>{{.Name}}</Name>
     <OperatingSystemSection ovf:id="101" vmw:osType="other5xLinux64Guest">
       <Info>Linux, 64-bit</Info>

@@ -1,5 +1,5 @@
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0  slot A  3 nodes\e[0m      \e[34m|\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM Appliance\e[0m\e[2m   0.1.0  slot A  3 nodes\e[0m      \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Health        \e[1;32mOK\e[0m\e[2m      all services running\e[0m                 \e[34m|\e[0m

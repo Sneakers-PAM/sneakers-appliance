@@ -1,12 +1,12 @@
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m    .------.\e[0m                               \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m   /  \e[0m\e[1;34m.-.\e[0m\e[34m   \ = = =\e[0m                        \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m  |  \e[0m\e[1;34m( o )\e[0m\e[34m   '------._\e[0m                     \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m  |   \e[0m\e[1;34m|_|\e[0m\e[34m            '\\e[0m                    \e[34m|\e[0m
 \e[34m|\e[0m                   \e[33m (=====================)\e[0m                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                \e[1;37mSneakers-PAM appliance\e[0m\e[2m  0.1.0\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m                    \e[1;37mSneakers-PAM Appliance\e[0m                    \e[34m|\e[0m
+\e[34m|\e[0m                            \e[2m0.1.0\e[0m                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;37mOpen this address in your browser:\e[0m                         \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;37m   https://192.0.2.10:8443\e[0m                                 \e[34m|\e[0m

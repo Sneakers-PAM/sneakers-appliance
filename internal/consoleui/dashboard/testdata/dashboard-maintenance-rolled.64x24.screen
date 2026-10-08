@@ -3,14 +3,14 @@
 |                                                              |
 |                                                              |
 |                                                              |
-|                                                              |
 |                       .------.                               |
 |                      /  .-.   \ = = =                        |
 |                     |  ( o )   '------._                     |
 |                     |   |_|            '\                    |
 |                    (=====================)                   |
 |                                                              |
-|                Sneakers-PAM appliance  0.1.0                 |
+|                    Sneakers-PAM Appliance                    |
+|                            0.1.0                             |
 |                                                              |
 |   The upgrade to 0.1.1 was rolled back:                      |
 |     UPGRADE_HEALTH: the platform didn't come up within 10    |

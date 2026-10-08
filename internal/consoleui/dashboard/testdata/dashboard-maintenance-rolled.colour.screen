@@ -3,14 +3,14 @@
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m    .------.\e[0m                               \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m   /  \e[0m\e[1;34m.-.\e[0m\e[34m   \ = = =\e[0m                        \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m  |  \e[0m\e[1;34m( o )\e[0m\e[34m   '------._\e[0m                     \e[34m|\e[0m
 \e[34m|\e[0m                   \e[34m  |   \e[0m\e[1;34m|_|\e[0m\e[34m            '\\e[0m                    \e[34m|\e[0m
 \e[34m|\e[0m                   \e[33m (=====================)\e[0m                   \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m                \e[1;37mSneakers-PAM appliance\e[0m\e[2m  0.1.0\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m                    \e[1;37mSneakers-PAM Appliance\e[0m                    \e[34m|\e[0m
+\e[34m|\e[0m                            \e[2m0.1.0\e[0m                             \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;31mThe upgrade to 0.1.1 was rolled back:\e[0m                      \e[34m|\e[0m
 \e[34m|\e[0m     \e[1;31mUPGRADE_HEALTH: the platform didn't come up within 10\e[0m    \e[34m|\e[0m

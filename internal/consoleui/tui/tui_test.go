@@ -102,6 +102,37 @@ func TestTheMarkIsOnTheBigPagesOnly(t *testing.T) {
 	}
 }
 
+// On the big pages the version has a dim line of its own, centred under
+// the name.
+func TestTheVersionIsUnderTheNameOnTheBigPages(t *testing.T) {
+	p := page()
+	p.Name = "Sneakers-PAM Appliance"
+	p.Big = true
+	f := p.Frame(64, 24)
+	name, version := -1, -1
+	for i, r := range f.Rows {
+		switch strings.TrimSpace(strings.Trim(r.String(), "|")) {
+		case "Sneakers-PAM Appliance":
+			name = i
+		case "0.1.0":
+			version = i
+			for _, s := range r {
+				if s.Text == "0.1.0" && s.Style != tui.Dim {
+					t.Errorf("the version is in style %d, not dim", s.Style)
+				}
+			}
+		}
+	}
+	if name < 0 || version != name+1 {
+		t.Fatalf("the name is on row %d and the version on row %d:\n%s", name, version, f.Text())
+	}
+	row := func(i int) string { return f.Rows[i].String() }
+	centre := func(s, what string) int { i := strings.Index(s, what); return i + len(what)/2 }
+	if d := centre(row(name), "Sneakers-PAM Appliance") - centre(row(version), "0.1.0"); d < -1 || d > 1 {
+		t.Fatalf("the version isn't centred under the name:\n%s", f.Text())
+	}
+}
+
 // Short of room, a one-row-header page gives up the blank under the
 // header before it cuts the body.
 func TestAFullBodyMovesUpBeforeItIsCut(t *testing.T) {
