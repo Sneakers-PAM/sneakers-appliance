@@ -12,7 +12,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -69,7 +68,8 @@ func run() int {
 	b := backend()
 	fd := int(os.Stdin.Fd()) // #nosec G115 -- a file descriptor fits an int
 	tty := term.IsTerminal(fd)
-	code, err := askCode(fd, tty)
+	stdin := newStdinLines(os.Stdin)
+	code, err := askCode(fd, tty, stdin)
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "\nNo authenticator code; the login ends.")
 		return 1
@@ -80,7 +80,7 @@ func run() int {
 		return 1
 	}
 	defer b.EndLogin(context.WithoutCancel(ctx), login)
-	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: stdin, Out: os.Stdout, Err: os.Stderr}
 	if tty {
 		e.RootShell = rootShell(fd)
 	}
@@ -114,18 +114,67 @@ func run() int {
 
 // askCode reads the TOTP code: without echo on a terminal, else one line
 // of standard input.
-func askCode(fd int, tty bool) (string, error) {
+func askCode(fd int, tty bool, stdin *stdinLines) (string, error) {
 	_, _ = fmt.Fprint(os.Stderr, "Authenticator code: ")
 	if tty {
 		b, err := term.ReadPassword(fd)
 		_, _ = fmt.Fprintln(os.Stderr)
 		return strings.TrimSpace(string(b)), err
 	}
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-	if err != nil && line == "" {
-		return "", err
+	return stdin.line()
+}
+
+// stdinLines is standard input without a terminal. line reads up to CR or
+// LF: a client whose own terminal is raw sends Enter as a bare CR, and
+// with no terminal on the box nothing turns it into LF. It reads a byte at
+// a time, so what follows the line is left for the command, and the LF of
+// a CRLF is dropped.
+type stdinLines struct {
+	r      io.Reader
+	skipLF bool
+}
+
+func newStdinLines(r io.Reader) *stdinLines { return &stdinLines{r: r} }
+
+func (s *stdinLines) line() (string, error) {
+	var b []byte
+	var one [1]byte
+	for {
+		n, err := s.Read(one[:])
+		if n == 1 {
+			switch one[0] {
+			case '\r':
+				s.skipLF = true
+				return strings.TrimSpace(string(b)), nil
+			case '\n':
+				return strings.TrimSpace(string(b)), nil
+			}
+			b = append(b, one[0])
+			continue
+		}
+		if err != nil {
+			if len(b) > 0 {
+				return strings.TrimSpace(string(b)), nil
+			}
+			return "", err
+		}
 	}
-	return strings.TrimSpace(line), nil
+}
+
+func (s *stdinLines) Read(p []byte) (int, error) {
+	for {
+		n, err := s.r.Read(p)
+		if s.skipLF && n > 0 {
+			s.skipLF = false
+			if p[0] == '\n' {
+				n = copy(p, p[1:n])
+				if n == 0 && err == nil {
+					continue
+				}
+			}
+		}
+		return n, err
+	}
 }
 
 // rootShell relays the terminal to the root shell, raw, and follows its

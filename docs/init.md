@@ -91,8 +91,9 @@ API's backend; `sneakers-osadmin` runs unprivileged and can't reach either socke
 
 ## PID 1
 
-Init mounts `/proc`, `/sys`, `/dev`, `/run`, `/tmp` and efivarfs, and mounts the ESP at
-`/run/sneakers/esp`. Unless it booted from the install medium or is finishing a factory reset, it
+Init mounts `/proc`, `/sys`, `/dev`, devpts on `/dev/pts`, `/run`, `/tmp` and efivarfs, and mounts
+the ESP at `/run/sneakers/esp`. devpts is where the kernel finds the terminals `/dev/ptmx` hands
+out: without it sshd can't give an SSH login a terminal, and the root shell can't open one. Unless it booted from the install medium or is finishing a factory reset, it
 then reads the custody header on the state volume, unlocks and mounts state and backup (or, on
 first boot, runs the protection step and makes them), all before the service table
 ([key-custody.md](key-custody.md#at-boot)); a state that doesn't unlock stops the boot with the
