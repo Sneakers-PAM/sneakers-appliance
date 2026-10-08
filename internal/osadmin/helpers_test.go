@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"errors"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -80,6 +81,7 @@ type fakeInit struct {
 	stagedVer  string
 	activated  int
 	rollbacks  int
+	markedGood int
 	// activateErr fails Activate; duringActivate runs inside it, as the
 	// box is mid-apply.
 	activateErr    error
@@ -198,6 +200,13 @@ func (i fakeImage) Activate(context.Context, *connect.Request[initv1.ActivateReq
 	return connect.NewResponse(&initv1.ActivateResponse{}), nil
 }
 
+func (i fakeImage) MarkGood(context.Context, *connect.Request[initv1.MarkGoodRequest]) (*connect.Response[initv1.MarkGoodResponse], error) {
+	i.f.mu.Lock()
+	defer i.f.mu.Unlock()
+	i.f.markedGood++
+	return connect.NewResponse(&initv1.MarkGoodResponse{}), nil
+}
+
 func (i fakeImage) Rollback(context.Context, *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
 	i.f.mu.Lock()
 	during := i.f.duringActivate
@@ -222,6 +231,8 @@ type fakeNetd struct {
 	ntp       bool
 	// servicePorts are the ports SetServicePorts last opened.
 	servicePorts []uint32
+	// down makes Status fail, as a netd that doesn't answer.
+	down bool
 }
 
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
@@ -252,6 +263,9 @@ func (n *fakeNetd) Confirm(_ context.Context, r *connect.Request[netdv1.ConfirmR
 func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest]) (*connect.Response[netdv1.StatusResponse], error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.down {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("netd is down"))
+	}
 	return connect.NewResponse(&netdv1.StatusResponse{ManagementAddresses: n.mgmt, Hostname: "box1.sneakers.example.org", NtpSynced: n.ntp}), nil
 }
 

@@ -19,7 +19,11 @@ A box holds at most two releases: the one it runs and one more (the next, or the
 - `Image.Activate` checks a release is staged (`UPGRADE_NOT_STAGED` otherwise); its entry already
   has boot tries, so the reboot that follows boots it.
 - `Image.MarkGood`, after the health checks, renames the running entry to `sneakers-<version>.efi`
-  and prunes sealed copies for UKIs no longer kept. init doesn't serve it yet (`Unimplemented`).
+  and prunes the sealed copies for UKIs no longer on the ESP (the copy made at install time, which
+  names no UKI, is kept). accessd calls it when it starts and then each minute until it succeeds,
+  once setup is done and init and netd answer; until platformd's health gate exists, those are the
+  health checks. It waits while an apply or a revert is under way, so it can't undo a revert before
+  its reboot. A release that never gets there (the box doesn't come up on it) uses up its tries.
 - `Image.Rollback` marks the running release bad (`+0-n`), so the next boot is the previous one.
   With no previous release it's `UPGRADE_NO_PREVIOUS`.
 - With Secure Boot off (TPM mode), the new release's PCR 4 must be predicted from the firmware's

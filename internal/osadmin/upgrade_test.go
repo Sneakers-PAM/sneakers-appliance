@@ -267,3 +267,46 @@ func TestTheWindowAppliesOnce(t *testing.T) {
 		t.Fatalf("%+v", e)
 	}
 }
+
+func TestTheBootedReleaseIsMarkedGoodOnceTheBoxIsHealthy(t *testing.T) {
+	b := newBox(t, false)
+	ctx := context.Background()
+	if err := b.srv.MarkGood(ctx); err == nil || b.init.markedGood != 0 {
+		t.Fatalf("before setup is done: %v, marked %d", err, b.init.markedGood)
+	}
+	if err := os.MkdirAll(filepath.Join(b.state, "setup"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b.state, "setup", osadmin.DoneMarker), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	b.netd.down = true
+	if err := b.srv.MarkGood(ctx); err == nil || b.init.markedGood != 0 {
+		t.Fatalf("with netd down: %v, marked %d", err, b.init.markedGood)
+	}
+	b.netd.down = false
+	if err := b.srv.MarkGood(ctx); err != nil || b.init.markedGood != 1 {
+		t.Fatalf("healthy: %v, marked %d", err, b.init.markedGood)
+	}
+}
+
+func TestMarkGoodWaitsOutAnApplyOrRevert(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	if err := os.MkdirAll(filepath.Join(b.state, "setup"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b.state, "setup", osadmin.DoneMarker), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A revert marks the running release bad and reboots; marking it good
+	// before the reboot would undo the revert.
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.srv.MarkGood(ctx); err == nil || b.init.markedGood != 0 {
+		t.Fatalf("during a revert: %v, marked %d", err, b.init.markedGood)
+	}
+}

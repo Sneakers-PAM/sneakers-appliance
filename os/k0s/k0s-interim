@@ -92,7 +92,9 @@ prepare() {
   for l in "$data"/images/*.tar; do
     if [ -L "$l" ]; then rm -f "$l"; fi
   done
-  slot="$(readlink -f "$product")"
+  # The shell's own cd -P, not readlink -f: the box's busybox has no
+  # readlink -f (os/k0s/busybox_test.go).
+  slot="$(cd -P "$product" && pwd)"
   n=""
   for f in "$slot"/images/*.tar; do
     [ -f "$f" ] || continue

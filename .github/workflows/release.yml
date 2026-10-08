@@ -175,8 +175,10 @@ jobs:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
           in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work"
+          # shellcheck source=build/release/pins.env
+          source build/release/pins.env
           "$RUNNER_TEMP/sneakers-artifact" assemble --arch amd64 --version "$VERSION" --channel production \
-            --systemd "$(cat "$in/systemd-version")" \
+            --kit-min "$KIT_MIN" --systemd "$(cat "$in/systemd-version")" \
             --release "$in/release.yaml" --release-sig "$in/release.yaml.sigstore.json" \
             --root "$in/root-$VERSION.img" --verity-json "$in/verity.json" \
             --uki "$work/sneakers-$VERSION.efi" --loader "$work/systemd-bootx64.efi" --keys keys/production \
@@ -335,7 +337,9 @@ jobs:
           keys="$RUNNER_TEMP/labkeys" lab="$RUNNER_TEMP/lab" work="$RUNNER_TEMP/work"
           mkdir -p "$keys" "$work"
           sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
-          KERNEL=build/out/kernel/amd64/bzImage \
+          # shellcheck source=build/release/pins.env
+          source build/release/pins.env
+          KIT_MIN="$KIT_MIN" KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
           OPENSSH=out/static BUSYBOX=out/static/busybox \

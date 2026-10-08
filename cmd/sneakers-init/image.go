@@ -123,6 +123,10 @@ func (e dirESP) Remove(rel string) error {
 	return syncDir(filepath.Dir(filepath.Join(e.root, rel)))
 }
 
+func (e dirESP) Open(rel string) (io.ReadCloser, error) {
+	return os.Open(filepath.Join(e.root, rel)) // #nosec G304 -- a path under the ESP mount
+}
+
 func syncDir(dir string) error {
 	d, err := os.Open(dir) // #nosec G304 -- a directory under the ESP mount
 	if err != nil {

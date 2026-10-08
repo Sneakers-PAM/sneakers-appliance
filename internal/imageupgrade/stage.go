@@ -33,6 +33,7 @@ type ESP interface {
 	WriteFile(rel string, r io.Reader) error
 	Rename(from, to string) error
 	Remove(rel string) error
+	Open(rel string) (io.ReadCloser, error)
 }
 
 // Slots are the two root partitions.
@@ -157,6 +158,32 @@ func (s *Stager) MarkGood(ctx context.Context, keep []string) error {
 		}
 	}
 	return s.Sealer.Prune(ctx, keep)
+}
+
+// Kept is what MarkGood keeps sealed copies for: the SHA-256 of every UKI
+// on the ESP (the running release, and the previous or the staged one, so
+// either still unseals the state), and "" for the copy made at install
+// time, which names no UKI and may be the previous release's only one.
+func (s *Stager) Kept() ([]string, error) {
+	entries, err := s.entries()
+	if err != nil {
+		return nil, err
+	}
+	keep := []string{""}
+	for _, e := range entries {
+		f, err := s.ESP.Open(path.Join(UKIDir, e.Name))
+		if err != nil {
+			return nil, err
+		}
+		h := sha256.New()
+		_, err = io.Copy(h, f)
+		_ = f.Close()
+		if err != nil {
+			return nil, fmt.Errorf("imageupgrade: read %s: %w", e.Name, err)
+		}
+		keep = append(keep, hex.EncodeToString(h.Sum(nil)))
+	}
+	return keep, nil
 }
 
 // Rollback marks the running release bad so systemd-boot boots the
