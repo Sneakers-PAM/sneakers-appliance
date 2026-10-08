@@ -6,10 +6,11 @@
 // Package setup_test is the image suite's whole first boot, on the box a
 // VMware VM is: a screen and no serial port, Secure Boot off, no TPM, and
 // a NIC on QEMU's user network with 22 and 8443 forwarded. The wizard gets
-// the DHCP address, the first admin's key is enrolled over SSH with the
-// typed yes, a recovery key is set over SSH, the first :8443 sign-in is
-// approved with `login <code>`, setup/done is written, and after a reboot
-// the box is in normal operation with SSH and :8443 up.
+// the DHCP address and shows the setup code; on :8443 the code makes the
+// first admin with a password and a TOTP secret, sshd comes on, the box
+// issues an SSH key, a recovery key is set, one sign-in finishes setup,
+// and after a reboot the box is in normal operation with SSH (the issued
+// certificate, then the TOTP code) and :8443 up.
 package setup_test
 
 import (
@@ -18,6 +19,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -34,6 +36,7 @@ import (
 	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
 	"github.com/Sneakers-PAM/sneakers-appliance/test/image/harness"
 )
 
@@ -78,9 +81,10 @@ func key(t *testing.T, name string) string {
 	return p
 }
 
-// ssh runs one closed-shell command as user with key, feeding stdin.
+// ssh runs one closed-shell command as user with key and its certificate,
+// feeding stdin (the TOTP code first).
 func ssh(ctx context.Context, port int, user, key, stdin string, command ...string) (string, error) {
-	args := []string{"-p", fmt.Sprint(port), "-i", key, "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+	args := []string{"-p", fmt.Sprint(port), "-i", key, "-o", "CertificateFile=" + key + "-cert.pub", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10",
 		user + "@127.0.0.1"}
 	cmd := exec.CommandContext(ctx, "ssh", append(args, command...)...) // #nosec G204 -- test-only
@@ -89,11 +93,18 @@ func ssh(ctx context.Context, port int, user, key, stdin string, command ...stri
 	return string(out), err
 }
 
-// connectCall posts a Connect unary call in JSON to :8443.
-func connectCall(t *testing.T, hc *http.Client, base, procedure string, in, out any) {
+// connectCall posts a Connect unary call in JSON to :8443, with the
+// session's CSRF token.
+func connectCall(t *testing.T, hc *http.Client, base, csrf, procedure string, in, out any) {
 	t.Helper()
 	body, _ := json.Marshal(in)
-	resp, err := hc.Post(base+procedure, "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, base+procedure, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-CSRF-Token", csrf)
+	resp, err := hc.Do(req)
 	if err != nil {
 		t.Fatalf("%s: %v", procedure, err)
 	}
@@ -107,7 +118,22 @@ func connectCall(t *testing.T, hc *http.Client, base, procedure string, in, out 
 	}
 }
 
-var codeOnScreen = regexp.MustCompile(`Code ([0-9A-Z]{4}-[0-9A-Z]{4})`)
+var codeOnScreen = regexp.MustCompile(`setup code ([0-9A-Z]{4}-[0-9A-Z]{4})`)
+
+// totp hands out TOTP codes for steps not used yet: the box takes each
+// step's code once.
+type totp struct {
+	secret []byte
+	last   uint64
+}
+
+func (c *totp) next() string {
+	for credentials.Step(time.Now()) <= c.last {
+		time.Sleep(time.Second)
+	}
+	c.last = credentials.Step(time.Now())
+	return credentials.TOTP(c.secret, time.Now())
+}
 
 func TestFirstBootToAWorkingAppliance(t *testing.T) {
 	img, keys := os.Getenv("SNEAKERS_IMAGE"), os.Getenv("SNEAKERS_KEYS")
@@ -145,62 +171,13 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 	vm.ExpectScreen(`Setup 2 of 5: protection.*Protection: reduced \(Secure Boot off\)`, time.Minute)
 	vm.Press("\r")
 
-	// 2. The first admin, and their key enrolled over SSH with the code
-	// shown on the screen and the yes typed there. sshd listens once the
-	// SSH step opened 22.
-	vm.ExpectScreen(`The first admin is an owner`, time.Minute)
-	vm.Press("alice\r")
-	m := vm.ExpectScreen(`Code [0-9A-Z]{4}-[0-9A-Z]{4}`, 2*time.Minute)
+	// 2. The setup code on the screen opens the :8443 setup page; no SSH
+	// yet.
+	m := vm.ExpectScreen(`setup code [0-9A-Z]{4}-[0-9A-Z]{4}`, 3*time.Minute)
 	code := codeOnScreen.FindStringSubmatch(m)[1]
-	deadline := time.Now().Add(2 * time.Minute)
-	for b := banner(sshAddr); !strings.HasPrefix(b, "SSH-"); b = banner(sshAddr) {
-		if time.Now().After(deadline) {
-			t.Fatal("sshd didn't answer after the SSH step opened 22")
-		}
-		time.Sleep(2 * time.Second)
+	if b := banner(sshAddr); strings.HasPrefix(b, "SSH-") {
+		t.Fatalf("SSH answered before the first admin: %q", b)
 	}
-	alice := key(t, "alice")
-	enrolled := make(chan string, 1)
-	go func() {
-		out, err := ssh(ctx, sshPort, "enrol", alice, code+"\n")
-		if err != nil {
-			out += " (" + err.Error() + ")"
-		}
-		enrolled <- out
-	}()
-	vm.ExpectScreen(`This key wants to be a key of admin alice`, 2*time.Minute)
-	vm.Press("yes\r")
-	select {
-	case out := <-enrolled:
-		if !strings.Contains(out, "Key enrolled for alice") {
-			t.Fatalf("the enrolment session said: %s", out)
-		}
-	case <-time.After(2 * time.Minute):
-		t.Fatal("the enrolment session didn't finish")
-	}
-	vm.ExpectScreen(`Keys enrolled so far: 1`, time.Minute)
-	vm.Press("d\r")
-	vm.ExpectScreen(`Setup 4 and 5: continue on :8443`, 2*time.Minute)
-
-	// 3. A recovery key, over SSH into the closed shell.
-	recovery, err := os.ReadFile(key(t, "recovery") + ".pub")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var out string
-	deadline = time.Now().Add(2 * time.Minute)
-	for {
-		if out, err = ssh(ctx, sshPort, "alice", alice, string(recovery), "setup", "recovery-key", "--label", "safe"); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("setup recovery-key: %v: %s", err, out)
-		}
-		time.Sleep(3 * time.Second)
-	}
-	vm.ExpectScreen(`\[x\] 4 Recovery`, 2*time.Minute)
-
-	// 4. The first :8443 sign-in, approved over SSH.
 	jar, _ := cookiejar.New(nil)
 	var cert []byte
 	hc := &http.Client{Jar: jar, Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{
@@ -211,11 +188,7 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 		},
 	}}}
 	base := fmt.Sprintf("https://127.0.0.1:%d", httpsPort)
-	var begin struct {
-		Code      string `json:"code"`
-		PollToken string `json:"pollToken"`
-	}
-	deadline = time.Now().Add(2 * time.Minute)
+	deadline := time.Now().Add(2 * time.Minute)
 	for {
 		resp, err := hc.Get(base + "/")
 		if err == nil {
@@ -227,21 +200,72 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 		}
 		time.Sleep(3 * time.Second)
 	}
-	connectCall(t, hc, base, "/sneakers.appliance.osadmin.v1.SignInService/BeginSignIn", map[string]any{}, &begin)
-	if out, err := ssh(ctx, sshPort, "alice", alice, "y\n", "login", begin.Code); err != nil || !strings.Contains(out, "Signed in.") {
-		t.Fatalf("login %s: %v: %s", begin.Code, err, out)
+	const api = "/sneakers.appliance.osadmin.v1."
+	var red struct {
+		CsrfToken string `json:"csrfToken"`
 	}
-	var poll struct {
-		State string `json:"state"`
+	connectCall(t, hc, base, "", api+"SetupService/RedeemCode", map[string]any{"code": code}, &red)
+
+	// 3. The first admin: a password and a TOTP secret. sshd comes on.
+	var begin struct {
+		Totp struct {
+			ID     string `json:"id"`
+			Secret string `json:"secret"`
+		} `json:"totp"`
 	}
-	connectCall(t, hc, base, "/sneakers.appliance.osadmin.v1.SignInService/PollSignIn", map[string]any{"pollToken": begin.PollToken}, &poll)
-	if poll.State != "SIGN_IN_STATE_APPROVED" {
-		t.Fatalf("the sign-in is %s", poll.State)
+	const password = "image suite lab passphrase"
+	connectCall(t, hc, base, red.CsrfToken, api+"SetupService/BeginCredentials", map[string]any{"admin": "alice", "password": password}, &begin)
+	secret, err := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(begin.Totp.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes := &totp{secret: secret}
+	var session struct {
+		Session struct {
+			CsrfToken string `json:"csrfToken"`
+		} `json:"session"`
+	}
+	connectCall(t, hc, base, red.CsrfToken, api+"SetupService/CompleteCredentials", map[string]any{"enrolmentId": begin.Totp.ID, "totpCode": codes.next()}, &session)
+	csrf := session.Session.CsrfToken
+	deadline = time.Now().Add(2 * time.Minute)
+	for b := banner(sshAddr); !strings.HasPrefix(b, "SSH-"); b = banner(sshAddr) {
+		if time.Now().After(deadline) {
+			t.Fatal("sshd didn't answer after the first admin")
+		}
+		time.Sleep(2 * time.Second)
 	}
 
-	// 5. With one admin the wizard asks to confirm it, then completes setup.
-	vm.ExpectScreen(`This box has one admin`, 2*time.Minute)
-	vm.Press("one admin\r")
+	// 4. An SSH key the box issues, and a recovery key.
+	var issued struct {
+		PrivateKey  string `json:"privateKey"`
+		Certificate string `json:"certificate"`
+	}
+	connectCall(t, hc, base, csrf, api+"AccessService/IssueSshKey", map[string]any{"label": "image suite"}, &issued)
+	alice := filepath.Join(t.TempDir(), "alice")
+	if err := os.WriteFile(alice, []byte(issued.PrivateKey), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(alice+"-cert.pub", []byte(issued.Certificate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recovery, err := os.ReadFile(key(t, "recovery") + ".pub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	connectCall(t, hc, base, csrf, api+"SetupService/AddRecoveryKey", map[string]any{"publicKey": strings.TrimSpace(string(recovery)), "label": "safe"}, &struct{}{})
+	vm.ExpectScreen(`\[x\] 4 Recovery`, 2*time.Minute)
+	var out string
+	if out, err = ssh(ctx, sshPort, "alice", alice, "000000\n", "status"); err == nil {
+		t.Fatalf("a wrong TOTP code let the login through: %s", out)
+	}
+
+	// 5. The network and protection steps, one admin confirmed, one
+	// sign-in, and the wizard completes setup.
+	for _, step := range []string{"SETUP_STEP_KIND_NETWORK", "SETUP_STEP_KIND_PROTECTION"} {
+		connectCall(t, hc, base, csrf, api+"SetupService/AcknowledgeStep", map[string]any{"step": step}, &struct{}{})
+	}
+	connectCall(t, hc, base, csrf, api+"SetupService/AcknowledgeSingleAdmin", map[string]any{}, &struct{}{})
+	connectCall(t, hc, base, "", api+"SignInService/SignIn", map[string]any{"admin": "alice", "password": password, "totpCode": codes.next()}, &session)
 	vm.ExpectScreen(`Setup is complete.*Restart to start normal operation`, 2*time.Minute)
 	vm.Press("reboot\r")
 	vm.WaitExit(5 * time.Minute)
@@ -253,7 +277,7 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 	next.ExpectScreen(`Management 10\.0\.2\.15/24`, 3*time.Minute)
 	deadline = time.Now().Add(3 * time.Minute)
 	for {
-		if out, err = ssh(ctx, sshPort, "alice", alice, "", "status", "-o", "json"); err == nil && strings.Contains(out, `"normal"`) {
+		if out, err = ssh(ctx, sshPort, "alice", alice, codes.next()+"\n", "status", "-o", "json"); err == nil && strings.Contains(out, `"normal"`) {
 			break
 		}
 		if time.Now().After(deadline) {
