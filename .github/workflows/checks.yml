@@ -31,6 +31,7 @@ jobs:
       # and www.w3.org are the XML namespaces of the OVF descriptor.
       # cdn.openbsd.org and busybox.net are the source hosts of the pinned
       # static OpenSSH and busybox tarballs (build/openssh, build/busybox).
+      # software.sslmate.com is the module host of go-pkcs12 (PFX import).
       allowed-domains: >-
         kernel.org
         cdn.kernel.org
@@ -53,3 +54,4 @@ jobs:
         api.acme.com
         cdn.openbsd.org
         busybox.net
+        software.sslmate.com

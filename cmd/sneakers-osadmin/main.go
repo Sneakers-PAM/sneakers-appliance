@@ -102,8 +102,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		if err != nil {
 			return err
 		}
-		lg.Info("osadmin: certificate ready", log.F("fingerprint", info.Fingerprint), log.F("expires", info.Expires))
-		servers, err := serve(f.Handler(), cert, addrs, lg)
+		lg.Info("osadmin: certificate ready", log.F("fingerprint", info.Fingerprint), log.F("expires", info.Expires), log.F("selfSigned", info.SelfSigned))
+		// accessd swaps the files when an owner assigns a certificate; the
+		// source re-reads them, so the listeners keep running.
+		src := osadmin.NewCertSource(paths.OwnDir(), cert, lg)
+		servers, err := serve(f.Handler(), src.GetCertificate, addrs, lg)
 		if err != nil {
 			return err
 		}
@@ -164,7 +167,7 @@ func watch(ctx context.Context, binding accessv1connect.BindingServiceClient, ho
 	}
 }
 
-func serve(h http.Handler, cert tls.Certificate, addrs []string, lg log.Logger) ([]*http.Server, error) {
+func serve(h http.Handler, cert func(*tls.ClientHelloInfo) (*tls.Certificate, error), addrs []string, lg log.Logger) ([]*http.Server, error) {
 	var out []*http.Server
 	for _, a := range addrs {
 		ln, err := net.Listen("tcp", net.JoinHostPort(a, Port))
@@ -176,7 +179,7 @@ func serve(h http.Handler, cert tls.Certificate, addrs []string, lg log.Logger) 
 		}
 		s := &http.Server{
 			Handler:           h,
-			TLSConfig:         &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12},
+			TLSConfig:         &tls.Config{GetCertificate: cert, MinVersion: tls.VersionTLS12},
 			ReadHeaderTimeout: 10 * time.Second,
 			IdleTimeout:       2 * time.Minute,
 		}
