@@ -125,13 +125,11 @@ SIGKILL if it is still there 5 seconds later), and an elevated shell is ended as
 browser's `id` is derived from its session and is never its cookie. An `id` that names no live
 session answers `NotFound`.
 
-Shell elevation: `ApproveElevation` signs the requester's certificate and may shorten the request
-(`minutes`, never longer). With two or more owners nobody approves their own request
-(`ELEV_SELF_APPROVAL`); the only owner may, and the request is flagged `self_approved` (and on
-Status, `WARNING_KIND_SELF_APPROVED_ELEVATION`, while it is approved or active).
-`TerminateElevation` ends an active session or revokes an approved certificate nobody has used.
-`GetElevationRecording` returns the asciicast recording with `verified` set when every chunk hash
-in the OS audit log matches. See [ssh-and-elevation.md](ssh-and-elevation.md#one-time-elevation).
+Root shells: `ApproveElevation` and `DenyElevation` are gone (deprecated in the proto, answering
+`Unimplemented`); a root shell needs no approval, only the challenge and the code
+`RootShellService.IssueRootShellCode` gives for it. `TerminateElevation` ends an active root shell.
+`GetElevationRecording` returns the asciicast recording with `verified` set when every chunk hash in
+the OS audit log matches. See [ssh-and-elevation.md](ssh-and-elevation.md#the-root-shell).
 
 ### Not available in this release
 

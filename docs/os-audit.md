@@ -38,20 +38,18 @@ An elevated session is recorded in full, both directions, as asciicast v2 in
 chunk count. A session killed mid-way still leaves a prefix that verifies; a recording with more
 than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can view recordings.
 
-## Elevation and enrolment
+## Sign-in, lockout and the root shell
 
-| Action | Written by | When |
+| Action | By | When |
 |---|---|---|
-| `elevation.request` | accessd | a closed-shell login asks; `detail` has the minutes and reason |
-| `elevation.approve`, `elevation.deny`, `elevation.terminate` | accessd (the :8443 or console call) | an owner decides; `detail.selfApproved` is `true` when the only owner approved their own |
-| `elevation.certificate` | accessd | the certificate is signed: its serial, `validBefore` and minutes |
-| `elevation.connect` | accessd | `sneakers-elevated` uses the certificate up (or is refused, with the code) |
-| `elevation.end` | accessd | the session ends: `outcome` `exit`, `time-box` or `terminated`, `detail.recordingSha256` the whole recording's hash |
-| `elevation.expire` | accessd | a request waited 30 minutes, a certificate's 10 minutes passed, or a session was lost |
-| `elevation.recording.view` | accessd | an owner reads a recording on :8443 |
-| `enrol.open`, `enrol.close` | accessd | the console opens the window; it closes as `done`, `idle` or `attempts` |
-| `enrol.code`, `enrol.submit` | accessd | a wrong code (refused, `ENROL_CODE`), or a key that gave the right one |
-| `enrol.accept`, `enrol.reject` | accessd | the console's typed `yes` stores the key, or it refuses it |
+| `signin.password` | accessd | a :8443 sign-in with the name, password and TOTP code (or a refusal) |
+| `signin.step-up` | accessd | a fresh TOTP code for a sensitive action |
+| `access.lockout`, `access.throttle` | accessd | an account locks after 3 failures, or a source is held off after 10 |
+| `access.admin.unlock` | accessd | an owner unlocks an account |
+| `ssh.login`, `ssh.logout` | accessd | the closed shell's TOTP check, and its end |
+| `setup.code.redeem`, `setup.code.reset` | accessd | a browser redeems the setup code (or a wrong one), the console asks for a new code |
+| `recover-access.code`, `recover-access.cancel` | accessd | the console's Recover access code |
+| `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end |
 
 ## Reboot and shutdown
 

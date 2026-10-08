@@ -57,14 +57,8 @@ The steps of first boot, in order, with a step strip on every page
 2. **Protection.** Read-only: the Secure Boot choice and the key custody were made at boot, by
    init, before the wizard (the state volumes are formatted for them). The page says the level, the
    at-rest key, and how to raise a reduced level later.
-3. **First admin.** The owner's name (checked against the name rules and the reserved names), then
-   netd opens port 22, sshd starts and the enrolment window opens ([ssh-and-elevation.md](ssh-and-elevation.md#the-enrolment-window)):
-   the page shows `ssh enrol@<address>`, the code, the host key fingerprints, and the keys enrolled
-   so far. A key that gave the code is shown with its fingerprint and stored only on a typed `yes`.
-   **t** types a key on the console; **f** fetches an `authorized_keys` file over https (no
-   redirect to http), and each key found is confirmed with its own `yes`. **d** (Done, after one
-   key) closes the window.
-4. and 5. **Continue on :8443.** netd opens port 8443 and osadmin starts once step 3 is done. The page shows the :8443 URLs,
+3. **Continue on :8443.** :8443 runs from the start of first boot. The page shows the :8443 URLs,
+   the setup code (XXXX-XXXX-XXXX-XXXX, 60 minutes, 5 tries; [access.md](access.md#the-8443-setup-page)),
    the certificate's SHA-256 fingerprint to check on the first visit, and the recovery keys set so
    far (one to three, added on the :8443 setup page or with `setup recovery-key` over SSH). It
    moves on by itself once :8443 finishes setup after the first sign-in.
@@ -129,11 +123,11 @@ command itself. The output shows as the command's transcript, as plain text.
 
 Then the console's own entries:
 
-- **Recover access**, for when every admin key is lost: type an owner's name to add a key to them,
-  or a new name to make a new owner. It runs the enrolment window as above, marked as a recovery:
-  each key stored is recorded in the OS audit log as `access.console-recovery`, every other owner
-  sees the warning on :8443 Status while the hold lasts, and the key can't approve elevations for
-  24 hours (`approvalHoldUntil`; another owner can lift it).
+- **Recover access**, for when every admin's password or authenticator is lost: it shows a one-time
+  code (16 characters, 60 minutes, 5 tries, sealed, destroyed on use) for `https://<address>:8443/recover`,
+  where an owner gets a new password and TOTP secret, or a new owner is made
+  ([access.md](access.md#the-8443-setup-page)). Every admin sees a notice at their next sign-in,
+  and Status warns for 24 hours.
 - **Recent messages**: the tail of `/run/sneakers/console.log`.
 - **Cancel the factory reset**, while one is pending or counting down (typed `cancel`).
 
@@ -145,7 +139,7 @@ table, with no change to the console:
 
 | Backend | Until it's in the build |
 |---|---|
-| netd or sshd, on a build without them | the interface list is read from sysfs (an interface not brought up shows `not up`) and the network step can't apply settings, so it stops there; the enrolment window says `ssh enrol@` can't connect, and keys are typed or fetched on the console |
+| netd or sshd, on a build without them | the interface list is read from sysfs (an interface not brought up shows `not up`) and the network step can't apply settings, so it stops there; SSH logins can't connect |
 | moving to normal while init runs | setup completes and writes `setup/done`; normal operation starts on the next boot (the complete page offers `reboot`) |
 | the platform (spec 3) and the upgrade service (spec 5) | the status view says the platform isn't installed; upgrades show only the staged and rolled-back versions from Status |
 
