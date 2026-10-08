@@ -964,8 +964,10 @@ type ApplyUpdateRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	ElevationOverride *ElevationOverride     `protobuf:"bytes,1,opt,name=elevation_override,json=elevationOverride,proto3" json:"elevation_override,omitempty"`
 	Target            UpdateTarget           `protobuf:"varint,2,opt,name=target,proto3,enum=sneakers.appliance.osadmin.v1.UpdateTarget" json:"target,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// totp_code is a fresh code from the owner's authenticator.
+	TotpCode      string `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ApplyUpdateRequest) Reset() {
@@ -1012,6 +1014,13 @@ func (x *ApplyUpdateRequest) GetTarget() UpdateTarget {
 	return UpdateTarget_UPDATE_TARGET_UNSPECIFIED
 }
 
+func (x *ApplyUpdateRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
 type ApplyUpdateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1052,8 +1061,10 @@ type RevertUpdateRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	ElevationOverride *ElevationOverride     `protobuf:"bytes,1,opt,name=elevation_override,json=elevationOverride,proto3" json:"elevation_override,omitempty"`
 	Target            UpdateTarget           `protobuf:"varint,2,opt,name=target,proto3,enum=sneakers.appliance.osadmin.v1.UpdateTarget" json:"target,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// totp_code is a fresh code from the owner's authenticator.
+	TotpCode      string `protobuf:"bytes,3,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RevertUpdateRequest) Reset() {
@@ -1098,6 +1109,13 @@ func (x *RevertUpdateRequest) GetTarget() UpdateTarget {
 		return x.Target
 	}
 	return UpdateTarget_UPDATE_TARGET_UNSPECIFIED
+}
+
+func (x *RevertUpdateRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
 }
 
 type ListProductVersionsRequest struct {
@@ -1374,14 +1392,16 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x11ElevationOverride\x12!\n" +
 	"\felevation_id\x18\x01 \x01(\tR\velevationId\x12\x18\n" +
 	"\aconfirm\x18\x02 \x01(\tR\aconfirm\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xba\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xd7\x01\n" +
 	"\x12ApplyUpdateRequest\x12_\n" +
 	"\x12elevation_override\x18\x01 \x01(\v20.sneakers.appliance.osadmin.v1.ElevationOverrideR\x11elevationOverride\x12C\n" +
-	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x15\n" +
-	"\x13ApplyUpdateResponse\"\xbb\x01\n" +
+	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x1b\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\x15\n" +
+	"\x13ApplyUpdateResponse\"\xd8\x01\n" +
 	"\x13RevertUpdateRequest\x12_\n" +
 	"\x12elevation_override\x18\x01 \x01(\v20.sneakers.appliance.osadmin.v1.ElevationOverrideR\x11elevationOverride\x12C\n" +
-	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x1c\n" +
+	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x1b\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\x1c\n" +
 	"\x1aListProductVersionsRequest\"\x8b\x01\n" +
 	"\x1bListProductVersionsResponse\x12I\n" +
 	"\bversions\x18\x01 \x03(\v2-.sneakers.appliance.osadmin.v1.ProductVersionR\bversions\x12!\n" +
@@ -1398,8 +1418,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\vGetUpgrades\x121.sneakers.appliance.osadmin.v1.GetUpgradesRequest\x1a2.sneakers.appliance.osadmin.v1.GetUpgradesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x8b\x01\n" +
 	"\vFetchUpdate\x121.sneakers.appliance.osadmin.v1.FetchUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.FetchUpdateResponse\"\x15\xc2\xf3\x18\x11\x10\x01\"\rupgrade.fetch\x12\x8d\x01\n" +
 	"\vStageUpdate\x121.sneakers.appliance.osadmin.v1.StageUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.StageUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.stage\x12\x8d\x01\n" +
-	"\vApplyUpdate\x121.sneakers.appliance.osadmin.v1.ApplyUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.ApplyUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.apply\x12\x91\x01\n" +
-	"\fRevertUpdate\x122.sneakers.appliance.osadmin.v1.RevertUpdateRequest\x1a3.sneakers.appliance.osadmin.v1.RevertUpdateResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0eupgrade.revert\x12\x97\x01\n" +
+	"\vApplyUpdate\x121.sneakers.appliance.osadmin.v1.ApplyUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.ApplyUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\"\rupgrade.apply8\x01\x12\x91\x01\n" +
+	"\fRevertUpdate\x122.sneakers.appliance.osadmin.v1.RevertUpdateRequest\x1a3.sneakers.appliance.osadmin.v1.RevertUpdateResponse\"\x18\xc2\xf3\x18\x14\x10\x02\"\x0eupgrade.revert8\x01\x12\x97\x01\n" +
 	"\x13ListProductVersions\x129.sneakers.appliance.osadmin.v1.ListProductVersionsRequest\x1a:.sneakers.appliance.osadmin.v1.ListProductVersionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa1\x01\n" +
 	"\x10SetUpgradePolicy\x126.sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest\x1a7.sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse\"\x1c\xc2\xf3\x18\x18\x10\x02\x18\x01\"\x12upgrade.policy.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 

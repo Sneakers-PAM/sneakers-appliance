@@ -208,19 +208,19 @@ func TestApplyAndRevert(t *testing.T) {
 	alice := b.browser()
 	alice.signIn("alice")
 	ctx := context.Background()
-	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_NOT_STAGED")
 	id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
 	if err := stage(alice, id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if b.init.activated != 1 || b.init.reboots != 1 {
 		t.Fatal("apply activates and reboots")
 	}
-	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if b.init.rollbacks != 1 || b.init.reboots != 2 {
@@ -228,7 +228,7 @@ func TestApplyAndRevert(t *testing.T) {
 	}
 	bob := b.browser()
 	bob.signIn("bob")
-	_, err = bob.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	_, err = bob.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("bob")}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 }
 
@@ -303,10 +303,49 @@ func TestMarkGoodWaitsOutAnApplyOrRevert(t *testing.T) {
 	}
 	// A revert marks the running release bad and reboots; marking it good
 	// before the reboot would undo the revert.
-	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{})); err != nil {
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
 	if err := b.srv.MarkGood(ctx); err == nil || b.init.markedGood != 0 {
 		t.Fatalf("during a revert: %v, marked %d", err, b.init.markedGood)
+	}
+}
+
+// Apply and Revert take a fresh authenticator code on every call: a
+// step-up window that is still open isn't enough, and a stale one doesn't
+// stop a call that carries a good code.
+func TestApplyAndRevertTakeAFreshCodeEveryTime(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
+	_, err = alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: "000000"}))
+	symbolIn(t, err, connect.CodeUnauthenticated, "ACCESS_CREDENTIALS")
+	if b.init.activated != 0 || b.init.reboots != 0 {
+		t.Fatal("a refused apply changed nothing")
+	}
+	if e := lastEntry(t, b.log, "upgrade.apply"); e.Outcome != "refused" || e.Actor != "alice" {
+		t.Fatalf("%+v", e)
+	}
+	b.clk.Advance(10 * time.Minute)
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if b.init.activated != 1 || b.init.reboots != 1 {
+		t.Fatal("apply with a fresh code activates and reboots")
+	}
+	_, err = alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{}))
+	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if b.init.rollbacks != 1 || b.init.reboots != 2 {
+		t.Fatal("revert with a fresh code rolls back and reboots")
 	}
 }

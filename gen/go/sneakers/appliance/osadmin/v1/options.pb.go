@@ -109,7 +109,12 @@ type Rule struct {
 	// setup_only methods are refused with SETUP_DONE once setup is done.
 	// Every call made with a setup code's session is refused the same way,
 	// whatever its method.
-	SetupOnly     bool `protobuf:"varint,6,opt,name=setup_only,json=setupOnly,proto3" json:"setup_only,omitempty"`
+	SetupOnly bool `protobuf:"varint,6,opt,name=setup_only,json=setupOnly,proto3" json:"setup_only,omitempty"`
+	// code_each_call: the request's totp_code must be a fresh code from the
+	// caller's authenticator on every call, whatever the step-up window
+	// says. A wrong or reused code counts toward the sign-in lockout. Used
+	// for the actions that reboot the box or swap what it runs.
+	CodeEachCall  bool `protobuf:"varint,7,opt,name=code_each_call,json=codeEachCall,proto3" json:"code_each_call,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -186,6 +191,13 @@ func (x *Rule) GetSetupOnly() bool {
 	return false
 }
 
+func (x *Rule) GetCodeEachCall() bool {
+	if x != nil {
+		return x.CodeEachCall
+	}
+	return false
+}
+
 var file_sneakers_appliance_osadmin_v1_options_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
@@ -207,7 +219,7 @@ var File_sneakers_appliance_osadmin_v1_options_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"\n" +
-	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\xc8\x01\n" +
+	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\xee\x01\n" +
 	"\x04Rule\x12\x16\n" +
 	"\x06public\x18\x01 \x01(\bR\x06public\x127\n" +
 	"\x04role\x18\x02 \x01(\x0e2#.sneakers.appliance.osadmin.v1.RoleR\x04role\x12\x17\n" +
@@ -215,7 +227,8 @@ const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"\x05audit\x18\x04 \x01(\tR\x05audit\x12!\n" +
 	"\fcode_session\x18\x05 \x01(\bR\vcodeSession\x12\x1d\n" +
 	"\n" +
-	"setup_only\x18\x06 \x01(\bR\tsetupOnly*<\n" +
+	"setup_only\x18\x06 \x01(\bR\tsetupOnly\x12$\n" +
+	"\x0ecode_each_call\x18\a \x01(\bR\fcodeEachCall*<\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

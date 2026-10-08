@@ -46,8 +46,13 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    `UPGRADE_PATCH_BASE`) is deleted, never unpacked, and the refusal is audited. Only then is the
    update key read from the booted UKI (by accessd, as root; [access.md](access.md#the-update-key)), the payload decrypted and unpacked, and the layout handed to
    `Image.Stage`.
-3. **Apply** (owner, step-up) activates the staged release and reboots into it (`UPGRADE_NOT_STAGED`
-   when nothing is staged). **Revert** rolls back to the previous release and reboots. Both are
+3. **Apply** (owner) activates the staged release and reboots into it (`UPGRADE_NOT_STAGED`
+   when nothing is staged). **Revert** rolls back to the previous release and reboots. Neither
+   rides on the step-up window: each request carries its own `totp_code`, a fresh code from the
+   owner's authenticator, checked on every call under the sign-in lockout (`ACCESS_CONFIRM` when
+   it's empty, `ACCESS_CREDENTIALS` when it's wrong or used already). The page asks for it in the
+   same dialog as the typed version, then shows a restart page that waits for :8443 to answer
+   again and sends the owner to sign in. Both are
    refused while an elevated shell is open (`UPGRADE_ELEVATED`, naming it), and both put the box in
    maintenance first, which refuses new elevated shells (`ELEV_MAINTENANCE`) until the reboot, or
    at once again if the apply fails ([ssh-and-elevation.md](ssh-and-elevation.md)).
@@ -56,8 +61,8 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
 
 **The elevation override.** An owner may end the open shell and go ahead in the same request:
 Apply and Revert take an `elevation_override` with the session's id, a typed confirmation of its
-admin and id (`bob E-7KQ2`) and a reason. The override is owner only and behind step-up, like Apply
-and Revert themselves. A wrong confirmation or an empty reason is refused (`ACCESS_CONFIRM`) and
+admin and id (`bob E-7KQ2`) and a reason. The override is owner only and needs the same fresh
+code as Apply and Revert themselves. A wrong confirmation or an empty reason is refused (`ACCESS_CONFIRM`) and
 the shell is left alone; an override naming one session doesn't cover another, which still refuses
 with `UPGRADE_ELEVATED`. When it checks out, the session is terminated (an `elevation.terminate`
 entry in the OS audit log with the reason, the admin it belonged to and `for: upgrade.apply` or

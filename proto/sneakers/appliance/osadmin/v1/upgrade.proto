@@ -48,23 +48,24 @@ service UpgradeService {
   }
   // ApplyUpdate boots the staged release, or for target product switches
   // to the staged product slot and restarts the product services (no
-  // reboot). While an elevated shell is open
+  // reboot). It takes a fresh TOTP code every time (code_each_call), not
+  // the step-up window. While an elevated shell is open
   // it is refused with UPGRADE_ELEVATED, unless the request carries an
   // owner's elevation_override for that shell.
   rpc ApplyUpdate(ApplyUpdateRequest) returns (ApplyUpdateResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
+      code_each_call: true
       audit: "upgrade.apply"
     };
   }
   // RevertUpdate goes back to the previous release, or for target product
-  // to the previous product slot. An open elevated
-  // shell holds it back the same way as ApplyUpdate.
+  // to the previous product slot. Like ApplyUpdate it takes a fresh TOTP
+  // code every time, and an open elevated shell holds it back the same way.
   rpc RevertUpdate(RevertUpdateRequest) returns (RevertUpdateResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
+      code_each_call: true
       audit: "upgrade.revert"
     };
   }
@@ -223,6 +224,8 @@ message ElevationOverride {
 message ApplyUpdateRequest {
   ElevationOverride elevation_override = 1;
   UpdateTarget target = 2;
+  // totp_code is a fresh code from the owner's authenticator.
+  string totp_code = 3;
 }
 
 message ApplyUpdateResponse {}
@@ -230,6 +233,8 @@ message ApplyUpdateResponse {}
 message RevertUpdateRequest {
   ElevationOverride elevation_override = 1;
   UpdateTarget target = 2;
+  // totp_code is a fresh code from the owner's authenticator.
+  string totp_code = 3;
 }
 
 message ListProductVersionsRequest {}
