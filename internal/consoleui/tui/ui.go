@@ -18,9 +18,12 @@ var ErrClosed = errors.New("tui: the console's input ended")
 
 // UI is one console: the screen, the typed lines and a clock tick.
 type UI struct {
-	Screen     *Screen
-	Lines      <-chan string
-	Tick       <-chan time.Time
+	Screen *Screen
+	Lines  <-chan string
+	Tick   <-chan time.Time
+	// Wake, when set, redraws the page at once, between ticks (the setup
+	// code changed, say).
+	Wake       <-chan struct{}
 	Cols, Rows int
 	// OnFrame, when set, sees every frame drawn (tests read the screen
 	// with it).
@@ -55,6 +58,12 @@ func (u *UI) Ask(ctx context.Context, view func() (Page, bool)) (line string, ok
 			}
 			u.Screen.Typed(len(l))
 			return l, true, nil
+		case <-u.Wake:
+			p, wake := view()
+			if wake {
+				return "", false, nil
+			}
+			u.Show(p)
 		case <-u.Tick:
 			p, wake := view()
 			if wake {

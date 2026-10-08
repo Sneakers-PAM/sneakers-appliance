@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mRecover access\e[0m                                             \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Who can connect is reset: the admin page and SSH take      \e[34m|\e[0m
+\e[34m|\e[0m   connections from the management network again.             \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Open the admin page from a computer on that network. If    \e[34m|\e[0m
+\e[34m|\e[0m   it works, press K to keep the change; otherwise it's put   \e[34m|\e[0m
+\e[34m|\e[0m   back in 2m00s.                                             \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mK  Keep it\e[0m\e[2m     \e[0m\e[2mEnter  Back\e[0m                                  \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

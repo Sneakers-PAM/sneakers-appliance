@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;33mThis box has no network address yet.\e[0m                       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   No DHCP server answered, so there is no address to show.   \e[34m|\e[0m
+\e[34m|\e[0m   Give it one by hand.                                       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[2m   Port      Cable        Hardware address\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m      ens192    \e[1;32mconnected    \e[0m00:50:56:00:00:01                \e[34m|\e[0m
+\e[34m|\e[0m      ens224    \e[1;33mno cable     \e[0m00:50:56:00:00:02                \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mN  Set an address by hand\e[0m\e[2m     \e[0m\e[2mR  Try DHCP again\e[0m             \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

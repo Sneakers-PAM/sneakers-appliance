@@ -42,7 +42,7 @@ import (
 
 const hello = "hello from sneakers-appliance"
 
-var codeOnScreen = regexp.MustCompile(`setup code ([0-9A-Z]{4}-[0-9A-Z]{4})`)
+var codeOnScreen = regexp.MustCompile(`Setup code ([0-9A-Z]{4}(?:-[0-9A-Z]{4}){3})`)
 
 // password is the first admin's password on the lab box.
 const password = "image suite lab passphrase"
@@ -77,7 +77,7 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	}
 	vm := harness.Boot(t, opts(marked))
 	alice := firstBoot(t, vm, adminPort)
-	vm.Press("reboot\r")
+	// The console restarts into normal operation by itself.
 	vm.WaitExit(5 * time.Minute)
 
 	next := harness.Boot(t, opts(vm.Disk(0)))
@@ -186,16 +186,8 @@ func firstBoot(t *testing.T, vm *harness.VM, adminPort int) *lab {
 	vm.Press(screens.TypedNoSecureBoot + "\r")
 	vm.ExpectScreen(`Press Enter to continue`, 2*time.Minute)
 	vm.Press("\r")
-	vm.ExpectScreen(`The box took an address by itself`, 5*time.Minute)
-	vm.Press("\r")
-	if m := vm.ExpectScreen(`Every check passed|c: continue anyway`, 3*time.Minute); strings.Contains(m, "continue anyway") {
-		vm.Press("c\r")
-	} else {
-		vm.Press("\r")
-	}
-	vm.ExpectScreen(`Setup 2 of 5: protection`, time.Minute)
-	vm.Press("\r")
-	code := codeOnScreen.FindStringSubmatch(vm.ExpectScreen(`setup code [0-9A-Z]{4}-[0-9A-Z]{4}`, 3*time.Minute))[1]
+	vm.ExpectScreen(`Open this address in your browser:`, 5*time.Minute)
+	code := codeOnScreen.FindStringSubmatch(vm.ExpectScreen(`Setup code [0-9A-Z]{4}(?:-[0-9A-Z]{4}){3}`, 3*time.Minute))[1]
 
 	a := browser(t, adminPort)
 	var red struct {
@@ -240,13 +232,12 @@ func firstBoot(t *testing.T, vm *harness.VM, adminPort int) *lab {
 		t.Fatal(err)
 	}
 	a.call(t, "SetupService/AddRecoveryKey", map[string]any{"publicKey": strings.TrimSpace(string(recovery)), "label": "safe"}, &struct{}{})
-	vm.ExpectScreen(`\[x\] 4 Recovery`, 2*time.Minute)
 	for _, step := range []string{"SETUP_STEP_KIND_NETWORK", "SETUP_STEP_KIND_PROTECTION"} {
 		a.call(t, "SetupService/AcknowledgeStep", map[string]any{"step": step}, &struct{}{})
 	}
 	a.call(t, "SetupService/AcknowledgeSingleAdmin", map[string]any{}, &struct{}{})
 	signIn(t, adminPort, alice)
-	vm.ExpectScreen(`Setup is complete`, 2*time.Minute)
+	vm.ExpectScreen(`Setup is done`, 2*time.Minute)
 	return alice
 }
 

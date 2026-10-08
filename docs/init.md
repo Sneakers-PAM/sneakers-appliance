@@ -117,8 +117,8 @@ input is a pipe fed by every console, so the Secure Boot choice can be typed on 
 admin has. Before it reboots or powers off, init waits up to two seconds for the last lines to
 reach every console. When no console takes writes, init keeps the console the kernel gave it.
 
-A service with `console: true` owns the consoles while it runs (the setup wizard in `firstboot`,
-the dashboard in `normal`; [console.md](console.md)): its standard output is its own pipe, copied
+A service with `console: true` owns the consoles while it runs (the first-boot info screen in
+`firstboot`, the status screen in `normal`; [console.md](console.md)): its standard output is its own pipe, copied
 to every console, while init's and every other service's output goes to
 `/run/sneakers/console.log` instead (1 MiB, then `console.log.1`). At most one service per phase may
 own the console, and it runs as root. When it stops, the consoles get a fresh line with the colours

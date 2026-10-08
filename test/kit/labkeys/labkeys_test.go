@@ -284,7 +284,7 @@ func TestAssembleUKI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(pf, []byte("sneakers.roothash="+root+" sneakers.hashoffset=8192 sneakers.version=0.1.0 quiet console=tty0 console=ttyS0 panic=10 lockdown=integrity")) {
+	if !bytes.Contains(pf, []byte("sneakers.roothash="+root+" sneakers.hashoffset=8192 sneakers.version=0.1.0 quiet console=tty0 console=ttyS0 fbcon=font:TER16x32 panic=10 lockdown=integrity")) {
 		t.Fatal("the command line isn't the spec's")
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,5 +329,15 @@ func TestCustodyReadsInit(t *testing.T) {
 	p, m, err := sources.Custody{C: fakeCustody{}}.Read(context.Background())
 	if err != nil || p != keycustody.Reduced(keycustody.ReasonSecureBootOff) || m != keycustody.ModeKeyfile {
 		t.Fatalf("%v %v %v", p, m, err)
+	}
+}
+
+func TestURLHosts(t *testing.T) {
+	got := sources.URLHosts([]string{"192.0.2.10/24", "fe80::1", "2001:db8::10/64", "junk"})
+	if strings.Join(got, " ") != "192.0.2.10 [2001:db8::10]" {
+		t.Fatalf("%q", got)
+	}
+	if h := sources.Hosts([]string{"2001:db8::10/64"}); len(h) != 1 || h[0] != "2001:db8::10" {
+		t.Fatalf("%q", h)
 	}
 }

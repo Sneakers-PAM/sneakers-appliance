@@ -67,3 +67,55 @@ func TestOpenLeavesOutAConsoleThatTakesNoWrites(t *testing.T) {
 		t.Fatalf("dropped = %v, want ttyS0 (no writes) and ttyAMA0 (missing)", dropped)
 	}
 }
+
+func setSize(t *testing.T, m *os.File, cols, rows int) {
+	t.Helper()
+	if err := unix.IoctlSetWinsize(int(m.Fd()), unix.TIOCSWINSZ, &unix.Winsize{Col: uint16(cols), Row: uint16(rows)}); err != nil { // #nosec G115 -- test sizes
+		t.Fatal(err)
+	}
+}
+
+// The screens are laid out for the smallest console that reports a size;
+// a serial line reports none and doesn't count.
+func TestSizeIsTheSmallestConsoleWithASize(t *testing.T) {
+	dev := t.TempDir()
+	screen := pty(t, dev, "tty0")
+	defer func() { _ = screen.Close() }()
+	serial := pty(t, dev, "ttyS0")
+	defer func() { _ = serial.Close() }()
+	setSize(t, screen, 64, 24)
+	if c, r := console.Size(dev, []string{"tty0", "ttyS0"}); c != 64 || r != 24 {
+		t.Fatalf("size %dx%d, want 64x24", c, r)
+	}
+	setSize(t, serial, 80, 20)
+	if c, r := console.Size(dev, []string{"tty0", "ttyS0"}); c != 64 || r != 20 {
+		t.Fatalf("size %dx%d, want 64x20", c, r)
+	}
+	if c, r := console.Size(dev, []string{"ttyAMA0"}); c != 80 || r != 24 {
+		t.Fatalf("no console with a size: %dx%d, want 80x24", c, r)
+	}
+}
+
+// The small font is the fallback only when the large one leaves less than
+// 64x24; a console with no size never switches.
+func TestNeedsSmallFont(t *testing.T) {
+	for _, c := range []struct {
+		cols, rows int
+		want       bool
+	}{{64, 24, false}, {80, 25, false}, {40, 15, true}, {64, 23, true}, {0, 0, false}} {
+		if got := console.NeedsSmallFont(c.cols, c.rows); got != c.want {
+			t.Errorf("%dx%d: %v", c.cols, c.rows, got)
+		}
+	}
+}
+
+// A screen big enough for the large font is left alone.
+func TestFitFontLeavesABigScreen(t *testing.T) {
+	dev := t.TempDir()
+	screen := pty(t, dev, "tty0")
+	defer func() { _ = screen.Close() }()
+	setSize(t, screen, 64, 24)
+	if switched, err := console.FitFont(dev); err != nil || switched {
+		t.Fatalf("switched %v: %v", switched, err)
+	}
+}

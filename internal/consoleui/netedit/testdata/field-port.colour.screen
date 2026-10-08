@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mSet an address by hand\e[0m\e[2m                      field 1 of 4\e[0m   \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Type the number of the port to use.                        \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m      1  ens192    connected                                  \e[34m|\e[0m
+\e[34m|\e[0m      2  ens224    no cable                                   \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Port:                                                      \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mEnter  Next\e[0m\e[2m     \e[0m\e[2mB  Back\e[0m                                     \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

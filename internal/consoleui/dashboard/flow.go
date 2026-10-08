@@ -4,16 +4,9 @@
 package dashboard
 
 import (
-	"bufio"
 	"context"
-	"fmt"
-	"io"
-	"os"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
-	"unicode"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
@@ -23,10 +16,10 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/netedit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/sources"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
 // Deps are what the dashboard reads and drives.
@@ -39,14 +32,11 @@ type Deps struct {
 	Slot     string
 	Upgrades sources.Upgrades
 	Platform sources.Platform
-	// Shell runs the console commands, as the closed shell's console
-	// origin.
-	Shell  shell.Backend
-	Access accessv1connect.AccessServiceClient
-	Local  osadminv1connect.LocalServiceClient
-	// Setup is accessd's SetupService, for the Recover access code.
-	Setup        accessv1connect.SetupServiceClient
-	MessagesFile string
+	// Console is the access backend: Recover access by code.
+	Console sources.ConsoleAccess
+	// AccessNet resets who can connect, for Recover access.
+	AccessNet accessv1connect.NetworkServiceClient
+	Local     osadminv1connect.LocalServiceClient
 	// Refresh is how often the status is read again; zero is 5 seconds.
 	Refresh time.Duration
 	Now     func() time.Time
@@ -79,10 +69,15 @@ func Run(ctx context.Context, u *tui.UI, d Deps) error {
 		if err != nil {
 			return err
 		}
-		if strings.TrimSpace(line) == "" {
-			err = k.menu(ctx)
-		} else {
-			err = k.direct(ctx, line)
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "r":
+			err = k.recoverAccess(ctx)
+		case "n":
+			if !HasAddress(k.data) && !sources.IsNotInstalled(k.data.NetErr) {
+				_, err = netedit.Edit(ctx, u, netedit.Deps{Chrome: k.c, Network: d.Network, Logger: d.Logger})
+			}
+		case "c":
+			k.cancelReset(ctx)
 		}
 		if err != nil {
 			return err
@@ -106,19 +101,24 @@ func (k *console) load(ctx context.Context) {
 	if !k.d.Network.Installed() {
 		d.NetErr = sources.NotInstalled{What: "The network service"}
 	}
+	k.c.NTP = consoleui.NTPUnknown
 	if st := d.Status.Status; st != nil {
 		k.c.Host = st.GetHostname()
-		k.c.NTP = consoleui.NTPUnsynced
-		if st.GetNtpSynced() {
-			k.c.NTP = consoleui.NTPSynced
-		}
-		if d.NetErr != nil {
-			k.c.NTP = consoleui.NTPUnknown
+		if d.NetErr == nil {
+			k.c.NTP = consoleui.NTPUnsynced
+			if st.GetNtpSynced() {
+				k.c.NTP = consoleui.NTPSynced
+			}
 		}
 	}
 	d.HostKeys = k.d.HostKeys()
 	d.Upgrade, d.UpgradeErr = k.d.Upgrades.Current(c)
 	d.Platform, d.PlatformErr = k.d.Platform.State(c)
+	if info, err := k.d.Console.Read(c); err == nil {
+		d.Recover = info.Recover
+	}
+	header := &k.c
+	header.Info = Info(d)
 	k.data, k.loaded = d, time.Now()
 }
 
@@ -136,290 +136,102 @@ func (k *console) statusView(ctx context.Context) func() (tui.Page, bool) {
 	}
 }
 
-// entry is one menu entry and what it does.
-type entry struct {
-	Item
-	run func(ctx context.Context) error
-}
-
-func (k *console) entries() []entry {
-	var es []entry
-	for _, info := range shell.Commands(shell.OriginConsole) {
-		info := info
-		es = append(es, entry{Item{Label: info.Path}, func(ctx context.Context) error { return k.command(ctx, info, "", false) }})
-	}
-	es = append(es,
-		entry{Item{Label: "Recover access"}, k.recoverAccess},
-		entry{Item{Label: "Recent messages"}, k.messages},
-	)
-	for i := range es {
-		es[i].Key = strconv.Itoa(i + 1)
-	}
-	if fr := k.data.Status.Status.GetFactoryReset(); fr != nil {
-		es = append(es, entry{Item{Key: "c", Label: "Cancel the factory reset"}, k.cancelReset})
-	}
-	return es
-}
-
-func (k *console) menu(ctx context.Context) error {
+// recoverAccess is the break-glass screen: reset who can connect, or a
+// one-time code that resets an owner's sign-in on :8443.
+func (k *console) recoverAccess(ctx context.Context) error {
 	errLine := ""
 	for {
-		es := k.entries()
-		items := make([]Item, len(es))
-		for i, e := range es {
-			items[i] = e.Item
-		}
-		line, _, err := k.u.Ask(ctx, tui.Static(MenuPage(k.c, items, errLine)))
+		line, _, err := k.u.Ask(ctx, tui.Static(RecoverPage(k.c, errLine)))
 		if err != nil {
 			return err
 		}
-		errLine = ""
-		key := strings.ToLower(strings.TrimSpace(line))
-		if key == "" || key == "0" {
+		switch strings.TrimSpace(line) {
+		case "":
 			return nil
-		}
-		found := false
-		for _, e := range es {
-			if e.Key == key {
-				found = true
-				if err := e.run(ctx); err != nil {
-					return err
-				}
+		case "1":
+			if errLine, err = k.resetAllowList(ctx); err != nil || errLine == "" {
+				return err
 			}
-		}
-		if !found {
-			errLine = fmt.Sprintf("%q isn't on the menu.", key)
-		}
-	}
-}
-
-// direct runs a command line typed at the status view.
-func (k *console) direct(ctx context.Context, line string) error {
-	if words, err := shell.Split(line); err == nil && len(words) > 0 && (words[0] == "help" || words[0] == "menu") {
-		return k.menu(ctx)
-	}
-	for _, info := range shell.Commands(shell.OriginConsole) {
-		if strings.HasPrefix(line+" ", info.Path+" ") {
-			return k.command(ctx, info, strings.TrimSpace(strings.TrimPrefix(line, info.Path)), true)
+		case "2":
+			if errLine, err = k.recoverCode(ctx); err != nil || errLine == "" {
+				return err
+			}
+		default:
+			errLine = "Type 1 or 2, or press Enter to go back."
 		}
 	}
-	return k.transcript(ctx, line, nil, func(e *shell.Env) error { return shell.Run(ctx, e, line) })
 }
 
-// command runs one console command: what it takes first, then its
-// transcript.
-func (k *console) command(ctx context.Context, info shell.Info, args string, typed bool) error {
-	var in io.Reader
-	if info.Stdin {
-		key, _, err := k.u.Ask(ctx, tui.Static(ArgsPage(k.c, info)))
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(key) == "" {
-			return nil
-		}
-		in = strings.NewReader(key + "\n")
-	} else if !typed && (info.Args || len(info.Flags) > 0) {
-		a, _, err := k.u.Ask(ctx, tui.Static(ArgsPage(k.c, info)))
-		if err != nil {
-			return err
-		}
-		args = strings.TrimSpace(a)
+func (k *console) resetAllowList(ctx context.Context) (string, error) {
+	out, err := k.d.AccessNet.ResetAllowList(ctx, connect.NewRequest(&accessv1.ResetAllowListRequest{}))
+	if err != nil {
+		k.d.Logger.Warn("console: Recover access: the allow-list reset was refused", log.F("error", err.Error()))
+		return "Who can connect wasn't reset: " + consoleui.Describe(err), nil
 	}
-	line := strings.TrimSpace(info.Path + " " + args)
-	k.d.Logger.Info("console: command", log.F("command", info.Path))
-	return k.transcript(ctx, line, in, func(e *shell.Env) error { return shell.Run(ctx, e, line) })
-}
-
-// liveIn is a command's standard input on the console: each read asks the
-// screen for a typed line.
-type liveIn struct {
-	mu      sync.Mutex
-	waiting bool
-	lines   chan string
-}
-
-func (l *liveIn) Read(p []byte) (int, error) {
-	l.mu.Lock()
-	l.waiting = true
-	l.mu.Unlock()
-	line, ok := <-l.lines
-	if !ok {
-		return 0, io.EOF
-	}
-	return copy(p, line+"\n"), nil
-}
-
-func (l *liveIn) wants() bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.waiting
-}
-
-func (l *liveIn) give(line string) {
-	l.mu.Lock()
-	l.waiting = false
-	l.mu.Unlock()
-	l.lines <- line
-}
-
-// out collects a command's output for its transcript.
-type out struct {
-	mu sync.Mutex
-	b  strings.Builder
-}
-
-func (o *out) Write(p []byte) (int, error) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	return o.b.Write(p)
-}
-
-// lines are the full lines so far and the partial last one.
-func (o *out) lines() ([]string, string) {
-	o.mu.Lock()
-	defer o.mu.Unlock()
-	s := sanitize(o.b.String())
-	all := strings.Split(s, "\n")
-	return all[:len(all)-1], all[len(all)-1]
-}
-
-// sanitize keeps a command's output to plain printable text, so nothing it
-// prints can move the cursor or change the screen.
-func sanitize(s string) string {
-	return strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\t' {
-			return r
-		}
-		if !unicode.IsPrint(r) {
-			return -1
-		}
-		return r
-	}, s)
-}
-
-// transcript runs a command and shows what it prints; a line it reads is
-// typed at the prompt, after its own question.
-func (k *console) transcript(ctx context.Context, line string, in io.Reader, run func(e *shell.Env) error) error {
-	o := &out{}
-	live := &liveIn{lines: make(chan string)}
-	if in == nil {
-		in = live
-	}
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		_ = run(&shell.Env{Origin: shell.OriginConsole, Backend: k.d.Shell, In: in, Out: o, Err: o})
-	}()
-	finished := false
+	k.d.Logger.Info("console: Recover access: who can connect was reset", log.F("revert_after", out.Msg.GetRevertAfterSeconds()))
+	until := time.Now().Add(time.Duration(out.Msg.GetRevertAfterSeconds()) * time.Second)
+	errLine := ""
 	for {
-		lineIn, typed, err := k.u.Ask(ctx, func() (tui.Page, bool) {
-			select {
-			case <-done:
-				if !finished {
-					finished = true
-				}
-			default:
+		line, _, err := k.u.Ask(ctx, func() (tui.Page, bool) { return AllowListPage(k.c, time.Until(until), errLine), false })
+		if err != nil {
+			return "", err
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "":
+			return "", nil
+		case "k":
+			if _, err := k.d.AccessNet.ConfirmNetwork(ctx, connect.NewRequest(&accessv1.ConfirmNetworkRequest{Token: out.Msg.GetToken()})); err != nil {
+				errLine = "The change wasn't kept: " + consoleui.Describe(err)
+				continue
 			}
-			lines, partial := o.lines()
-			prompt := ""
-			switch {
-			case finished:
-				if partial != "" {
-					lines = append(lines, partial)
-				}
-				prompt = "> "
-			case live.wants():
-				prompt = partial
-			default:
-				if partial != "" {
-					lines = append(lines, partial)
+			k.d.Logger.Info("console: Recover access: the allow-list reset was kept")
+			return "", nil
+		}
+	}
+}
+
+func (k *console) recoverCode(ctx context.Context) (string, error) {
+	r, err := k.d.Console.BeginRecoverAccess(ctx)
+	if err != nil {
+		k.d.Logger.Warn("console: Recover access: no code", log.F("error", err.Error()))
+		return "No code was made: " + consoleui.Describe(err), nil
+	}
+	k.d.Logger.Info("console: Recover access: a code is out", log.F("expires", r.Expires))
+	fp := k.data.Status.Status.GetTlsFingerprint()
+	for {
+		line, _, err := k.u.Ask(ctx, func() (tui.Page, bool) {
+			if info, err := k.d.Console.Read(ctx); err == nil && info.Recover != nil {
+				r = *info.Recover
+				if info.CertFingerprint != "" {
+					fp = info.CertFingerprint
 				}
 			}
-			return CommandPage(k.c, line, lines, prompt, finished), false
+			return RecoverCodePage(k.c, r, fp, k.d.Now()), false
 		})
 		if err != nil {
-			close(live.lines)
-			return err
+			return "", err
 		}
-		if !typed {
-			continue
-		}
-		switch {
-		case finished:
-			return nil
-		case live.wants():
-			live.give(lineIn)
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "":
+			return "", nil
+		case "c":
+			if err := k.d.Console.CancelRecoverAccess(ctx); err != nil {
+				return "The code wasn't withdrawn: " + consoleui.Describe(err), nil
+			}
+			k.d.Logger.Info("console: Recover access: the code was withdrawn")
+			return "", nil
 		}
 	}
 }
 
-// recoverAccess is the console's Recover access: a one-time code that
-// opens :8443's /recover page, where an owner gets a new password and
-// authenticator, or a new owner is made.
-func (k *console) recoverAccess(ctx context.Context) error {
-	if k.d.Setup == nil {
-		_, _, err := k.u.Ask(ctx, tui.Static(k.c.Page("Recover access", tui.WrapStyled(tui.Alert, "Recover access isn't available on this box.", consoleui.Width, ""), "Enter: back", "> ")))
-		return err
+// cancelReset stops a factory reset counting down, as the console.
+func (k *console) cancelReset(ctx context.Context) {
+	if k.data.Status.Status.GetFactoryReset().GetState() != osadminv1.FactoryResetState_FACTORY_RESET_STATE_COUNTDOWN {
+		return
 	}
-	r, err := k.d.Setup.BeginRecoverAccess(ctx, connect.NewRequest(&accessv1.BeginRecoverAccessRequest{}))
-	var body []tui.Line
-	if err != nil {
-		body = tui.WrapStyled(tui.Alert, "The Recover access code can't be made: "+consoleui.Describe(err), consoleui.Width, "")
-	} else {
-		rec := r.Msg.GetRecover()
-		k.d.Logger.Info("console: Recover access code shown")
-		for _, l := range []string{
-			"Open " + rec.GetUrl() + " and type this code:",
-			"",
-			"    " + rec.GetCode(),
-			"",
-			"It works once, until " + rec.GetExpires().AsTime().Local().Format("15:04") + ".",
-		} {
-			body = append(body, tui.WrapStyled(tui.Normal, l, consoleui.Width, "")...)
-		}
+	if _, err := k.d.Local.LocalCancelFactoryReset(ctx, connect.NewRequest(&osadminv1.LocalCancelFactoryResetRequest{Actor: "console"})); err != nil {
+		k.d.Logger.Warn("console: the factory reset wasn't cancelled", log.F("error", err.Error()))
+		return
 	}
-	_, _, err = k.u.Ask(ctx, tui.Static(k.c.Page("Recover access", body, "Enter: back", "> ")))
-	return err
-}
-
-// messages shows the tail of the shared output.
-func (k *console) messages(ctx context.Context) error {
-	_, _, err := k.u.Ask(ctx, func() (tui.Page, bool) { return MessagesPage(k.c, tail(k.d.MessagesFile, 200)), false })
-	return err
-}
-
-func tail(path string, n int) []string {
-	f, err := os.Open(path) // #nosec G304 -- init's console log
-	if err != nil {
-		return nil
-	}
-	defer func() { _ = f.Close() }()
-	var lines []string
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 4096), 1<<20)
-	for sc.Scan() {
-		lines = append(lines, sanitize(sc.Text()))
-		if len(lines) > n {
-			lines = lines[1:]
-		}
-	}
-	return lines
-}
-
-// cancelReset stops a pending factory reset, as the console.
-func (k *console) cancelReset(ctx context.Context) error {
-	return k.transcript(ctx, "cancel the factory reset", nil, func(e *shell.Env) error {
-		_, _ = fmt.Fprint(e.Out, "Type cancel to stop the factory reset: ")
-		if line, _ := bufio.NewReader(e.In).ReadString('\n'); strings.TrimSpace(line) != "cancel" {
-			_, _ = fmt.Fprintln(e.Out, "\nNot cancelled.")
-			return nil
-		}
-		if _, err := k.d.Local.LocalCancelFactoryReset(ctx, connect.NewRequest(&osadminv1.LocalCancelFactoryResetRequest{Actor: "console"})); err != nil {
-			_, _ = fmt.Fprintln(e.Out, "Not cancelled: "+consoleui.Describe(err))
-			return err
-		}
-		_, _ = fmt.Fprintln(e.Out, "The factory reset is cancelled.")
-		return nil
-	})
+	k.d.Logger.Info("console: the factory reset was cancelled on the console")
 }

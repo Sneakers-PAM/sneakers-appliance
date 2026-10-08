@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mReset an owner's sign-in\e[0m                                   \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Open this address in your browser:                         \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37m   https://192.0.2.10:8443/recover\e[0m                         \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[2mCheck that the page's certificate matches:\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m      7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D                 \e[34m|\e[0m
+\e[34m|\e[0m      E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5                 \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mCode  \e[0m\e[33m6HDW-2RTE-KM8Q-0VXA\e[0m\e[2m   expires in 59 min\e[0m              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;33mIn use from 192.0.2.50.\e[0m                                    \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mC  Cancel the code\e[0m\e[2m     \e[0m\e[2mEnter  Back\e[0m                          \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

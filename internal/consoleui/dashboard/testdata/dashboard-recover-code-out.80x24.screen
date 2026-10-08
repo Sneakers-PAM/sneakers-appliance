@@ -1,0 +1,24 @@
++------------------------------------------------------------------------------+
+|          /o\__  Sneakers-PAM appliance   0.1.0  slot A  1 node               |
++------------------------------------------------------------------------------+
+|                                                                              |
+|           Health        OK      all services running                         |
+|           Product       OK      Sneakers-PAM running                         |
+|           Protection    FULL    Secure Boot on, key in the TPM               |
+|           Clock         OK      synced 18:03 UTC                             |
+|                                                                              |
+|           Admin         https://192.0.2.10:8443                              |
+|                         https://sneakers.example.org:8443                    |
+|           SSH           192.0.2.10:22  key + TOTP code                       |
+|                                                                              |
+|           Fingerprints                                                       |
+|             :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D                  |
+|                     E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5                  |
+|             ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F                     |
+|                            cH76 LnuV dAfL HqOr ZRw                           |
+|                                                                              |
+|           ! A Recover access code is out until 15:03.                        |
+|                                                                              |
++------------------------------------------------------------------------------+
+|          R  Recover access                                                   |
++------------------------------------------------------------------------------+

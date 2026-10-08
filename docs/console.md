@@ -2,74 +2,130 @@
 
 The box's console is the screen (VGA, `tty0`) and the serial line (`ttyS0`), whichever the box
 has; init joins them ([init.md](init.md#the-console)), so everything below shows on both and either
-one can answer. Two programs own the console in turn:
+one can answer. The console shows information. Setup and everyday admin work happen on the :8443
+admin page; the console never asks for an SSH key, a typed `yes` or a "done" key. Two programs own
+the console in turn:
 
 | Phase | Program | Service entry |
 |---|---|---|
-| `firstboot` | `sneakers-firstboot`: the setup wizard | `services.d/firstboot.yaml` |
-| `normal` | `sneakers-console`: the status view and the menu | `services.d/console.yaml` |
+| `firstboot` | `sneakers-firstboot`: the start-up and the setup info screen | `services.d/firstboot.yaml` |
+| `normal` | `sneakers-console`: the status screen and Recover access | `services.d/console.yaml` |
 
 Both run as root, after accessd, with `console: true` in their entry: their output reaches every
 console while every other service's lines (and init's own) go to `/run/sneakers/console.log`
-(1 MiB, then `console.log.1`), which the menu's **Recent messages** shows. When the program stops,
-the shared output comes back on the consoles; init restarts it. Before either runs, init's own
-screens (the Secure Boot choice in `enrol`, the at-rest protection step, "State locked") are
-unchanged.
+(1 MiB, then `console.log.1`). When the program stops, the shared output comes back on the
+consoles; init restarts it. Before either runs, init's own screens (the Secure Boot choice in
+`enrol`, the at-rest protection step, "State locked") are unchanged.
+
+The only inputs left are:
+
+- the network editor, shown only when DHCP gives the box no address;
+- **Recover access**, the break-glass way back in when no admin can sign in;
+- **C** to cancel a factory reset that is counting down, and **X** to stop a browser setup that
+  isn't yours.
+
+## The font and the screen size
+
+The kernel has the Terminus 16x32 font built in (`CONFIG_FONT_TER16x32`), and the UKI's command
+line selects it (`fbcon=font:TER16x32`). On VMware's default 1024x768 that gives a 64x24 console,
+large enough to read the setup code and the fingerprints from across a desk. The 8x16 font
+(`CONFIG_FONT_8x16`) stays built in as the fallback: when the large font leaves the screen
+smaller than 64x24 (a framebuffer below 1024x768), the console switches the screen to `VGA8x16`
+(the `KDFONTOP` ioctl on `tty0`) before it draws.
+
+The screens are laid out for the real terminal: the console reads each active console's size
+(`TIOCGWINSZ`) and uses the smallest that reports one. A serial line reports none and doesn't
+count; with no size at all the console uses 80x24. The same output goes to every console, so it has
+to fit the smallest.
 
 ## How it looks
 
-Every page fits an 80x24 terminal (and so 80x25 and wider): a header with the box's host name, the
-reduced-protection banner when it applies, the body, the keys that work, the prompt, and a footer
-with the version, the phase, the time (UTC) and whether NTP is synced. Pages are drawn with cursor
-addressing and redrawn row by row, so a clock tick rewrites one row, nothing flickers, and an
-answer typed half-way stays where it is.
-
-Colour is foreground only (no backgrounds or reverse video), and nothing depends on it: alerts
-start with `!!` or `!`. `sneakers.console=plain` on the kernel command line, or `TERM=dumb`, turns
-colour off. Input is a line at a time (type, then Enter): the consoles stay in the kernel's line
-mode, which works the same on a VMware screen and a serial line.
-
-When protection is reduced, every page starts with it, in plain words and with how to raise it:
+Every screen is a frame round the whole terminal, every row the full width and ending in the same
+column, with a body block of at most 56 columns centred in it. A row is always written in full, so
+a redraw needs no erase that would clear the frame's right edge. The start-up and the setup info
+screens carry the Sneakers-PAM mark (the sneaker with the keyhole) and the wordmark with the
+version; the others have a one-row header with a small mark, the wordmark, the version, the slot
+and the node count, and the keys in a dim row at the bottom, each ruled off. Keys are single
+letters or digits, typed and then Enter (the consoles stay in the kernel's line mode, which works
+the same on a VMware screen and a serial line); a screen with nothing to type hides the cursor.
 
 ```
- !! Protection: reduced (Secure Boot off). Someone with the disk or SD card
-    can change this box's software and read its data.
-    Raise it later on the :8443 Status page (Secure Boot on); no reinstall.
++--------------------------------------------------------------+
+|                                                              |
+|                       .------.                               |
+|                      /  .-.   \ = = =                        |
+|                     |  ( o )   '------._                     |
+|                     |   |_|            '\                    |
+|                    (=====================)                   |
+|                                                              |
+|                Sneakers-PAM appliance  0.1.0                 |
+|                                                              |
+|   Open this address in your browser:                         |
+|      https://192.0.2.10:8443                                 |
+|                                                              |
+|   Certificate fingerprint                                    |
+|      7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D                 |
+|      E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5                 |
+|                                                              |
+|   Setup code  7PQK-NMS9-XD2A-4KJW   expires in 59 min        |
+|                                                              |
+|   Protection  REDUCED  no TPM, no Secure Boot                |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
 ```
 
-The same sentences are on :8443's Status page (the reduced-protection warning) and in the wizard's
-protection step, from one source (`internal/consoleui/screens`).
+Colour is the brand palette in the console's 16 colours, foreground only (no backgrounds or
+reverse video):
 
-## The setup wizard
+| What | SGR | On the VGA palette |
+|---|---|---|
+| The frame and the mark | `34` | the primary blue |
+| The keyhole | `1;34` | the bright blue |
+| The setup code and the mark's sole (the one accent) | `33` | brown, the console's orange |
+| OK, a warning, danger | `1;32`, `1;33`, `1;31` | green, yellow, red |
+| Secondary text | `2` | dim |
+| What is read aloud or typed | `1;37` | bold white |
 
-The steps of first boot, in order, with a step strip on every page
-(`[x] 1 Network  [>] 2 Protection  [ ] 3 Admin  [ ] 4 Recovery  [ ] 5 Sign-in`):
+Nothing depends on colour: every status is a word (`OK`, `REDUCED`, `UNSYNCED`) and every warning
+starts with `!`. `sneakers.console=plain` on the kernel command line, or `TERM=dumb`, turns colour
+off. Fingerprints are written in groups of four, eight groups to a line, so they can be read aloud.
 
-1. **Network.** netd takes an address by itself on its first start (DHCP and SLAAC on the first
-   linked NIC); the wizard shows it, and Enter keeps it once the checks pass. **e** chooses instead:
-   the interfaces (name, MAC, link, driver); with no link on any, it waits for one.
-   Then the management interface (22 and 8443 listen only there) and, with two NICs, the service
-   interface; then the settings, each changed by its number: IPv4 (DHCP, static, off), IPv6 (SLAAC,
-   DHCPv6, static, off), host name, DNS and NTP, validated as typed. Enter applies them live and
-   runs the checks (link, address, gateway, DNS, NTP). A failed check can be skipped (**c**,
-   continue anyway), except no address on the management interface; **e** edits. Keeping the
-   settings confirms netd's 120-second auto-revert.
-2. **Protection.** Read-only: the Secure Boot choice and the key custody were made at boot, by
-   init, before the wizard (the state volumes are formatted for them). The page says the level, the
-   at-rest key, and how to raise a reduced level later.
-3. **Continue on :8443.** :8443 runs from the start of first boot. The page shows the :8443 URLs,
-   the setup code (XXXX-XXXX-XXXX-XXXX, 60 minutes, 5 tries; [access.md](access.md#the-8443-setup-page)),
-   the certificate's SHA-256 fingerprint to check on the first visit, and the recovery keys set so
-   far (one to three, added on the :8443 setup page or with `setup recovery-key` over SSH). It
-   moves on by itself once :8443 finishes setup after the first sign-in.
-6. **Complete.** The product's first-run URL, then normal operation.
+## First boot
 
-Steps 4 and 5 complete as the box shows them done: a recovery key set, then the first :8443 sign-in
-(recorded by :8443 when the first session starts). With one admin the wizard then shows the
-single-admin warning (no quorum, so a factory reset means re-creating the box) and needs `one admin`
-typed to go on. Then it calls accessd's `Setup.Complete`, which checks every step again (an owner
-with a key, a recovery key and its escrow, the first sign-in, the warning confirmed) and writes
-`/var/lib/sneakers/setup/done`.
+`sneakers-firstboot` asks for nothing while DHCP works:
+
+1. **Starting.** The mark, then the start-up steps: the system image verified, the encrypted data
+   disk, the network (with the time it has waited) and the setup page.
+2. **Network.** netd takes an address by itself on its first start (DHCP and SLAAC on the first
+   linked NIC). As soon as the box has one, the network step is done. When none comes within 30
+   seconds, the console shows the ports (name, cable, hardware address) with **N** (set an address
+   by hand) and **R** (try DHCP again). The editor takes one field at a time: the port (with more
+   than one), the address with its prefix, the gateway and the DNS server (both optional), with
+   **B** to go back. Enter applies it live and shows netd's checks; Enter again keeps it (confirming
+   netd's auto-revert), **E** edits. A failed check that can't be skipped holds it back.
+3. **Protection** was chosen at boot from the hardware; the step completes by itself and the info
+   screen shows the level in one line.
+4. **Ready to set up.** netd opens port 8443 (not 22) and osadmin starts. The screen shows the
+   :8443 address on each management address (and, directly under it, on the box's FQDN once a
+   hostname or domain is set), the certificate's SHA-256 fingerprint to check on the first visit,
+   the one-time setup code (`XXXX-XXXX-XXXX-XXXX`, 16 Crockford base32 characters, the sole
+   orange; [access.md](access.md#the-8443-setup-page)) with the minutes it has left of its 60, and
+   the protection. A new code replaces it
+   when it lapses, and the screen redraws at once.
+5. **Setting up.** Once a browser has typed the code, the screen shows where it's from, when it
+   started and the step it's at. Until the first admin exists, **X** stops that setup and shows a
+   new code. When the first admin exists, netd opens port 22 and sshd starts. A code locked by 5
+   wrong tries shows `LOCKED`; **N** asks for a new one.
+6. **Done.** When :8443 finishes setup, the box moves to normal operation: at once when init can,
+   otherwise it says so and restarts once, by itself.
+
+The console reads all of this from the access backend's console API (`sources.ConsoleAccess`:
+the setup code, its expiry and tries left, the :8443 addresses and certificate, setup's state,
+step and source, the first admin, a code locked by wrong tries, and a live Recover access code):
+`GetConsoleInfo` for each read, and `WatchConsoleInfo` so the screen redraws as soon as anything
+changes. `ResetSetupCode` asks for a new code (X, and N on a locked code).
 
 ### The step machine
 
@@ -78,70 +134,84 @@ with a key, a recovery key and its escrow, the first sign-in, the warning confir
 open step), in `progress.json` written with an atomic rename. Until the protection step it's on
 the tmpfs (`/run/sneakers/setup/`), so a power cut there runs the network step again; from the
 protection step on it's on the state volume (`/var/lib/sneakers/setup/`), and the tmpfs copy is
-removed. After a power cut or a restart of the wizard, it resumes at the first step not done. A
-progress file that doesn't parse stops the wizard rather than run steps again on a box that may be
+removed. After a power cut or a restart of first boot, it resumes at the first step not done. A
+progress file that doesn't parse stops first boot rather than run steps again on a box that may be
 set up.
 
-accessd reads the same file for the access store's invariants: no owner with a key is required
-until the admin step is done (first boot adds its owner before the key), and no recovery key until
-the recovery step is; once `setup/done` exists every invariant applies.
+The console completes the network and protection steps itself, and follows :8443 for the rest: the
+admin step once the first admin exists, the recovery step once a recovery key is set, the sign-in
+step after the first sign-in. Then, once a single admin has been confirmed on the page, it calls
+accessd's `Setup.Complete`, which checks every step again and writes `setup/done`.
 
-## The status view
+accessd reads the same file for the access store's invariants; once `setup/done` exists every
+invariant applies.
+
+## The status screen
 
 ```
- Version      0.1.0 (stable channel), slot A
- Secure Boot  enforcing, org keys only         At rest   TPM
- Platform     running                          Upgrades  none staged
- Management   192.0.2.10/24  2001:db8::10/64
- :8443        https://192.0.2.10:8443/  (self-signed: check the fingerprint)
-              3F:A1:...  (the certificate's SHA-256, in full, on two lines)
- SSH host     ssh-ed25519  SHA256:...
-              ssh-rsa      SHA256:...
-
- ! The clock isn't synchronised with an NTP server.
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM appliance   0.1.0  slot A  1 node       |
++--------------------------------------------------------------+
+|                                                              |
+|   Health        OK      all services running                 |
+|   Product       OK      Sneakers-PAM running                 |
+|   Protection    FULL    Secure Boot on, key in the TPM       |
+|   Clock         OK      synced 18:03 UTC                     |
+|                                                              |
+|   Admin         https://192.0.2.10:8443                      |
+|                 https://sneakers.example.org:8443            |
+|   SSH           192.0.2.10:22  key + TOTP code               |
+|                                                              |
+|   Fingerprints                                               |
+|     :8443   7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D          |
+|             E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5          |
+|     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             |
+|                    cH76 LnuV dAfL HqOr ZRw                   |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  R  Recover access                                           |
++--------------------------------------------------------------+
 ```
 
-It reads :8443's Status data from accessd (or, while accessd is down, its last saved copy, with
-the time it was saved), the protection and the custody mode from init, the root slot from init's
-environment and the host keys from the state volume, every 5 seconds. The warnings are Status's
-(the exposure warning, NTP, a key added with Recover access, a self-approved elevation), a factory
-reset pending or counting down (who started it, the time left, and **c** on the menu to cancel
-it), and any component that isn't answering. During an upgrade the maintenance view replaces it.
+It reads :8443's Status data from accessd (or, while accessd is down, its last saved copy, with the
+time it was saved), the protection and the custody mode from init, the root slot from init's
+environment, the host keys from the state volume and the node count from the platform, every 5
+seconds. In order: health, the product, protection and the clock, each a status word in its colour
+with the details dim; the admin page on the first management address and, on the line under it, on
+the box's FQDN once one is set; SSH on port 22 (key and TOTP code); the fingerprints of the page's
+certificate and the SSH host key; then the warnings, each a `!` in its colour with its first
+sentence in bold. The warnings are Status's own (the exposure warning, a self-approved elevation
+and the like, but not the ones with their own line: reduced protection, the clock and the
+self-signed certificate), an upgrade staged or rolled back, a factory reset waiting for approval or
+counting down (with **C** to cancel it), a Recover access code that's out, a service that isn't
+answering, and accessd itself not answering. Without a management address the screen offers **N**,
+the network editor. During an upgrade the maintenance screen replaces it: the version it's moving
+to and the step, and that the box goes back by itself if the new one doesn't come up.
 
-Enter opens the menu; a console command can also be typed straight at the prompt (`keys list`).
+## Recover access
 
-## The menu
+**R**, for when no admin can sign in. It's recorded, and every admin sees a notice the next time
+they sign in:
 
-The console commands of the closed shell's console origin, from the shell's own command table
-([ssh-and-elevation.md](ssh-and-elevation.md#the-closed-shell)), so the console and SSH can't drift
-apart: `status`, `network show`, `network set`, `network confirm`, `network allow-list reset` (the
-console's lockout recovery), `keys list`, `keys add`, `keys remove`, `admins list`, `admins add`,
-`admins remove`, `recovery-key add`, `tls show`, `backup`, `restore`, `upgrade`, `mcp`,
-`resources`, `reboot` and `poweroff`. A command that takes arguments asks for them first; one that
-reads a key asks for it on one line; each typed confirmation (`reboot`, `reset`) is asked by the
-command itself. The output shows as the command's transcript, as plain text.
-
-Then the console's own entries:
-
-- **Recover access**, for when every admin's password or authenticator is lost: it shows a one-time
-  code (16 characters, 60 minutes, 5 tries, sealed, destroyed on use) for `https://<address>:8443/recover`,
-  where an owner gets a new password and TOTP secret, or a new owner is made
-  ([access.md](access.md#the-8443-setup-page)). Every admin sees a notice at their next sign-in,
-  and Status warns for 24 hours.
-- **Recent messages**: the tail of `/run/sneakers/console.log`.
-- **Cancel the factory reset**, while one is pending or counting down (typed `cancel`).
+1. **Let this network reach the admin page again**: resets who can connect (accessd's
+   `ResetAllowList`) to the management network. The screen asks to check the admin page opens from
+   there, then **K** keeps the change; otherwise it's put back by itself.
+2. **Reset an owner's sign-in with a one-time code** (`BeginRecoverAccess`): the screen shows
+   `https://<address>:8443/recover`, the certificate to check and the code, in the setup code's
+   form (`XXXX-XXXX-XXXX-XXXX`, sealed and destroyed on use). On :8443 it opens only setup step 2: a new password and
+   authenticator for an owner, or a new owner. It works once, for 60 minutes and 5 tries; **C**
+   withdraws it.
 
 ## What isn't in this build yet
 
 The console names a missing backend plainly ("... isn't installed in this build yet") and never
-shows a success it didn't get. Each switches to the real one when its service is in the service
-table, with no change to the console:
+shows a success it didn't get. Each switches to the real one when it's in the build, with no change
+to the screens:
 
 | Backend | Until it's in the build |
 |---|---|
-| netd or sshd, on a build without them | the interface list is read from sysfs (an interface not brought up shows `not up`) and the network step can't apply settings, so it stops there; SSH logins can't connect |
-| moving to normal while init runs | setup completes and writes `setup/done`; normal operation starts on the next boot (the complete page offers `reboot`) |
-| the platform (spec 3) and the upgrade service (spec 5) | the status view says the platform isn't installed; upgrades show only the staged and rolled-back versions from Status |
-
-The fetch over https uses the system CA bundle; the root image carries none yet, so a fetch fails
-with the TLS error until it does, and typing the key works.
+| netd, on a build without it | first boot skips the network step and the screens say the address isn't known |
+| moving to normal while init runs | setup completes and the box restarts once into normal operation |
+| the platform (spec 3) and the upgrade service (spec 5) | Product shows `NONE YET`; upgrades show only the staged and rolled-back versions from Status |

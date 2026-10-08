@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0  slot B  1 node\e[0m       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Health        \e[1;33mUNKNOWN\e[0m\e[2m no status yet\e[0m                        \e[34m|\e[0m
+\e[34m|\e[0m   Product       \e[2m        \e[0m                                     \e[34m|\e[0m
+\e[34m|\e[0m   Protection    \e[1;33mUNKNOWN\e[0m\e[2m the boot hasn't answered yet\e[0m         \e[34m|\e[0m
+\e[34m|\e[0m   Clock         \e[2mUNKNOWN\e[0m\e[2m 18:03 UTC\e[0m                            \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Admin         \e[1;33mno address yet\e[0m                               \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;31m!\e[0m \e[1;37mThe appliance services aren't answering yet; there's\e[0m     \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;37mno status to show.\e[0m                                       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m\e[2m     \e[0m\e[2mN  Network\e[0m                            \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

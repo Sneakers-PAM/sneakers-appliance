@@ -1,0 +1,24 @@
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM appliance   0.1.0  slot A  1 node       |
++--------------------------------------------------------------+
+|                                                              |
+|   Health        OK      all services running                 |
+|   Product       NONE    installed from the admin page, Update|
+|   Protection    REDUCED no TPM, Secure Boot off              |
+|   Clock         OK      synced 18:03 UTC                     |
+|                                                              |
+|   Admin         address not known: the network service isn't |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  R  Recover access                                           |
++--------------------------------------------------------------+

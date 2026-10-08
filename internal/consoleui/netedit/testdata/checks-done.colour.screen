@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mChecking the network\e[0m                                       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m      \e[1;32m[ok]\e[0m  cable on ens192                                   \e[34m|\e[0m
+\e[34m|\e[0m      \e[1;32m[ok]\e[0m  address 192.0.2.10/24                             \e[34m|\e[0m
+\e[34m|\e[0m      \e[1;32m[ok]\e[0m  gateway 192.0.2.1                                 \e[34m|\e[0m
+\e[34m|\e[0m      \e[1;33m[!!]\e[0m  time server: no answer; certificate checks can    \e[34m|\e[0m
+\e[34m|\e[0m            fail if the clock drifts                          \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mEnter  Use these settings\e[0m\e[2m     \e[0m\e[2mE  Edit\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

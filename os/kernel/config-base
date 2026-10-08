@@ -145,9 +145,11 @@ CONFIG_FB_EFI=y
 CONFIG_FRAMEBUFFER_CONSOLE=y
 CONFIG_FONTS=y
 CONFIG_FONT_8x16=y
-# Large Terminus font so the branded console fills a modern display legibly
-# (selected at boot via `fbcon=font:TER16x32` on the prod cmdline). 8x16 stays
-# as the fallback.
+# Large Terminus font so the console is readable on a hypervisor's screen:
+# the UKI cmdline selects it with `fbcon=font:TER16x32`, which gives
+# VMware's 1024x768 a 64x24 console. 8x16 stays as the fallback: the console
+# switches to it (KDFONTOP) when the framebuffer is too small for 64x24 at
+# the large font.
 CONFIG_FONT_TER16x32=y
 # virtio transport + the NIC and block device the harness attaches.
 # VIRTIO_MENU gates the whole virtio drivers menu; the tiny base leaves it off,
