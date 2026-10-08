@@ -74,8 +74,11 @@ edge's box-state page ([edge-fallback.md](edge-fallback.md)), `state`: `updating
 applies or reverts (through the reboot it ends in), else `rebooting` or `shutting-down` once init
 has announced one, else `running` when setup is done and the product's service (k0s) runs, else
 `starting`. `maintenance` is reserved for platformd's maintenance mode. `product_running` and
-`product_installed` say whether k0s runs and whether a product bundle is installed. It says nothing
-else about the box.
+`product_installed` say whether k0s runs and whether a product bundle is installed.
+`upgrade_progress` is an update's steps while one is in progress and for 15 minutes after it ends,
+for the restart page before anyone signs in again: each step's id, label and state only, with no
+version, detail or code ([upgrades.md](upgrades.md#the-steps-of-an-update)). It says nothing else
+about the box.
 | `SetupService.GetSetup` | admin or code session | no | |
 | `SetupService.RedeemCode` | public | no | `setup.code.redeem` |
 | `SetupService.CheckPassword` | admin or code session | no | |

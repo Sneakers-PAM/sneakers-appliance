@@ -93,6 +93,9 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = img.Msg.GetRunningVersion(), img.Msg.GetStagedVersion(), img.Msg.GetFailedVersion()
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = img.Msg.GetRevertedVersion(), img.Msg.GetRevertedBy(), img.Msg.GetRevertedAt()
 		out.PreviousVersion, out.PreviousSlot = s.previous(img.Msg)
+		out.UpgradeProgress = s.progressToWire(img.Msg)
+	} else {
+		out.UpgradeProgress = s.progressToWire(nil)
 	}
 	if cert.SelfSigned {
 		add(osadminv1.WarningKind_WARNING_KIND_SELF_SIGNED_TLS, "This page uses the box's own self-signed certificate; check its fingerprint.")

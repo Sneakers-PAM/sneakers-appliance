@@ -45,6 +45,7 @@ func (h *status) GetPhase(ctx context.Context, _ *connect.Request[osadminv1.GetP
 	return connect.NewResponse(&osadminv1.GetPhaseResponse{
 		Phase: p, State: string(h.s.boxState(p, running)), ProductRunning: running,
 		ProductInstalled: h.s.slots().Status().Installed != "",
+		UpgradeProgress:  h.s.publicProgress(),
 	}), nil
 }
 

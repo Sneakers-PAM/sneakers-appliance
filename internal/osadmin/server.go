@@ -132,6 +132,7 @@ type Server struct {
 	certMu   sync.Mutex
 	resets   resets
 	upgrades upgrades
+	progress progress
 	// revertMu guards revertAudited, the last network change whose revert
 	// is in the audit, so a timer and a late check don't write it twice.
 	revertMu      sync.Mutex
