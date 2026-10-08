@@ -33,7 +33,6 @@ type Box struct {
 	Power    initv1connect.PowerServiceClient
 	SSHDir   string
 	Platform Platform
-	Upgrades Upgrades
 }
 
 // Dial makes the console's clients. Nothing connects until a call.
@@ -52,7 +51,6 @@ func Dial() Box {
 		Power:     initv1connect.NewPowerServiceClient(pc, powerURL),
 		SSHDir:    SSHDir,
 		Platform:  NoPlatform{},
-		Upgrades:  NoUpgrades{},
 	}
 	b.Console = &AccessConsole{Setup: b.Setup}
 	return b

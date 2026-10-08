@@ -250,12 +250,8 @@ func TestServicesSayWhatIsntInstalled(t *testing.T) {
 }
 
 func TestTheStubsForLaterServices(t *testing.T) {
-	_, err := sources.NoUpgrades{}.Current(context.Background())
+	_, err := sources.NoPlatform{}.State(context.Background())
 	var ni sources.NotInstalled
-	if !errors.As(err, &ni) || ni.Error() != "The upgrade service isn't installed in this build yet" {
-		t.Fatalf("upgrades: %v", err)
-	}
-	_, err = sources.NoPlatform{}.State(context.Background())
 	if !errors.As(err, &ni) || ni.Error() != "The platform isn't installed in this build yet" {
 		t.Fatalf("platform: %v", err)
 	}

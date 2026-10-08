@@ -41,7 +41,6 @@ func main() {
 		Network:   b.Network,
 		HostKeys:  func() []sources.HostKey { return sources.HostKeys(b.SSHDir) },
 		Slot:      dashboard.Slot(os.Getenv(switchroot.SourceEnv)),
-		Upgrades:  b.Upgrades,
 		Platform:  b.Platform,
 		Console:   b.Console,
 		AccessNet: b.AccessNet,
