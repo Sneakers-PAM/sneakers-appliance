@@ -399,6 +399,9 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
 		out.PreviousVersion, out.PreviousSlot = h.s.previous(st.Msg)
 		out.NextStageRemoves = st.Msg.GetNextStageRemoves()
+		out.UpgradeProgress = h.s.progressToWire(st.Msg)
+	} else {
+		out.UpgradeProgress = h.s.progressToWire(nil)
 	}
 	if h.s.o.Elevation != nil {
 		auditDir := ""
@@ -525,8 +528,10 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	}
 	h.s.historyFor(target, "stage", version, c.session.Admin, err, id)
 	if err != nil {
+		h.s.failActive("stage", err)
 		return nil, err
 	}
+	h.s.finishSteps(stepStage)
 	out := &osadminv1.StageUpdateResponse{Package: pkg}
 	if target != osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
 		out.Slot = h.s.otherSlot()
@@ -563,6 +568,8 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	if err != nil {
 		return nil, nil, err
 	}
+	s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, "", s.otherSlot())
+	s.setStep(stepVerify, "")
 	f, err := os.Open(path) // #nosec G304 -- an upload this box made
 	if err != nil {
 		return nil, nil, codes.Wrap(codes.UpgradeUpload, err)
@@ -586,8 +593,11 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE}
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+		s.beginProgress("stage", pkg.Target, h.Version, "")
+		s.setStep(stepVerify, "")
 		return pkg, nil, s.stageProduct(ctx, path, p)
 	}
+	s.setVersion(h.Version)
 	img, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
 		return pkg, nil, err
@@ -597,6 +607,7 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 		return pkg, nil, err
 	}
 	s.o.Logger.Info("osadmin: update verified; unpacking", log.F("upload", id), log.F("version", h.Version), log.F("kind", string(h.Kind)))
+	s.setStep(stepStage, "Decrypting and unpacking the release.")
 	key, err := s.o.Upgrade.UpdateKey()
 	if err != nil {
 		return pkg, nil, codes.Wrap(codes.UpgradeDecrypt, err)
@@ -611,6 +622,7 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	if err := unpack(p, key, dir); err != nil {
 		return pkg, nil, err
 	}
+	s.setStep(stepStage, "Writing the release into "+slotName(s.otherSlot())+".")
 	res, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir}))
 	if err != nil {
 		return pkg, nil, err
@@ -618,6 +630,14 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	s.removeUpload(path)
 	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version), log.F("removed", strings.Join(res.Msg.GetRemovedVersions(), ",")))
 	return pkg, res.Msg.GetRemovedVersions(), nil
+}
+
+// slotName is a base slot as a sentence says it.
+func slotName(slot string) string {
+	if slot == "" {
+		return "the other slot"
+	}
+	return "slot " + slot
 }
 
 // removeUpload removes an upload's .bin or its unpacked layout once it's
@@ -696,10 +716,11 @@ func (s *Server) apply(ctx context.Context, by osaudit.Entry, o *osadminv1.Eleva
 		overrode, err = s.beginMaintenance(ctx, "update applies", by, o)
 	}
 	if err == nil {
-		_, err = s.o.Image.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{}))
-	}
-	if err == nil {
-		_, err = s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))
+		s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_BASE, v, s.otherSlot())
+		err = s.rebootInto(ctx, v, func() error {
+			_, err := s.o.Image.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{}))
+			return err
+		})
 	}
 	if err != nil {
 		s.endMaintenance()
@@ -718,25 +739,99 @@ func (s *Server) apply(ctx context.Context, by osaudit.Entry, o *osadminv1.Eleva
 // marking it good before the reboot would undo that. The command calls it
 // at start and each minute until it succeeds.
 func (s *Server) MarkGood(ctx context.Context) error {
-	if !s.SetupDone() {
-		return errors.New("osadmin: setup isn't done; the release isn't marked good yet")
-	}
 	if s.Maintenance() {
 		return errors.New("osadmin: an update is being applied or reverted; the release isn't marked good")
 	}
+	// After an apply's or a revert's reboot, the update's last steps are
+	// this loop's: checking health, then marking good.
+	track := s.afterReboot(ctx)
+	health := func(why string) {
+		if track {
+			s.setStep(stepHealth, why)
+		}
+	}
+	if !s.SetupDone() {
+		health("Waiting for setup to finish.")
+		return errors.New("osadmin: setup isn't done; the release isn't marked good yet")
+	}
 	if _, err := s.o.KeyCustody.Protection(ctx, connect.NewRequest(&initv1.ProtectionRequest{})); err != nil {
 		s.o.Logger.Warn("osadmin: init doesn't answer; the release isn't marked good yet", log.F("error", err.Error()))
+		health("Waiting for init to answer: " + err.Error())
 		return err
 	}
 	if _, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{})); err != nil {
 		s.o.Logger.Warn("osadmin: netd doesn't answer; the release isn't marked good yet", log.F("error", err.Error()))
+		health("Waiting for netd to answer: " + err.Error())
 		return err
+	}
+	if track {
+		s.setStep(stepMarkGood, "")
 	}
 	if _, err := s.o.Image.MarkGood(ctx, connect.NewRequest(&initv1.MarkGoodRequest{})); err != nil {
 		s.o.Logger.Error(err, "osadmin: the release wasn't marked good")
+		if track {
+			s.setStep(stepMarkGood, "Not marked good yet, trying again in a minute: "+describe(err))
+		}
 		return err
 	}
+	if track {
+		s.finishSteps(stepMarkGood)
+	}
 	s.o.Logger.Info("osadmin: the running release is marked good", log.F("version", release.Version))
+	return nil
+}
+
+// afterReboot reports whether the update record waits on this boot's
+// checks: a base apply or revert past its switch. When the box came back
+// on another release than the one it rebooted into, that step fails
+// instead, naming both: boot counting went back by itself.
+func (s *Server) afterReboot(ctx context.Context) bool {
+	r := s.progressSnapshot()
+	if r == nil || r.Target == "product" {
+		return false
+	}
+	switch r.active() {
+	case stepReboot, stepHealth, stepMarkGood:
+	default:
+		return false
+	}
+	st, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil {
+		s.setStep(stepHealth, "Waiting for init to answer: "+err.Error())
+		return true
+	}
+	running := st.Msg.GetRunningVersion()
+	if running == r.Version {
+		if r.active() == stepReboot {
+			s.setStep(stepHealth, "")
+		}
+		return true
+	}
+	why := "The box came back on " + running + ", not " + r.Version + "."
+	if st.Msg.GetFailedVersion() == r.Version {
+		why = r.Version + " didn't come up healthy, so the box went back to " + running + " by itself."
+	}
+	s.setStep(stepHealth, "")
+	s.progress.mu.Lock()
+	s.failStepLocked(stepHealth, why, "")
+	s.progress.mu.Unlock()
+	return false
+}
+
+// rebootInto runs an apply's or a revert's switch, then the reboot into
+// version, each as its step: the reboot step stays active until the
+// booted release's MarkGood loop takes over.
+func (s *Server) rebootInto(ctx context.Context, version string, switchSlots func() error) error {
+	s.setStep(stepSwitch, "")
+	if err := switchSlots(); err != nil {
+		s.failStep(stepSwitch, err)
+		return err
+	}
+	s.setStep(stepReboot, "The box restarts into "+version+".")
+	if _, err := s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{})); err != nil {
+		s.failStep(stepReboot, err)
+		return err
+	}
 	return nil
 }
 
@@ -767,10 +862,15 @@ func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadmi
 		c.note("box", "overrode", overrode)
 	}
 	if err == nil {
-		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: c.session.Admin}))
-	}
-	if err == nil {
-		_, err = h.s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))
+		back := ""
+		if st, serr := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); serr == nil {
+			back = st.Msg.GetPreviousVersion()
+		}
+		h.s.beginProgress("revert", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, back, "")
+		err = h.s.rebootInto(ctx, back, func() error {
+			_, err := h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: c.session.Admin}))
+			return err
+		})
 	}
 	if err != nil {
 		h.s.endMaintenance()

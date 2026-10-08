@@ -49,29 +49,6 @@ func (s services) Running(ctx context.Context, name string) (bool, error) {
 	return r.Msg.GetRunning(), nil
 }
 
-// Upgrade is the upgrade service's state, for the maintenance view.
-type Upgrade struct {
-	InProgress bool
-	Version    string
-	Step       string
-	// Failed is the error of an upgrade that was rolled back.
-	Failed string
-}
-
-// Upgrades is the upgrade service (spec 5).
-type Upgrades interface {
-	Current(ctx context.Context) (Upgrade, error)
-}
-
-// NoUpgrades is the upgrade service's stub until it's in the build: the
-// console falls back to the staged and failed versions on Status.
-type NoUpgrades struct{}
-
-// Current answers NotInstalled.
-func (NoUpgrades) Current(context.Context) (Upgrade, error) {
-	return Upgrade{}, NotInstalled{What: "The upgrade service"}
-}
-
 // PlatformState is the platform as the status view shows it: its state,
 // and how many nodes run it (this box alone until the join path exists).
 type PlatformState struct {

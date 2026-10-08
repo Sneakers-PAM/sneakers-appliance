@@ -178,6 +178,7 @@ func (s *Server) stageProduct(ctx context.Context, path string, p *updatepkg.Pac
 		return codes.Wrap(codes.KitPinMissing, err)
 	}
 	s.o.Logger.Info("osadmin: product bundle verified; unpacking", log.F("version", p.Header.Version), log.F("base", base))
+	s.setStep(stepStage, "Decrypting, unpacking and checking the bundle.")
 	id, err := s.o.Upgrade.UpdateKey()
 	if err != nil {
 		return codes.Wrap(codes.UpgradeDecrypt, err)
@@ -205,10 +206,8 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 	if err == nil {
 		overrode, err = s.beginMaintenance(ctx, "product update applies", by, o)
 		if err == nil {
-			_, err = s.slots().Apply()
-			if err == nil {
-				err = s.restartProduct(ctx)
-			}
+			s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
+			err = s.switchProduct(ctx, func() error { _, err := s.slots().Apply(); return err })
 			s.endMaintenance()
 		}
 	}
@@ -222,15 +221,34 @@ func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadmin
 	overrode, err := s.beginMaintenance(ctx, "product update reverts", by, o)
 	v := ""
 	if err == nil {
-		v, err = s.slots().Revert()
-		if err == nil {
-			err = s.restartProduct(ctx)
-		}
+		s.beginProgress("revert", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, s.slots().Status().Previous, "")
+		err = s.switchProduct(ctx, func() error {
+			var err error
+			v, err = s.slots().Revert()
+			return err
+		})
 		s.endMaintenance()
 	}
 	s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "revert", v, by.Actor, err, overrideDetail(overrode))
 	s.o.Logger.Info("osadmin: product revert", log.F("version", v), log.F("by", by.Actor), log.F("ok", err == nil))
 	return v, overrode, err
+}
+
+// switchProduct runs a product apply's or revert's switch, then the
+// product's restart, each as its step.
+func (s *Server) switchProduct(ctx context.Context, switchSlots func() error) error {
+	s.setStep(stepSwitch, "")
+	if err := switchSlots(); err != nil {
+		s.failStep(stepSwitch, err)
+		return err
+	}
+	s.setStep(stepRestart, "")
+	if err := s.restartProduct(ctx); err != nil {
+		s.failStep(stepRestart, err)
+		return err
+	}
+	s.finishSteps(stepRestart)
+	return nil
 }
 
 // restartProduct stops the product service and starts it from the current

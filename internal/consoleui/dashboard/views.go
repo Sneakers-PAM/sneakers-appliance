@@ -30,11 +30,9 @@ type Data struct {
 	NetErr   error
 	Slot     string
 	HostKeys []sources.HostKey
-	Upgrade  sources.Upgrade
-	// UpgradeErr and PlatformErr are their services' answers (NotInstalled
-	// until they're in the build).
-	UpgradeErr  error
-	Platform    sources.PlatformState
+	Platform sources.PlatformState
+	// PlatformErr is the platform's answer (NotInstalled until it's in the
+	// build).
 	PlatformErr error
 	// Recover is a Recover access code that's out.
 	Recover *sources.RecoverCode
@@ -157,7 +155,10 @@ func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 			add(tui.Warn, fmt.Sprintf("A factory reset asked for by %s waits for approval (%d of %d).", fr.GetStartedBy(), len(fr.GetApprovals()), fr.GetRequired()))
 		}
 	}
-	switch {
+	switch p := st.GetUpgradeProgress(); {
+	case p.GetFailed() && now.Sub(p.GetUpdatedAt().AsTime()) < failedStepShown:
+		s := failedStep(p)
+		add(tui.Alert, "The update to "+p.GetVersion()+" failed. "+s.GetLabel()+": "+s.GetDetail())
 	case st.GetRevertedVersion() != "":
 		add(tui.Normal, "Reverted from "+st.GetRevertedVersion()+" by "+st.GetRevertedBy()+" at "+st.GetRevertedAt().AsTime().In(now.Location()).Format("15:04 MST")+". The box runs "+st.GetVersion()+" again.")
 	case st.GetFailedVersion() != "":
@@ -278,20 +279,90 @@ func lowerFirst(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
-// MaintenancePage is an upgrade in progress, or rolled back with its
-// reason.
-func MaintenancePage(c consoleui.Chrome, u sources.Upgrade) tui.Page {
-	var b []tui.Line
-	if u.InProgress {
-		b = append(b, tui.Styled(tui.Strong, "Upgrading to "+u.Version+". Leave it powered on."), tui.Text(""))
-		b = append(b, tui.Line{{Text: "   "}, {Text: "[..]", Style: tui.Warn}, {Text: "  " + u.Step}}, tui.Text(""))
-		b = append(b, tui.Wrap("If "+u.Version+" doesn't come up healthy, the box goes back to "+c.Version+" by itself.", width, "")...)
+// failedStepShown is how long the status view warns about a failed
+// update step; Updates on :8443 keeps it until the next update.
+const failedStepShown = 24 * time.Hour
+
+// failedStep is the step that failed, or an empty one.
+func failedStep(p *osadminv1.UpgradeProgress) *osadminv1.UpgradeStep {
+	for _, s := range p.GetSteps() {
+		if s.GetState() == osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED {
+			return s
+		}
 	}
-	if u.Failed != "" {
-		b = append(b, tui.Styled(tui.Alert, "The upgrade to "+u.Version+" was rolled back:"))
-		b = append(b, tui.WrapStyled(tui.Alert, u.Failed, width, "  ")...)
+	return &osadminv1.UpgradeStep{}
+}
+
+// stepMarks are each step state's mark, in its colour.
+var stepMarks = map[osadminv1.UpgradeStepState]tui.Span{
+	osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_PENDING: {Text: "[  ]", Style: tui.Dim},
+	osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_ACTIVE:  {Text: "[..]", Style: tui.Warn},
+	osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_DONE:    {Text: "[ok]", Style: tui.OK},
+	osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED:  {Text: "[!!]", Style: tui.Alert},
+}
+
+// barWidth is the progress bar's cells between its brackets.
+const barWidth = 20
+
+// progressBar is done of total as a bar, the percentage and the sizes.
+func progressBar(done, total int64) tui.Line {
+	done = min(max(done, 0), total)
+	filled := int(done * barWidth / total)
+	pct := done * 100 / total
+	return tui.Line{
+		{Text: "        ["},
+		{Text: strings.Repeat("#", filled), Style: tui.Warn},
+		{Text: strings.Repeat("-", barWidth-filled), Style: tui.Dim},
+		{Text: fmt.Sprintf("]  %d%%  ", pct)},
+		{Text: fmt.Sprintf("%s of %s", size(done), size(total)), Style: tui.Dim},
 	}
-	return c.BigPage(b)
+}
+
+// size is a byte count in MB or GB, one decimal.
+func size(n int64) string {
+	if n >= 1<<30 {
+		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+	}
+	return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+}
+
+// MaintenancePage is an update in progress: what it does, each step with
+// the current one marked, its progress where it has one, and what the box
+// does if the new release doesn't come up.
+func MaintenancePage(c consoleui.Chrome, p *osadminv1.UpgradeProgress) tui.Page {
+	head := "Updating to " + p.GetVersion() + ". Leave it powered on."
+	switch {
+	case p.GetAction() == "revert":
+		head = "Going back to " + p.GetVersion() + ". Leave it powered on."
+	case p.GetAction() == "stage":
+		head = "Staging " + p.GetVersion() + ". The box keeps running."
+	}
+	b := []tui.Line{tui.Styled(tui.Strong, head), tui.Text("")}
+	for _, s := range p.GetSteps() {
+		st := s.GetState()
+		text := tui.Span{Text: "  " + s.GetLabel()}
+		if st == osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_ACTIVE {
+			text.Style = tui.Strong
+		}
+		if st == osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_PENDING {
+			text.Style = tui.Dim
+		}
+		b = append(b, tui.Line{{Text: "  "}, stepMarks[st], text})
+		if st != osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_ACTIVE {
+			continue
+		}
+		if s.GetTotalBytes() > 0 {
+			b = append(b, progressBar(s.GetDoneBytes(), s.GetTotalBytes()))
+		}
+		if d := s.GetDetail(); d != "" {
+			b = append(b, tui.WrapStyled(tui.Dim, d, width, "        ")...)
+		}
+	}
+	if p.GetAction() == "apply" && p.GetVersion() != c.Version {
+		b = append(b, tui.Text(""))
+		b = append(b, tui.Wrap("If "+p.GetVersion()+" doesn't come up healthy, the box goes back to "+c.Version+" by itself.", width, "")...)
+	}
+	return c.Page(b, consoleui.Keys(consoleui.Key("R", "Recover access")), "")
 }
 
 // RecoverPage is Recover access's first screen: the two ways back in.

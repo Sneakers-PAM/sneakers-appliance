@@ -176,6 +176,11 @@ message ImageServiceStatusResponse {
   // next_stage_removes are the releases the next Stage removes to keep the
   // box at its release count: the previous release, or a staged one.
   repeated string next_stage_removes = 8;
+  // stage_written_bytes of stage_total_bytes is how much of a release's
+  // root image a Stage under way has written into the inactive slot; both
+  // are 0 when no Stage is writing.
+  int64 stage_written_bytes = 9;
+  int64 stage_total_bytes = 10;
 }
 
 // Power reboots, powers off or factory resets the box.

@@ -9,6 +9,7 @@ package sneakers.appliance.osadmin.v1;
 import "google/protobuf/timestamp.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/power.proto";
+import "sneakers/appliance/osadmin/v1/upgrade.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
 
@@ -56,6 +57,10 @@ message GetPhaseResponse {
   // product_installed: a product bundle is installed. Before one is,
   // nothing answers 80 or 443.
   bool product_installed = 4;
+  // upgrade_progress is an update's steps while one is in progress or
+  // just ended, for the restart page before anyone signs in again: the
+  // steps' ids, labels and states only, with no version, detail or code.
+  UpgradeProgress upgrade_progress = 5;
 }
 
 message GetStatusRequest {}
@@ -154,6 +159,9 @@ message GetStatusResponse {
   // to revert to.
   string previous_version = 23;
   string previous_slot = 24;
+  // upgrade_progress is the last stage, apply or revert, step by step;
+  // unset when the box has made none.
+  UpgradeProgress upgrade_progress = 25;
 }
 
 message SetSecureBootRequest {

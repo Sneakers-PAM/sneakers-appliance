@@ -81,6 +81,17 @@ func TestDashboardScreens(t *testing.T) {
 	rolled.FailedVersion = "0.1.1"
 	reverted := status()
 	reverted.RevertedVersion, reverted.RevertedBy, reverted.RevertedAt = "0.1.1", "alice", timestamppb.New(now.Add(-20*time.Minute))
+	staging := progress("stage", "0.1.1", "stage", "Writing the release into slot B.")
+	staging.Steps[1].DoneBytes, staging.Steps[1].TotalBytes = 734003200, 1468006400
+	rebooting := progress("apply", "0.1.1", "reboot", "The box restarts into 0.1.1.")
+	checking := progress("apply", "0.1.1", "health", "Waiting for netd to answer: connection refused")
+	reverting := progress("revert", "0.0.9", "reboot", "The box restarts into 0.0.9.")
+	reverting.Steps = reverting.Steps[2:]
+	stepFailed := status()
+	stepFailed.UpgradeProgress = progress("stage", "0.1.1", "verify", "")
+	stepFailed.UpgradeProgress.InProgress, stepFailed.UpgradeProgress.Failed, stepFailed.UpgradeProgress.Code = false, true, "UPGRADE_SIGNATURE"
+	stepFailed.UpgradeProgress.Steps[0].State = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED
+	stepFailed.UpgradeProgress.Steps[0].Detail = "UPGRADE_SIGNATURE (2505): the package isn't signed by this box's release key"
 	three := data(status())
 	three.Platform.Nodes = 3
 	lab := dashboard.Data{Status: sources.StatusView{Status: &osadminv1.GetStatusResponse{Version: "0.0.0-lab.20261007d", Channel: "lab", Phase: "normal",
@@ -114,8 +125,11 @@ func TestDashboardScreens(t *testing.T) {
 		"accessd-down-no-status": dashboard.Page(consoleui.Chrome{Version: "0.1.0", Now: func() time.Time { return now }}, nothing, now),
 		"lab-no-netd":            dashboard.Page(chrome(sbOff, keycustody.ModeKeyfile), lab, now),
 		"recover-code-out":       dashboard.Page(chrome(full, keycustody.ModeTPM), recovering, now),
-		"maintenance":            dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), sources.Upgrade{InProgress: true, Version: "0.1.1", Step: "restarting into 0.1.1"}),
-		"maintenance-rolled":     dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), sources.Upgrade{Version: "0.1.1", Failed: "UPGRADE_HEALTH: the platform didn't come up within 10 minutes; booted 0.1.0 again"}),
+		"maintenance-staging":    dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), staging),
+		"maintenance-rebooting":  dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), rebooting),
+		"maintenance-health":     dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), checking),
+		"maintenance-revert":     dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), reverting),
+		"upgrade-step-failed":    dashboard.Page(chrome(full, keycustody.ModeTPM), data(stepFailed), now),
 		"recover":                dashboard.RecoverPage(chrome(full, keycustody.ModeTPM), ""),
 		"recover-not-installed":  dashboard.RecoverPage(chrome(full, keycustody.ModeTPM), "No code was made: Recover access by code isn't installed in this build yet"),
 		"recover-allow-list":     dashboard.AllowListPage(chrome(full, keycustody.ModeTPM), 2*time.Minute, ""),
@@ -124,6 +138,61 @@ func TestDashboardScreens(t *testing.T) {
 	}
 	for name, p := range cases {
 		t.Run(name, func(t *testing.T) { tuitest.Golden(t, "dashboard-"+name, p) })
+	}
+}
+
+// progress is an update on step at, the steps before it done and the rest
+// pending.
+func progress(action, version, at, detail string) *osadminv1.UpgradeProgress {
+	ids := []string{"verify", "stage", "switch", "reboot", "health", "mark_good"}
+	labels := []string{"Verifying (signature, channel, SHA-256)", "Staging into slot B", "Switching slots", "Rebooting", "Checking health", "Marking good"}
+	p := &osadminv1.UpgradeProgress{Action: action, Version: version, InProgress: true, UpdatedAt: timestamppb.New(now.Add(-time.Minute))}
+	state := osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_DONE
+	for i, id := range ids {
+		st := &osadminv1.UpgradeStep{Id: id, Label: labels[i], State: state}
+		if id == at {
+			st.State, st.Detail = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_ACTIVE, detail
+			state = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_PENDING
+		}
+		p.Steps = append(p.Steps, st)
+	}
+	return p
+}
+
+// An update in progress takes over the status view with its steps; once
+// it's done the status view comes back.
+func TestTheMaintenanceViewFollowsAnUpdate(t *testing.T) {
+	e := newEnv()
+	d := start(t, e)
+	d.Expect(t, "https://192.0.2.10:8443")
+	e.setStatus(func(s *osadminv1.GetStatusResponse) { s.UpgradeProgress = progress("apply", "0.1.1", "reboot", "") })
+	d.Expect(t, "Updating to 0.1.1. Leave it powered on.")
+	d.Expect(t, "Rebooting")
+	e.setStatus(func(s *osadminv1.GetStatusResponse) { s.UpgradeProgress = progress("apply", "0.1.1", "mark_good", "") })
+	d.Expect(t, "Marking good")
+	e.setStatus(func(s *osadminv1.GetStatusResponse) { s.UpgradeProgress.InProgress = false })
+	d.Expect(t, "https://192.0.2.10:8443")
+}
+
+// A failed step shows on the status view for a day, then goes.
+func TestAFailedStepWarnsForADay(t *testing.T) {
+	st := status()
+	st.UpgradeProgress = progress("stage", "0.1.1", "stage", "")
+	st.UpgradeProgress.InProgress, st.UpgradeProgress.Failed = false, true
+	st.UpgradeProgress.Steps[1].State, st.UpgradeProgress.Steps[1].Detail = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED, "the disk is full"
+	text := func(ls []tui.Line) string {
+		var b strings.Builder
+		for _, l := range ls {
+			b.WriteString(l.String() + "\n")
+		}
+		return b.String()
+	}
+	got := text(dashboard.Warnings(chrome(full, keycustody.ModeTPM), data(st), now))
+	if !strings.Contains(got, "The update to 0.1.1 failed.") || !strings.Contains(got, "Staging into slot B: the disk is full") {
+		t.Fatalf("warnings:\n%s", got)
+	}
+	if got := text(dashboard.Warnings(chrome(full, keycustody.ModeTPM), data(st), now.Add(25*time.Hour))); strings.Contains(got, "failed") {
+		t.Fatalf("a day later:\n%s", got)
 	}
 }
 
@@ -256,7 +325,6 @@ func newEnv() *env {
 		Network:   &consoletest.Network{},
 		HostKeys:  func() []sources.HostKey { return keys },
 		Slot:      "A",
-		Upgrades:  sources.NoUpgrades{},
 		Platform:  sources.NoPlatform{},
 		Console:   e.console,
 		AccessNet: e.net,

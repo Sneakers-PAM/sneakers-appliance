@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM Appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mUpdating to 0.1.1. Leave it powered on.\e[0m                    \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Verifying (signature, channel, SHA-256)            \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Staging into slot B                                \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Switching slots                                    \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;33m[..]\e[0m\e[1;37m  Rebooting\e[0m                                          \e[34m|\e[0m
+\e[34m|\e[0m           \e[2mThe box restarts into 0.1.1.\e[0m                       \e[34m|\e[0m
+\e[34m|\e[0m     \e[2m[  ]\e[0m\e[2m  Checking health\e[0m                                    \e[34m|\e[0m
+\e[34m|\e[0m     \e[2m[  ]\e[0m\e[2m  Marking good\e[0m                                       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   If 0.1.1 doesn't come up healthy, the box goes back to     \e[34m|\e[0m
+\e[34m|\e[0m   0.1.0 by itself.                                           \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m                                           \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

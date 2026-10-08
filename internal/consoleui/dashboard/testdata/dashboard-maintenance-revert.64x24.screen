@@ -1,24 +1,24 @@
 +--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM Appliance   0.1.0                       |
++--------------------------------------------------------------+
 |                                                              |
+|   Going back to 0.0.9. Leave it powered on.                  |
 |                                                              |
-|                                                              |
-|                                                              |
-|                       .------.                               |
-|                      /  .-.   \ = = =                        |
-|                     |  ( o )   '------._                     |
-|                     |   |_|            '\                    |
-|                    (=====================)                   |
-|                                                              |
-|                    Sneakers-PAM Appliance                    |
-|                            0.1.0                             |
-|                                                              |
-|   The upgrade to 0.1.1 was rolled back:                      |
-|     UPGRADE_HEALTH: the platform didn't come up within 10    |
-|     minutes; booted 0.1.0 again                              |
+|     [ok]  Switching slots                                    |
+|     [..]  Rebooting                                          |
+|           The box restarts into 0.0.9.                       |
+|     [  ]  Checking health                                    |
+|     [  ]  Marking good                                       |
 |                                                              |
 |                                                              |
 |                                                              |
 |                                                              |
 |                                                              |
 |                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  R  Recover access                                           |
 +--------------------------------------------------------------+

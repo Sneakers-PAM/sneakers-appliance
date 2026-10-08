@@ -100,6 +100,17 @@ type fakeInit struct {
 	// box is mid-apply.
 	activateErr    error
 	duringActivate func()
+	// running is the release Status says the box booted; empty is 0.1.0.
+	// failedVer is a release boot counting fell back from.
+	running, failedVer string
+	// written of total is how much of a root image a Stage under way has
+	// written, as Status reports it; duringStage runs inside Stage before
+	// it returns, and stageErr fails it.
+	written, total int64
+	duringStage    func()
+	stageErr       error
+	// rebootErr fails Reboot; markGoodErr fails MarkGood.
+	rebootErr, markGoodErr error
 }
 
 func (f *fakeInit) Protection(context.Context, *connect.Request[initv1.ProtectionRequest]) (*connect.Response[initv1.ProtectionResponse], error) {
@@ -142,6 +153,9 @@ type fakePower struct {
 func (p fakePower) Reboot(_ context.Context, r *connect.Request[initv1.RebootRequest]) (*connect.Response[initv1.RebootResponse], error) {
 	p.f.mu.Lock()
 	defer p.f.mu.Unlock()
+	if p.f.rebootErr != nil {
+		return nil, p.f.rebootErr
+	}
 	p.f.reboots++
 	p.f.forced = r.Msg.GetForced()
 	return connect.NewResponse(&initv1.RebootResponse{}), nil
@@ -187,7 +201,12 @@ type fakeImage struct {
 func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceStatusRequest]) (*connect.Response[initv1.ImageServiceStatusResponse], error) {
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
-	out := &initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer, PreviousVersion: i.f.previousVer, NextStageRemoves: i.f.nextRemoves}
+	running := i.f.running
+	if running == "" {
+		running = "0.1.0"
+	}
+	out := &initv1.ImageServiceStatusResponse{RunningVersion: running, StagedVersion: i.f.stagedVer, FailedVersion: i.f.failedVer, PreviousVersion: i.f.previousVer, NextStageRemoves: i.f.nextRemoves,
+		StageWrittenBytes: i.f.written, StageTotalBytes: i.f.total}
 	if i.f.revertedBy != "" {
 		out.StagedVersion, out.RevertedVersion, out.RevertedBy, out.RevertedAt = "", "0.2.0", i.f.revertedBy, timestamppb.New(time.Date(2026, 10, 8, 14, 5, 0, 0, time.UTC))
 	}
@@ -195,6 +214,15 @@ func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceS
 }
 
 func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageRequest]) (*connect.Response[initv1.StageResponse], error) {
+	i.f.mu.Lock()
+	during, err := i.f.duringStage, i.f.stageErr
+	i.f.mu.Unlock()
+	if during != nil {
+		during()
+	}
+	if err != nil {
+		return nil, err
+	}
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
 	i.f.staged = append(i.f.staged, r.Msg.GetReference())
@@ -224,6 +252,9 @@ func (i fakeImage) Activate(context.Context, *connect.Request[initv1.ActivateReq
 func (i fakeImage) MarkGood(context.Context, *connect.Request[initv1.MarkGoodRequest]) (*connect.Response[initv1.MarkGoodResponse], error) {
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
+	if i.f.markGoodErr != nil {
+		return nil, i.f.markGoodErr
+	}
 	i.f.markedGood++
 	return connect.NewResponse(&initv1.MarkGoodResponse{}), nil
 }

@@ -30,7 +30,6 @@ type Deps struct {
 	Network  sources.Network
 	HostKeys func() []sources.HostKey
 	Slot     string
-	Upgrades sources.Upgrades
 	Platform sources.Platform
 	// Console is the access backend: Recover access by code.
 	Console sources.ConsoleAccess
@@ -112,7 +111,6 @@ func (k *console) load(ctx context.Context) {
 		}
 	}
 	d.HostKeys = k.d.HostKeys()
-	d.Upgrade, d.UpgradeErr = k.d.Upgrades.Current(c)
 	d.Platform, d.PlatformErr = k.d.Platform.State(c)
 	if info, err := k.d.Console.Read(c); err == nil {
 		d.Recover = info.Recover
@@ -129,8 +127,8 @@ func (k *console) statusView(ctx context.Context) func() (tui.Page, bool) {
 		if time.Since(k.loaded) >= k.d.Refresh {
 			k.load(ctx)
 		}
-		if k.data.Upgrade.InProgress || (k.data.UpgradeErr == nil && k.data.Upgrade.Failed != "") {
-			return MaintenancePage(k.c, k.data.Upgrade), false
+		if p := k.data.Status.Status.GetUpgradeProgress(); p.GetInProgress() {
+			return MaintenancePage(k.c, p), false
 		}
 		return Page(k.c, k.data, k.d.Now()), false
 	}

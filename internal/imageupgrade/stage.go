@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"path"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	log "github.com/Bugs5382/go-log"
@@ -73,6 +74,27 @@ type Stager struct {
 	// Keep is how many releases the box keeps (Keeps); 0 is DefaultKeep.
 	Keep   int
 	Logger log.Logger
+	// written of total is the root image a Stage is writing now.
+	written, total atomic.Int64
+}
+
+// Writing reports how much of a release's root image the Stage under way
+// has written into the inactive slot, of its size; 0 of 0 when no Stage is
+// writing.
+func (s *Stager) Writing() (written, total int64) {
+	return s.written.Load(), s.total.Load()
+}
+
+// counted counts what's read through it into the stager's progress.
+type counted struct {
+	r io.Reader
+	n *atomic.Int64
+}
+
+func (c counted) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n.Add(int64(n))
+	return n, err
 }
 
 // Stage verifies a release against the pins compiled into the running
@@ -123,7 +145,13 @@ func (s *Stager) Stage(ctx context.Context, src verify.Source, arch string) (str
 	if err != nil {
 		return "", err
 	}
-	err = s.Slots.WriteInactive(ctx, root, st.Files[m.Spec.Root.File].Size, guid)
+	size := st.Files[m.Spec.Root.File].Size
+	s.written.Store(0)
+	s.total.Store(size)
+	lg.Info("imageupgrade: writing the inactive slot", log.F("version", ver), log.F("bytes", size))
+	err = s.Slots.WriteInactive(ctx, counted{r: root, n: &s.written}, size, guid)
+	s.total.Store(0)
+	s.written.Store(0)
 	_ = root.Close()
 	if err != nil {
 		return "", fmt.Errorf("imageupgrade: write the inactive slot: %w", err)

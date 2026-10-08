@@ -213,8 +213,12 @@ type GetPhaseResponse struct {
 	// product_installed: a product bundle is installed. Before one is,
 	// nothing answers 80 or 443.
 	ProductInstalled bool `protobuf:"varint,4,opt,name=product_installed,json=productInstalled,proto3" json:"product_installed,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// upgrade_progress is an update's steps while one is in progress or
+	// just ended, for the restart page before anyone signs in again: the
+	// steps' ids, labels and states only, with no version, detail or code.
+	UpgradeProgress *UpgradeProgress `protobuf:"bytes,5,opt,name=upgrade_progress,json=upgradeProgress,proto3" json:"upgrade_progress,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GetPhaseResponse) Reset() {
@@ -273,6 +277,13 @@ func (x *GetPhaseResponse) GetProductInstalled() bool {
 		return x.ProductInstalled
 	}
 	return false
+}
+
+func (x *GetPhaseResponse) GetUpgradeProgress() *UpgradeProgress {
+	if x != nil {
+		return x.UpgradeProgress
+	}
+	return nil
 }
 
 type GetStatusRequest struct {
@@ -536,6 +547,9 @@ type GetStatusResponse struct {
 	// to revert to.
 	PreviousVersion string `protobuf:"bytes,23,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
 	PreviousSlot    string `protobuf:"bytes,24,opt,name=previous_slot,json=previousSlot,proto3" json:"previous_slot,omitempty"`
+	// upgrade_progress is the last stage, apply or revert, step by step;
+	// unset when the box has made none.
+	UpgradeProgress *UpgradeProgress `protobuf:"bytes,25,opt,name=upgrade_progress,json=upgradeProgress,proto3" json:"upgrade_progress,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -738,6 +752,13 @@ func (x *GetStatusResponse) GetPreviousSlot() string {
 	return ""
 }
 
+func (x *GetStatusResponse) GetUpgradeProgress() *UpgradeProgress {
+	if x != nil {
+		return x.UpgradeProgress
+	}
+	return nil
+}
+
 type SetSecureBootRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	On              bool                   `protobuf:"varint,1,opt,name=on,proto3" json:"on,omitempty"`
@@ -830,13 +851,14 @@ var File_sneakers_appliance_osadmin_v1_status_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\n" +
-	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\"\x11\n" +
-	"\x0fGetPhaseRequest\"\x94\x01\n" +
+	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\x11\n" +
+	"\x0fGetPhaseRequest\"\xef\x01\n" +
 	"\x10GetPhaseResponse\x12\x14\n" +
 	"\x05phase\x18\x01 \x01(\tR\x05phase\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12'\n" +
 	"\x0fproduct_running\x18\x03 \x01(\bR\x0eproductRunning\x12+\n" +
-	"\x11product_installed\x18\x04 \x01(\bR\x10productInstalled\"\x12\n" +
+	"\x11product_installed\x18\x04 \x01(\bR\x10productInstalled\x12Y\n" +
+	"\x10upgrade_progress\x18\x05 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\"\x12\n" +
 	"\x10GetStatusRequest\"a\n" +
 	"\aWarning\x12>\n" +
 	"\x04kind\x18\x01 \x01(\x0e2*.sneakers.appliance.osadmin.v1.WarningKindR\x04kind\x12\x16\n" +
@@ -851,7 +873,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
 	"totalBytes\x12/\n" +
-	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xd5\b\n" +
+	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xb0\t\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1a\n" +
@@ -883,7 +905,8 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\vreverted_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"revertedAt\x12)\n" +
 	"\x10previous_version\x18\x17 \x01(\tR\x0fpreviousVersion\x12#\n" +
-	"\rprevious_slot\x18\x18 \x01(\tR\fpreviousSlot\"Q\n" +
+	"\rprevious_slot\x18\x18 \x01(\tR\fpreviousSlot\x12Y\n" +
+	"\x10upgrade_progress\x18\x19 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\"Q\n" +
 	"\x14SetSecureBootRequest\x12\x0e\n" +
 	"\x02on\x18\x01 \x01(\bR\x02on\x12)\n" +
 	"\x10confirm_hostname\x18\x02 \x01(\tR\x0fconfirmHostname\"\x17\n" +
@@ -937,29 +960,32 @@ var file_sneakers_appliance_osadmin_v1_status_proto_goTypes = []any{
 	(*GetStatusResponse)(nil),     // 8: sneakers.appliance.osadmin.v1.GetStatusResponse
 	(*SetSecureBootRequest)(nil),  // 9: sneakers.appliance.osadmin.v1.SetSecureBootRequest
 	(*SetSecureBootResponse)(nil), // 10: sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
-	(*FactoryReset)(nil),          // 12: sneakers.appliance.osadmin.v1.FactoryReset
+	(*UpgradeProgress)(nil),       // 11: sneakers.appliance.osadmin.v1.UpgradeProgress
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*FactoryReset)(nil),          // 13: sneakers.appliance.osadmin.v1.FactoryReset
 }
 var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
-	1,  // 0: sneakers.appliance.osadmin.v1.Warning.kind:type_name -> sneakers.appliance.osadmin.v1.WarningKind
-	0,  // 1: sneakers.appliance.osadmin.v1.GetStatusResponse.protection:type_name -> sneakers.appliance.osadmin.v1.Protection
-	7,  // 2: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
-	6,  // 3: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
-	11, // 4: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
-	5,  // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
-	12, // 6: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	11, // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
-	4,  // 8: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
-	9,  // 9: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	2,  // 10: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
-	8,  // 11: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	10, // 12: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	3,  // 13: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	11, // 0: sneakers.appliance.osadmin.v1.GetPhaseResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	1,  // 1: sneakers.appliance.osadmin.v1.Warning.kind:type_name -> sneakers.appliance.osadmin.v1.WarningKind
+	0,  // 2: sneakers.appliance.osadmin.v1.GetStatusResponse.protection:type_name -> sneakers.appliance.osadmin.v1.Protection
+	7,  // 3: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
+	6,  // 4: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
+	12, // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
+	5,  // 6: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
+	13, // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	12, // 8: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	11, // 9: sneakers.appliance.osadmin.v1.GetStatusResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	4,  // 10: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
+	9,  // 11: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	2,  // 12: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
+	8,  // 13: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	10, // 14: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	3,  // 15: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
+	13, // [13:16] is the sub-list for method output_type
+	10, // [10:13] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_status_proto_init() }
@@ -969,6 +995,7 @@ func file_sneakers_appliance_osadmin_v1_status_proto_init() {
 	}
 	file_sneakers_appliance_osadmin_v1_options_proto_init()
 	file_sneakers_appliance_osadmin_v1_power_proto_init()
+	file_sneakers_appliance_osadmin_v1_upgrade_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

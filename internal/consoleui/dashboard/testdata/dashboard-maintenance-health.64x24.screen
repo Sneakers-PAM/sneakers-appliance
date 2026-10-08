@@ -1,0 +1,24 @@
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM Appliance   0.1.0                       |
++--------------------------------------------------------------+
+|                                                              |
+|   Updating to 0.1.1. Leave it powered on.                    |
+|                                                              |
+|     [ok]  Verifying (signature, channel, SHA-256)            |
+|     [ok]  Staging into slot B                                |
+|     [ok]  Switching slots                                    |
+|     [ok]  Rebooting                                          |
+|     [..]  Checking health                                    |
+|           Waiting for netd to answer: connection refused     |
+|     [  ]  Marking good                                       |
+|                                                              |
+|   If 0.1.1 doesn't come up healthy, the box goes back to     |
+|   0.1.0 by itself.                                           |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  R  Recover access                                           |
++--------------------------------------------------------------+

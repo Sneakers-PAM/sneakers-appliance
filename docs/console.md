@@ -203,8 +203,35 @@ self-signed certificate), an upgrade staged, reverted by an admin ("Reverted fro
 14:05 UTC", in the plain colour) or rolled back by boot counting, a factory reset waiting for approval or
 counting down (with **C** to cancel it), a Recover access code that's out, a service that isn't
 answering, and accessd itself not answering. Without a management address the screen offers **N**,
-the network editor. During an upgrade the maintenance screen replaces it: the version it's moving
-to and the step, and that the box goes back by itself if the new one doesn't come up.
+the network editor. A failed update step is a warning for a day ("The update to 0.1.1 failed.",
+then the step and why), from Status's `upgrade_progress`.
+
+During a stage, an apply or a revert (Status's `upgrade_progress` with `in_progress`) the
+maintenance screen replaces it. It says what's happening ("Staging 0.1.1. The box keeps running.",
+"Updating to 0.1.1. Leave it powered on." or "Going back to 0.0.9. Leave it powered on.") and lists
+the steps ([upgrades.md](upgrades.md#the-steps-of-an-update)), each marked `[ok]` done, `[..]` the
+current one (in bold, with what it's doing or waiting for under it), `[  ]` still to come, or
+`[!!]` failed:
+
+```text
+Updating to 0.1.1. Leave it powered on.
+
+  [ok]  Verifying (signature, channel, SHA-256)
+  [ok]  Staging into slot B
+  [ok]  Switching slots
+  [ok]  Rebooting
+  [..]  Checking health
+        Waiting for netd to answer: connection refused
+  [  ]  Marking good
+
+If 0.1.1 doesn't come up healthy, the box goes back to 0.1.0 by itself.
+```
+
+While the release is written into the slot the current step has a progress bar, the percentage
+and the sizes (`[##########----------]  50%  700.0 MB of 1.4 GB`). The steps after the reboot come
+from the release the box booted, so the screen is back on the new release's console for checking
+health and marking good, and gives way to the status view once the update is done. **R** (Recover
+access) still works.
 
 ## Recover access
 
@@ -230,4 +257,4 @@ to the screens:
 |---|---|
 | netd, on a build without it | first boot skips the network step and the screens say the address isn't known |
 | moving to normal while init runs | setup completes and the box restarts once into normal operation |
-| the platform (spec 3) and the upgrade service (spec 5) | Product shows `NONE YET`; upgrades show only the staged and rolled-back versions from Status |
+| the platform (spec 3) | Product shows `NONE YET` |

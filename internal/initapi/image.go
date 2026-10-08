@@ -34,6 +34,12 @@ type Images interface {
 	NextStageRemoves() ([]string, error)
 }
 
+// writing is an Images that reports a Stage's progress writing the slot,
+// as *imageupgrade.Stager does.
+type writing interface {
+	Writing() (written, total int64)
+}
+
 // imageHandler serves ImageService.
 type imageHandler struct {
 	initv1connect.UnimplementedImageServiceHandler
@@ -127,6 +133,9 @@ func (h *imageHandler) Status(context.Context, *connect.Request[initv1.ImageServ
 		return nil, toConnect(err)
 	}
 	out := &initv1.ImageServiceStatusResponse{RunningVersion: st.Running, StagedVersion: st.Staged, FailedVersion: st.Failed, PreviousVersion: st.Previous, NextStageRemoves: st.NextStageRemoves}
+	if w, ok := h.im.(writing); ok {
+		out.StageWrittenBytes, out.StageTotalBytes = w.Writing()
+	}
 	if rev := st.Reverted; rev.Version != "" {
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = rev.Version, rev.By, timestamppb.New(rev.At)
 	}

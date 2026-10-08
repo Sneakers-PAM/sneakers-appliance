@@ -59,6 +59,38 @@ confirm dialog.
   event log; until that replay is in, staging is refused (`UPGRADE_UNPREDICTABLE`) rather than
   sealed to a guess.
 
+## The steps of an update
+
+osadmin keeps the last stage, apply or revert as its steps, in
+`/var/lib/sneakers/osadmin-api/upgrade-progress.json`, and serves them add-only as
+`upgrade_progress` on `GetUpgrades` and `GetStatus` (and, reduced to the steps' ids, labels and
+states, on the public `GetPhase`, for the restart page). The console's maintenance screen
+([console.md](console.md#the-status-screen)), Updates and the restart page on :8443 all show the same
+list. A base update has six steps:
+
+| id | Label | What it covers |
+|---|---|---|
+| `verify` | Verifying (signature, channel, SHA-256) | reading the `.bin`'s header, its signature, its channel and its payload's hash, and that it fits the running base |
+| `stage` | Staging into slot B (the slot the box isn't running from) | decrypting and unpacking the release, then init writing its root image into the slot, with `done_bytes` of `total_bytes` written (init's `Image.Status` reports `stage_written_bytes` of `stage_total_bytes` while it writes), the sealed key copy and the ESP entry |
+| `switch` | Switching slots | `Image.Activate` (an apply) or `Image.Rollback` (a revert) |
+| `reboot` | Rebooting | the reboot; it stays the current step until the booted release takes over |
+| `health` | Checking health | the booted release's MarkGood loop waiting for setup, init and netd (the detail says which) |
+| `mark_good` | Marking good | `Image.MarkGood`; a refusal is the detail, and the loop tries again each minute |
+
+A stage runs the first two and leaves the rest pending for Apply, which carries the same record
+on; an apply of a release staged before this record starts with those two done. A revert has no
+file, so it starts at `switch`, and its version is the release it goes back to. A product bundle
+has `verify`, `stage` (into the free product slot), `switch` and `restart` (restarting the product),
+and no reboot.
+
+Each step is pending, active, done or failed, and `in_progress` is set while one is active. A
+failed step carries why in its detail and the failure's code (`UPGRADE_SIGNATURE`, say) in the
+record's `code`; the steps after it stay pending. A release the box doesn't come up on fails at
+`health`, naming both releases ("0.2.0 didn't come up healthy, so the box went back to 0.1.0 by
+itself."): the fallback is boot counting's, unchanged. A step osadmin runs in one call (verifying,
+staging, restarting the product) that's found active when osadmin starts was cut off by a restart,
+and fails as such. The next stage, apply or revert replaces the record.
+
 ## Updating from :8443
 
 The Updates page drives the same flow for an uploaded or a fetched `.bin`:
@@ -71,6 +103,8 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    `https://` URL; the environment's proxy applies.
 2. **Stage** (owner, step-up). The signature, the channel and the payload's SHA-256 are verified
    before anything is decrypted or unpacked; a patch must name the running version as a base.
+   While the call runs, Updates asks `GetUpgrades` each second and shows the steps, with the bytes
+   written into the slot.
    A refused file (`UPGRADE_SIGNATURE`, `UPGRADE_CHANNEL`, `UPGRADE_FORMAT`,
    `UPGRADE_PATCH_BASE`) is deleted, never unpacked, and the refusal is audited. Only then is the
    update key read from the booted UKI (by accessd, as root; [access.md](access.md#the-update-key)), the payload decrypted and unpacked, and the layout handed to
@@ -85,7 +119,9 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    owner's authenticator, checked on every call under the sign-in lockout (`ACCESS_CONFIRM` when
    it's empty, `ACCESS_CREDENTIALS` when it's wrong or used already). The page asks for it in the
    same dialog as the typed version, then shows a restart page that waits for :8443 to answer
-   again and sends the owner to sign in. Both are
+   again and sends the owner to sign in. The restart page lists the steps from the public
+   `GetPhase`: rebooting while the box is down, then checking health and marking good once :8443
+   answers, and it sends the owner to sign in when they're done, or shows the failed step. Both are
    refused while an elevated shell is open (`UPGRADE_ELEVATED`, naming it), and both put the box in
    maintenance first, which refuses new elevated shells (`ELEV_MAINTENANCE`) until the reboot, or
    at once again if the apply fails ([ssh-and-elevation.md](ssh-and-elevation.md)).
