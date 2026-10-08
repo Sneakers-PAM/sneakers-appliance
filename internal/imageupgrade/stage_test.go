@@ -9,9 +9,11 @@ import (
 	"encoding/hex"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/imageupgrade"
@@ -169,7 +171,7 @@ func TestStageRefusesAnUnsignedRelease(t *testing.T) {
 	}
 }
 
-func TestMarkGoodRollbackAndFailedStatus(t *testing.T) {
+func TestMarkGoodRollbackAndRevertedStatus(t *testing.T) {
 	s, dir, _, sealer, _ := stager(t, "0.0.9")
 	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
 		t.Fatal(err)
@@ -186,7 +188,8 @@ func TestMarkGoodRollbackAndFailedStatus(t *testing.T) {
 	if len(sealer.kept) != 1 {
 		t.Fatal("MarkGood prunes sealed copies")
 	}
-	if err := s.Rollback(); err != nil {
+	at := time.Date(2026, 10, 8, 14, 5, 0, 0, time.UTC)
+	if err := s.Rollback("alice", at); err != nil {
 		t.Fatal(err)
 	}
 	names, _ = s.ESP.List(imageupgrade.UKIDir)
@@ -194,17 +197,39 @@ func TestMarkGoodRollbackAndFailedStatus(t *testing.T) {
 	if !e.Bad() || e.Version != fixtures.Version {
 		t.Fatalf("after rollback: %v", names)
 	}
-	// Back on the old release, the new one shows as failed.
+	// Back on the old release, the new one shows as reverted, not failed.
 	s.Running = "0.0.9"
 	st, _ := s.Status()
-	if st.Failed != fixtures.Version {
+	if st.Failed != "" || st.Reverted.Version != fixtures.Version || st.Reverted.By != "alice" || !st.Reverted.At.Equal(at) {
+		t.Fatalf("status %+v", st)
+	}
+	// Staging again forgets the revert.
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Status(); st.Reverted.Version != "" || st.Staged != fixtures.Version {
+		t.Fatalf("after a new stage: %+v", st)
+	}
+}
+
+// A release that used up its boot tries without a Rollback is a failure.
+func TestABootCountingFallbackIsFailed(t *testing.T) {
+	s, dir, _, _, _ := stager(t, "0.0.9")
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ESP.Rename(path.Join(imageupgrade.UKIDir, imageupgrade.EntryName(fixtures.Version, imageupgrade.Tries, 0)), path.Join(imageupgrade.UKIDir, imageupgrade.EntryName(fixtures.Version, 0, imageupgrade.Tries))); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := s.Status()
+	if st.Failed != fixtures.Version || st.Reverted.Version != "" {
 		t.Fatalf("status %+v", st)
 	}
 }
 
 func TestRollbackWithoutAPreviousRelease(t *testing.T) {
 	s, _, _, _, _ := stager(t, "0.0.9")
-	if err := s.Rollback(); !codes.Is(err, codes.UpgradeNoPrevious) {
+	if err := s.Rollback("alice", time.Now()); !codes.Is(err, codes.UpgradeNoPrevious) {
 		t.Fatalf("got %v", err)
 	}
 }

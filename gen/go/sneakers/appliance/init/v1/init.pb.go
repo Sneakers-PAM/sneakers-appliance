@@ -1162,7 +1162,10 @@ func (*MarkGoodResponse) Descriptor() ([]byte, []int) {
 }
 
 type RollbackRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// by is the admin who asked for the revert; it's recorded so Status
+	// reports a revert, not a failed boot.
+	By            string `protobuf:"bytes,1,opt,name=by,proto3" json:"by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1195,6 +1198,13 @@ func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
 func (*RollbackRequest) Descriptor() ([]byte, []int) {
 	return file_sneakers_appliance_init_v1_init_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RollbackRequest) GetBy() string {
+	if x != nil {
+		return x.By
+	}
+	return ""
 }
 
 type RollbackResponse struct {
@@ -1274,10 +1284,15 @@ type ImageServiceStatusResponse struct {
 	RunningVersion string                 `protobuf:"bytes,1,opt,name=running_version,json=runningVersion,proto3" json:"running_version,omitempty"`
 	StagedVersion  string                 `protobuf:"bytes,2,opt,name=staged_version,json=stagedVersion,proto3" json:"staged_version,omitempty"`
 	// failed_version is a release that didn't reach MarkGood and was rolled
-	// back by boot counting.
+	// back by boot counting. Empty after a manual revert.
 	FailedVersion string `protobuf:"bytes,3,opt,name=failed_version,json=failedVersion,proto3" json:"failed_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// reverted_version is the newer release an admin reverted from (Rollback),
+	// with who asked and when; empty when there was no manual revert.
+	RevertedVersion string                 `protobuf:"bytes,4,opt,name=reverted_version,json=revertedVersion,proto3" json:"reverted_version,omitempty"`
+	RevertedBy      string                 `protobuf:"bytes,5,opt,name=reverted_by,json=revertedBy,proto3" json:"reverted_by,omitempty"`
+	RevertedAt      *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=reverted_at,json=revertedAt,proto3" json:"reverted_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ImageServiceStatusResponse) Reset() {
@@ -1329,6 +1344,27 @@ func (x *ImageServiceStatusResponse) GetFailedVersion() string {
 		return x.FailedVersion
 	}
 	return ""
+}
+
+func (x *ImageServiceStatusResponse) GetRevertedVersion() string {
+	if x != nil {
+		return x.RevertedVersion
+	}
+	return ""
+}
+
+func (x *ImageServiceStatusResponse) GetRevertedBy() string {
+	if x != nil {
+		return x.RevertedBy
+	}
+	return ""
+}
+
+func (x *ImageServiceStatusResponse) GetRevertedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RevertedAt
+	}
+	return nil
 }
 
 type RebootRequest struct {
@@ -2103,14 +2139,20 @@ const file_sneakers_appliance_init_v1_init_proto_rawDesc = "" +
 	"\x0fActivateRequest\"\x12\n" +
 	"\x10ActivateResponse\"\x11\n" +
 	"\x0fMarkGoodRequest\"\x12\n" +
-	"\x10MarkGoodResponse\"\x11\n" +
-	"\x0fRollbackRequest\"\x12\n" +
+	"\x10MarkGoodResponse\"!\n" +
+	"\x0fRollbackRequest\x12\x0e\n" +
+	"\x02by\x18\x01 \x01(\tR\x02by\"\x12\n" +
 	"\x10RollbackResponse\"\x1b\n" +
-	"\x19ImageServiceStatusRequest\"\x93\x01\n" +
+	"\x19ImageServiceStatusRequest\"\x9c\x02\n" +
 	"\x1aImageServiceStatusResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
-	"\x0efailed_version\x18\x03 \x01(\tR\rfailedVersion\"'\n" +
+	"\x0efailed_version\x18\x03 \x01(\tR\rfailedVersion\x12)\n" +
+	"\x10reverted_version\x18\x04 \x01(\tR\x0frevertedVersion\x12\x1f\n" +
+	"\vreverted_by\x18\x05 \x01(\tR\n" +
+	"revertedBy\x12;\n" +
+	"\vreverted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"revertedAt\"'\n" +
 	"\rRebootRequest\x12\x16\n" +
 	"\x06forced\x18\x01 \x01(\bR\x06forced\"\x10\n" +
 	"\x0eRebootResponse\")\n" +
@@ -2259,56 +2301,57 @@ var file_sneakers_appliance_init_v1_init_proto_depIdxs = []int32{
 	1,  // 1: sneakers.appliance.init.v1.InitializeRequest.secure_boot:type_name -> sneakers.appliance.init.v1.SecureBootSetting
 	0,  // 2: sneakers.appliance.init.v1.ModeResponse.mode:type_name -> sneakers.appliance.init.v1.CustodyMode
 	2,  // 3: sneakers.appliance.init.v1.ProtectionResponse.level:type_name -> sneakers.appliance.init.v1.ProtectionLevel
-	47, // 4: sneakers.appliance.init.v1.ArmFactoryResetResponse.runs_at:type_name -> google.protobuf.Timestamp
-	3,  // 5: sneakers.appliance.init.v1.KeyCustodyService.Initialize:input_type -> sneakers.appliance.init.v1.InitializeRequest
-	5,  // 6: sneakers.appliance.init.v1.KeyCustodyService.Mode:input_type -> sneakers.appliance.init.v1.ModeRequest
-	7,  // 7: sneakers.appliance.init.v1.KeyCustodyService.Protection:input_type -> sneakers.appliance.init.v1.ProtectionRequest
-	9,  // 8: sneakers.appliance.init.v1.KeyCustodyService.SetSecureBoot:input_type -> sneakers.appliance.init.v1.SetSecureBootRequest
-	11, // 9: sneakers.appliance.init.v1.KeyCustodyService.Seal:input_type -> sneakers.appliance.init.v1.SealRequest
-	13, // 10: sneakers.appliance.init.v1.KeyCustodyService.Unseal:input_type -> sneakers.appliance.init.v1.UnsealRequest
-	15, // 11: sneakers.appliance.init.v1.KeyCustodyService.Escrow:input_type -> sneakers.appliance.init.v1.EscrowRequest
-	17, // 12: sneakers.appliance.init.v1.PlatformService.StartPlatform:input_type -> sneakers.appliance.init.v1.StartPlatformRequest
-	19, // 13: sneakers.appliance.init.v1.PlatformService.StopPlatform:input_type -> sneakers.appliance.init.v1.StopPlatformRequest
-	21, // 14: sneakers.appliance.init.v1.ImageService.Stage:input_type -> sneakers.appliance.init.v1.StageRequest
-	23, // 15: sneakers.appliance.init.v1.ImageService.Activate:input_type -> sneakers.appliance.init.v1.ActivateRequest
-	25, // 16: sneakers.appliance.init.v1.ImageService.MarkGood:input_type -> sneakers.appliance.init.v1.MarkGoodRequest
-	27, // 17: sneakers.appliance.init.v1.ImageService.Rollback:input_type -> sneakers.appliance.init.v1.RollbackRequest
-	29, // 18: sneakers.appliance.init.v1.ImageService.Status:input_type -> sneakers.appliance.init.v1.ImageServiceStatusRequest
-	31, // 19: sneakers.appliance.init.v1.PowerService.Reboot:input_type -> sneakers.appliance.init.v1.RebootRequest
-	33, // 20: sneakers.appliance.init.v1.PowerService.PowerOff:input_type -> sneakers.appliance.init.v1.PowerOffRequest
-	35, // 21: sneakers.appliance.init.v1.PowerService.ArmFactoryReset:input_type -> sneakers.appliance.init.v1.ArmFactoryResetRequest
-	37, // 22: sneakers.appliance.init.v1.PowerService.CancelFactoryReset:input_type -> sneakers.appliance.init.v1.CancelFactoryResetRequest
-	39, // 23: sneakers.appliance.init.v1.PowerService.FactoryReset:input_type -> sneakers.appliance.init.v1.FactoryResetRequest
-	41, // 24: sneakers.appliance.init.v1.ServicesService.Start:input_type -> sneakers.appliance.init.v1.StartRequest
-	43, // 25: sneakers.appliance.init.v1.ServicesService.Stop:input_type -> sneakers.appliance.init.v1.StopRequest
-	45, // 26: sneakers.appliance.init.v1.ServicesService.Status:input_type -> sneakers.appliance.init.v1.StatusRequest
-	4,  // 27: sneakers.appliance.init.v1.KeyCustodyService.Initialize:output_type -> sneakers.appliance.init.v1.InitializeResponse
-	6,  // 28: sneakers.appliance.init.v1.KeyCustodyService.Mode:output_type -> sneakers.appliance.init.v1.ModeResponse
-	8,  // 29: sneakers.appliance.init.v1.KeyCustodyService.Protection:output_type -> sneakers.appliance.init.v1.ProtectionResponse
-	10, // 30: sneakers.appliance.init.v1.KeyCustodyService.SetSecureBoot:output_type -> sneakers.appliance.init.v1.SetSecureBootResponse
-	12, // 31: sneakers.appliance.init.v1.KeyCustodyService.Seal:output_type -> sneakers.appliance.init.v1.SealResponse
-	14, // 32: sneakers.appliance.init.v1.KeyCustodyService.Unseal:output_type -> sneakers.appliance.init.v1.UnsealResponse
-	16, // 33: sneakers.appliance.init.v1.KeyCustodyService.Escrow:output_type -> sneakers.appliance.init.v1.EscrowResponse
-	18, // 34: sneakers.appliance.init.v1.PlatformService.StartPlatform:output_type -> sneakers.appliance.init.v1.StartPlatformResponse
-	20, // 35: sneakers.appliance.init.v1.PlatformService.StopPlatform:output_type -> sneakers.appliance.init.v1.StopPlatformResponse
-	22, // 36: sneakers.appliance.init.v1.ImageService.Stage:output_type -> sneakers.appliance.init.v1.StageResponse
-	24, // 37: sneakers.appliance.init.v1.ImageService.Activate:output_type -> sneakers.appliance.init.v1.ActivateResponse
-	26, // 38: sneakers.appliance.init.v1.ImageService.MarkGood:output_type -> sneakers.appliance.init.v1.MarkGoodResponse
-	28, // 39: sneakers.appliance.init.v1.ImageService.Rollback:output_type -> sneakers.appliance.init.v1.RollbackResponse
-	30, // 40: sneakers.appliance.init.v1.ImageService.Status:output_type -> sneakers.appliance.init.v1.ImageServiceStatusResponse
-	32, // 41: sneakers.appliance.init.v1.PowerService.Reboot:output_type -> sneakers.appliance.init.v1.RebootResponse
-	34, // 42: sneakers.appliance.init.v1.PowerService.PowerOff:output_type -> sneakers.appliance.init.v1.PowerOffResponse
-	36, // 43: sneakers.appliance.init.v1.PowerService.ArmFactoryReset:output_type -> sneakers.appliance.init.v1.ArmFactoryResetResponse
-	38, // 44: sneakers.appliance.init.v1.PowerService.CancelFactoryReset:output_type -> sneakers.appliance.init.v1.CancelFactoryResetResponse
-	40, // 45: sneakers.appliance.init.v1.PowerService.FactoryReset:output_type -> sneakers.appliance.init.v1.FactoryResetResponse
-	42, // 46: sneakers.appliance.init.v1.ServicesService.Start:output_type -> sneakers.appliance.init.v1.StartResponse
-	44, // 47: sneakers.appliance.init.v1.ServicesService.Stop:output_type -> sneakers.appliance.init.v1.StopResponse
-	46, // 48: sneakers.appliance.init.v1.ServicesService.Status:output_type -> sneakers.appliance.init.v1.StatusResponse
-	27, // [27:49] is the sub-list for method output_type
-	5,  // [5:27] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	47, // 4: sneakers.appliance.init.v1.ImageServiceStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	47, // 5: sneakers.appliance.init.v1.ArmFactoryResetResponse.runs_at:type_name -> google.protobuf.Timestamp
+	3,  // 6: sneakers.appliance.init.v1.KeyCustodyService.Initialize:input_type -> sneakers.appliance.init.v1.InitializeRequest
+	5,  // 7: sneakers.appliance.init.v1.KeyCustodyService.Mode:input_type -> sneakers.appliance.init.v1.ModeRequest
+	7,  // 8: sneakers.appliance.init.v1.KeyCustodyService.Protection:input_type -> sneakers.appliance.init.v1.ProtectionRequest
+	9,  // 9: sneakers.appliance.init.v1.KeyCustodyService.SetSecureBoot:input_type -> sneakers.appliance.init.v1.SetSecureBootRequest
+	11, // 10: sneakers.appliance.init.v1.KeyCustodyService.Seal:input_type -> sneakers.appliance.init.v1.SealRequest
+	13, // 11: sneakers.appliance.init.v1.KeyCustodyService.Unseal:input_type -> sneakers.appliance.init.v1.UnsealRequest
+	15, // 12: sneakers.appliance.init.v1.KeyCustodyService.Escrow:input_type -> sneakers.appliance.init.v1.EscrowRequest
+	17, // 13: sneakers.appliance.init.v1.PlatformService.StartPlatform:input_type -> sneakers.appliance.init.v1.StartPlatformRequest
+	19, // 14: sneakers.appliance.init.v1.PlatformService.StopPlatform:input_type -> sneakers.appliance.init.v1.StopPlatformRequest
+	21, // 15: sneakers.appliance.init.v1.ImageService.Stage:input_type -> sneakers.appliance.init.v1.StageRequest
+	23, // 16: sneakers.appliance.init.v1.ImageService.Activate:input_type -> sneakers.appliance.init.v1.ActivateRequest
+	25, // 17: sneakers.appliance.init.v1.ImageService.MarkGood:input_type -> sneakers.appliance.init.v1.MarkGoodRequest
+	27, // 18: sneakers.appliance.init.v1.ImageService.Rollback:input_type -> sneakers.appliance.init.v1.RollbackRequest
+	29, // 19: sneakers.appliance.init.v1.ImageService.Status:input_type -> sneakers.appliance.init.v1.ImageServiceStatusRequest
+	31, // 20: sneakers.appliance.init.v1.PowerService.Reboot:input_type -> sneakers.appliance.init.v1.RebootRequest
+	33, // 21: sneakers.appliance.init.v1.PowerService.PowerOff:input_type -> sneakers.appliance.init.v1.PowerOffRequest
+	35, // 22: sneakers.appliance.init.v1.PowerService.ArmFactoryReset:input_type -> sneakers.appliance.init.v1.ArmFactoryResetRequest
+	37, // 23: sneakers.appliance.init.v1.PowerService.CancelFactoryReset:input_type -> sneakers.appliance.init.v1.CancelFactoryResetRequest
+	39, // 24: sneakers.appliance.init.v1.PowerService.FactoryReset:input_type -> sneakers.appliance.init.v1.FactoryResetRequest
+	41, // 25: sneakers.appliance.init.v1.ServicesService.Start:input_type -> sneakers.appliance.init.v1.StartRequest
+	43, // 26: sneakers.appliance.init.v1.ServicesService.Stop:input_type -> sneakers.appliance.init.v1.StopRequest
+	45, // 27: sneakers.appliance.init.v1.ServicesService.Status:input_type -> sneakers.appliance.init.v1.StatusRequest
+	4,  // 28: sneakers.appliance.init.v1.KeyCustodyService.Initialize:output_type -> sneakers.appliance.init.v1.InitializeResponse
+	6,  // 29: sneakers.appliance.init.v1.KeyCustodyService.Mode:output_type -> sneakers.appliance.init.v1.ModeResponse
+	8,  // 30: sneakers.appliance.init.v1.KeyCustodyService.Protection:output_type -> sneakers.appliance.init.v1.ProtectionResponse
+	10, // 31: sneakers.appliance.init.v1.KeyCustodyService.SetSecureBoot:output_type -> sneakers.appliance.init.v1.SetSecureBootResponse
+	12, // 32: sneakers.appliance.init.v1.KeyCustodyService.Seal:output_type -> sneakers.appliance.init.v1.SealResponse
+	14, // 33: sneakers.appliance.init.v1.KeyCustodyService.Unseal:output_type -> sneakers.appliance.init.v1.UnsealResponse
+	16, // 34: sneakers.appliance.init.v1.KeyCustodyService.Escrow:output_type -> sneakers.appliance.init.v1.EscrowResponse
+	18, // 35: sneakers.appliance.init.v1.PlatformService.StartPlatform:output_type -> sneakers.appliance.init.v1.StartPlatformResponse
+	20, // 36: sneakers.appliance.init.v1.PlatformService.StopPlatform:output_type -> sneakers.appliance.init.v1.StopPlatformResponse
+	22, // 37: sneakers.appliance.init.v1.ImageService.Stage:output_type -> sneakers.appliance.init.v1.StageResponse
+	24, // 38: sneakers.appliance.init.v1.ImageService.Activate:output_type -> sneakers.appliance.init.v1.ActivateResponse
+	26, // 39: sneakers.appliance.init.v1.ImageService.MarkGood:output_type -> sneakers.appliance.init.v1.MarkGoodResponse
+	28, // 40: sneakers.appliance.init.v1.ImageService.Rollback:output_type -> sneakers.appliance.init.v1.RollbackResponse
+	30, // 41: sneakers.appliance.init.v1.ImageService.Status:output_type -> sneakers.appliance.init.v1.ImageServiceStatusResponse
+	32, // 42: sneakers.appliance.init.v1.PowerService.Reboot:output_type -> sneakers.appliance.init.v1.RebootResponse
+	34, // 43: sneakers.appliance.init.v1.PowerService.PowerOff:output_type -> sneakers.appliance.init.v1.PowerOffResponse
+	36, // 44: sneakers.appliance.init.v1.PowerService.ArmFactoryReset:output_type -> sneakers.appliance.init.v1.ArmFactoryResetResponse
+	38, // 45: sneakers.appliance.init.v1.PowerService.CancelFactoryReset:output_type -> sneakers.appliance.init.v1.CancelFactoryResetResponse
+	40, // 46: sneakers.appliance.init.v1.PowerService.FactoryReset:output_type -> sneakers.appliance.init.v1.FactoryResetResponse
+	42, // 47: sneakers.appliance.init.v1.ServicesService.Start:output_type -> sneakers.appliance.init.v1.StartResponse
+	44, // 48: sneakers.appliance.init.v1.ServicesService.Stop:output_type -> sneakers.appliance.init.v1.StopResponse
+	46, // 49: sneakers.appliance.init.v1.ServicesService.Status:output_type -> sneakers.appliance.init.v1.StatusResponse
+	28, // [28:50] is the sub-list for method output_type
+	6,  // [6:28] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_init_v1_init_proto_init() }

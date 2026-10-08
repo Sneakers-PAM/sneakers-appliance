@@ -185,6 +185,11 @@ message GetUpgradesResponse {
   // direct_available is true when this build has a release source to
   // fetch from directly (production builds).
   bool direct_available = 9;
+  // reverted_version is the newer release an admin reverted from, with who
+  // did it and when; failed_version stays for a boot-counting fallback.
+  string reverted_version = 10;
+  string reverted_by = 11;
+  google.protobuf.Timestamp reverted_at = 12;
 }
 
 message FetchUpdateRequest {

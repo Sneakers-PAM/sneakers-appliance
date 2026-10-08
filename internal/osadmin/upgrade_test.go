@@ -349,3 +349,32 @@ func TestApplyAndRevertTakeAFreshCodeEveryTime(t *testing.T) {
 		t.Fatal("revert with a fresh code rolls back and reboots")
 	}
 }
+
+// A manual revert is reported as reverted, by whom and when, never as a
+// failed boot.
+func TestARevertIsReportedAsReverted(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	if _, err := alice.upgrade().RevertUpdate(ctx, connect.NewRequest(&osadminv1.RevertUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if b.init.revertedBy != "alice" {
+		t.Fatalf("init was told %q asked for the revert", b.init.revertedBy)
+	}
+	g, err := alice.upgrade().GetUpgrades(ctx, connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := g.Msg; m.GetFailedVersion() != "" || m.GetRevertedVersion() != "0.2.0" || m.GetRevertedBy() != "alice" || m.GetRevertedAt() == nil {
+		t.Fatalf("upgrades %+v", m)
+	}
+	st, err := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL).GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m := st.Msg; m.GetFailedVersion() != "" || m.GetRevertedVersion() != "0.2.0" || m.GetRevertedBy() != "alice" || m.GetRevertedAt() == nil {
+		t.Fatalf("status %+v", m)
+	}
+}

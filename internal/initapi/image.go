@@ -9,9 +9,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"time"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
@@ -25,7 +27,7 @@ import (
 type Images interface {
 	Stage(ctx context.Context, src verify.Source, arch string) (string, error)
 	Status() (imageupgrade.Status, error)
-	Rollback() error
+	Rollback(by string, at time.Time) error
 	MarkGood(ctx context.Context, keep []string) error
 	Kept() ([]string, error)
 }
@@ -99,14 +101,16 @@ func (h *imageHandler) MarkGood(ctx context.Context, _ *connect.Request[initv1.M
 	return connect.NewResponse(&initv1.MarkGoodResponse{}), nil
 }
 
-func (h *imageHandler) Rollback(context.Context, *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
+// Rollback marks the running release bad and records who asked, so the
+// next boot's Status reports a revert rather than a failed boot.
+func (h *imageHandler) Rollback(_ context.Context, r *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if err := h.im.Rollback(); err != nil {
+	if err := h.im.Rollback(r.Msg.GetBy(), time.Now()); err != nil {
 		h.log.Warn("initapi: Image.Rollback refused", log.F("error", codes.Describe(err)))
 		return nil, toConnect(err)
 	}
-	h.log.Info("initapi: Image.Rollback")
+	h.log.Info("initapi: Image.Rollback", log.F("by", r.Msg.GetBy()))
 	return connect.NewResponse(&initv1.RollbackResponse{}), nil
 }
 
@@ -115,7 +119,11 @@ func (h *imageHandler) Status(context.Context, *connect.Request[initv1.ImageServ
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&initv1.ImageServiceStatusResponse{RunningVersion: st.Running, StagedVersion: st.Staged, FailedVersion: st.Failed}), nil
+	out := &initv1.ImageServiceStatusResponse{RunningVersion: st.Running, StagedVersion: st.Staged, FailedVersion: st.Failed}
+	if rev := st.Reverted; rev.Version != "" {
+		out.RevertedVersion, out.RevertedBy, out.RevertedAt = rev.Version, rev.By, timestamppb.New(rev.At)
+	}
+	return connect.NewResponse(out), nil
 }
 
 func imageHandlerFor(o Options) (string, http.Handler) {

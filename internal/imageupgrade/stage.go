@@ -8,11 +8,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 	"sort"
+	"time"
 
 	log "github.com/Bugs5382/go-log"
 	"golang.org/x/mod/semver"
@@ -135,6 +138,9 @@ func (s *Stager) Stage(ctx context.Context, src verify.Source, arch string) (str
 			}
 		}
 	}
+	if err := s.forgetRevert(); err != nil {
+		return "", err
+	}
 	if err := s.ESP.WriteFile(path.Join(UKIDir, EntryName(ver, Tries, 0)), bytes.NewReader(uki)); err != nil {
 		return "", fmt.Errorf("imageupgrade: write the ESP entry: %w", err)
 	}
@@ -186,9 +192,25 @@ func (s *Stager) Kept() ([]string, error) {
 	return keep, nil
 }
 
+// RevertedFile is the ESP file that records a manual revert, so Status
+// tells it apart from a boot-counting fallback: both leave the newer entry
+// with no tries left.
+const RevertedFile = "loader/sneakers-reverted.json"
+
+// Reverted is a manual revert: the release reverted from, the admin who
+// asked and when.
+type Reverted struct {
+	Version string    `json:"version"`
+	By      string    `json:"by"`
+	At      time.Time `json:"at"`
+}
+
 // Rollback marks the running release bad so systemd-boot boots the
-// previous one next. With no previous release it's UPGRADE_NO_PREVIOUS.
-func (s *Stager) Rollback() error {
+// previous one next, and records that by asked for it at at. With no
+// previous release it's UPGRADE_NO_PREVIOUS. The record is written first:
+// if the rename then fails, it names a release that isn't bad, and Status
+// ignores it.
+func (s *Stager) Rollback(by string, at time.Time) error {
 	entries, err := s.entries()
 	if err != nil {
 		return err
@@ -206,6 +228,14 @@ func (s *Stager) Rollback() error {
 	if running == nil || !previous {
 		return codes.New(codes.UpgradeNoPrevious, "there's no previous release to roll back to")
 	}
+	b, err := json.Marshal(Reverted{Version: running.Version, By: by, At: at.UTC()})
+	if err != nil {
+		return err
+	}
+	if err := s.ESP.WriteFile(RevertedFile, bytes.NewReader(b)); err != nil {
+		return fmt.Errorf("imageupgrade: record the revert: %w", err)
+	}
+	s.logger().Info("imageupgrade: revert recorded", log.F("version", running.Version), log.F("by", by))
 	return s.ESP.Rename(path.Join(UKIDir, running.Name), path.Join(UKIDir, EntryName(running.Version, 0, running.Done+1)))
 }
 
@@ -216,6 +246,9 @@ type Status struct {
 	// Failed is a newer release that used up its tries: boot counting
 	// fell back from it.
 	Failed string
+	// Reverted is set instead of Failed when an admin reverted from the
+	// newer release (Rollback).
+	Reverted Reverted
 }
 
 // Status reads the entries.
@@ -225,12 +258,15 @@ func (s *Stager) Status() (Status, error) {
 		return Status{}, err
 	}
 	st := Status{Running: s.Running}
+	rev := s.revert()
 	for _, e := range entries {
 		if e.Version == s.Running {
 			continue
 		}
 		newer := semver.Compare("v"+e.Version, "v"+s.Running) > 0
 		switch {
+		case newer && e.Bad() && rev.Version == e.Version:
+			st.Reverted = rev
 		case newer && e.Bad():
 			st.Failed = e.Version
 		case newer && e.Counted:
@@ -238,6 +274,31 @@ func (s *Stager) Status() (Status, error) {
 		}
 	}
 	return st, nil
+}
+
+// revert reads the revert record; a missing or unreadable one is no
+// revert.
+func (s *Stager) revert() Reverted {
+	f, err := s.ESP.Open(RevertedFile)
+	if err != nil {
+		return Reverted{}
+	}
+	defer func() { _ = f.Close() }()
+	var r Reverted
+	if err := json.NewDecoder(io.LimitReader(f, 4096)).Decode(&r); err != nil {
+		s.logger().Warn("imageupgrade: the revert record doesn't read; ignored", log.F("error", err.Error()))
+		return Reverted{}
+	}
+	return r
+}
+
+// forgetRevert removes the revert record: a newly staged release starts
+// with a clean slate.
+func (s *Stager) forgetRevert() error {
+	if err := s.ESP.Remove(RevertedFile); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("imageupgrade: remove the revert record: %w", err)
+	}
+	return nil
 }
 
 func (s *Stager) entries() ([]Entry, error) {

@@ -395,6 +395,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 		Product: h.s.productSlots(ctx), DirectAvailable: direct}
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
+		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
 	}
 	if h.s.o.Elevation != nil {
 		auditDir := ""
@@ -711,7 +712,7 @@ func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadmi
 		c.note("box", "overrode", overrode)
 	}
 	if err == nil {
-		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{}))
+		_, err = h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: c.session.Admin}))
 	}
 	if err == nil {
 		_, err = h.s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{}))

@@ -25,7 +25,13 @@ A box holds at most two releases: the one it runs and one more (the next, or the
   health checks. It waits while an apply or a revert is under way, so it can't undo a revert before
   its reboot. A release that never gets there (the box doesn't come up on it) uses up its tries.
 - `Image.Rollback` marks the running release bad (`+0-n`), so the next boot is the previous one.
-  With no previous release it's `UPGRADE_NO_PREVIOUS`.
+  With no previous release it's `UPGRADE_NO_PREVIOUS`. It first writes `loader/sneakers-reverted.json`
+  on the ESP (the release, the admin who asked and when), so after the reboot `Image.Status`
+  reports `reverted_version`, `reverted_by` and `reverted_at` instead of `failed_version`: a revert
+  someone asked for isn't a failed boot. `failed_version` is only for a release boot counting fell
+  back from. The next `Image.Stage` removes the record. Status and Updates on :8443 and the console
+  show "Reverted from <version> (by <admin>, <time>)" in a neutral tone; "Failed" stays for a real
+  fallback.
 - With Secure Boot off (TPM mode), the new release's PCR 4 must be predicted from the firmware's
   event log; until that replay is in, staging is refused (`UPGRADE_UNPREDICTABLE`) rather than
   sealed to a guess.

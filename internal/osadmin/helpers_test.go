@@ -22,6 +22,7 @@ import (
 	"connectrpc.com/connect"
 	"filippo.io/age"
 	"golang.org/x/crypto/ssh"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
@@ -81,6 +82,9 @@ type fakeInit struct {
 	stagedVer  string
 	activated  int
 	rollbacks  int
+	// revertedBy is the admin the last Rollback named; Status then reports
+	// the staged release as reverted from.
+	revertedBy string
 	markedGood int
 	// activateErr fails Activate; duringActivate runs inside it, as the
 	// box is mid-apply.
@@ -173,7 +177,11 @@ type fakeImage struct {
 func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceStatusRequest]) (*connect.Response[initv1.ImageServiceStatusResponse], error) {
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
-	return connect.NewResponse(&initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer}), nil
+	out := &initv1.ImageServiceStatusResponse{RunningVersion: "0.1.0", StagedVersion: i.f.stagedVer}
+	if i.f.revertedBy != "" {
+		out.StagedVersion, out.RevertedVersion, out.RevertedBy, out.RevertedAt = "", "0.2.0", i.f.revertedBy, timestamppb.New(time.Date(2026, 10, 8, 14, 5, 0, 0, time.UTC))
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageRequest]) (*connect.Response[initv1.StageResponse], error) {
@@ -207,7 +215,7 @@ func (i fakeImage) MarkGood(context.Context, *connect.Request[initv1.MarkGoodReq
 	return connect.NewResponse(&initv1.MarkGoodResponse{}), nil
 }
 
-func (i fakeImage) Rollback(context.Context, *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
+func (i fakeImage) Rollback(_ context.Context, r *connect.Request[initv1.RollbackRequest]) (*connect.Response[initv1.RollbackResponse], error) {
 	i.f.mu.Lock()
 	during := i.f.duringActivate
 	i.f.mu.Unlock()
@@ -217,6 +225,7 @@ func (i fakeImage) Rollback(context.Context, *connect.Request[initv1.RollbackReq
 	i.f.mu.Lock()
 	defer i.f.mu.Unlock()
 	i.f.rollbacks++
+	i.f.revertedBy = r.Msg.GetBy()
 	return connect.NewResponse(&initv1.RollbackResponse{}), nil
 }
 

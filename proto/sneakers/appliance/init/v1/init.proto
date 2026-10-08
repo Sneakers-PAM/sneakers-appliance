@@ -145,7 +145,11 @@ message MarkGoodRequest {}
 
 message MarkGoodResponse {}
 
-message RollbackRequest {}
+message RollbackRequest {
+  // by is the admin who asked for the revert; it's recorded so Status
+  // reports a revert, not a failed boot.
+  string by = 1;
+}
 
 message RollbackResponse {}
 
@@ -155,8 +159,13 @@ message ImageServiceStatusResponse {
   string running_version = 1;
   string staged_version = 2;
   // failed_version is a release that didn't reach MarkGood and was rolled
-  // back by boot counting.
+  // back by boot counting. Empty after a manual revert.
   string failed_version = 3;
+  // reverted_version is the newer release an admin reverted from (Rollback),
+  // with who asked and when; empty when there was no manual revert.
+  string reverted_version = 4;
+  string reverted_by = 5;
+  google.protobuf.Timestamp reverted_at = 6;
 }
 
 // Power reboots, powers off or factory resets the box.

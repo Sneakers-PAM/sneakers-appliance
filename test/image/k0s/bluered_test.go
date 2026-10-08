@@ -112,6 +112,17 @@ func TestBlueTakesRedFromUpdatesAndRevertsToBlue(t *testing.T) {
 
 	boot(redVM, blueV)
 	t.Logf("BLUE runs %s after the revert", blueV)
+	// The revert was asked for: it reads as reverted from RED, by alice,
+	// not as a failed boot.
+	var after struct {
+		FailedVersion   string `json:"failedVersion"`
+		RevertedVersion string `json:"revertedVersion"`
+		RevertedBy      string `json:"revertedBy"`
+	}
+	signIn(t, adminPort, alice).call(t, "UpgradeService/GetUpgrades", map[string]any{}, &after)
+	if after.FailedVersion != "" || after.RevertedVersion != redV || after.RevertedBy != "alice" {
+		t.Fatalf("after the revert, Updates reports %+v; want reverted from %s by alice", after, redV)
+	}
 }
 
 // entries lists the boot entries on the ESP of a VM's disk. The guest
