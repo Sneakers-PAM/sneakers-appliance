@@ -171,3 +171,22 @@ func TestImageServiceMarksTheRunningReleaseGood(t *testing.T) {
 		t.Fatalf("kept %v; want both UKIs and the install copy", seal.kept)
 	}
 }
+
+func TestImageStageNamesTheReleasesItRemoved(t *testing.T) {
+	dir, pins := fixtures.Build(t, fixtures.Options{})
+	const previous, running = "0.0.8", "0.0.9"
+	esp := espDir(t.TempDir())
+	for _, v := range []string{previous, running} {
+		if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(v)), strings.NewReader(v)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := serveImages(t, &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Pins: pins, Running: running, WorkDir: t.TempDir()})
+	got, err := c.Stage(context.Background(), connect.NewRequest(&initv1.StageRequest{Reference: dir}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := got.Msg.GetRemovedVersions(); len(r) != 1 || r[0] != previous {
+		t.Fatalf("removed %v; want %s", r, previous)
+	}
+}

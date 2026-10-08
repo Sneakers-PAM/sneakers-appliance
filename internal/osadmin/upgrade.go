@@ -502,11 +502,21 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	c := callFrom(ctx)
 	id := r.Msg.GetUploadId()
 	c.noteID("uploaded file", "upload", id)
-	pkg, err := h.s.stage(ctx, id)
+	pkg, removed, err := h.s.stage(ctx, id)
 	version := ""
 	if pkg != nil {
 		version = pkg.GetVersion()
 		c.noteID("release "+version, "upload", id, "version", version, "kind", pkg.GetKind(), "channel", pkg.GetChannel())
+	}
+	if len(removed) > 0 {
+		c.note(c.target, "removed", strings.Join(removed, ","))
+	}
+	for _, v := range removed {
+		e := c.by("upgrade.remove")
+		e.Target = "release " + v
+		e.Detail = map[string]string{"version": v, "for": version}
+		h.s.write(e, nil)
+		h.s.history("remove", v, c.session.Admin, nil, "removed to stage "+version)
 	}
 	target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
 	if pkg != nil {
@@ -544,62 +554,79 @@ func (s *Server) previous(st *initv1.ImageServiceStatusResponse) (version, slot 
 	return "", ""
 }
 
-func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage, error) {
+// stage stages an upload and returns the older releases init removed to
+// make room for it. The upload and its unpacked layout are removed once
+// init has staged it.
+func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage, []string, error) {
 	path, err := s.uploadPath(id)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	f, err := os.Open(path) // #nosec G304 -- an upload this box made
 	if err != nil {
-		return nil, codes.Wrap(codes.UpgradeUpload, err)
+		return nil, nil, codes.Wrap(codes.UpgradeUpload, err)
 	}
 	defer func() { _ = f.Close() }()
 	st, err := f.Stat()
 	if err != nil {
-		return nil, codes.Wrap(codes.UpgradeUpload, err)
+		return nil, nil, codes.Wrap(codes.UpgradeUpload, err)
 	}
 	p, err := updatepkg.Read(f, st.Size())
 	if err != nil {
 		s.reject(path, err)
-		return nil, err
+		return nil, nil, err
 	}
 	if err := p.Verify(s.o.Upgrade.ReleaseKeyPEM, s.o.Upgrade.Channel); err != nil {
 		s.reject(path, err)
-		return nil, err
+		return nil, nil, err
 	}
 	h := p.Header
 	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
 		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE}
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
-		return pkg, s.stageProduct(ctx, path, p)
+		return pkg, nil, s.stageProduct(ctx, path, p)
 	}
 	img, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
-		return pkg, err
+		return pkg, nil, err
 	}
 	if err := h.AppliesTo(img.Msg.GetRunningVersion()); err != nil {
 		s.reject(path, err)
-		return pkg, err
+		return pkg, nil, err
 	}
 	s.o.Logger.Info("osadmin: update verified; unpacking", log.F("upload", id), log.F("version", h.Version), log.F("kind", string(h.Kind)))
 	key, err := s.o.Upgrade.UpdateKey()
 	if err != nil {
-		return pkg, codes.Wrap(codes.UpgradeDecrypt, err)
+		return pkg, nil, codes.Wrap(codes.UpgradeDecrypt, err)
 	}
 	dir := strings.TrimSuffix(path, ".bin") + ".d"
 	if err := os.RemoveAll(dir); err != nil {
-		return pkg, err
+		return pkg, nil, err
 	}
+	// The layout is needed only while init stages it; a retry unpacks the
+	// upload again.
+	defer s.removeUpload(dir)
 	if err := unpack(p, key, dir); err != nil {
-		_ = os.RemoveAll(dir)
-		return pkg, err
+		return pkg, nil, err
 	}
-	if _, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir})); err != nil {
-		return pkg, err
+	res, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir}))
+	if err != nil {
+		return pkg, nil, err
 	}
-	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version))
-	return pkg, nil
+	s.removeUpload(path)
+	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version), log.F("removed", strings.Join(res.Msg.GetRemovedVersions(), ",")))
+	return pkg, res.Msg.GetRemovedVersions(), nil
+}
+
+// removeUpload removes an upload's .bin or its unpacked layout once it's
+// no longer needed.
+func (s *Server) removeUpload(p string) {
+	if err := os.RemoveAll(p); err != nil {
+		s.o.Logger.Error(err, "osadmin: a staged upload wasn't removed", log.F("file", filepath.Base(p)))
+		return
+	}
+	s.o.Logger.Debug("osadmin: removed a staged upload", log.F("file", filepath.Base(p)))
 }
 
 // unpack decrypts the payload into a pipe and untars it into dir.

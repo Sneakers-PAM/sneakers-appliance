@@ -81,7 +81,7 @@ func stage(br *browser, id string) error {
 // unpacked reports whether any upload was unpacked.
 func (b *box) unpacked(t *testing.T) bool {
 	t.Helper()
-	dirs, _ := filepath.Glob(filepath.Join(b.state, "osadmin", "uploads", "*.d"))
+	dirs, _ := filepath.Glob(filepath.Join(b.state, "osadmin-api", "uploads", "*.d"))
 	return len(dirs) > 0 || b.keyReads > 0
 }
 
@@ -99,8 +99,8 @@ func TestUploadVerifyThenStage(t *testing.T) {
 	if b.keyReads != 1 || len(b.init.staged) != 1 {
 		t.Fatalf("decrypted once, staged once: %d %v", b.keyReads, b.init.staged)
 	}
-	if _, err := os.Stat(filepath.Join(b.init.staged[0], "oci-layout")); err != nil {
-		t.Fatalf("init stages the unpacked layout: %v", err)
+	if !b.init.layoutSeen {
+		t.Fatal("init stages the unpacked layout")
 	}
 	g, err := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
 	if err != nil || g.Msg.GetPolicy().GetWindowStart() != osadmin.DefaultPolicy().WindowStart || g.Msg.GetStagedVersion() != "0.2.0" || !g.Msg.GetAirGapped() || len(g.Msg.GetHistory()) != 1 || g.Msg.GetHistory()[0].GetOutcome() != "ok" {
@@ -108,6 +108,29 @@ func TestUploadVerifyThenStage(t *testing.T) {
 	}
 	if e := lastEntry(t, b.log, "upgrade.stage"); e.Outcome != "ok" || e.Detail["version"] != "0.2.0" {
 		t.Fatalf("%+v", e)
+	}
+}
+
+// A stage removes its .bin and the unpacked layout once init has staged
+// it, and audits the older release init removed to make room.
+func TestAStageRemovesItsFilesAndAuditsTheOlderRelease(t *testing.T) {
+	b := newBox(t, false)
+	b.init.removes = []string{"0.0.9"}
+	alice := b.browser()
+	alice.signIn("alice")
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	left, _ := filepath.Glob(filepath.Join(b.state, "osadmin-api", "uploads", "*"))
+	if len(left) != 0 {
+		t.Fatalf("after the stage the uploads hold %v", left)
+	}
+	if e := lastEntry(t, b.log, "upgrade.stage"); e.Detail["removed"] != "0.0.9" {
+		t.Fatalf("the stage entry %+v; want removed 0.0.9", e)
+	}
+	if e := lastEntry(t, b.log, "upgrade.remove"); e.Outcome != "ok" || e.Actor != "alice" || e.Detail["version"] != "0.0.9" || e.Detail["for"] != "0.2.0" {
+		t.Fatalf("the removal entry %+v", e)
 	}
 }
 

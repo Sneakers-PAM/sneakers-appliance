@@ -135,6 +135,9 @@ message StageRequest {
 
 message StageResponse {
   string version = 1;
+  // removed_versions are the older releases the stage removed to keep the
+  // box at its release count, with their boot entries and fetched files.
+  repeated string removed_versions = 2;
 }
 
 message ActivateRequest {}
