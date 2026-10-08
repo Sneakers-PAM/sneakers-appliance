@@ -123,12 +123,16 @@ func TestImageServiceStagesAndReportsThroughInit(t *testing.T) {
 	}
 	// The box boots the new release, an admin reverts, and it boots the old one again.
 	s.Running = fixtures.Version
+	st, err = c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil || st.Msg.GetPreviousVersion() != running || st.Msg.GetStagedVersion() != "" {
+		t.Fatalf("status on the new release: %v %v", st, err)
+	}
 	if _, err := c.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: "alice"})); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 	s.Running = running
 	st, err = c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
-	if err != nil || st.Msg.GetFailedVersion() != "" || st.Msg.GetRevertedVersion() != fixtures.Version || st.Msg.GetRevertedBy() != "alice" || st.Msg.GetRevertedAt() == nil {
+	if err != nil || st.Msg.GetFailedVersion() != "" || st.Msg.GetRevertedVersion() != fixtures.Version || st.Msg.GetRevertedBy() != "alice" || st.Msg.GetRevertedAt() == nil || st.Msg.GetPreviousVersion() != "" {
 		t.Fatalf("status after a revert: %v %v", st, err)
 	}
 }

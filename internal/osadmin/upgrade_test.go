@@ -397,3 +397,43 @@ func TestStagingNamesTheOtherSlot(t *testing.T) {
 		}
 	}
 }
+
+// The release kept for a revert is reported with the slot it's in, on
+// Status and Updates; with none there's no slot either.
+func TestThePreviousReleaseIsReportedWithItsSlot(t *testing.T) {
+	for running, want := range map[string]string{switchroot.LabelRootA: "B", switchroot.LabelRootB: "A"} {
+		b := newBox(t, false, func(_ *box, o *osadmin.Options) { o.RootSource = running })
+		alice := b.browser()
+		alice.signIn("alice")
+		ctx := context.Background()
+		status := func() *osadminv1.GetStatusResponse {
+			st, err := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL).GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return st.Msg
+		}
+		upgrades := func() *osadminv1.GetUpgradesResponse {
+			g, err := alice.upgrade().GetUpgrades(ctx, connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return g.Msg
+		}
+		if m := status(); m.GetPreviousVersion() != "" || m.GetPreviousSlot() != "" {
+			t.Fatalf("running from %s with no previous release: status %+v", running, m)
+		}
+		if m := upgrades(); m.GetPreviousVersion() != "" || m.GetPreviousSlot() != "" {
+			t.Fatalf("running from %s with no previous release: upgrades %+v", running, m)
+		}
+		b.init.mu.Lock()
+		b.init.previousVer = "0.0.9"
+		b.init.mu.Unlock()
+		if m := status(); m.GetPreviousVersion() != "0.0.9" || m.GetPreviousSlot() != want {
+			t.Fatalf("running from %s: status %+v", running, m)
+		}
+		if m := upgrades(); m.GetPreviousVersion() != "0.0.9" || m.GetPreviousSlot() != want {
+			t.Fatalf("running from %s: upgrades %+v", running, m)
+		}
+	}
+}

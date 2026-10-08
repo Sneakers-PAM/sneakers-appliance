@@ -32,6 +32,13 @@ A box holds at most two releases: the one it runs and one more (the next, or the
   back from. The next `Image.Stage` removes the record. Status and Updates on :8443 and the console
   show "Reverted from <version> (by <admin>, <time>)" in a neutral tone; "Failed" stays for a real
   fallback.
+- `Image.Status` also names the revert target: `previous_version` is the older, good entry still
+  on the ESP that `Image.Rollback` would boot. After an update and its `MarkGood` it's the release
+  updated from; it's empty on a fresh install, while a newer release is staged (staging removes
+  it) and after a revert. osadmin's `GetStatus` and `GetUpgrades` pass it on with `previous_slot`,
+  the slot it's in (the one the box isn't running from, `A` or `B`), so Status, the diagnostics
+  and Updates read "Other slot: <version> (revert target)", "staged <version>" when one is
+  staged, and "empty" only when there's neither.
 - With Secure Boot off (TPM mode), the new release's PCR 4 must be predicted from the firmware's
   event log; until that replay is in, staging is refused (`UPGRADE_UNPREDICTABLE`) rather than
   sealed to a guess.

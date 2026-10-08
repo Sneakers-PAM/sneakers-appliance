@@ -613,6 +613,12 @@ type GetUpgradesResponse struct {
 	RevertedVersion string                 `protobuf:"bytes,10,opt,name=reverted_version,json=revertedVersion,proto3" json:"reverted_version,omitempty"`
 	RevertedBy      string                 `protobuf:"bytes,11,opt,name=reverted_by,json=revertedBy,proto3" json:"reverted_by,omitempty"`
 	RevertedAt      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=reverted_at,json=revertedAt,proto3" json:"reverted_at,omitempty"`
+	// previous_version is the older release kept in the other slot for a
+	// revert, and previous_slot that slot, A or B (empty when the box can't
+	// tell which slot it runs from). Both are empty when there's no release
+	// to revert to.
+	PreviousVersion string `protobuf:"bytes,13,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
+	PreviousSlot    string `protobuf:"bytes,14,opt,name=previous_slot,json=previousSlot,proto3" json:"previous_slot,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -729,6 +735,20 @@ func (x *GetUpgradesResponse) GetRevertedAt() *timestamppb.Timestamp {
 		return x.RevertedAt
 	}
 	return nil
+}
+
+func (x *GetUpgradesResponse) GetPreviousVersion() string {
+	if x != nil {
+		return x.PreviousVersion
+	}
+	return ""
+}
+
+func (x *GetUpgradesResponse) GetPreviousSlot() string {
+	if x != nil {
+		return x.PreviousSlot
+	}
+	return ""
 }
 
 type FetchUpdateRequest struct {
@@ -1404,7 +1424,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x04code\x18\x06 \x01(\tR\x04code\x12\x16\n" +
 	"\x06detail\x18\a \x01(\tR\x06detail\x12C\n" +
 	"\x06target\x18\b \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\"\x14\n" +
-	"\x12GetUpgradesRequest\"\x8a\x05\n" +
+	"\x12GetUpgradesRequest\"\xda\x05\n" +
 	"\x13GetUpgradesResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
@@ -1421,7 +1441,9 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\vreverted_by\x18\v \x01(\tR\n" +
 	"revertedBy\x12;\n" +
 	"\vreverted_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"revertedAt\"1\n" +
+	"revertedAt\x12)\n" +
+	"\x10previous_version\x18\r \x01(\tR\x0fpreviousVersion\x12#\n" +
+	"\rprevious_slot\x18\x0e \x01(\tR\fpreviousSlot\"1\n" +
 	"\x12FetchUpdateRequest\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\"J\n" +
 	"\x13FetchUpdateResponse\x12\x1b\n" +

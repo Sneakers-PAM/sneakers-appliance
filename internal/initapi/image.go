@@ -119,7 +119,7 @@ func (h *imageHandler) Status(context.Context, *connect.Request[initv1.ImageServ
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &initv1.ImageServiceStatusResponse{RunningVersion: st.Running, StagedVersion: st.Staged, FailedVersion: st.Failed}
+	out := &initv1.ImageServiceStatusResponse{RunningVersion: st.Running, StagedVersion: st.Staged, FailedVersion: st.Failed, PreviousVersion: st.Previous}
 	if rev := st.Reverted; rev.Version != "" {
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = rev.Version, rev.By, timestamppb.New(rev.At)
 	}

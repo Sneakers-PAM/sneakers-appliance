@@ -249,6 +249,9 @@ type Status struct {
 	// Reverted is set instead of Failed when an admin reverted from the
 	// newer release (Rollback).
 	Reverted Reverted
+	// Previous is the older release kept on the ESP that Rollback would
+	// boot: the revert target. Empty when there's none.
+	Previous string
 }
 
 // Status reads the entries.
@@ -271,6 +274,8 @@ func (s *Stager) Status() (Status, error) {
 			st.Failed = e.Version
 		case newer && e.Counted:
 			st.Staged = e.Version
+		case !newer && !e.Bad() && semver.Compare("v"+e.Version, "v"+st.Previous) > 0:
+			st.Previous = e.Version
 		}
 	}
 	return st, nil

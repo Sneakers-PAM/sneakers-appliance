@@ -134,6 +134,12 @@ message GetStatusResponse {
   string reverted_version = 20;
   string reverted_by = 21;
   google.protobuf.Timestamp reverted_at = 22;
+  // previous_version is the older release kept in the other slot for a
+  // revert, and previous_slot that slot, A or B (empty when the box can't
+  // tell which slot it runs from). Both are empty when there's no release
+  // to revert to.
+  string previous_version = 23;
+  string previous_slot = 24;
 }
 
 message SetSecureBootRequest {

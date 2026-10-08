@@ -190,6 +190,12 @@ message GetUpgradesResponse {
   string reverted_version = 10;
   string reverted_by = 11;
   google.protobuf.Timestamp reverted_at = 12;
+  // previous_version is the older release kept in the other slot for a
+  // revert, and previous_slot that slot, A or B (empty when the box can't
+  // tell which slot it runs from). Both are empty when there's no release
+  // to revert to.
+  string previous_version = 13;
+  string previous_slot = 14;
 }
 
 message FetchUpdateRequest {

@@ -283,3 +283,36 @@ func TestMarkGoodLeavesAnUncountedEntryAlone(t *testing.T) {
 		t.Fatalf("entries %v", names)
 	}
 }
+
+// After an update the previous release stays on the ESP for a revert, and
+// Status names it: before and after MarkGood, but not once it's the
+// release reverted to, nor while a newer one is staged.
+func TestStatusNamesThePreviousRelease(t *testing.T) {
+	s, dir, _, _, _ := stager(t, "0.0.9")
+	if st, _ := s.Status(); st.Previous != "" {
+		t.Fatalf("a fresh install has no previous release: %+v", st)
+	}
+	if _, err := s.Stage(ctx, verify.LocalLayout(dir), "amd64"); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Status(); st.Previous != "" || st.Staged != fixtures.Version {
+		t.Fatalf("staged, before the reboot: %+v", st)
+	}
+	s.Running = fixtures.Version
+	if st, _ := s.Status(); st.Previous != "0.0.9" || st.Staged != "" {
+		t.Fatalf("booted, before MarkGood: %+v", st)
+	}
+	if err := s.MarkGood(ctx, []string{"keep"}); err != nil {
+		t.Fatal(err)
+	}
+	if st, _ := s.Status(); st.Previous != "0.0.9" || st.Staged != "" || st.Failed != "" {
+		t.Fatalf("after MarkGood: %+v", st)
+	}
+	if err := s.Rollback("alice", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	s.Running = "0.0.9"
+	if st, _ := s.Status(); st.Previous != "" || st.Reverted.Version != fixtures.Version {
+		t.Fatalf("after a revert: %+v", st)
+	}
+}
