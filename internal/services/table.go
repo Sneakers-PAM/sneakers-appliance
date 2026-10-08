@@ -83,6 +83,23 @@ type Service struct {
 	// console and everyone else's goes aside. At most one per phase; it
 	// runs as root.
 	Console bool `yaml:"console"`
+	// Capabilities are the ambient capabilities a service with a user
+	// keeps: only net-bind-service, for the edge fallback's 80 and 443.
+	Capabilities []string `yaml:"capabilities"`
+}
+
+// capabilityBits are the capabilities a service may keep, by name.
+var capabilityBits = map[string]uintptr{
+	"net-bind-service": 10, // CAP_NET_BIND_SERVICE
+}
+
+// Caps is s's ambient capabilities, as capability numbers.
+func (s *Service) Caps() []uintptr {
+	var out []uintptr
+	for _, c := range s.Capabilities {
+		out = append(out, capabilityBits[c])
+	}
+	return out
 }
 
 // Readiness is one probe: a file that appears, or a command that exits 0.
@@ -164,6 +181,14 @@ func parse(name string, b []byte) (*Service, error) {
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: start-when needs start: always", name)
 	case s.Console && s.User != "":
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: a console service runs as root", name)
+	}
+	if len(s.Capabilities) > 0 && s.User == "" {
+		return nil, codes.New(codes.ServiceTableInvalid, "%s: capabilities need a user; root has them all", name)
+	}
+	for _, c := range s.Capabilities {
+		if _, ok := capabilityBits[c]; !ok {
+			return nil, codes.New(codes.ServiceTableInvalid, "%s: capability %q isn't one a service may keep", name, c)
+		}
 	}
 	if s.User != "" {
 		if _, ok := accounts.ServiceUser(s.User); !ok {

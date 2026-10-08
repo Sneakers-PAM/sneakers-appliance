@@ -16,6 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/console"
@@ -164,7 +165,8 @@ func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken, scree
 	roster := func() (access.State, error) { return access.ReadState(filepath.Join(stateDir, "access")) }
 	return power.New(power.Options{
 		Machine:  flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: reaperRunner{binary: cryptsetup}, Logger: lg}, con: con, screen: screen},
-		Announce: screen.stopping,
+		Announce: announce(boxstate.File, screen.stopping, lg),
+		Keep:     drainKeep,
 		Drainer:  sup,
 		Audit:    (&lazyAudit{lg: lg}).open,
 		Roster:   roster,
@@ -172,6 +174,30 @@ func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken, scree
 		Clock:    clock.Real{},
 		Logger:   lg,
 	})
+}
+
+// drainKeep is what a reboot's or a shutdown's drain leaves running until
+// the power goes: the edge fallback answers 80 and 443 with the box-state
+// page once k0s has stopped.
+var drainKeep = []string{"edgefall"}
+
+// announce is the power controller's Announce: the reboot or the shutdown
+// goes to the box-state file first (the product edge's box-state page
+// reads it through accessd's GetPhase and sneakers-edgefall), then on the
+// screen. A file that can't be written is logged; the box still goes down.
+func announce(file string, show func(action string), lg log.Logger) func(action string) {
+	return func(action string) {
+		s := boxstate.Rebooting
+		if action == osaudit.ActionShutdown {
+			s = boxstate.ShuttingDown
+		}
+		if err := boxstate.Announce(file, s); err != nil {
+			lg.Error(err, "init: the box-state file wasn't written", log.F("state", string(s)))
+		} else {
+			lg.Info("init: the box state is announced", log.F("state", string(s)))
+		}
+		show(action)
+	}
 }
 
 // adminName names the admin a closed-shell login's uid belongs to.

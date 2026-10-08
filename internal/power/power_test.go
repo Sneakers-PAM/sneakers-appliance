@@ -423,3 +423,26 @@ func TestTheActionIsAnnouncedBeforeTheDrain(t *testing.T) {
 		}
 	}
 }
+
+// A reboot or a shutdown leaves Keep running through the drain (the edge
+// fallback, which answers 443 until the power goes).
+func TestTheDrainKeepsWhatItIsToldTo(t *testing.T) {
+	for _, act := range []func(*power.Controller) error{
+		func(c *power.Controller) error { return c.Reboot(ctx, osadmin, false) },
+		func(c *power.Controller) error { return c.PowerOff(ctx, osadmin, false) },
+	} {
+		b := &box{}
+		c := power.New(power.Options{
+			Machine: b, Drainer: b, Audit: func() (power.Auditor, error) { return b, nil },
+			Roster: roster, Reset: &resetter{b: b}, Clock: clock.NewFake(),
+			Go:   func(fn func()) { fn() },
+			Keep: []string{"edgefall"},
+		})
+		if err := act(c); err != nil {
+			t.Fatal(err)
+		}
+		if got := b.log(); !slices.Contains(got, "drain keep=edgefall") {
+			t.Fatalf("%v", got)
+		}
+	}
+}

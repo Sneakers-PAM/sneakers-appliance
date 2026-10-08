@@ -200,9 +200,21 @@ func (*GetPhaseRequest) Descriptor() ([]byte, []int) {
 type GetPhaseResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// phase is firstboot until setup's Finish, then normal.
-	Phase         string `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Phase string `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
+	// state is what the box is doing, as the product edge's box-state page
+	// shows it: running (the product runs), starting (it doesn't run yet,
+	// or setup isn't done), rebooting, shutting-down (init has announced
+	// the reboot or the power-off), updating (an update is being applied or
+	// reverted) or maintenance.
+	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// product_running: the product's service (k0s) runs, so its edge holds
+	// 80 and 443; while it doesn't, sneakers-edgefall answers there.
+	ProductRunning bool `protobuf:"varint,3,opt,name=product_running,json=productRunning,proto3" json:"product_running,omitempty"`
+	// product_installed: a product bundle is installed. Before one is,
+	// nothing answers 80 or 443.
+	ProductInstalled bool `protobuf:"varint,4,opt,name=product_installed,json=productInstalled,proto3" json:"product_installed,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetPhaseResponse) Reset() {
@@ -240,6 +252,27 @@ func (x *GetPhaseResponse) GetPhase() string {
 		return x.Phase
 	}
 	return ""
+}
+
+func (x *GetPhaseResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *GetPhaseResponse) GetProductRunning() bool {
+	if x != nil {
+		return x.ProductRunning
+	}
+	return false
+}
+
+func (x *GetPhaseResponse) GetProductInstalled() bool {
+	if x != nil {
+		return x.ProductInstalled
+	}
+	return false
 }
 
 type GetStatusRequest struct {
@@ -798,9 +831,12 @@ var File_sneakers_appliance_osadmin_v1_status_proto protoreflect.FileDescriptor
 const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\n" +
 	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\"\x11\n" +
-	"\x0fGetPhaseRequest\"(\n" +
+	"\x0fGetPhaseRequest\"\x94\x01\n" +
 	"\x10GetPhaseResponse\x12\x14\n" +
-	"\x05phase\x18\x01 \x01(\tR\x05phase\"\x12\n" +
+	"\x05phase\x18\x01 \x01(\tR\x05phase\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12'\n" +
+	"\x0fproduct_running\x18\x03 \x01(\bR\x0eproductRunning\x12+\n" +
+	"\x11product_installed\x18\x04 \x01(\bR\x10productInstalled\"\x12\n" +
 	"\x10GetStatusRequest\"a\n" +
 	"\aWarning\x12>\n" +
 	"\x04kind\x18\x01 \x01(\x0e2*.sneakers.appliance.osadmin.v1.WarningKindR\x04kind\x12\x16\n" +

@@ -304,6 +304,7 @@ store. Both are in init's service table (`os/rootfs/services.d/`):
 | `accessd` (`/usr/bin/sneakers-accessd`) | root | firstboot, normal | always |
 | `osadmin` (`/usr/bin/sneakers-osadmin`) | `osadmin` (uid 102) | firstboot, normal | always, after accessd is ready |
 | `sshd` (`/usr/bin/sneakers-sshd-run`) | root | firstboot (accessd starts it once the first admin exists), normal | always |
+| `edgefall` (`/usr/bin/sneakers-edgefall`) | `edgefall` (uid 103), with only `CAP_NET_BIND_SERVICE` | normal | always, after accessd is ready ([edge-fallback.md](edge-fallback.md)) |
 
 ### access.sock
 
@@ -317,6 +318,7 @@ uid is refused before a byte is read.
 | root | every method of `AccessService`, `NetworkService`, `SetupService` (with `GetConsoleInfo`, the `WatchConsoleInfo` stream, `ResetSetupCode` and the Recover access code) and `ElevationService`, and `LocalService` | the console (an owner named `console`), firstboot, or `sneakers-elevated` |
 | an admin uid (a closed-shell login) | `SshLoginService` (the TOTP check, first) and the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, `BeginRootShell`, `OpenRootShell`, and `LocalService` | that admin, with that admin's role |
 | `osadmin` | the :8443 API (`sneakers.appliance.osadmin.v1`), the upload and the audit export, and `BindingService` | the signed-in admin (or the code session) each call carries |
+| `edgefall` | the public `StatusService.GetPhase` only; anything else answers `permission_denied` | nobody: it's a public call ([edge-fallback.md](edge-fallback.md)) |
 
 - The console-only methods (`AddRecoveryKey`, `ResetAllowList`, `Complete`, the console info and
   codes, `TerminateElevation`, `BeginElevatedSession`, `EndElevatedSession`) refuse an admin uid

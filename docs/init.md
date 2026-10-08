@@ -36,6 +36,7 @@ readiness:                         # a file that appears, or a command that exit
 start: always                      # always (default) or on-demand
 on-demand-in: [firstboot]          # phases, among phases:, where it waits to be asked
 user: osadmin                      # a fixed unprivileged system account; default root
+capabilities: [net-bind-service]   # ambient capabilities kept with user:; only this one
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
 stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist first
@@ -53,8 +54,12 @@ start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist
   way stays stopped until it's started again. k0s waits for `setup/done` (the first admin exists)
   and an installed product bundle ([k0s.md](k0s.md)).
 - `user` runs the service as one of the fixed system accounts that has its own uid (`sshd`,
-  `sshkeys`, `osadmin`), with no supplementary groups; any other name is `SERVICE_TABLE_INVALID`.
-  Init never falls back to root for such an entry.
+  `sshkeys`, `osadmin`, `edgefall`), with no supplementary groups; any other name is
+  `SERVICE_TABLE_INVALID`. Init never falls back to root for such an entry.
+- `capabilities` lists ambient capabilities a `user` service keeps. The only one allowed is
+  `net-bind-service` (`CAP_NET_BIND_SERVICE`), which sneakers-edgefall needs for 80 and 443
+  ([edge-fallback.md](edge-fallback.md)); any other, or one without `user`, is
+  `SERVICE_TABLE_INVALID`.
 - The root image's table lives in `os/rootfs/services.d/` (accessd as root, osadmin as `osadmin`;
   see [access.md](access.md#accessd)).
 - `pre-start` runs to completion before every start; a non-zero exit keeps the service from
@@ -64,6 +69,8 @@ start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist
   a longer one so it can stop its workloads cleanly.
 - A drain (a graceful reboot or shutdown, or a factory reset) stops the services in reverse
   `after:` order, so k0s stops before platformd, and nothing starts again until the box reboots.
+  A reboot's or a shutdown's drain leaves `edgefall` running until the power goes, so 443 shows
+  the box-state page once k0s has stopped ([edge-fallback.md](edge-fallback.md)).
 - An entry that doesn't parse, an unknown `after:` name or a loop is `SERVICE_TABLE_INVALID`, and
   the table isn't used.
 
@@ -139,7 +146,9 @@ protection step, "State locked", the mismatch screen, a fatal error) clear the s
 before; once they're answered the starting page comes back. A console program draws over it as
 soon as it owns the consoles.
 
-When a reboot or a shutdown is accepted, before the drain, init puts "Sneakers-PAM is rebooting" or
-"Sneakers-PAM is shutting down" on the screen and holds it there: nothing else reaches the screen,
+When a reboot or a shutdown is accepted, before the drain, init writes `rebooting` or
+`shutting-down` to `/run/sneakers/box-state` (mode 0644; the product edge's box-state page reads it
+through accessd's `GetPhase` and sneakers-edgefall, [edge-fallback.md](edge-fallback.md)), then puts
+"Sneakers-PAM is rebooting" or "Sneakers-PAM is shutting down" on the screen and holds it there: nothing else reaches the screen,
 not even the console program's last frames, until the power goes. The finished factory reset at
 boot, and the enrol phase's reboot on QEMU, show the rebooting page the same way.

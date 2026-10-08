@@ -2,6 +2,7 @@ root:x:0:
 sshd:x:100:
 sshkeys:x:101:
 osadmin:x:102:
+edgefall:x:103:
 nogroup:x:65534:
 alice:x:20000:
 bob:x:20001:

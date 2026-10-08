@@ -32,6 +32,7 @@ drwxr-xr-x 0/0 /usr
 drwxr-xr-x 0/0 /usr/bin
 -rwxr-xr-x 0/0 /usr/bin/sneakers-accessd
 -rwxr-xr-x 0/0 /usr/bin/sneakers-console
+-rwxr-xr-x 0/0 /usr/bin/sneakers-edgefall
 -rwxr-xr-x 0/0 /usr/bin/sneakers-firstboot
 -rwxr-xr-x 0/0 /usr/bin/sneakers-netd
 -rwxr-xr-x 0/0 /usr/bin/sneakers-osadmin
@@ -43,6 +44,7 @@ drwxr-xr-x 0/0 /usr/lib/sneakers
 drwxr-xr-x 0/0 /usr/lib/sneakers/services.d
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/accessd.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/console.yaml
+-rw-r--r-- 0/0 /usr/lib/sneakers/services.d/edgefall.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/firstboot.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/k0s.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/netd.yaml

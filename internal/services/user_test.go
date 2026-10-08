@@ -19,13 +19,17 @@ import (
 // userRunner is a fakeRunner that can also start a program as a user.
 type userRunner struct {
 	*fakeRunner
-	mu  sync.Mutex
-	ids map[string][2]uint32
+	mu   sync.Mutex
+	ids  map[string][2]uint32
+	caps map[string][]uintptr
 }
 
-func (r *userRunner) StartAs(argv []string, uid, gid uint32) (services.Process, error) {
+func (r *userRunner) StartAs(argv []string, uid, gid uint32, caps []uintptr) (services.Process, error) {
 	r.mu.Lock()
 	r.ids[argv[0]] = [2]uint32{uid, gid}
+	if r.caps != nil {
+		r.caps[argv[0]] = caps
+	}
 	r.mu.Unlock()
 	return r.Start(argv)
 }
@@ -91,6 +95,45 @@ func TestAServiceWithAUserNeverFallsBackToRoot(t *testing.T) {
 	_ = sup.EnterPhase(context.Background(), phase.Normal)
 	if slices.Contains(r.starts(), "/usr/bin/web") {
 		t.Fatal("a runner that can't change user started the service as root")
+	}
+}
+
+// A service with a user may keep named capabilities, as ambient ones:
+// only net-bind-service (the edge fallback binds 80 and 443), and only
+// with a user, since root has them all.
+func TestAServiceWithAUserMayKeepNetBindService(t *testing.T) {
+	tbl, err := table(t, map[string]string{"edge": "exec: /usr/bin/edge\nphases: [normal]\nuser: edgefall\ncapabilities: [net-bind-service]\n", "web": "exec: /usr/bin/web\nphases: [normal]\nuser: osadmin\n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &userRunner{fakeRunner: newRunner(), ids: map[string][2]uint32{}, caps: map[string][]uintptr{}}
+	sup := services.NewSupervisor(r, tbl, opts())
+	if err := sup.EnterPhase(context.Background(), phase.Normal); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "both started", func() bool { return len(r.starts()) == 2 })
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if ids := r.ids["/usr/bin/edge"]; ids != [2]uint32{103, 103} {
+		t.Fatalf("edge ran as %v", ids)
+	}
+	if got := r.caps["/usr/bin/edge"]; !slices.Equal(got, []uintptr{10}) {
+		t.Fatalf("edge kept %v; want CAP_NET_BIND_SERVICE (10)", got)
+	}
+	if got := r.caps["/usr/bin/web"]; len(got) != 0 {
+		t.Fatalf("web kept %v", got)
+	}
+}
+
+func TestOnlyNetBindServiceAndOnlyWithAUser(t *testing.T) {
+	for _, body := range []string{
+		"exec: /usr/bin/edge\nphases: [normal]\ncapabilities: [net-bind-service]\n",
+		"exec: /usr/bin/edge\nphases: [normal]\nuser: edgefall\ncapabilities: [sys-admin]\n",
+		"exec: /usr/bin/edge\nphases: [normal]\nuser: edgefall\ncapabilities: [net-raw]\n",
+	} {
+		if _, err := table(t, map[string]string{"edge": body}); !codes.Is(err, codes.ServiceTableInvalid) {
+			t.Fatalf("%q: %v", body, err)
+		}
 	}
 }
 
@@ -198,5 +241,30 @@ func TestTheRootImageTableRunsSshd(t *testing.T) {
 		!s.OnDemand(phase.Firstboot) || s.OnDemand(phase.Normal) || !s.In(phase.Normal) ||
 		!slices.Contains(s.After, "netd") || !slices.Contains(s.After, "accessd") {
 		t.Fatalf("sshd: %+v", s)
+	}
+}
+
+// sneakers-edgefall runs in normal operation as the edgefall user with
+// only CAP_NET_BIND_SERVICE, after accessd (it asks GetPhase), restarted
+// whenever it stops; its pre-start hands it the box's certificate.
+func TestTheRootImageTableRunsTheEdgeFallback(t *testing.T) {
+	tbl, err := services.Load(os.DirFS("../../os/rootfs"), "services.d")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, ok := tbl["edgefall"]
+	if !ok {
+		t.Fatal("no edgefall")
+	}
+	if e.Exec != "/usr/bin/sneakers-edgefall" || !slices.Equal(e.Args, []string{"serve"}) || e.User != "edgefall" ||
+		!slices.Equal(e.Capabilities, []string{"net-bind-service"}) || e.Restart != services.RestartAlways ||
+		e.Start != services.StartAlways || !e.In(phase.Normal) || e.In(phase.Firstboot) ||
+		!slices.Contains(e.After, "accessd") || !slices.Equal(e.PreStart, []string{"/usr/bin/sneakers-edgefall", "prepare"}) {
+		t.Fatalf("edgefall: %+v", e)
+	}
+	for _, n := range tbl.Names() {
+		if n != "edgefall" && len(tbl[n].Capabilities) > 0 {
+			t.Fatalf("%s keeps capabilities: %v", n, tbl[n].Capabilities)
+		}
 	}
 }

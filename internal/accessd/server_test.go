@@ -28,10 +28,31 @@ func TestThePeerRule(t *testing.T) {
 	for _, c := range []struct {
 		uid  uint32
 		want bool
-	}{{0, true}, {accounts.OsadminUID, true}, {20000, true}, {20001, true}, {100, false}, {101, false}, {1000, false}, {65534, false}} {
+	}{{0, true}, {accounts.OsadminUID, true}, {accounts.EdgefallUID, true}, {20000, true}, {20001, true}, {100, false}, {101, false}, {1000, false}, {65534, false}} {
 		if got := accessd.PeerAllowed(c.uid); got != c.want {
 			t.Errorf("uid %d: %v", c.uid, got)
 		}
+	}
+}
+
+// sneakers-edgefall's uid asks the public GetPhase and nothing else: not
+// the rest of the front's API, not the local services.
+func TestTheEdgeFallbackOnlyAsksThePhase(t *testing.T) {
+	b := newBox(t)
+	hc, url := b.as(accounts.EdgefallUID)
+	ctx := context.Background()
+	st := osadminv1connect.NewStatusServiceClient(hc, url)
+	if p, err := st.GetPhase(ctx, connect.NewRequest(&osadminv1.GetPhaseRequest{})); err != nil || p.Msg.GetState() == "" {
+		t.Fatalf("GetPhase: %v %v", p, err)
+	}
+	if _, err := st.GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("GetStatus: %v", err)
+	}
+	if _, err := osadminv1connect.NewSignInServiceClient(hc, url).GetSession(ctx, connect.NewRequest(&osadminv1.GetSessionRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if _, err := accessv1connect.NewAccessServiceClient(hc, url).GetStatus(ctx, connect.NewRequest(&accessv1.GetStatusRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("access GetStatus: %v", err)
 	}
 }
 

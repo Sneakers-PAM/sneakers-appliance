@@ -43,6 +43,7 @@ var system = []Account{
 	{"sshd", 100, 100, "sshd privilege separation", privsepHome, NoLogin},
 	{"sshkeys", 101, 101, "sshd keys command", "/", NoLogin},
 	{"osadmin", OsadminUID, OsadminUID, "appliance admin on 8443", "/", NoLogin},
+	{"edgefall", EdgefallUID, EdgefallUID, "product edge fallback on 80 and 443", "/", NoLogin},
 }
 
 var nobody = Account{"nobody", 65534, 65534, "nobody", "/", NoLogin}
@@ -60,6 +61,9 @@ func ServiceUser(name string) (Account, bool) {
 
 // OsadminUID is the uid sneakers-osadmin runs as.
 const OsadminUID = 102
+
+// EdgefallUID is the uid sneakers-edgefall runs as.
+const EdgefallUID = 103
 
 // Accounts returns every account for s, in file order.
 func Accounts(s access.State) []Account {

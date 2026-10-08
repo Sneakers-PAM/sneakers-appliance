@@ -17,6 +17,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 )
 
@@ -123,5 +124,88 @@ func TestTheServerSendsPagesToSetupUntilItIsDone(t *testing.T) {
 	_ = res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("after setup: %d %q", res.StatusCode, res.Header.Get("Location"))
+	}
+}
+
+func (b *box) phase() *osadminv1.GetPhaseResponse {
+	b.t.Helper()
+	st := osadminv1connect.NewStatusServiceClient(b.browser().hc, b.ts.URL)
+	p, err := st.GetPhase(context.Background(), connect.NewRequest(&osadminv1.GetPhaseRequest{}))
+	if err != nil {
+		b.t.Fatal(err)
+	}
+	return p.Msg
+}
+
+// GetPhase says what the box is doing, for the product edge's box-state
+// page: starting until setup is done and the product runs, running then,
+// and init's announcement of a reboot or a shutdown over both.
+func TestThePhaseSaysWhatTheBoxIsDoing(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "box-state")
+	b := newBox(t, false, func(_ *box, o *osadmin.Options) { o.BoxStateFile = file })
+	if p := b.phase(); p.GetState() != string(boxstate.Starting) || p.GetProductRunning() {
+		t.Fatalf("before setup: %v", p)
+	}
+	b.finishSetup()
+	if p := b.phase(); p.GetState() != string(boxstate.Starting) || p.GetProductRunning() || p.GetProductInstalled() {
+		t.Fatalf("set up, no product running: %v", p)
+	}
+	b.installProduct("0.1.0")
+	if p := b.phase(); !p.GetProductInstalled() {
+		t.Fatalf("a product installed: %v", p)
+	}
+	b.services.mu.Lock()
+	b.services.running = true
+	b.services.mu.Unlock()
+	if p := b.phase(); p.GetState() != string(boxstate.Running) || !p.GetProductRunning() {
+		t.Fatalf("the product runs: %v", p)
+	}
+	for _, s := range []boxstate.State{boxstate.Rebooting, boxstate.ShuttingDown} {
+		if err := boxstate.Announce(file, s); err != nil {
+			t.Fatal(err)
+		}
+		if p := b.phase(); p.GetState() != string(s) || !p.GetProductRunning() || p.GetPhase() != osadmin.PhaseNormal {
+			t.Fatalf("announced %s: %v", s, p)
+		}
+	}
+}
+
+// While an update applies the box is updating, and the reboot it ends in
+// stays updating: the page says why the box went away.
+func TestThePhaseSaysUpdatingWhileAnUpdateApplies(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "box-state")
+	b := newBox(t, true, func(_ *box, o *osadmin.Options) { o.BoxStateFile = file })
+	b.finishSetup()
+	alice := b.browser()
+	alice.signIn("alice")
+	b.staged(alice)
+	var during, rebooting string
+	b.init.duringActivate = func() {
+		during = b.phase().GetState()
+		if err := boxstate.Announce(file, boxstate.Rebooting); err != nil {
+			t.Error(err)
+		}
+		rebooting = b.phase().GetState()
+	}
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if during != string(boxstate.Updating) || rebooting != string(boxstate.Updating) {
+		t.Fatalf("while the update applied: %q, then with the reboot announced: %q", during, rebooting)
+	}
+}
+
+// installProduct makes version the installed product bundle.
+func (b *box) installProduct(version string) {
+	b.t.Helper()
+	dir := filepath.Join(b.state, "product")
+	if err := os.MkdirAll(filepath.Join(dir, "a"), 0o700); err != nil {
+		b.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a", "bundle.json"), []byte(`{"version":"`+version+`"}`), 0o600); err != nil {
+		b.t.Fatal(err)
+	}
+	if err := os.Symlink("a", filepath.Join(dir, "current")); err != nil {
+		b.t.Fatal(err)
 	}
 }
