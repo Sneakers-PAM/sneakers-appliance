@@ -17,6 +17,12 @@ config under `/run/sneakers/ssh`. `sshd-session` arms its login grace time with 
 needs the kernel's POSIX timers (`CONFIG_POSIX_TIMERS`, in `os/kernel/required.txt`). busybox runs its applets from the shell without symlinks, so the
 root image needs only the one binary.
 
+Only the options `busybox.config` turns on are built, and busybox refuses any other with
+`unrecognized option` (there is no `readlink -f`, for one; resolve a link with `cd -P` and `pwd`).
+`os/k0s/busybox_test.go` reads every shell script under `os/` and the lab overlay and fails when one
+uses an applet option the config doesn't build. Turning an option on means a rebuilt busybox; prefer
+the shell's own builtins.
+
 ```sh
 bash build/busybox/build.sh out/static
 bash build/openssh/build.sh out/static
