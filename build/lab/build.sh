@@ -22,22 +22,26 @@
 #   VERSION      the lab version (default 0.0.1); the build number,
 #                g<the short commit>, is appended to it, git-describe style,
 #                unless it already ends with it
-#   K0S          the k0s binary for the root (default: the K0S_VERSION
+#   K0S          the k0s binary for the product bundle (default: the K0S_VERSION
 #                release from build/ci/versions.env, downloaded and checked
 #                against K0S_SHA256_AMD64)
 #   DISK_SIZE    the raw disk's size (default 64G)
 #
 # Output: $OUT/version (the version with the build number, which every
 # file name below carries), $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
-# signed OCI layout), $OUT/sneakers-kit (a kit pinned to this run's keys).
-# The signed UKI, $OUT/work/sneakers-<version>.efi, carries the lab update
-# key (internal/ukikey).
+# signed OCI layout), $OUT/sneakers-kit (a kit pinned to this run's keys),
+# and the lab product bundle next to them:
+# $OUT/product/sneakers-product-<version>-amd64-LAB.bin with its
+# sneakers-product-index.json, to upload on the Updates page or serve from
+# a lab mirror. The signed UKI, $OUT/work/sneakers-<version>.efi, carries
+# the lab update key (internal/ukikey), which decrypts the bundle.
 #
-# The lab release pins the images in build/lab/images.txt (k0s's own and the
-# throwaway hello-world one), signs each pinned digest with the run's lab
-# key and bundles them, and the root gets build/lab/overlay (the image
-# suite's hook and the hello stack; docs/k0s.md). Pulling them needs the
-# network.
+# The lab release pins the images in build/lab/images.txt (k0s's own, the
+# throwaway hello-world one and the interim edge), signs each pinned digest
+# with the run's lab key, and puts them in the product bundle with k0s and
+# the stacks in build/lab/stacks (docs/k0s.md). The base root carries none
+# of it; it gets build/lab/overlay, the image suite's hook. Pulling the
+# images needs the network.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -119,7 +123,7 @@ pins="-X $pkg.Channel=lab -X $pkg.Version=$version \
   -X $pkg.ReleaseKey=$(b64 "$KEYS/cosign.pub") -X $pkg.DBCert=$(b64 "$KEYS/db.crt") \
   -X $pkg.PKCert=$(b64 "$KEYS/PK.crt") -X $pkg.KEKCert=$(b64 "$KEYS/KEK.crt")"
 
-echo "lab: bundle (${#images[@]} images)"
+echo "lab: product bundle (${#images[@]} images)"
 # The lab key stands in for the org's countersignature of each pinned
 # digest: it signs the manifest or index bytes, whose SHA-256 is the digest.
 rm -rf "$work/images" "$work/image-sigs" "$work/manifests"
@@ -131,12 +135,19 @@ for line in "${images[@]}"; do
   "$work/bundle-tool" manifest --image "$image" --digest "$dgst" --out "$work/manifests/$hexd"
   sign_blob "$work/manifests/$hexd" "$work/image-sigs/$hexd.sigstore.json"
 done
-RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" SIGNATURES="$work/image-sigs" OUT="$work/images" \
-  bash "$root/build/bundle/build.sh"
+# The bundle fits the base built here, and nothing else.
+VERSION="$version" CHANNEL=lab BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
+  SIGNATURES="$work/image-sigs" K0S="$k0s" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
+  bash "$root/build/product/build.sh"
+sign_blob "$work/product/bin/header.json" "$work/product/bin/header.sigstore.json"
+rm -rf "$OUT/product"
+product_bin="$(go run "$root/cmd/sneakers-artifact" bin-seal --work "$work/product/bin" --bundle "$work/product/bin/header.sigstore.json" --out "$OUT/product")"
+go run "$root/cmd/sneakers-artifact" product-index --out "$OUT/product/sneakers-product-index.json" "$product_bin" >/dev/null
+rm -rf "$work/product/tree"
 
 echo "lab: root"
-STATIC="${STATIC:-}" PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" K0S="$k0s" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
-  IMAGES="$work/images" LAB_OVERLAY="$here/overlay" OUT="$work/root" bash "$root/build/root/build.sh"
+env -u K0S -u IMAGES STATIC="${STATIC:-}" PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
+  LAB_OVERLAY="$here/overlay" OUT="$work/root" bash "$root/build/root/build.sh"
 
 echo "lab: UKI"
 KERNEL="$KERNEL" VERITYSETUP="$VERITYSETUP" VERITY_JSON="$work/root/verity.json" \
@@ -168,4 +179,10 @@ echo "lab: raw disk"
 "$OUT/sneakers-kit" verify "$OUT/artifact"
 mkdir -p "$OUT/disk"
 "$OUT/sneakers-kit" build "$OUT/artifact" --format raw --disk-size "${DISK_SIZE:-64G}" --out "$OUT/disk"
-echo "lab: done: $(ls "$OUT/disk")"
+echo "lab: product bundle: the box's own check, with the key in the signed UKI"
+rm -rf "$work/product-check"
+go run "$root/cmd/sneakers-artifact" bin-verify --release-key "$KEYS/cosign.pub" --channel lab \
+  --identity-uki "$work/sneakers-$version.efi" --extract "$work/product-check" "$product_bin"
+rm -rf "$work/product-check"
+echo "lab: sizes: root $(stat -c %s "$work/root/root-$version.img") bytes, product bundle $(stat -c %s "$product_bin") bytes"
+echo "lab: done: $(ls "$OUT/disk") $(basename "$product_bin")"

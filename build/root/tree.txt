@@ -30,7 +30,6 @@ drwxr-xr-x 0/0 /sys
 drwxr-xr-x 0/0 /tmp
 drwxr-xr-x 0/0 /usr
 drwxr-xr-x 0/0 /usr/bin
--rwxr-xr-x 0/0 /usr/bin/k0s
 -rwxr-xr-x 0/0 /usr/bin/sneakers-accessd
 -rwxr-xr-x 0/0 /usr/bin/sneakers-console
 -rwxr-xr-x 0/0 /usr/bin/sneakers-firstboot
@@ -67,8 +66,6 @@ drwxr-xr-x 0/0 /usr/sbin
 drwxr-xr-x 0/0 /usr/share
 drwxr-xr-x 0/0 /usr/share/sneakers
 drwxr-xr-x 0/0 /usr/share/sneakers/charts
-drwxr-xr-x 0/0 /usr/share/sneakers/images
-drwxr-xr-x 0/0 /usr/share/sneakers/manifests
 drwxr-xr-x 0/0 /usr/share/sneakers/osadmin
 drwxr-xr-x 0/0 /usr/share/sneakers/release
 -rw-r--r-- 0/0 /usr/share/sneakers/release/release.yaml

@@ -9,16 +9,17 @@
 # fixed from the version. build/root/tree.txt is the declared tree;
 # build/root/build_test.sh checks a build against it.
 #
+# The base root carries no k0s and no images: they ship in the product
+# bundle (build/product/build.sh, docs/k0s.md). K0S or IMAGES set is
+# refused, so an old caller can't put them back.
+#
 # Inputs (environment):
 #   VERSION        the release version
 #   ARCH           amd64 (default) or arm64
-#   RELEASE        release.yaml the root is built for (its k0s pin is checked)
-#   K0S            the k0s binary
+#   RELEASE        release.yaml the root is built for
 #   OPENSSH        directory with the static sshd, sshd-session, sshd-auth and
 #                  ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX        the static busybox (build/busybox/build.sh)
-#   IMAGES         the airgap bundle directory (build/bundle/build.sh); may
-#                  be unset when release.yaml pins no images
 #   STATIC         directory with cryptsetup-<arch>, veritysetup-<arch>,
 #                  mke2fs-<arch>, sgdisk-<arch> (optional)
 #   SERVICES       the service table (default os/rootfs/services.d)
@@ -36,15 +37,16 @@ umask 022
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${VERSION:?}" "${RELEASE:?}" "${K0S:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+: "${VERSION:?}" "${RELEASE:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+if [ -n "${K0S:-}" ] || [ -n "${IMAGES:-}" ]; then
+  echo "root: k0s and the images ship in the product bundle (build/product/build.sh), not the base root" >&2
+  exit 1
+fi
 arch="${ARCH:-amd64}"
 services="${SERVICES:-$root/os/rootfs/services.d}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH
 
-want_k0s="$(go run "$root/build/tools/k0spin" "$RELEASE" "$arch")"
-got_k0s="$(sha256sum "$K0S" | cut -d' ' -f1)"
-[ "$want_k0s" = "$got_k0s" ] || { echo "root: $K0S has SHA-256 $got_k0s; release.yaml pins $want_k0s" >&2; exit 1; }
 for b in sshd sshd-session sshd-auth ssh-keygen; do
   [ -f "$OPENSSH/$b" ] || { echo "root: $OPENSSH/$b is missing (build/openssh/build.sh)" >&2; exit 1; }
 done
@@ -54,7 +56,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 tree="$work/tree"
 mkdir -p "$tree"/{bin,sbin,etc/k0s/containerd.d,usr/bin,usr/sbin,usr/libexec/openssh,usr/libexec/sneakers,usr/lib/sneakers/services.d} \
-  "$tree"/usr/share/sneakers/{images,charts,release,osadmin,manifests} "$tree"/{proc,sys,dev,run,tmp,var/lib,boot/efi} \
+  "$tree"/usr/share/sneakers/{charts,release,osadmin} "$tree"/{proc,sys,dev,run,tmp,var/lib,boot/efi} \
   "$tree"/lib/modules "$tree"/usr/libexec/k0s/kubelet-plugins/volume/exec
 
 echo "root: Go binaries ($arch)"
@@ -71,8 +73,7 @@ for c in sneakers-elevated sneakers-enrol sneakers-enrol-keys; do
   gobuild "$tree/usr/libexec/$c" "$c"
 done
 
-echo "root: k0s, OpenSSH, busybox"
-install -m 0755 "$K0S" "$tree/usr/bin/k0s"
+echo "root: OpenSSH, busybox"
 install -m 0755 "$OPENSSH/sshd" "$tree/usr/sbin/sshd"
 install -m 0755 "$OPENSSH/sshd-session" "$OPENSSH/sshd-auth" "$tree/usr/libexec/openssh/"
 install -m 0755 "$OPENSSH/ssh-keygen" "$tree/usr/bin/ssh-keygen"
@@ -87,7 +88,8 @@ if [ -n "${STATIC:-}" ]; then
   install -m 0755 "$STATIC/sgdisk-$arch" "$tree/usr/sbin/sgdisk"
 fi
 
-# k0s (docs/k0s.md): its config template, containerd's config (k0s would
+# What the base OS gives k0s, which itself comes with the product bundle
+# (docs/k0s.md): its config template, containerd's config (k0s would
 # write one into the read-only /etc otherwise), the interim launcher,
 # and the host paths its pods mount: /etc/cni and /opt lead to the state
 # volume, and /lib/modules stays empty (no loadable modules).
@@ -106,12 +108,8 @@ ln -s busybox "$tree/bin/mount"
 ln -s busybox "$tree/bin/umount"
 ln -s /var/lib/sneakers/machine-id "$tree/etc/machine-id"
 
-echo "root: release, bundle, service table"
+echo "root: release, service table"
 install -m 0644 "$RELEASE" "$tree/usr/share/sneakers/release/release.yaml"
-if [ -n "${IMAGES:-}" ]; then
-  [ -d "$IMAGES" ] || { echo "root: the bundle $IMAGES isn't a directory" >&2; exit 1; }
-  find "$IMAGES" -mindepth 1 -maxdepth 1 -type f -exec install -m 0644 {} "$tree/usr/share/sneakers/images/" \;
-fi
 shopt -s nullglob
 svc=("$services"/*.yaml)
 shopt -u nullglob

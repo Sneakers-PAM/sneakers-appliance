@@ -10,6 +10,7 @@ with keys made for that run and publishes nothing.
 |---|---|---|
 | `sneakers-os:<version>` | GHCR, pushed by digest, with its signature | the kit, to build install media |
 | `sneakers-appliance-<version>-<arch>.bin` | the GitHub Release the owner created for the tag | the box: downloaded, or uploaded by hand |
+| `sneakers-product-<version>-<arch>.bin` and `sneakers-product-index.json` | built and sealed next to the base `.bin` (attaching them to the Release isn't in the workflow yet) | the box's Updates page: the product bundle, k0s and its images |
 
 The `.bin` is the update package. The box downloads it from the GitHub Release, or an admin
 uploads the identical file through :8443 or the console on an air-gapped box. Both paths read it
@@ -55,6 +56,39 @@ The box reads a package in this order, and refuses with the first code that appl
 to sign, `bin-seal` joins the header, its bundle and the ciphertext, and `bin-verify` runs steps 1
 to 4. Given `--identity` (an age key file) or `--identity-uki` (a UKI, read the way the box reads
 it), it also decrypts, and with `--extract` unpacks the payload.
+
+## The product bundle
+
+The product stack ships as its own `.bin`, never in the base image: `sneakers-product-<version>-<arch>.bin`
+(`-LAB` for a lab one), one per version and architecture. It's the same format, signed with the
+same release key and encrypted to the same update key, with these header fields:
+
+| Field | Meaning |
+|---|---|
+| `name` | `sneakers-product` (signed, so a base `.bin` can't pass for a product bundle or the reverse) |
+| `kind` | `product` |
+| `bases` | the base versions it fits; the box refuses it on any other (`UPGRADE_PRODUCT_BASE`), before it decrypts anything |
+
+The payload is the unpacked bundle as a tar: `release.yaml`, the `k0s` binary, `images/` (the
+airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
+and `manifests/<stack>/*.yaml`, the stacks k0s applies (the lab bundle's hello stack and interim
+edge, [k0s.md](k0s.md)). After it decrypts and unpacks one, the box checks it like the kit checks a
+root: only those entries, `k0s` with the SHA-256 its `release.yaml` pins, exactly the pinned images,
+each signed by the release key, and YAML stacks only (`KIT_BUNDLE_MISMATCH`, `KIT_IMAGE_UNSIGNED`).
+How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundle).
+
+`build/product/build.sh` lays the bundle out, runs that check (`sneakers-artifact product-check`)
+and packs it for a base version list (`bin-pack --kind product --base ...`); the caller signs the
+header and seals it with `bin-seal`. `sneakers-artifact product-index` writes the index a mirror
+serves next to the bundles: version, architecture, channel, bases, file name and size per bundle,
+which the box only uses to offer a choice. `bin-verify --extract` on a product bundle also runs the
+box's check.
+
+- **A release:** the build job packs the bundle for the release's own version
+  (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it
+  with the key in the signed UKI, checks it and writes the index.
+- **A lab build:** `build/lab/build.sh` writes `product/sneakers-product-<version>-amd64-LAB.bin` and
+  its index next to the disk, for the base it built, and checks it with the key in its signed UKI.
 
 ## Lab and production keys
 
@@ -102,13 +136,14 @@ any certificate or key that isn't the recorded production one.
 | Job | Holds | Does |
 |---|---|---|
 | `guard` | nothing | refuses a tag that isn't `v<semver>` or whose commit isn't on `main`, and a production release before `keys/production/fingerprints.txt` and the `SNEAKERS_RELEASE_VERSION` pin (`build/release/pins.env`) exist |
-| `build` | nothing | builds the kernel, the root image, the unsigned UKI and systemd-boot, the production kit, and `SHA256SUMS` over all of it (`build/release/build.sh`) |
-| `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; adds the update key to the UKI; signs the UKI and systemd-boot with the db key, then the artifact and the `.bin` header with the release key; checks the `.bin` decrypts with the key in the signed UKI; each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
+| `build` | nothing | builds the kernel, the root image, the unsigned UKI and systemd-boot, the production kit, the product bundle packed for signing, and `SHA256SUMS` over all of it (`build/release/build.sh`) |
+| `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; adds the update key to the UKI; signs the UKI and systemd-boot with the db key, then the artifact, the `.bin` header and the product bundle's header with the release key; checks both `.bin` files decrypt with the key in the signed UKI, and the product bundle's contents; each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
 | `publish` | `packages: write`, `contents: write` | verifies the artifact with the production kit and the `.bin` with the production key, pushes `sneakers-os` to GHCR, verifies what it pushed, and attaches the `.bin` and its `.sha256` to the tag's GitHub Release |
-| `lab` | lab keys only | the whole path with a lab key set: builds (the lab update key in the UKI), packs, verifies, decrypts with the key in the signed UKI, unpacks, runs the lab kit on the result, and checks a production verify of the lab `.bin` is refused; nothing leaves the run |
+| `lab` | lab keys only | the whole path with a lab key set: builds (the lab update key in the UKI), packs, verifies, decrypts with the key in the signed UKI, unpacks, runs the lab kit on the result, opens and checks the lab product bundle, and checks a production verify of either lab `.bin` is refused; nothing leaves the run |
 
 The release `release.yaml` and its signature come from the pinned `sneakers-release` GitHub
-Release; the k0s binary from its upstream release, checked against the pin in `release.yaml`. The
-images bundle, the charts and the platform add-ons join the payload as their builds land; every
+Release; the k0s binary from its upstream release, checked against the pin in `release.yaml`, goes
+into the product bundle with the images. The charts and the platform add-ons join the product
+bundle as their builds land; every
 image in it is signed with the release key, third-party ones included. amd64 only for now; arm64
 follows its kernel build.

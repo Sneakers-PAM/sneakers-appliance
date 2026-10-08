@@ -4,10 +4,11 @@
 #
 # build.sh builds the same root image twice from the same inputs and
 # SOURCE_DATE_EPOCH, byte for byte; the image holds exactly the declared tree
-# in tree.txt, with its owners and modes; and a k0s binary that isn't the
-# pinned one, a missing OpenSSH or busybox, or a lab overlay outside a lab
-# build or over a file the tree has, is refused. The k0s, OpenSSH
-# and busybox inputs are stand-ins: only their place in the tree is checked.
+# in tree.txt, with its owners and modes; and a k0s binary or images (they
+# ship in the product bundle), a missing OpenSSH or busybox, or a lab
+# overlay outside a lab build or over a file the tree has, is refused. The
+# OpenSSH and busybox inputs are stand-ins: only their place in the tree
+# is checked.
 # Needs go, mksquashfs, unsquashfs and veritysetup.
 #
 # UPDATE=1 rewrites tree.txt from the build instead of checking it.
@@ -21,7 +22,6 @@ mkdir -p "$work/openssh"
 for b in sshd sshd-session sshd-auth ssh-keygen; do printf '#!/bin/false\n# %s\n' "$b" > "$work/openssh/$b"; done
 printf '#!/bin/false\n# busybox\n' > "$work/busybox"
 printf '#!/bin/false\n# k0s\n' > "$work/k0s"
-sum="$(sha256sum "$work/k0s" | cut -d' ' -f1)"
 cat > "$work/release.yaml" <<YAML
 apiVersion: sneakers-pam/v1alpha1
 kind: Release
@@ -31,14 +31,11 @@ spec:
   kubernetes:
     k0s:
       version: test
-      sha256:
-        amd64: $sum
-        arm64: $sum
 YAML
 
 build() { # out [env...]
   local out="$1"; shift
-  env RELEASE="$work/release.yaml" K0S="$work/k0s" OPENSSH="$work/openssh" BUSYBOX="$work/busybox" \
+  env RELEASE="$work/release.yaml" OPENSSH="$work/openssh" BUSYBOX="$work/busybox" \
     OUT="$out" "$@" bash "$here/build.sh"
 }
 build "$work/a" >/dev/null
@@ -66,8 +63,8 @@ refused() { # message env...
   if out="$(build "$work/r" "$@" 2>&1)"; then echo "FAIL: built with $*" >&2; exit 1; fi
   grep -q "$msg" <<<"$out" || { echo "FAIL: $* said: $out" >&2; exit 1; }
 }
-printf 'other\n' > "$work/k0s-other"
-refused "release.yaml pins $sum" K0S="$work/k0s-other"
+refused "k0s and the images ship in the product bundle" K0S="$work/k0s"
+refused "k0s and the images ship in the product bundle" IMAGES="$work"
 refused "sshd is missing (build/openssh" OPENSSH="$work/nothing"
 refused "is missing (build/busybox" BUSYBOX="$work/nothing"
 refused "no service table" SERVICES="$work/openssh"
@@ -75,4 +72,4 @@ mkdir -p "$work/overlay/etc/k0s"
 printf 'x\n' > "$work/overlay/etc/k0s/k0s.yaml.tmpl"
 refused "LAB_OVERLAY is for lab builds only" LAB_OVERLAY="$work/overlay"
 refused "LAB_OVERLAY would replace /etc/k0s/k0s.yaml.tmpl" PINS_LDFLAGS="-X example.org/pins.Channel=lab" LAB_OVERLAY="$work/overlay"
-echo "ok: a wrong k0s, missing OpenSSH or busybox, an empty service table and a misused lab overlay are refused"
+echo "ok: k0s or images, missing OpenSSH or busybox, an empty service table and a misused lab overlay are refused"

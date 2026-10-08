@@ -216,6 +216,11 @@ jobs:
           trap 'rm -f "$keys/cosign.key"' EXIT
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/bin/header.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$work/bin/header.json" >/dev/null
+          # The product bundle's header, packed by the build job.
+          mkdir -p "$work/product"
+          cp "$RUNNER_TEMP/unsigned/product-header.json" "$work/product/header.json"
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/product/header.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$work/product/header.json" >/dev/null
       - name: Seal and verify the .bin
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -225,6 +230,14 @@ jobs:
           # The key in the signed UKI must open the .bin, as it will on the box.
           "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
             --identity-uki "$work/sneakers-$VERSION.efi" "$out/sneakers-appliance-$VERSION-amd64.bin"
+          # The product bundle: sealed next to it, then opened and checked
+          # the way the box does (k0s and the images against its release.yaml).
+          cp "$RUNNER_TEMP/unsigned/product-payload.age" "$work/product/payload.age"
+          product="$("$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/product" --bundle "$work/product/header.sigstore.json" --out "$out")"
+          "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
+            --identity-uki "$work/sneakers-$VERSION.efi" --extract "$work/product-check" "$product"
+          rm -rf "$work/product-check"
+          "$RUNNER_TEMP/sneakers-artifact" product-index --out "$out/sneakers-product-index.json" "$product"
       - name: Wipe the keys
         if: always()
         run: |
@@ -346,12 +359,21 @@ jobs:
           if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$bin"; then
             echo "a lab .bin verified as production" >&2; exit 1
           fi
+          # The lab product bundle the lab build sealed: opened with the key
+          # in the signed UKI and checked, and never a production one.
+          product="$(ls "$lab"/product/sneakers-product-*-LAB.bin)"
+          "$tool" bin-verify --release-key "$keys/cosign.pub" --channel lab \
+            --identity-uki "$lab/work/sneakers-$VERSION.efi" --extract "$work/product" "$product"
+          if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$product"; then
+            echo "a lab product bundle verified as production" >&2; exit 1
+          fi
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
           fi
           {
             echo "### Lab dry run ${VERSION}"
             echo "- $(basename "$bin"): $(stat -c %s "$bin") bytes, verified, decrypted and checked by the lab kit"
+            echo "- $(basename "$product"): $(stat -c %s "$product") bytes, verified, decrypted and checked"
             echo "- nothing was published or uploaded"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the lab keys
