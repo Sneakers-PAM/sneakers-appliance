@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -102,7 +103,7 @@ func TestThreeUpdatesInARowKeepTwoReleases(t *testing.T) {
 		}
 		adm.call(t, "UpgradeService/StageUpdate", map[string]any{"uploadId": adm.upload(t, bin)}, &struct{}{})
 		want := []string{imageupgrade.GoodName(prev), imageupgrade.EntryName(v, imageupgrade.Tries, 0)}
-		if got := strings.Fields(entries(t, running.Disk(0))); !sameSet(got, want) {
+		if got := espNames(t, running.Disk(0)); !sameSet(got, want) {
 			t.Fatalf("update %d: after staging %s the ESP holds %v; want only %v", i+1, v, got, want)
 		}
 		adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_BASE", "totpCode": alice.code()}, &struct{}{})
@@ -137,6 +138,17 @@ func TestThreeUpdatesInARowKeepTwoReleases(t *testing.T) {
 	running.WaitExit(5 * time.Minute)
 	boot(running, before)
 	t.Logf("%s runs again after reverting from %s", before, last)
+}
+
+// espNames is the file names in the ESP's UKI directory. mdir -b lists
+// each entry with its full ::/EFI/Linux/ path, so the path is dropped.
+func espNames(t *testing.T, img string) []string {
+	t.Helper()
+	var names []string
+	for _, e := range strings.Fields(entries(t, img)) {
+		names = append(names, path.Base(e))
+	}
+	return names
 }
 
 func sameSet(a, b []string) bool {
