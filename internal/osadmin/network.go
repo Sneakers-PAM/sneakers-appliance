@@ -12,6 +12,7 @@ import (
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	netmodel "github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 )
 
@@ -33,7 +34,7 @@ func (h *networkSvc) GetNetwork(ctx context.Context, _ *connect.Request[osadminv
 	}
 	return connect.NewResponse(&osadminv1.GetNetworkResponse{
 		Settings: g.Msg.GetSettings(), Pending: g.Msg.GetPending(),
-		ManagementAddresses: st.Msg.GetManagementAddresses(), ServiceAddresses: st.Msg.GetServiceAddresses(),
+		ManagementAddresses: netdapi.Bare(st.Msg.GetManagementAddresses()), ServiceAddresses: st.Msg.GetServiceAddresses(),
 		NtpSynced: st.Msg.GetNtpSynced(), NtpOffsetMs: st.Msg.GetNtpOffsetMs(),
 	}), nil
 }

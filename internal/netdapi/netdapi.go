@@ -29,10 +29,30 @@ func NewClient(sock string) netdv1connect.NetworkServiceClient {
 	return netdv1connect.NewNetworkServiceClient(hc, "http://netd.sock")
 }
 
+// Bare turns netd's management addresses (with or without a prefix
+// length) into bare addresses, the way they're shown.
+func Bare(mgmt []string) []string {
+	var out []string
+	for _, a := range addrs(mgmt) {
+		out = append(out, a.String())
+	}
+	return out
+}
+
 // Bindable turns netd's management addresses (with or without a prefix
 // length) into the addresses a listener binds, leaving out link-local
 // ones.
 func Bindable(mgmt []string) []netip.Addr {
+	var out []netip.Addr
+	for _, a := range addrs(mgmt) {
+		if !a.IsLinkLocalUnicast() {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func addrs(mgmt []string) []netip.Addr {
 	var out []netip.Addr
 	for _, m := range mgmt {
 		a, err := netip.ParseAddr(m)
@@ -43,9 +63,7 @@ func Bindable(mgmt []string) []netip.Addr {
 			}
 			a = p.Addr()
 		}
-		if !a.IsLinkLocalUnicast() {
-			out = append(out, a)
-		}
+		out = append(out, a)
 	}
 	return out
 }

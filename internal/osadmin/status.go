@@ -24,6 +24,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/screens"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	netmodel "github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
@@ -58,7 +59,7 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	ns, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
 	health("netd", err)
 	if err == nil {
-		out.Hostname, out.ManagementAddresses, out.NtpSynced = ns.Msg.GetHostname(), ns.Msg.GetManagementAddresses(), ns.Msg.GetNtpSynced()
+		out.Hostname, out.ManagementAddresses, out.NtpSynced = ns.Msg.GetHostname(), netdapi.Bare(ns.Msg.GetManagementAddresses()), ns.Msg.GetNtpSynced()
 		if !out.NtpSynced {
 			add(osadminv1.WarningKind_WARNING_KIND_NTP_UNSYNCED, "The clock isn't synchronised with an NTP server.")
 		}

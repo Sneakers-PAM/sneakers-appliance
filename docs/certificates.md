@@ -11,6 +11,10 @@ assigns one to each endpoint.
 | `admin` | :8443 on each management address | the host name or a management address | live |
 | `product` | 443, every product route on one host | the product host | "Available when the product is installed" |
 
+A management address here is the bare address (`192.0.2.10`), never the interface prefix netd
+reports (`192.0.2.10/24`), and link-local addresses are left out. That's what a CSR names, what the
+names check and Revert compare and what the :8443 check below connects to.
+
 An endpoint's source is exactly one of an **assigned certificate** from the store or **cert-manager
 (ACME)**. :8443 also has the box's own self-signed certificate, which it starts with and which
 Revert to self-signed puts back. ACME answers `TLS_ACME_UNAVAILABLE` ("Not available yet") until the
@@ -49,7 +53,10 @@ re-reads the files on the next handshake, so there's no restart, and keeps an as
 as it is when the host name or addresses change (Status then warns). accessd then connects to :8443
 on each management address and compares the served certificate's fingerprint; if the new one isn't
 served within 15 seconds, the previous files are put back (`TLS_NOT_SERVED`). Status, the console
-and the `Endpoint` read the live file, so the fingerprint they show follows the swap.
+and the `Endpoint` read the live file, so the fingerprint they show follows the swap. The store
+takes one change at a time but keeps answering reads during that check, so Status and the console
+stay live while a certificate is being applied; the endpoint shows its old assignment until the
+check passes.
 
 ## Where things live
 

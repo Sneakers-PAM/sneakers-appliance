@@ -36,6 +36,7 @@ import (
 	log "github.com/Bugs5382/go-log"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 )
 
 // Source is where a store certificate came from.
@@ -101,6 +102,9 @@ const (
 
 // ACMEReason is why ACME isn't offered in this release.
 const ACMEReason = "Not available yet: ACME through cert-manager comes with the product bundle."
+
+// probePort is the port the default check dials: :8443.
+var probePort = "8443"
 
 // productReason is why the product endpoint can't be assigned yet.
 const productReason = "Available when the product is installed."
@@ -202,9 +206,41 @@ type ImportRequest struct {
 
 // Store is the certificate store.
 type Store struct {
-	o  Options
-	mu sync.Mutex
-	st state
+	o Options
+	// ops runs one change at a time. mu guards st and the :8443 files; a
+	// change lets it go while swap waits for :8443, so Snapshot (and the
+	// status page and console that read it) keeps answering.
+	ops sync.Mutex
+	mu  sync.Mutex
+	st  state
+	// checking is true while swap waits: :8443's files then hold a
+	// certificate that isn't assigned yet.
+	checking bool
+}
+
+// change takes the store for a change; the returned func lets it go.
+func (s *Store) change() func() {
+	s.ops.Lock()
+	s.mu.Lock()
+	return func() {
+		s.mu.Unlock()
+		s.ops.Unlock()
+	}
+}
+
+// names are the box's host name and the addresses :8443 answers on.
+// netd gives the addresses as interface prefixes (192.0.2.10/24); a name
+// or a dial target is the bare address, and link-local ones are left out.
+func (s *Store) names(ctx context.Context) (string, []string, error) {
+	host, mgmt, err := s.o.Names(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	var addrs []string
+	for _, a := range netdapi.Bindable(mgmt) {
+		addrs = append(addrs, a.String())
+	}
+	return host, addrs, nil
 }
 
 type state struct {
@@ -254,11 +290,11 @@ func Open(o Options) (*Store, error) {
 	s := &Store{o: o, st: state{Version: 1, Endpoints: map[string]assignment{}}}
 	if o.Probe == nil {
 		s.o.Probe = func(ctx context.Context, fp string) error {
-			_, addrs, err := s.o.Names(ctx)
+			_, addrs, err := s.names(ctx)
 			if err != nil {
 				return err
 			}
-			return HandshakeProbe(ctx, addrs, "8443", fp)
+			return HandshakeProbe(ctx, addrs, probePort, fp)
 		}
 	}
 	b, err := os.ReadFile(filepath.Join(o.Dir, stateFile)) // #nosec G304 -- the store's own file
@@ -293,7 +329,7 @@ func (s *Store) Snapshot(ctx context.Context) (Snapshot, error) {
 	if err := s.captureSelfSigned(); err != nil {
 		s.o.Logger.Warn("tls: the self-signed certificate can't be recorded", log.F("error", err.Error()))
 	}
-	host, addrs, err := s.o.Names(ctx)
+	host, addrs, err := s.names(ctx)
 	if err != nil {
 		s.o.Logger.Warn("tls: the management names can't be read", log.F("error", err.Error()))
 	}
@@ -388,7 +424,7 @@ func boxNames(host string, addrs []string) []string {
 // box's own (sneakers-osadmin makes and renews it), sealing its key, so a
 // revert can put it back.
 func (s *Store) captureSelfSigned() error {
-	if s.assignments()[EndpointAdmin].Source != EndpointSelfSigned {
+	if s.checking || s.assignments()[EndpointAdmin].Source != EndpointSelfSigned {
 		return nil
 	}
 	crt, key, err := readAdminFiles(s.o.AdminDir)
@@ -446,15 +482,14 @@ func checkName(n string) error {
 // GenerateCSR makes a key on the box, seals it and returns the CSR for
 // the host name, the management addresses and the extra names.
 func (s *Store) GenerateCSR(ctx context.Context, r CSRRequest) (CSR, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	if len(s.st.CSRs) >= maxCSRs {
 		return CSR{}, codes.New(codes.TLSLimit, "%d CSRs are already pending; discard one first", maxCSRs)
 	}
 	if r.Country != "" && !countryRE.MatchString(r.Country) {
 		return CSR{}, codes.New(codes.TLSInvalid, "country: %q isn't a two-letter country code", r.Country)
 	}
-	host, addrs, err := s.o.Names(ctx)
+	host, addrs, err := s.names(ctx)
 	if err != nil {
 		return CSR{}, err
 	}
@@ -569,8 +604,7 @@ func (s *Store) GenerateCSR(ctx context.Context, r CSRRequest) (CSR, error) {
 // CompleteCSR validates a signed certificate against the pending CSR's
 // key and stores it.
 func (s *Store) CompleteCSR(ctx context.Context, id, certPEM, chainPEM, rootPEM string) (Certificate, []Check, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	i := s.findCSR(id)
 	if i < 0 {
 		return Certificate{}, nil, codes.New(codes.TLSUnknown, "no pending CSR has the id %q", id)
@@ -611,8 +645,7 @@ func (s *Store) CompleteCSR(ctx context.Context, id, certPEM, chainPEM, rootPEM 
 // Import validates and stores a key and certificate made elsewhere. A
 // PKCS#12 file is never kept; only its key (sealed) and chain are.
 func (s *Store) Import(ctx context.Context, r ImportRequest) (Certificate, []Check, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	var key crypto.Signer
 	var leaf *x509.Certificate
 	var extra []*x509.Certificate
@@ -672,7 +705,7 @@ func (s *Store) add(ctx context.Context, c candidate, sc storedCert, key ...byte
 	if len(s.st.Certificates) >= maxCertificates {
 		return Certificate{}, nil, codes.New(codes.TLSLimit, "the store already holds %d certificates; delete one first", maxCertificates)
 	}
-	host, addrs, err := s.o.Names(ctx)
+	host, addrs, err := s.names(ctx)
 	if err != nil {
 		return Certificate{}, nil, err
 	}
@@ -703,8 +736,7 @@ func (s *Store) add(ctx context.Context, c candidate, sc storedCert, key ...byte
 
 // DiscardCSR drops a pending CSR and its key.
 func (s *Store) DiscardCSR(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	i := s.findCSR(id)
 	if i < 0 {
 		return codes.New(codes.TLSUnknown, "no pending CSR has the id %q", id)
@@ -719,8 +751,7 @@ func (s *Store) DiscardCSR(id string) error {
 
 // Delete removes a certificate no endpoint uses.
 func (s *Store) Delete(id string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	i := s.find(id)
 	if i < 0 {
 		return codes.New(codes.TLSUnknown, "no certificate has the id %q", id)
@@ -754,8 +785,7 @@ func (s *Store) forget(item string) error {
 
 // Assign makes an endpoint serve a store certificate.
 func (s *Store) Assign(ctx context.Context, endpoint, id string) (Endpoint, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	if err := s.checkEndpoint(endpoint); err != nil {
 		return Endpoint{}, err
 	}
@@ -774,7 +804,7 @@ func (s *Store) Assign(ctx context.Context, endpoint, id string) (Endpoint, erro
 	if err != nil {
 		return Endpoint{}, err
 	}
-	host, addrs, err := s.o.Names(ctx)
+	host, addrs, err := s.names(ctx)
 	if err != nil {
 		return Endpoint{}, err
 	}
@@ -807,8 +837,7 @@ func (s *Store) Assign(ctx context.Context, endpoint, id string) (Endpoint, erro
 // the one it served before, while it is still good for the box's names,
 // or a new one.
 func (s *Store) Revert(ctx context.Context, endpoint string) (Endpoint, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	defer s.change()()
 	if err := s.checkEndpoint(endpoint); err != nil {
 		return Endpoint{}, err
 	}
@@ -816,7 +845,7 @@ func (s *Store) Revert(ctx context.Context, endpoint string) (Endpoint, error) {
 }
 
 func (s *Store) revert(ctx context.Context) (Endpoint, error) {
-	host, addrs, err := s.o.Names(ctx)
+	host, addrs, err := s.names(ctx)
 	if err != nil {
 		return Endpoint{}, err
 	}
@@ -891,6 +920,7 @@ func (s *Store) checkEndpoint(endpoint string) error {
 
 // swap writes the new :8443 files (marker names the store id, empty for
 // self-signed), checks they're served, and puts the old files back if not.
+// It's called holding s.ops and s.mu, and lets s.mu go during the check.
 func (s *Store) swap(ctx context.Context, crt, key []byte, id, fp string) error {
 	prev, err := backupAdmin(s.o.AdminDir)
 	if err != nil {
@@ -903,7 +933,11 @@ func (s *Store) swap(ctx context.Context, crt, key []byte, id, fp string) error 
 	pctx, cancel := context.WithTimeout(ctx, ProbeTimeout)
 	defer cancel()
 	start := time.Now()
+	s.checking = true
+	s.mu.Unlock()
 	perr := s.o.Probe(pctx, fp)
+	s.mu.Lock()
+	s.checking = false
 	s.o.Logger.Debug("tls: :8443 self-test", log.F("fingerprint", fp), log.F("duration", time.Since(start).String()), log.F("ok", perr == nil))
 	if perr != nil {
 		s.restore(prev)
