@@ -18,7 +18,7 @@ renders the config and deploys the real platform; the hello stack goes then.
 | Piece | Where | What |
 |---|---|---|
 | Service entry | `os/rootfs/services.d/k0s.yaml` | waits (`start-when`, [init.md](init.md#the-service-table)) for `/var/lib/sneakers/setup/done` and the installed bundle, `/var/lib/sneakers/product/current/bundle.json`, so a box with no bundle runs no k0s; a product apply or revert restarts it through the Services API. `k0s-interim run` (`exec`s `<current slot>/k0s controller --enable-worker --no-taints --config /run/sneakers/k0s/k0s.yaml --data-dir /var/lib/k0s`), root, `restart: always`, `stop-timeout: 2m`, after netd, phase `normal` only (the data directory is on the state volume). konnectivity, metrics-server, autopilot and the update prober are disabled: none is bundled, and the prober would reach the internet. While the console service owns the consoles, k0s's output goes to `/run/sneakers/console.log`. |
-| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | refuses to go on without an installed bundle; mounts cgroup2 on `/sys/fs/cgroup` when it isn't; makes the box's node name once (below); gives the kernel a host name when it has none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface and routes the Service range there (below); renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories; writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one; links the bundle's images into `/var/lib/k0s/images/`; copies each of the bundle's stacks, `<slot>/manifests/<name>/`, to `/var/lib/k0s/manifests/<name>/`; writes the box's own :8443 certificate as the `box-tls` Secret for the interim edge (below) |
+| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | refuses to go on without an installed bundle; mounts cgroup2 on `/sys/fs/cgroup` when it isn't; makes the box's node name once (below); gives the kernel a host name when it has none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface and routes the Service range there (below); renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories; writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one, and the kubelet's resolver file from it (below); links the bundle's images into `/var/lib/k0s/images/`; copies each of the bundle's stacks, `<slot>/manifests/<name>/`, to `/var/lib/k0s/manifests/<name>/`; writes the box's own :8443 certificate as the `box-tls` Secret for the interim edge (below) |
 | Cluster config | `/etc/k0s/k0s.yaml.tmpl` (`os/k0s/k0s.yaml.tmpl`) | the API, etcd peer and node address `198.18.0.1`; the pod range `10.244.0.0/16` and the Service range `10.96.0.0/12` (k0s's defaults, named, and the defaults of the box's network settings, [network.md](network.md)); every system image pinned by `<tag>@sha256:<digest>`; `default_pull_policy: Never`; NodePorts on every address; telemetry off; etcd storage named `@NODE_NAME@`, the one field rendered <!-- scrub:allow=private-ip --> |
 | containerd config | `/etc/k0s/containerd.toml` (`os/k0s/containerd.toml`) | what k0s would write, with the sandbox (pause) image pinned by digest. It isn't marked `k0s_managed`, so k0s uses it as it is instead of writing into the read-only `/etc`. Drop-ins: `/etc/k0s/containerd.d/` (empty). |
 | Host paths in the root | the root | `/etc/cni -> /var/lib/cni-conf` and `/opt -> /var/lib/opt` (kube-router installs the CNI config and plugins there), `/var/run -> /run` (containerd's NRI socket), `/var/log -> /var/lib/log` (pod logs), `/etc/machine-id -> /var/lib/sneakers/machine-id`, `/etc/hosts` (localhost), `/bin/mount` and `/bin/umount` (busybox; the kubelet mounts tmpfs volumes with them), `/lib/modules` (empty: the kernel has no loadable modules), `/usr/libexec/k0s/kubelet-plugins/volume/exec` (empty) |
@@ -43,6 +43,23 @@ the API through the `kubernetes` Service, so on a management network with no gat
 started, and with it the pod network: pods stayed in ContainerCreating on the bridge CNI's "no IP
 ranges". With the route the cluster doesn't depend on the management network's gateway, the same
 as its address.
+
+### Cluster DNS with no DNS server
+
+The box runs with no DNS server ([network.md](network.md#dns-ntp-and-the-host-name): the `dns`
+check only warns), and so must k0s. CoreDNS runs with `dnsPolicy: Default` and forwards every name
+outside the cluster to the servers in the kubelet's resolver file, and with no server there it
+exits at start (`plugin/forward: no valid upstream addresses found`). So the kubelet has its own
+file, `/run/sneakers/k0s/resolv.conf` (`--resolv-conf`), which `k0s-interim prepare` writes at
+each start: a copy of netd's `/run/sneakers/resolv.conf` when that names a server, otherwise its
+search list and `nameserver 198.18.0.1`, the node address, where nothing serves DNS. Cluster names
+resolve, and names outside the cluster fail (`SERVFAIL`) instead of CoreDNS crash-looping.
+
+The image suite hits this: its QEMU user network is `restrict=on`, and then QEMU's DHCP server
+offers no router and no DNS server.
+
+The kubelet hands a pod its resolver at the pod's start, so CoreDNS takes a server netd learns
+later at k0s's next start (a reboot, a product apply or revert).
 
 ### Multi-node later (spec 3, Section 2.12)
 

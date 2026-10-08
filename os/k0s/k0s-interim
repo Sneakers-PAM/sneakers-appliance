@@ -27,6 +27,21 @@ node_ip=198.18.0.1
 service_cidr=10.96.0.0/12 # scrub:allow=private-ip -- the k0s default
 say() { echo "k0s-interim: $*"; }
 
+# kubelet_resolv <host file> <out>: the kubelet's resolver file, which the
+# pods with dnsPolicy Default get, CoreDNS among them. CoreDNS forwards
+# what isn't the cluster's to the servers there and exits at start with
+# none, and the box runs with no DNS server (spec 1). Then the file names
+# the node address instead, where nothing serves DNS: cluster names still
+# resolve and the rest fail.
+kubelet_resolv() {
+  if grep -q '^nameserver ' "$1" 2>/dev/null; then
+    cp "$1" "$2.new"
+  else
+    { grep -v '^nameserver ' "$1" 2>/dev/null || :; echo "nameserver $node_ip"; } > "$2.new"
+  fi
+  mv "$2.new" "$2"
+}
+
 prepare() {
   if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
     say "no product bundle is installed; k0s comes with it (Updates)"
@@ -81,9 +96,11 @@ prepare() {
   mkdir -p /var/lib/cni-conf/net.d /var/lib/opt/cni/bin
   # /var/log leads here (pod logs).
   mkdir -p /var/lib/log
-  # The kubelet won't start a pod without a resolver file; netd writes the
-  # real one.
+  # netd writes the host's resolver file; until it has, an empty one. The
+  # kubelet gets its own, made from it.
   [ -e /run/sneakers/resolv.conf ] || : > /run/sneakers/resolv.conf
+  kubelet_resolv /run/sneakers/resolv.conf /run/sneakers/k0s/resolv.conf
+  say "the kubelet's resolver: $(grep '^nameserver ' /run/sneakers/k0s/resolv.conf | tr '\n' ' ')"
 
   # The airgap images: k0s imports every archive in $data/images when its
   # worker starts. Links into the current product slot, so the images
@@ -141,7 +158,7 @@ run() {
   exec "$product/k0s" controller --enable-worker --no-taints \
     --config /run/sneakers/k0s/k0s.yaml --data-dir "$data" \
     --disable-components konnectivity-server,metrics-server,update-prober,autopilot \
-    --kubelet-extra-args="--hostname-override=$name --node-ip=$node_ip"
+    --kubelet-extra-args="--hostname-override=$name --node-ip=$node_ip --resolv-conf=/run/sneakers/k0s/resolv.conf"
 }
 
 case "${1:-}" in
