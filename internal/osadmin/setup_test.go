@@ -192,3 +192,19 @@ func TestFinishNeedsAFirstSignIn(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestTheProductSetupURLFallsBackToTheBareManagementAddress(t *testing.T) {
+	for mgmt, want := range map[string]string{
+		"192.0.2.10/24":   "https://192.0.2.10/setup",
+		"2001:db8::10/64": "https://[2001:db8::10]/setup",
+	} {
+		b := newBox(t, false)
+		b.netd.hostname, b.netd.mgmt = "", []string{"fe80::10/64", mgmt}
+		alice := b.browser()
+		alice.signIn("alice")
+		g, err := osadminv1connect.NewSetupServiceClient(alice.hc, b.ts.URL).GetSetup(context.Background(), connect.NewRequest(&osadminv1.GetSetupRequest{}))
+		if err != nil || g.Msg.GetProductSetupUrl() != want {
+			t.Fatalf("%s: %q %v", mgmt, g.Msg.GetProductSetupUrl(), err)
+		}
+	}
+}

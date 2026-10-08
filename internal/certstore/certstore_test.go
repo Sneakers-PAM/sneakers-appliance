@@ -8,9 +8,11 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -60,6 +62,7 @@ type fixture struct {
 	probeErr error
 	probed   []string
 	host     string
+	addrs    []string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -69,7 +72,13 @@ func newFixture(t *testing.T) *fixture {
 
 func newFixtureFor(t *testing.T, hostname string) *fixture {
 	t.Helper()
-	f := &fixture{t: t, sealer: &memSealer{items: map[string][]byte{}}, dir: t.TempDir(), admin: t.TempDir(), ca: testpki.NewTLSCA(t), host: hostname}
+	return newFixtureWith(t, hostname, addrs)
+}
+
+// newFixtureWith gives the store mgmt as netd's management addresses.
+func newFixtureWith(t *testing.T, hostname string, mgmt []string) *fixture {
+	t.Helper()
+	f := &fixture{t: t, sealer: &memSealer{items: map[string][]byte{}}, dir: t.TempDir(), admin: t.TempDir(), ca: testpki.NewTLSCA(t), host: hostname, addrs: mgmt}
 	// The box's own self-signed certificate, as sneakers-osadmin makes it.
 	crt, key, err := certstore.NewSelfSigned(hostname, addrs, time.Now())
 	if err != nil {
@@ -79,7 +88,7 @@ func newFixtureFor(t *testing.T, hostname string) *fixture {
 	f.write("tls.key", key)
 	f.s, err = certstore.Open(certstore.Options{
 		Dir: f.dir, AdminDir: f.admin, Sealer: f.sealer,
-		Names: func(context.Context) (string, []string, error) { return f.host, addrs, nil },
+		Names: func(context.Context) (string, []string, error) { return f.host, f.addrs, nil },
 		Probe: func(_ context.Context, fp string) error {
 			f.probed = append(f.probed, fp)
 			return f.probeErr
@@ -529,4 +538,192 @@ func TestTheStoreSurvivesAReopen(t *testing.T) {
 	if err := s2.DiscardCSR("nope"); !codes.Is(err, codes.TLSUnknown) {
 		t.Fatal(err)
 	}
+}
+
+// netd gives the management addresses as interface prefixes.
+var prefixed = []string{"192.0.2.10/24", "fe80::10/64"}
+
+func TestInterfacePrefixesBecomeBareAddressesInTheBoxNames(t *testing.T) {
+	f := newFixtureWith(t, host, prefixed)
+	ctx := context.Background()
+	csr, err := f.s.GenerateCSR(ctx, certstore.CSRRequest{KeyType: certstore.KeyECDSAP256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(csr.Names, []string{host, "192.0.2.10"}) {
+		t.Fatalf("names %v", csr.Names)
+	}
+	blk, _ := pem.Decode([]byte(csr.PEM))
+	req, err := x509.ParseCertificateRequest(blk.Bytes)
+	if err != nil || len(req.IPAddresses) != 1 || req.IPAddresses[0].String() != "192.0.2.10" {
+		t.Fatalf("IP SANs %v %v", req.IPAddresses, err)
+	}
+	snap, err := f.s.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := snap.Endpoints[0].Names; !slices.Equal(got, []string{host, "192.0.2.10"}) {
+		t.Fatalf("endpoint names %v", got)
+	}
+
+	ipOnly := f.ca.Issue(t, testpki.LeafOptions{Names: []string{"192.0.2.10"}})
+	c, _, err := f.s.Import(ctx, certstore.ImportRequest{CertificatePEM: string(ipOnly.PEM), ChainPEM: f.chain(), KeyPEM: string(ipOnly.KeyPEM)})
+	if err != nil {
+		t.Fatalf("a certificate for the bare address covers the box: %v", err)
+	}
+	if _, err := f.s.Assign(ctx, certstore.EndpointAdmin, c.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRevertingWithPrefixedAddressesPutsBackTheSameSelfSignedCertificate(t *testing.T) {
+	f := newFixtureWith(t, host, prefixed)
+	ctx := context.Background()
+	selfCrt := f.read("tls.crt")
+	l := f.ca.Issue(t, testpki.LeafOptions{Names: []string{host}})
+	c, _, err := f.s.Import(ctx, certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: f.chain(), KeyPEM: string(l.KeyPEM)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Assign(ctx, certstore.EndpointAdmin, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Revert(ctx, certstore.EndpointAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(f.read("tls.crt"), selfCrt) {
+		t.Fatal("the recorded self-signed certificate is put back, not a new one")
+	}
+}
+
+// serveAdmin is :8443 on the loopback: each handshake serves the admin
+// directory's current files, as sneakers-osadmin does.
+func serveAdmin(t *testing.T, dir string) string {
+	t.Helper()
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+		c, err := tls.LoadX509KeyPair(filepath.Join(dir, "tls.crt"), filepath.Join(dir, "tls.key"))
+		return &c, err
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = c.Close() }()
+				_ = c.(*tls.Conn).Handshake()
+			}()
+		}
+	}()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	return port
+}
+
+func TestTheDefaultProbeDialsTheBareManagementAddress(t *testing.T) {
+	admin := t.TempDir()
+	crt, key, err := certstore.NewSelfSigned(host, []string{"127.0.0.1"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, b := range map[string][]byte{"tls.crt": crt, "tls.key": key} {
+		if err := os.WriteFile(filepath.Join(admin, name), b, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	certstore.SetProbePort(t, serveAdmin(t, admin))
+	s, err := certstore.Open(certstore.Options{
+		Dir: t.TempDir(), AdminDir: admin, Sealer: &memSealer{items: map[string][]byte{}},
+		Names: func(context.Context) (string, []string, error) { return host, []string{"127.0.0.1/8"}, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := testpki.NewTLSCA(t)
+	ctx := context.Background()
+	l := ca.Issue(t, testpki.LeafOptions{Names: []string{host}})
+	c, _, err := s.Import(ctx, certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: string(ca.IntermediatePEM) + string(ca.RootPEM), KeyPEM: string(l.KeyPEM)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := s.Assign(ctx, certstore.EndpointAdmin, c.ID)
+	if err != nil {
+		t.Fatalf("the probe reaches 127.0.0.1, not 127.0.0.1/8: %v", err)
+	}
+	if ep.Serving != c.Fingerprint {
+		t.Fatalf("%+v", ep)
+	}
+}
+
+func TestTheStoreAnswersWhileANewCertificateIsBeingChecked(t *testing.T) {
+	for _, served := range []bool{false, true} {
+		f := newFixture(t)
+		ctx := context.Background()
+		before := f.read("tls.crt")
+		probing, release := make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		f.s = reopen(t, f, func(context.Context, string) error {
+			once.Do(func() { close(probing) })
+			<-release
+			if served {
+				return nil
+			}
+			return errors.New("the handshake served the old certificate")
+		})
+		l := f.ca.Issue(t, testpki.LeafOptions{Names: []string{host}})
+		c, _, err := f.s.Import(ctx, certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: f.chain(), KeyPEM: string(l.KeyPEM)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan error, 1)
+		go func() {
+			_, err := f.s.Assign(ctx, certstore.EndpointAdmin, c.ID)
+			done <- err
+		}()
+		<-probing
+		snapped := make(chan certstore.Snapshot, 1)
+		go func() {
+			snap, _ := f.s.Snapshot(ctx)
+			snapped <- snap
+		}()
+		select {
+		case snap := <-snapped:
+			if snap.Endpoints[0].Source != certstore.EndpointSelfSigned {
+				t.Fatalf("nothing is assigned until the check passes: %+v", snap.Endpoints[0])
+			}
+			if self := snap.Certificates[0]; self.Source != certstore.SourceSelfSigned || self.Fingerprint == c.Fingerprint {
+				t.Fatalf("the certificate being checked isn't recorded as the self-signed one: %+v", self)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Snapshot waits for the :8443 check")
+		}
+		close(release)
+		err = <-done
+		snap, _ := f.s.Snapshot(ctx)
+		if served {
+			if err != nil || snap.Endpoints[0].CertificateID != c.ID {
+				t.Fatalf("%v %+v", err, snap.Endpoints[0])
+			}
+			continue
+		}
+		wantCode(t, err, codes.TLSNotServed, "put back")
+		if !bytes.Equal(f.read("tls.crt"), before) || snap.Certificates[0].Fingerprint == c.Fingerprint {
+			t.Fatal("the previous certificate is back and still recorded as the self-signed one")
+		}
+	}
+}
+
+// reopen opens f's store again with probe as its :8443 check.
+func reopen(t *testing.T, f *fixture, probe func(context.Context, string) error) *certstore.Store {
+	t.Helper()
+	s, err := certstore.Open(certstore.Options{Dir: f.dir, AdminDir: f.admin, Sealer: f.sealer,
+		Names: func(context.Context) (string, []string, error) { return f.host, f.addrs, nil }, Probe: probe})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }

@@ -203,7 +203,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			if err != nil {
 				return "", nil, err
 			}
-			return st.Msg.GetHostname(), st.Msg.GetManagementAddresses(), nil
+			return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 		},
 		Own:    func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
 		Logger: lg,

@@ -6,6 +6,7 @@ package osadmin_test
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"net"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
+	pkcs12 "software.sslmate.com/src/go-pkcs12"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
@@ -325,5 +327,35 @@ func TestWithoutAStoreTheCertificatesAreNotAvailable(t *testing.T) {
 	_, err := br.tls().GetCertificateStore(context.Background(), connect.NewRequest(&osadminv1.GetCertificateStoreRequest{}))
 	if err == nil || !strings.Contains(err.Error(), osadmin.NotAvailable) {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestAWildcardPFXServesThe8443AndAWrongKeyLeavesItInPlace(t *testing.T) {
+	cb := newCertBox(t, false, false)
+	br := cb.browser()
+	br.signIn("alice")
+	ctx := context.Background()
+	l := cb.leaf(t, "*.sneakers.example.org")
+	p12, err := pkcs12.Modern.Encode(l.Key, l.Cert, []*x509.Certificate{cb.ca.Intermediate, cb.ca.Root}, "test-only-password")
+	if err != nil {
+		t.Fatal(err)
+	}
+	imp, err := br.tls().ImportCertificate(ctx, connect.NewRequest(&osadminv1.ImportCertificateRequest{Pkcs12: p12, Pkcs12Password: "test-only-password"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cert := imp.Msg.GetCertificate()
+	if _, err := br.tls().AssignCertificate(ctx, connect.NewRequest(&osadminv1.AssignCertificateRequest{EndpointId: "admin", CertificateId: cert.GetId()})); err != nil {
+		t.Fatal(err)
+	}
+	if got := served(t, cb.addr); got != cert.GetFingerprint() {
+		t.Fatalf(":8443 serves %s, want the PFX's %s", got, cert.GetFingerprint())
+	}
+
+	a, b := cb.leaf(t, boxHost), cb.leaf(t, boxHost)
+	_, err = br.tls().ImportCertificate(ctx, connect.NewRequest(&osadminv1.ImportCertificateRequest{CertificatePem: string(a.PEM), ChainPem: cb.chain(), KeyPem: string(b.KeyPEM)}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "TLS_KEY_MISMATCH")
+	if got := served(t, cb.addr); got != cert.GetFingerprint() {
+		t.Fatal("a refused upload leaves :8443 as it was")
 	}
 }

@@ -227,8 +227,11 @@ type fakeNetd struct {
 	settings  *netdv1.Settings
 	pending   string
 	confirmed int
-	mgmt      []string
-	ntp       bool
+	// mgmt are the management addresses as netd gives them: interface
+	// prefixes.
+	mgmt     []string
+	hostname string
+	ntp      bool
 	// servicePorts are the ports SetServicePorts last opened.
 	servicePorts []uint32
 	// down makes Status fail, as a netd that doesn't answer.
@@ -266,7 +269,7 @@ func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest
 	if n.down {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("netd is down"))
 	}
-	return connect.NewResponse(&netdv1.StatusResponse{ManagementAddresses: n.mgmt, Hostname: "box1.sneakers.example.org", NtpSynced: n.ntp}), nil
+	return connect.NewResponse(&netdv1.StatusResponse{ManagementAddresses: slices.Clone(n.mgmt), Hostname: n.hostname, NtpSynced: n.ntp}), nil
 }
 
 func (n *fakeNetd) SetServicePorts(_ context.Context, r *connect.Request[netdv1.SetServicePortsRequest]) (*connect.Response[netdv1.SetServicePortsResponse], error) {
@@ -414,7 +417,7 @@ func startBox(t *testing.T, mods []func(*box, *osadmin.Options), seed func(*box)
 		t.Fatal(err)
 	}
 	b.init = &fakeInit{level: initv1.ProtectionLevel_PROTECTION_LEVEL_FULL}
-	b.netd = &fakeNetd{settings: defaultSettings(), mgmt: []string{"192.0.2.10"}, ntp: true}
+	b.netd = &fakeNetd{settings: defaultSettings(), mgmt: []string{"192.0.2.10/24"}, hostname: "box1.sneakers.example.org", ntp: true}
 	mux := http.NewServeMux()
 	mux.Handle(initv1connect.NewKeyCustodyServiceHandler(b.init))
 	mux.Handle(initv1connect.NewPowerServiceHandler(fakePower{f: b.init}))

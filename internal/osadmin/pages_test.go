@@ -6,6 +6,7 @@ package osadmin_test
 import (
 	"bufio"
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +42,9 @@ func TestStatus(t *testing.T) {
 	m := s.Msg
 	if m.GetProtection() != osadminv1.Protection_PROTECTION_FULL || m.GetCustodyMode() != "tpm" || m.GetRunningVersion() != "0.1.0" || m.GetHostname() != "box1.sneakers.example.org" || m.GetPhase() != "firstboot" {
 		t.Fatalf("%v", m)
+	}
+	if !slices.Equal(m.GetManagementAddresses(), []string{"192.0.2.10"}) {
+		t.Fatalf("the addresses without their prefix: %v", m.GetManagementAddresses())
 	}
 	if m.GetDisk().GetTotalBytes() == 0 {
 		t.Fatal("disk use")
@@ -114,7 +118,7 @@ func TestNetworkWithAutoRevert(t *testing.T) {
 		t.Fatalf("%v %v", res, err)
 	}
 	g, err := nc.GetNetwork(ctx, connect.NewRequest(&osadminv1.GetNetworkRequest{}))
-	if err != nil || !g.Msg.GetPending() || g.Msg.GetSettings().GetHostname() != "box2" {
+	if err != nil || !g.Msg.GetPending() || g.Msg.GetSettings().GetHostname() != "box2" || !slices.Equal(g.Msg.GetManagementAddresses(), []string{"192.0.2.10"}) {
 		t.Fatalf("%v %v", g, err)
 	}
 	if _, err := nc.ConfirmNetwork(ctx, connect.NewRequest(&osadminv1.ConfirmNetworkRequest{Token: res.Msg.GetToken()})); err != nil {

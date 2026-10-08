@@ -22,6 +22,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 )
 
 // The setup markers in Paths.SetupDir.
@@ -238,16 +239,16 @@ func (s *Server) mark(name string) error {
 }
 
 // productSetupURL is the product's own first-run page, on the box's host
-// name, or its first management address.
+// name, or its first management address that isn't link-local.
 func (s *Server) productSetupURL(ctx context.Context) string {
 	st, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
 	if err != nil {
 		return ""
 	}
 	host := st.Msg.GetHostname()
-	if host == "" && len(st.Msg.GetManagementAddresses()) > 0 {
-		host = st.Msg.GetManagementAddresses()[0]
-		if strings.Contains(host, ":") {
+	if a := netdapi.Bindable(st.Msg.GetManagementAddresses()); host == "" && len(a) > 0 {
+		host = a[0].String()
+		if a[0].Is6() {
 			host = "[" + host + "]"
 		}
 	}
