@@ -320,7 +320,9 @@ func TestRecoverAccessResetsAnOwner(t *testing.T) {
 // Recover access can also make a new owner, on the root-operator roster.
 func TestRecoverAccessMakesANewOwner(t *testing.T) {
 	b := newBox(t, false)
-	b.store.Update(rosterOf("alice"))
+	if err := b.store.Update(rosterOf("alice")); err != nil {
+		t.Fatal(err)
+	}
 	code, _ := b.srv.BeginRecoverAccess()
 	secret := b.browser().enrol(t, code, "dave", "dave's long passphrase")
 	st := b.store.Read()

@@ -5,7 +5,6 @@ package osadmin
 
 import (
 	"slices"
-	"time"
 
 	log "github.com/Bugs5382/go-log"
 
@@ -77,14 +76,4 @@ func (s *Server) verifyLogin(l Local, code string) (SSHLogin, error) {
 // EndSSHLogin records a login's end.
 func (s *Server) EndSSHLogin(l Local, id string) {
 	s.write(osaudit.Entry{Actor: l.Admin, KeyFP: l.KeyFP, Source: l.Source, Action: "ssh.logout", Target: id, Detail: map[string]string{"surface": SurfaceSSH}}, nil)
-}
-
-// keyValid reports whether fp is one of a's issued keys at now.
-func keyValid(a *access.Admin, fp string, now time.Time) bool {
-	for _, k := range a.Keys {
-		if k.Fingerprint == fp && (k.ValidBefore == nil || now.Before(*k.ValidBefore)) {
-			return true
-		}
-	}
-	return false
 }

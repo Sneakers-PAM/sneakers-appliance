@@ -43,10 +43,9 @@ type Deps struct {
 }
 
 type run struct {
-	u    *tui.UI
-	d    Deps
-	f    Frame
-	sshd error
+	u *tui.UI
+	d Deps
+	f Frame
 }
 
 // Run runs first boot on the console until setup is complete, then keeps

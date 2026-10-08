@@ -163,7 +163,7 @@ func TestAuditListAndExport(t *testing.T) {
 	ctx := context.Background()
 	ac := osadminv1connect.NewAuditServiceClient(alice.hc, b.ts.URL)
 	for range 3 {
-		_, _ = alice.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: newKey(t).line}))
+		_, _ = alice.access().AddKey(ctx, connect.NewRequest(&osadminv1.AddKeyRequest{Admin: "alice", PublicKey: newKey(t).line})) //nolint:staticcheck // the deprecated RPC still answers
 	}
 	l, err := ac.ListEvents(ctx, connect.NewRequest(&osadminv1.ListEventsRequest{Limit: 2, Action: "access."}))
 	if err != nil || len(l.Msg.GetEvents()) != 2 || !l.Msg.GetChainOk() || l.Msg.GetNextPageToken() == "" {

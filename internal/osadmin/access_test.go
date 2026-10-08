@@ -156,7 +156,9 @@ func TestAnInvitation(t *testing.T) {
 	b := newBox(t, false)
 	alice := b.browser()
 	alice.signIn("alice")
-	b.store.Update(rosterOf("alice"))
+	if err := b.store.Update(rosterOf("alice")); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	out, err := alice.access().AddAdmin(ctx, connect.NewRequest(&osadminv1.AddAdminRequest{Name: "carol", Role: osadminv1.Role_ROLE_ADMIN, RootOperator: true}))
 	if err != nil {

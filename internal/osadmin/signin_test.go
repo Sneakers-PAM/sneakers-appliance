@@ -88,7 +88,7 @@ func TestSignInEndToEnd(t *testing.T) {
 // The sign-in code approved over SSH is gone.
 func TestTheSSHSignInCodeIsGone(t *testing.T) {
 	b := newBox(t, false)
-	_, err := signInClient(b.browser()).BeginSignIn(context.Background(), connect.NewRequest(&osadminv1.BeginSignInRequest{}))
+	_, err := signInClient(b.browser()).BeginSignIn(context.Background(), connect.NewRequest(&osadminv1.BeginSignInRequest{})) //nolint:staticcheck // the deprecated RPC is gone
 	if connect.CodeOf(err) != connect.CodeUnimplemented || !strings.Contains(err.Error(), osadmin.NotAvailable) {
 		t.Fatalf("BeginSignIn: %v", err)
 	}

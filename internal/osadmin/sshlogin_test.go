@@ -109,7 +109,9 @@ func rootShellClient(br *browser) osadminv1connect.RootShellServiceClient {
 // code, and a code that opens that challenge once.
 func TestTheRootShellCodePage(t *testing.T) {
 	b := newBox(t, true)
-	b.store.Update(rosterOf("alice"))
+	if err := b.store.Update(rosterOf("alice")); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	if _, err := b.srv.BeginRootShell(b.sshLoginOf("bob"), ""); !codes.Is(err, codes.AccessForbidden) {
 		t.Fatalf("bob isn't a root operator: %v", err)
