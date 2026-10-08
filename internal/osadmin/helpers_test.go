@@ -351,10 +351,10 @@ func (f *fakeServices) log() []string {
 }
 
 // newBox starts osadmin with an owner alice and, when withBob, an admin
-// bob, as a box whose first admin was made already.
-func newBox(t *testing.T, withBob bool) *box {
+// bob, as a box whose first admin was made already; mods change the options first.
+func newBox(t *testing.T, withBob bool, mods ...func(*box, *osadmin.Options)) *box {
 	t.Helper()
-	return startBox(t, func(b *box) {
+	return startBox(t, mods, func(b *box) {
 		b.addAdmin("alice", access.RoleOwner)
 		if withBob {
 			b.addAdmin("bob", access.RoleAdmin)
@@ -371,10 +371,10 @@ func newBox(t *testing.T, withBob bool) *box {
 // newFreshBox starts osadmin on a box with no admin yet: first boot.
 func newFreshBox(t *testing.T) *box {
 	t.Helper()
-	return startBox(t, func(*box) {})
+	return startBox(t, nil, func(*box) {})
 }
 
-func startBox(t *testing.T, seed func(*box)) *box {
+func startBox(t *testing.T, mods []func(*box, *osadmin.Options), seed func(*box)) *box {
 	t.Helper()
 	b := &box{t: t, clk: clock.NewFake(), state: t.TempDir(), keys: map[string]sshKey{}, totp: map[string][]byte{}, shells: &fakeShells{}}
 	var err error
@@ -448,7 +448,7 @@ func startBox(t *testing.T, seed func(*box)) *box {
 	if b.codeSealer == nil {
 		b.codeSealer = newMemSealer()
 	}
-	b.srv = osadmin.New(osadmin.Options{
+	opts := osadmin.Options{
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: release.ChannelProduction, ReleaseKeyPEM: b.sign.PublicPEM,
 			UpdateKey:        func() (age.Identity, error) { b.keyReads++; return b.enc, nil },
@@ -470,7 +470,11 @@ func startBox(t *testing.T, seed func(*box)) *box {
 		OnFirstAdmin: func() { b.sshdUp++ },
 		Shells:       b.shells,
 		Cert:         osadmin.CertInfo{Fingerprint: "AA:BB", Expires: b.clk.Now().Add(24 * time.Hour), SelfSigned: true},
-	})
+	}
+	for _, m := range mods {
+		m(b, &opts)
+	}
+	b.srv = osadmin.New(opts)
 	b.ts = httptest.NewTLSServer(b.srv.Handler())
 	t.Cleanup(b.ts.Close)
 	return b

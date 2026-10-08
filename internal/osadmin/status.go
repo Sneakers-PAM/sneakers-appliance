@@ -97,6 +97,7 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	if cert.SelfSigned {
 		add(osadminv1.WarningKind_WARNING_KIND_SELF_SIGNED_TLS, "This page uses the box's own self-signed certificate; check its fingerprint.")
 	}
+	out.Warnings = append(out.Warnings, s.tlsWarnings(ctx)...)
 	if st := s.o.Access.Read(); st.LastRecoverAccess != nil && s.o.Clock.Now().Before(st.LastRecoverAccess.Add(24*time.Hour)) {
 		add(osadminv1.WarningKind_WARNING_KIND_CONSOLE_RECOVERY, "The console's Recover access was used at "+st.LastRecoverAccess.UTC().Format(time.RFC3339)+".")
 	}
