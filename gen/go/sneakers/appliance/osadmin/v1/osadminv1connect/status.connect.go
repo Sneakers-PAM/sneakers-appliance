@@ -43,6 +43,8 @@ const (
 	// StatusServiceSetSecureBootProcedure is the fully-qualified name of the StatusService's
 	// SetSecureBoot RPC.
 	StatusServiceSetSecureBootProcedure = "/sneakers.appliance.osadmin.v1.StatusService/SetSecureBoot"
+	// StatusServiceGetPhaseProcedure is the fully-qualified name of the StatusService's GetPhase RPC.
+	StatusServiceGetPhaseProcedure = "/sneakers.appliance.osadmin.v1.StatusService/GetPhase"
 )
 
 // StatusServiceClient is a client for the sneakers.appliance.osadmin.v1.StatusService service.
@@ -51,6 +53,11 @@ type StatusServiceClient interface {
 	// SetSecureBoot turns the Secure Boot setting off, or on again without a
 	// reinstall. The typed confirmation is the box's host name.
 	SetSecureBoot(context.Context, *connect.Request[v1.SetSecureBootRequest]) (*connect.Response[v1.SetSecureBootResponse], error)
+	// GetPhase says whether the box is still in setup (firstboot) or set up
+	// (normal). It is public: the pages read it before anyone signs in, and
+	// sneakers-osadmin sends every page but /setup to /setup while setup is
+	// open. It says nothing else about the box.
+	GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error)
 }
 
 // NewStatusServiceClient constructs a client for the sneakers.appliance.osadmin.v1.StatusService
@@ -77,6 +84,13 @@ func NewStatusServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(statusServiceMethods.ByName("SetSecureBoot")),
 			connect.WithClientOptions(opts...),
 		),
+		getPhase: connect.NewClient[v1.GetPhaseRequest, v1.GetPhaseResponse](
+			httpClient,
+			baseURL+StatusServiceGetPhaseProcedure,
+			connect.WithSchema(statusServiceMethods.ByName("GetPhase")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -84,6 +98,7 @@ func NewStatusServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 type statusServiceClient struct {
 	getStatus     *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
 	setSecureBoot *connect.Client[v1.SetSecureBootRequest, v1.SetSecureBootResponse]
+	getPhase      *connect.Client[v1.GetPhaseRequest, v1.GetPhaseResponse]
 }
 
 // GetStatus calls sneakers.appliance.osadmin.v1.StatusService.GetStatus.
@@ -96,6 +111,11 @@ func (c *statusServiceClient) SetSecureBoot(ctx context.Context, req *connect.Re
 	return c.setSecureBoot.CallUnary(ctx, req)
 }
 
+// GetPhase calls sneakers.appliance.osadmin.v1.StatusService.GetPhase.
+func (c *statusServiceClient) GetPhase(ctx context.Context, req *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error) {
+	return c.getPhase.CallUnary(ctx, req)
+}
+
 // StatusServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.StatusService
 // service.
 type StatusServiceHandler interface {
@@ -103,6 +123,11 @@ type StatusServiceHandler interface {
 	// SetSecureBoot turns the Secure Boot setting off, or on again without a
 	// reinstall. The typed confirmation is the box's host name.
 	SetSecureBoot(context.Context, *connect.Request[v1.SetSecureBootRequest]) (*connect.Response[v1.SetSecureBootResponse], error)
+	// GetPhase says whether the box is still in setup (firstboot) or set up
+	// (normal). It is public: the pages read it before anyone signs in, and
+	// sneakers-osadmin sends every page but /setup to /setup while setup is
+	// open. It says nothing else about the box.
+	GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error)
 }
 
 // NewStatusServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -125,12 +150,21 @@ func NewStatusServiceHandler(svc StatusServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(statusServiceMethods.ByName("SetSecureBoot")),
 		connect.WithHandlerOptions(opts...),
 	)
+	statusServiceGetPhaseHandler := connect.NewUnaryHandler(
+		StatusServiceGetPhaseProcedure,
+		svc.GetPhase,
+		connect.WithSchema(statusServiceMethods.ByName("GetPhase")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.StatusService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StatusServiceGetStatusProcedure:
 			statusServiceGetStatusHandler.ServeHTTP(w, r)
 		case StatusServiceSetSecureBootProcedure:
 			statusServiceSetSecureBootHandler.ServeHTTP(w, r)
+		case StatusServiceGetPhaseProcedure:
+			statusServiceGetPhaseHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -146,4 +180,8 @@ func (UnimplementedStatusServiceHandler) GetStatus(context.Context, *connect.Req
 
 func (UnimplementedStatusServiceHandler) SetSecureBoot(context.Context, *connect.Request[v1.SetSecureBootRequest]) (*connect.Response[v1.SetSecureBootResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot is not implemented"))
+}
+
+func (UnimplementedStatusServiceHandler) GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.StatusService.GetPhase is not implemented"))
 }

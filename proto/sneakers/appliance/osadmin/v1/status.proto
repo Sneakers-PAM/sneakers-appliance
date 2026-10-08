@@ -27,6 +27,21 @@ service StatusService {
       audit: "status.secure-boot.set"
     };
   }
+  // GetPhase says whether the box is still in setup (firstboot) or set up
+  // (normal). It is public: the pages read it before anyone signs in, and
+  // sneakers-osadmin sends every page but /setup to /setup while setup is
+  // open. It says nothing else about the box.
+  rpc GetPhase(GetPhaseRequest) returns (GetPhaseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {public: true};
+  }
+}
+
+message GetPhaseRequest {}
+
+message GetPhaseResponse {
+  // phase is firstboot until setup's Finish, then normal.
+  string phase = 1;
 }
 
 message GetStatusRequest {}

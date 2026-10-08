@@ -361,7 +361,11 @@ addresses and host name (`BindingService.GetBinding`, from netd), makes or reuse
 name change it rebinds with a matching certificate. Port 8443 speaks TLS only: a browser that asks
 for `http://<box>:8443/` gets a `301` to the same host, port and path over `https://`, with a short
 "Redirecting you to https…" page and the link, and nothing else is served over plain HTTP. It serves the static pages and forwards the API,
-`POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Flags:
+`POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Until
+setup is done every page path but `/setup` answers `302` to `/setup`, so `http://<box>:8443/` ends
+on the setup stepper, never on sign-in: before a page it asks accessd for the phase
+(`StatusService.GetPhase`, public) until accessd says `normal`, and then stops asking. If accessd
+doesn't answer, the page is served as it is (it then says the services are unavailable). Flags:
 `--state` (`/var/lib/sneakers`), `--assets` (`/usr/share/sneakers/osadmin`) and `--access-socket`
 (`/run/sneakers/access.sock`). `LOG_LEVEL` and `LOG_FORMAT` set the logging; the defaults are
 `error` and JSON.

@@ -344,7 +344,7 @@ func TestEveryMethodHasARule(t *testing.T) {
 					continue
 				}
 				if r.GetPublic() {
-					if svc.Name() != "SignInService" && m.FullName() != "sneakers.appliance.osadmin.v1.SetupService.RedeemCode" {
+					if svc.Name() != "SignInService" && m.FullName() != "sneakers.appliance.osadmin.v1.SetupService.RedeemCode" && m.FullName() != "sneakers.appliance.osadmin.v1.StatusService.GetPhase" {
 						t.Errorf("%s is public", m.FullName())
 					}
 					continue
