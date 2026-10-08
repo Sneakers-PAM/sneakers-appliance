@@ -389,7 +389,7 @@ func policyToWire(p Policy) *osadminv1.UpgradePolicy {
 func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadminv1.GetUpgradesRequest]) (*connect.Response[osadminv1.GetUpgradesResponse], error) {
 	p := h.s.policy()
 	direct := h.s.o.Upgrade.DirectURL != ""
-	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && !(p.Direct && direct), History: h.s.readHistory(100),
+	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && (!p.Direct || !direct), History: h.s.readHistory(100),
 		Product: h.s.productSlots(ctx), DirectAvailable: direct}
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
