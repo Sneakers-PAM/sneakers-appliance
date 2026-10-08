@@ -60,7 +60,11 @@ it strictly: an unknown field, a missing Secure Boot file on amd64, a Secure Boo
 `upgradeFrom` above `version` is refused with `KIT_MANIFEST_INVALID`. Then it checks:
 
 - `metadata.channel` equals the kit's channel (`KIT_CHANNEL`);
-- `spec.kitMin` is at most the kit's version, compared as semantic versions (`KIT_KIT_TOO_OLD`);
+- `spec.kitMin` is at most the kit's version, compared as semantic versions (`KIT_KIT_TOO_OLD`).
+  The same check runs in init when a box stages an update, against the running init's version.
+  `sneakers-artifact assemble --kit-min` sets it; the default is `0.0.0-0`, the lowest version, so
+  any kit or init that reads the manifest format accepts the release. Raise it only when a release
+  needs a newer verifier (`build/lab/build.sh` takes `KIT_MIN`);
 - the PK, KEK and db fingerprints equal the kit's pins (`KIT_WRONG_SIGNER`).
 
 ## Error codes

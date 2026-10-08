@@ -26,6 +26,8 @@
 #                release from build/ci/versions.env, downloaded and checked
 #                against K0S_SHA256_AMD64)
 #   DISK_SIZE    the raw disk's size (default 64G)
+#   KIT_MIN      the oldest kit or init version that may verify the release
+#                (spec.kitMin; default 0.0.0-0, any)
 #
 # Output: $OUT/version (the version with the build number, which every
 # file name below carries), $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
@@ -163,7 +165,7 @@ systemd_version="$(dpkg-query -W -f='${Version}' systemd-boot-efi 2>/dev/null ||
 
 echo "lab: artifact"
 rm -rf "$OUT/artifact"
-go run "$root/cmd/sneakers-artifact" assemble --arch amd64 --version "$version" --channel lab \
+go run "$root/cmd/sneakers-artifact" assemble --arch amd64 --version "$version" --channel lab --kit-min "${KIT_MIN:-0.0.0-0}" \
   --systemd "$systemd_version" --release "$work/release.yaml" --release-sig "$work/release.yaml.sigstore.json" \
   --root "$work/root/root-$version.img" --verity-json "$work/root/verity.json" \
   --uki "$work/sneakers-$version.efi" --loader "$work/systemd-bootx64.efi" --keys "$KEYS" \

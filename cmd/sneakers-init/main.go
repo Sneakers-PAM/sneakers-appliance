@@ -196,6 +196,13 @@ func run(lg log.TraceLogger) error {
 	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, SecureBoot: st, Logger: lg}
 	if opened {
 		api.KeyCustody = kc
+		if espOK && perr == nil {
+			if im, err := newImages(pins, kc, lg); err != nil {
+				lg.Error(err, "init: ImageService unavailable; updates can't be staged")
+			} else {
+				api.Images = im
+			}
+		}
 	}
 	srv, err := initapi.Listen(initapi.SocketPath, api)
 	if err != nil {
