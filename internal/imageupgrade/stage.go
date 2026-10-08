@@ -67,19 +67,25 @@ type Stager struct {
 	// InitVersion is checked against a release's kitMin; empty means the
 	// version stamped into this build.
 	InitVersion string
-	// WorkDir holds the fetched copy of a release while it's staged.
+	// WorkDir holds the fetched copy of a release while it's staged; Stage
+	// empties it.
 	WorkDir string
-	Logger  log.Logger
+	// Keep is how many releases the box keeps (Keeps); 0 is DefaultKeep.
+	Keep   int
+	Logger log.Logger
 }
 
 // Stage verifies a release against the pins compiled into the running
 // init (the whole chain of spec 1 Section 2.3), refuses a downgrade, writes
 // its root into the inactive slot, adds a sealed copy of the state key for
-// its UKI, and only then adds its ESP entry with three boot tries. Every
-// release but the running one and the new one is removed, so the box holds
-// at most two. Nothing is written before verification completes.
+// its UKI, and only then adds its ESP entry with three boot tries. The
+// releases Retain drops are removed first (with Keeps of two, every one but
+// the running release), with any cut-off ESP write, and the fetched copy
+// is removed when it returns. Nothing is written before verification
+// completes.
 func (s *Stager) Stage(ctx context.Context, src verify.Source, arch string) (string, error) {
 	lg := s.logger()
+	defer s.tidyWork()
 	d, err := src.Resolve(ctx)
 	if err != nil {
 		return "", err
@@ -130,13 +136,11 @@ func (s *Stager) Stage(ctx context.Context, src verify.Source, arch string) (str
 	if err != nil {
 		return "", err
 	}
-	for _, e := range entries {
-		if e.Version != s.Running {
-			lg.Info("imageupgrade: removing an older entry", log.F("entry", e.Name))
-			if err := s.ESP.Remove(path.Join(UKIDir, e.Name)); err != nil {
-				return "", err
-			}
-		}
+	if err := s.removeEntries(Retain(entries, s.Running, s.Keeps())); err != nil {
+		return "", err
+	}
+	if err := s.tidyESP(); err != nil {
+		return "", err
 	}
 	if err := s.forgetRevert(); err != nil {
 		return "", err

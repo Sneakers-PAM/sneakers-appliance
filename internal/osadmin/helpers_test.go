@@ -81,6 +81,10 @@ type fakeInit struct {
 	cancels    []string
 	staged     []string
 	stagedVer  string
+	// layoutSeen is set when Stage found the unpacked layout; removes is
+	// what it reports it removed.
+	layoutSeen bool
+	removes    []string
 	activated  int
 	rollbacks  int
 	// revertedBy is the admin the last Rollback named; Status then reports
@@ -193,7 +197,10 @@ func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageReque
 	defer i.f.mu.Unlock()
 	i.f.staged = append(i.f.staged, r.Msg.GetReference())
 	i.f.stagedVer = "0.2.0"
-	return connect.NewResponse(&initv1.StageResponse{Version: "0.2.0"}), nil
+	if _, err := os.Stat(filepath.Join(r.Msg.GetReference(), "oci-layout")); err == nil {
+		i.f.layoutSeen = true
+	}
+	return connect.NewResponse(&initv1.StageResponse{Version: "0.2.0", RemovedVersions: i.f.removes}), nil
 }
 
 func (i fakeImage) Activate(context.Context, *connect.Request[initv1.ActivateRequest]) (*connect.Response[initv1.ActivateResponse], error) {

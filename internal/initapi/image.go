@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ type Images interface {
 	Rollback(by string, at time.Time) error
 	MarkGood(ctx context.Context, keep []string) error
 	Kept() ([]string, error)
+	NextStageRemoves() ([]string, error)
 }
 
 // imageHandler serves ImageService.
@@ -56,13 +58,18 @@ func (h *imageHandler) Stage(ctx context.Context, r *connect.Request[initv1.Stag
 	defer h.mu.Unlock()
 	src := source(r.Msg.GetReference())
 	h.log.Info("initapi: Image.Stage", log.F("source", src.String()))
+	// Under mu, the releases Stage removes are the ones named now.
+	removes, err := h.im.NextStageRemoves()
+	if err != nil {
+		return nil, toConnect(err)
+	}
 	v, err := h.im.Stage(ctx, src, h.arch)
 	if err != nil {
 		h.log.Warn("initapi: Image.Stage refused", log.F("source", src.String()), log.F("error", codes.Describe(err)))
 		return nil, toConnect(err)
 	}
-	h.log.Info("initapi: Image.Stage done", log.F("version", v))
-	return connect.NewResponse(&initv1.StageResponse{Version: v}), nil
+	h.log.Info("initapi: Image.Stage done", log.F("version", v), log.F("removed", strings.Join(removes, ",")))
+	return connect.NewResponse(&initv1.StageResponse{Version: v, RemovedVersions: removes}), nil
 }
 
 // Activate checks a release is staged. Its entry already has boot tries

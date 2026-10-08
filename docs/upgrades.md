@@ -6,13 +6,24 @@ and the channel before it decrypts anything, with the update key read from the U
 
 A box holds at most two releases: the one it runs and one more (the next, or the previous).
 
+**Retention: keep N, drop the oldest.** `Stager.Keep` sets N: the default is 2 and so is the
+maximum (`MaxKeep`), because the boot disk has two root partitions, one release in each. A stage
+keeps the running release and the newest N-2 others, good entries before bad ones, and removes the
+rest with everything tied only to them: the boot entry, the sealed state-key copy (pruned at the
+next `MarkGood`), the fetched copy in `/var/lib/sneakers/image-stage/`, and the uploaded `.bin` and
+its unpacked layout. A `.tmp` file left by a cut-off ESP write goes as well, so neither the ESP nor
+the state volume grows from one update to the next. The root partition itself is simply written
+over. There are no pre-update backups: the A/B slots are the way back. The slot count and the
+partition layout of an image built from a template are a per-app design choice, made later.
+
 - `Image.Stage` fetches a release, runs the whole verification chain against the keys compiled
   into the running init, and refuses anything not newer than the running release
   (`UPGRADE_DOWNGRADE`). Nothing is written before that passes. It then writes the root image into
   the slot the box isn't running from (setting that slot's PARTUUID from the root hash), adds a
   sealed copy of the state key for the new UKI (PCR 7 as it is now and the predicted PCR 11), and
-  only then writes the ESP entry `EFI/Linux/sneakers-<version>+3-0.efi`. Entries other than the
-  running release's are removed first.
+  only then writes the ESP entry `EFI/Linux/sneakers-<version>+3-0.efi`. The entries retention
+  drops (with N of 2, every one but the running release's) are removed first, and the answer
+  names them (`removed_versions`).
 - systemd-boot boots the newest entry; each attempt moves one try from left to done
   (`+2-1`, `+1-2`, ...). An entry with no tries left is bad and sorts last, so after three failed
   boots the box falls back to the previous release, and `Image.Status` reports the failed version.
@@ -58,7 +69,10 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    A refused file (`UPGRADE_SIGNATURE`, `UPGRADE_CHANNEL`, `UPGRADE_FORMAT`,
    `UPGRADE_PATCH_BASE`) is deleted, never unpacked, and the refusal is audited. Only then is the
    update key read from the booted UKI (by accessd, as root; [access.md](access.md#the-update-key)), the payload decrypted and unpacked, and the layout handed to
-   `Image.Stage`. The answer names the slot a base release went into (`slot`, `A` or `B`, from
+   `Image.Stage`. Once it's staged, the upload's `.bin` and its unpacked layout are removed, and
+   each older release init removed gets an `upgrade.remove` entry in the OS audit log (the admin,
+   the version and the release it made room for) and a `remove` line in the update history; the
+   stage's own entry lists them under `removed`. The answer names the slot a base release went into (`slot`, `A` or `B`, from
    init's `SNEAKERS_ROOT_SOURCE`), so the page can say "Staged into slot B".
 3. **Apply** (owner) activates the staged release and reboots into it (`UPGRADE_NOT_STAGED`
    when nothing is staged). **Revert** rolls back to the previous release and reboots. Neither
