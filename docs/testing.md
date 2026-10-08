@@ -9,7 +9,7 @@
 | The root image: reproducible, the declared tree, its refusals | `bash build/root/build_test.sh` | every PR (`🔑 Lab keys and tool interop`) |
 | The airgap bundle: pull by digest per architecture, signatures, both-way check (a `registry:2` container) | `go test ./internal/bundle/` | every PR (`🧪 Build & Test`) |
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
-| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a pull request only builds the lab release and reports the root image size |
+| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a pull request only builds the lab release and reports the root image and product bundle sizes |
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
@@ -17,10 +17,14 @@ there a missing tool fails instead.
 ## The lab release
 
 `build/lab/build.sh` builds a whole release the way the release workflow does, signed with a key
-set `build/keys/lab-keys.sh` makes for that run only: the (empty) airgap bundle
-(`build/bundle/build.sh`), the root image (`build/root/build.sh`, with the static OpenSSH and
-busybox, and the static cryptsetup, veritysetup, mkfs.ext4 and sgdisk from `STATIC`, which first
-boot needs to make the state volumes), the
+set `build/keys/lab-keys.sh` makes for that run only: the lab product bundle
+(`build/product/build.sh`: the pinned k0s, `K0S_VERSION` in `build/ci/versions.env`, the images in
+`build/lab/images.txt`, each digest signed with the run's key, and the stacks in `build/lab/stacks`,
+the throwaway hello stack and the interim edge, [k0s.md](k0s.md)), sealed as
+`product/sneakers-product-<version>-amd64-LAB.bin` with its index; the root image (`build/root/build.sh`,
+with no k0s or images, the static OpenSSH and busybox, and the static cryptsetup, veritysetup,
+mkfs.ext4 and sgdisk from `STATIC`, which first boot needs to make the state volumes, plus
+`build/lab/overlay`: the image suite's hook), the
 UKI (`build/uki/assemble.sh`, signed with `sbsign`), systemd-boot (signed), the enrolment
 material, `release.yaml` and the artifact (`sneakers-artifact assemble`, then `cosign sign-blob`
 over the index blob and `sneakers-artifact attach`). It then builds a kit pinned to that run's keys
@@ -64,6 +68,7 @@ the entry goes when its cause is fixed. Today there are none.
 | `harness.TestFirstBootStaysUp` | as above | Enter at the protection step keeps the TPM; the state is formatted and mounted, protection is full, accessd is ready, and nothing crash-loops |
 | `reduced.TestNoSecureBootNoTPMBootsReduced` | no swtpm; an empty vars store, and keys enrolled with Secure Boot off | the Secure Boot choice (no default outside Setup Mode: Enter alone re-prompts), the typed `no secure boot`, then the key file at the protection step and first boot; after a kill, the next boot is `protection=reduced (Secure Boot off)` without asking either again |
 | `console.TestTheScreenAloneShowsTheChoiceAndTakesTheAnswer` | no serial port, VGA, keys enrolled with Secure Boot off, no swtpm (a VMware VM) | the banner and the Secure Boot choice on the screen, `no secure boot` typed on its keyboard, then Enter at the protection step (key file); then the setup wizard owns the screen: the reduced-protection banner, the NIC list, a NIC and Enter typed on the keyboard, and "The network service isn't installed in this build yet" |
+| `k0s.TestTheProductBundleBringsK0sAndTheHelloStack` | no swtpm, Secure Boot off with keys, 4 GiB, the lab hook's marker on the ESP, 22, 8443, 443 and 80 forwarded, the lab product bundle (`SNEAKERS_PRODUCT`) | the whole first boot (as `setup`); in normal operation no k0s runs and 443 doesn't answer; the bundle is uploaded, staged and applied through the Updates API; k0s starts from it, the node, the hello pod and the edge are Ready, `https://<box>/` answers `hello from sneakers-appliance`, 80 redirects to https, SSH and :8443 answer, `GetUpgrades` shows the product running, and k0s doesn't crash-loop ([k0s.md](k0s.md)) |
 | `console.TestTheSerialLineAloneShowsTheChoiceAndTakesTheAnswer` | no display adapter, as above otherwise (a headless box) | the same on the serial line |
 | `console.TestBothConsolesShowTheChoiceAndTheScreenCanAnswer` | serial and VGA | the choice on both; the answer typed on the screen's keyboard is taken while the serial line shows it |
 | `reset.TestAResetFinishesAtBootThenFirstBootIsFresh` | Secure Boot enforcing, swtpm; the disk laid out as after first boot, with a begun reset record on the ESP | `phase=reset` finishes the reset and reboots without starting services; the key file, state and backup are out of the GPT and the record is `done`; the next boot is first boot (the protection step again), with no reset |

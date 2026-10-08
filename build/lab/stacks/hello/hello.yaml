@@ -1,0 +1,88 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# THROWAWAY, LAB ONLY: a hello-world workload that shows k0s runs on the
+# box, until sneakers-platformd deploys the real platform (#99), which
+# removes it. It ships in the lab product bundle (build/lab/stacks), and
+# k0s applies it from /var/lib/k0s/manifests/hello/. It answers "hello
+# from sneakers-appliance" on NodePort 30080, which the edge stack serves
+# on 443 (build/lab/stacks/edge).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sneakers-hello
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello
+  namespace: sneakers-hello
+data:
+  index.html: |
+    hello from sneakers-appliance
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello
+  namespace: sneakers-hello
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hello
+  template:
+    metadata:
+      labels:
+        app: hello
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: httpd
+          image: docker.io/library/busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          imagePullPolicy: Never
+          command: [httpd, -f, -p, "8080", -h, /www]
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          volumeMounts:
+            - name: www
+              mountPath: /www
+      volumes:
+        - name: www
+          configMap:
+            name: hello
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hello
+  namespace: sneakers-hello
+spec:
+  type: NodePort
+  selector:
+    app: hello
+  ports:
+    - port: 80
+      targetPort: 8080
+      nodePort: 30080

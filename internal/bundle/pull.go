@@ -110,17 +110,49 @@ func Pull(ctx context.Context, o PullOptions) (err error) {
 	return nil
 }
 
-func pullOne(ctx context.Context, o PullOptions, image, dgst string) error {
+// FetchManifest returns the manifest or index image@dgst names, checked
+// against dgst. The lab build signs these bytes for its own bundle.
+func FetchManifest(ctx context.Context, image, dgst string, plainHTTP bool) ([]byte, error) {
+	if !digestRE.MatchString(dgst) {
+		return nil, codes.New(codes.KitBundleMismatch, "%s is pinned at %q, not a sha256 digest", image, dgst)
+	}
+	repo, err := repository(image, plainHTTP)
+	if err != nil {
+		return nil, err
+	}
+	desc, err := repo.Resolve(ctx, dgst)
+	if err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "%s@%s can't be resolved: %v", image, dgst, err)
+	}
+	b, err := content.FetchAll(ctx, repo, desc)
+	if err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "%s@%s: %v", image, dgst, err)
+	}
+	if got := digest.FromBytes(b).String(); got != dgst {
+		return nil, codes.New(codes.KitBundleMismatch, "%s@%s returned bytes hashing to %s", image, dgst, got)
+	}
+	return b, nil
+}
+
+func repository(image string, plainHTTP bool) (*remote.Repository, error) {
 	ref := image
 	if host, rest, ok := strings.Cut(image, "/"); ok && host == "docker.io" {
 		ref = "registry-1.docker.io/" + rest
 	}
 	repo, err := remote.NewRepository(ref)
 	if err != nil {
-		return codes.New(codes.KitBundleMismatch, "release.yaml names %q, which isn't an image reference: %v", image, err)
+		return nil, codes.New(codes.KitBundleMismatch, "release.yaml names %q, which isn't an image reference: %v", image, err)
 	}
-	repo.PlainHTTP = o.PlainHTTP
+	repo.PlainHTTP = plainHTTP
 	repo.Client = &auth.Client{Client: retry.DefaultClient, Cache: auth.NewCache()}
+	return repo, nil
+}
+
+func pullOne(ctx context.Context, o PullOptions, image, dgst string) error {
+	repo, err := repository(image, o.PlainHTTP)
+	if err != nil {
+		return err
+	}
 	root, err := repo.Resolve(ctx, dgst)
 	if err != nil {
 		return codes.New(codes.KitBundleMismatch, "%s@%s can't be resolved: %v", image, dgst, err)

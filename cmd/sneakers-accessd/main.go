@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -71,8 +72,14 @@ func main() {
 	}
 }
 
-func unixClient(sock string) *http.Client {
-	return &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{
+// releaseSource is where a production build fetches directly from, when
+// the update policy allows it: the project's GitHub Releases.
+const releaseSource = "https://github.com/Sneakers-PAM/sneakers-appliance/releases"
+
+func unixClient(sock string) *http.Client { return unixClientWith(sock, 30*time.Second) }
+
+func unixClientWith(sock string, timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
 		},
@@ -163,12 +170,14 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		KeyCustody: custody,
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
-		Network:    netd,
-		Paths:      paths,
-		CertDir:    paths.OwnDir(),
-		Elevation:  elev,
-		Shells:     &sshsession.Proc{},
-		Logger:     lg,
+		// Stopping k0s may take its whole stop-timeout (2 minutes).
+		Services:  initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
+		Network:   netd,
+		Paths:     paths,
+		CertDir:   paths.OwnDir(),
+		Elevation: elev,
+		Shells:    &sshsession.Proc{},
+		Logger:    lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and
@@ -177,6 +186,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			UpdateKey: func() (age.Identity, error) {
 				return ukikey.Running(secureboot.Efivarfs{Dir: secureboot.DefaultEfivarfs}, os.DirFS(c.esp))
 			},
+			DirectURL: directURL(pins.Channel),
+			Arch:      runtime.GOARCH,
 		},
 	})
 	d.Attach(store, api)
@@ -194,6 +205,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	lg.Info("accessd: ready", log.F("socket", c.socket))
 
 	d.RefreshStatus(ctx)
+	// netd keeps the product's ports only while it runs: open them again
+	// at start, and each minute until that works.
+	portsOpen := api.OpenProductPorts(ctx) == nil
 	minute := time.NewTicker(time.Minute)
 	defer minute.Stop()
 	for {
@@ -204,9 +218,21 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		case <-minute.C:
 			d.Tick()
 			api.UpgradeWindowTick(ctx)
+			if !portsOpen {
+				portsOpen = api.OpenProductPorts(ctx) == nil
+			}
 			d.RefreshStatus(ctx)
 		}
 	}
+}
+
+// directURL is the release source a build fetches from directly; a lab
+// build has none (lab packages are never published).
+func directURL(channel string) string {
+	if channel == release.ChannelProduction {
+		return releaseSource
+	}
+	return ""
 }
 
 // dirs makes osadmin's own directory (its certificate, written as the

@@ -9,16 +9,17 @@
 # fixed from the version. build/root/tree.txt is the declared tree;
 # build/root/build_test.sh checks a build against it.
 #
+# The base root carries no k0s and no images: they ship in the product
+# bundle (build/product/build.sh, docs/k0s.md). K0S or IMAGES set is
+# refused, so an old caller can't put them back.
+#
 # Inputs (environment):
 #   VERSION        the release version
 #   ARCH           amd64 (default) or arm64
-#   RELEASE        release.yaml the root is built for (its k0s pin is checked)
-#   K0S            the k0s binary
+#   RELEASE        release.yaml the root is built for
 #   OPENSSH        directory with the static sshd, sshd-session, sshd-auth and
 #                  ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX        the static busybox (build/busybox/build.sh)
-#   IMAGES         the airgap bundle directory (build/bundle/build.sh); may
-#                  be unset when release.yaml pins no images
 #   STATIC         directory with cryptsetup-<arch>, veritysetup-<arch>,
 #                  mke2fs-<arch>, sgdisk-<arch> (optional)
 #   SERVICES       the service table (default os/rootfs/services.d)
@@ -26,21 +27,26 @@
 #                  optional, the directory stays empty without them)
 #   PINS_LDFLAGS   -X flags with the release pins, for the binaries that
 #                  read them (init, accessd)
+#   LAB_OVERLAY    lab builds only (the pins say channel lab): a directory
+#                  whose files are added to the tree (build/lab/build.sh's
+#                  test hook and throwaway stacks); it may not replace any
+#                  file the tree already has
 #   OUT            output directory: root-<version>.img and verity.json
 set -euo pipefail
 umask 022
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${VERSION:?}" "${RELEASE:?}" "${K0S:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+: "${VERSION:?}" "${RELEASE:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+if [ -n "${K0S:-}" ] || [ -n "${IMAGES:-}" ]; then
+  echo "root: k0s and the images ship in the product bundle (build/product/build.sh), not the base root" >&2
+  exit 1
+fi
 arch="${ARCH:-amd64}"
 services="${SERVICES:-$root/os/rootfs/services.d}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH
 
-want_k0s="$(go run "$root/build/tools/k0spin" "$RELEASE" "$arch")"
-got_k0s="$(sha256sum "$K0S" | cut -d' ' -f1)"
-[ "$want_k0s" = "$got_k0s" ] || { echo "root: $K0S has SHA-256 $got_k0s; release.yaml pins $want_k0s" >&2; exit 1; }
 for b in sshd sshd-session sshd-auth ssh-keygen; do
   [ -f "$OPENSSH/$b" ] || { echo "root: $OPENSSH/$b is missing (build/openssh/build.sh)" >&2; exit 1; }
 done
@@ -49,8 +55,9 @@ done
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 tree="$work/tree"
-mkdir -p "$tree"/{bin,sbin,etc/k0s,usr/bin,usr/sbin,usr/libexec/openssh,usr/lib/sneakers/services.d} \
-  "$tree"/usr/share/sneakers/{images,charts,release,osadmin} "$tree"/{proc,sys,dev,run,tmp,var/lib,boot/efi}
+mkdir -p "$tree"/{bin,sbin,etc/k0s/containerd.d,usr/bin,usr/sbin,usr/libexec/openssh,usr/libexec/sneakers,usr/lib/sneakers/services.d} \
+  "$tree"/usr/share/sneakers/{charts,release,osadmin} "$tree"/{proc,sys,dev,run,tmp,var/lib,boot/efi} \
+  "$tree"/lib/modules "$tree"/usr/libexec/k0s/kubelet-plugins/volume/exec
 
 echo "root: Go binaries ($arch)"
 gobuild() { # out package
@@ -66,8 +73,7 @@ for c in sneakers-elevated sneakers-enrol sneakers-enrol-keys; do
   gobuild "$tree/usr/libexec/$c" "$c"
 done
 
-echo "root: k0s, OpenSSH, busybox"
-install -m 0755 "$K0S" "$tree/usr/bin/k0s"
+echo "root: OpenSSH, busybox"
 install -m 0755 "$OPENSSH/sshd" "$tree/usr/sbin/sshd"
 install -m 0755 "$OPENSSH/sshd-session" "$OPENSSH/sshd-auth" "$tree/usr/libexec/openssh/"
 install -m 0755 "$OPENSSH/ssh-keygen" "$tree/usr/bin/ssh-keygen"
@@ -82,12 +88,28 @@ if [ -n "${STATIC:-}" ]; then
   install -m 0755 "$STATIC/sgdisk-$arch" "$tree/usr/sbin/sgdisk"
 fi
 
-echo "root: release, bundle, service table"
+# What the base OS gives k0s, which itself comes with the product bundle
+# (docs/k0s.md): its config template, containerd's config (k0s would
+# write one into the read-only /etc otherwise), the interim launcher,
+# and the host paths its pods mount: /etc/cni and /opt lead to the state
+# volume, and /lib/modules stays empty (no loadable modules).
+install -m 0644 "$root/os/k0s/k0s.yaml.tmpl" "$tree/etc/k0s/k0s.yaml.tmpl"
+install -m 0644 "$root/os/k0s/containerd.toml" "$tree/etc/k0s/containerd.toml"
+install -m 0755 "$root/os/k0s/k0s-interim" "$tree/usr/libexec/sneakers/k0s-interim"
+ln -s /var/lib/cni-conf "$tree/etc/cni"
+ln -s /var/lib/opt "$tree/opt"
+# containerd puts its NRI socket in /var/run, and the kubelet and containerd
+# write pod logs to /var/log/pods; /var itself is the read-only root.
+ln -s /run "$tree/var/run"
+ln -s /var/lib/log "$tree/var/log"
+# The kubelet mounts tmpfs volumes with mount(8), and reads the machine ID
+# (made once per box, on the state volume, by k0s-interim).
+ln -s busybox "$tree/bin/mount"
+ln -s busybox "$tree/bin/umount"
+ln -s /var/lib/sneakers/machine-id "$tree/etc/machine-id"
+
+echo "root: release, service table"
 install -m 0644 "$RELEASE" "$tree/usr/share/sneakers/release/release.yaml"
-if [ -n "${IMAGES:-}" ]; then
-  [ -d "$IMAGES" ] || { echo "root: the bundle $IMAGES isn't a directory" >&2; exit 1; }
-  find "$IMAGES" -mindepth 1 -maxdepth 1 -type f -exec install -m 0644 {} "$tree/usr/share/sneakers/images/" \;
-fi
 shopt -s nullglob
 svc=("$services"/*.yaml)
 shopt -u nullglob
@@ -98,9 +120,26 @@ if [ -n "${OSADMIN_ASSETS:-}" ]; then
   find "$tree/usr/share/sneakers/osadmin" -type d -exec chmod 0755 {} + -o -type f -exec chmod 0644 {} +
 fi
 
+if [ -n "${LAB_OVERLAY:-}" ]; then
+  case " ${PINS_LDFLAGS:-} " in
+    *".Channel=lab "*) ;;
+    *) echo "root: LAB_OVERLAY is for lab builds only (the pins don't say channel lab)" >&2; exit 1 ;;
+  esac
+  while IFS= read -r -d '' f; do
+    rel="${f#"$LAB_OVERLAY"/}"
+    [ ! -e "$tree/$rel" ] || { echo "root: LAB_OVERLAY would replace /$rel" >&2; exit 1; }
+    mkdir -p "$(dirname "$tree/$rel")"
+    if [ -x "$f" ]; then install -m 0755 "$f" "$tree/$rel"; else install -m 0644 "$f" "$tree/$rel"; fi
+  done < <(find "$LAB_OVERLAY" -type f -print0 | sort -z)
+  echo "root: lab overlay from $LAB_OVERLAY"
+fi
+
 # /etc is read-only: the account files and the resolver config live in /run.
 cp -P "$root"/os/rootfs/etc/{passwd,group,shadow} "$tree/etc/"
 ln -s /run/sneakers/resolv.conf "$tree/etc/resolv.conf"
+# k0s and the kubelet resolve localhost; there's no resolver for it otherwise.
+printf '127.0.0.1\tlocalhost\n::1\tlocalhost\n' > "$tree/etc/hosts"
+chmod 0644 "$tree/etc/hosts"
 if find "$tree" -perm /6000 | grep -q .; then
   echo "root: a setuid or setgid file in the tree:" >&2
   find "$tree" -perm /6000 >&2

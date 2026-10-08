@@ -15,7 +15,6 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/bootcmd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/bundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/verity"
 )
 
@@ -81,13 +80,9 @@ func (s *State) signedCmdline() (string, error) {
 	return string(b), nil
 }
 
-// Step 8: inside the verified root, k0s is the pinned binary and the airgap
-// bundle is exactly release.yaml's images, each signed by the release key.
+// Step 8: the verified root holds the verified release.yaml, and no k0s or
+// images, which ship in the product bundle.
 func stepBundle(_ context.Context, s *State) error {
-	key, err := sigbundle.ParsePublicKey(s.Pins.ReleaseKeyPEM)
-	if err != nil {
-		return codes.Wrap(codes.KitPinMissing, err)
-	}
 	f, err := s.Layout.OpenBlob(s.Files[s.Manifest.Spec.Root.File])
 	if err != nil {
 		return codes.Wrap(codes.KitSourceUnreadable, err)
@@ -98,5 +93,5 @@ func stepBundle(_ context.Context, s *State) error {
 		return codes.New(codes.KitBundleMismatch, "the root image isn't a readable SquashFS: %v", err)
 	}
 	defer func() { _ = sq.Close() }()
-	return bundle.CheckRoot(sq, s.Release, s.Manifest.Spec.Arch, key)
+	return bundle.CheckRoot(sq, s.Release)
 }

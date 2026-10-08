@@ -37,11 +37,27 @@ var fixtureImages = []struct{ group, name, image string }{
 	{"k0s", "pause", "quay.io/k0sproject/pause"},
 }
 
-// RootTree returns a small root tree as it would be laid out in the root
-// image (k0s, the release and a signed airgap bundle) with the release.yaml
-// that pins it. edit, when set, changes the tree after the release is
-// written.
+// RootTree returns a small base root tree as it would be laid out in the
+// root image (the release, and no k0s or images: those ship in the product
+// bundle) with the release.yaml that pins the matching product. edit, when
+// set, changes the tree after the release is written.
 func RootTree(t testing.TB, k Keys, arch string, edit func(fstest.MapFS)) (fstest.MapFS, []byte) {
+	t.Helper()
+	_, relYAML := ProductTree(t, k, arch, nil)
+	m := fstest.MapFS{
+		"sbin/init":        {Data: []byte("init"), Mode: 0o755},
+		bundle.ReleasePath: {Data: relYAML},
+	}
+	if edit != nil {
+		edit(m)
+	}
+	return m, relYAML
+}
+
+// ProductTree returns a small unpacked product bundle (release.yaml, k0s,
+// the signed airgap images and one stack) with the release.yaml in it.
+// edit, when set, changes the tree after the release is written.
+func ProductTree(t testing.TB, k Keys, arch string, edit func(fstest.MapFS)) (fstest.MapFS, []byte) {
 	t.Helper()
 	k0s := random(t, 32<<10)
 	k0sSum := sha256.Sum256(k0s)
@@ -50,19 +66,19 @@ func RootTree(t testing.TB, k Keys, arch string, edit func(fstest.MapFS)) (fstes
 	sums[arch] = hex.EncodeToString(k0sSum[:])
 
 	m := fstest.MapFS{
-		"sbin/init":    {Data: []byte("init"), Mode: 0o755},
-		bundle.K0sPath: {Data: k0s, Mode: 0o755},
+		bundle.ProductK0s: {Data: k0s, Mode: 0o755},
+		bundle.ProductManifests + "/hello/hello.yaml": {Data: []byte("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: hello\n")},
 	}
 	groups := map[string]map[string]map[string]string{"services": {}, "thirdParty": {}}
 	var k0sImages []map[string]string
 	for _, im := range fixtureImages {
 		archive, d := imageArchive(t, im.image)
 		hexd := d.Digest.Encoded()
-		m[bundle.ImagesDir+"/"+hexd+".tar"] = &fstest.MapFile{Data: archive}
+		m[bundle.ProductImages+"/"+hexd+".tar"] = &fstest.MapFile{Data: archive}
 		var sum [sha256.Size]byte
 		raw, _ := hex.DecodeString(hexd)
 		copy(sum[:], raw)
-		m[bundle.ImagesDir+"/"+hexd+".tar"+bundle.SigSuffix] = &fstest.MapFile{Data: k.Cosign.DSSEBundle(t, im.image, sum)}
+		m[bundle.ProductImages+"/"+hexd+".tar"+bundle.SigSuffix] = &fstest.MapFile{Data: k.Cosign.DSSEBundle(t, im.image, sum)}
 		entry := map[string]string{"image": im.image, "digest": d.Digest.String()}
 		if im.group == "k0s" {
 			k0sImages = append(k0sImages, entry)
@@ -82,7 +98,7 @@ func RootTree(t testing.TB, k Keys, arch string, edit func(fstest.MapFS)) (fstes
 	}
 	relYAML, err := json.Marshal(rel) // JSON is YAML
 	must(t, err)
-	m[bundle.ReleasePath] = &fstest.MapFile{Data: relYAML}
+	m[bundle.ProductRelease] = &fstest.MapFile{Data: relYAML}
 	if edit != nil {
 		edit(m)
 	}
@@ -178,7 +194,7 @@ func RootImage(t testing.TB, fsys fs.FS) ([]byte, string, int64) {
 func listed(m fstest.MapFS) []string {
 	var out []string
 	for name := range m {
-		if strings.HasPrefix(name, bundle.ImagesDir+"/") && strings.HasSuffix(name, ".tar") {
+		if strings.HasPrefix(name, bundle.ProductImages+"/") && strings.HasSuffix(name, ".tar") {
 			out = append(out, name)
 		}
 	}
@@ -186,7 +202,7 @@ func listed(m fstest.MapFS) []string {
 	return out
 }
 
-// RemoveListedImage deletes one pinned image from the bundle.
+// RemoveListedImage deletes one pinned image from the product bundle.
 func RemoveListedImage(m fstest.MapFS) {
 	n := listed(m)[0]
 	delete(m, n)
@@ -196,6 +212,18 @@ func RemoveListedImage(m fstest.MapFS) {
 // AddUnlistedImage adds an image release.yaml doesn't pin.
 func AddUnlistedImage(m fstest.MapFS) {
 	b := []byte("an image nobody pinned")
+	m[bundle.ProductImages+"/"+digestOf(b).Encoded()+".tar"] = &fstest.MapFile{Data: b}
+}
+
+// AddK0sToRoot puts a k0s binary into a base root, which carries none.
+func AddK0sToRoot(m fstest.MapFS) {
+	m[bundle.K0sPath] = &fstest.MapFile{Data: []byte("k0s"), Mode: 0o755}
+}
+
+// AddImageToRoot puts an image archive into a base root, which carries
+// none.
+func AddImageToRoot(m fstest.MapFS) {
+	b := []byte("an image in the base root")
 	m[bundle.ImagesDir+"/"+digestOf(b).Encoded()+".tar"] = &fstest.MapFile{Data: b}
 }
 
@@ -214,9 +242,9 @@ func ResignImageWithRogue(k Keys) func(fstest.MapFS) {
 	}
 }
 
-// SwapK0sBinary replaces k0s with another binary.
+// SwapK0sBinary replaces the product bundle's k0s with another binary.
 func SwapK0sBinary(m fstest.MapFS) {
-	m[bundle.K0sPath] = &fstest.MapFile{Data: []byte(fmt.Sprintf("not k0s %d", len(m))), Mode: 0o755}
+	m[bundle.ProductK0s] = &fstest.MapFile{Data: []byte(fmt.Sprintf("not k0s %d", len(m))), Mode: 0o755}
 }
 
 func digestOf(b []byte) digest.Digest { return digest.SHA256.FromBytes(b) }

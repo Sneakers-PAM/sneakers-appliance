@@ -50,7 +50,7 @@ const (
 
 var (
 	uploadIDRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	binNameRE  = regexp.MustCompile(`^sneakers-appliance-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?-(amd64|arm64)\.bin$`)
+	binNameRE  = regexp.MustCompile(`^sneakers-(appliance|product)-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?-(amd64|arm64)(-LAB)?\.bin$`)
 	windowRE   = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 )
 
@@ -69,6 +69,13 @@ type UpgradeOptions struct {
 	// ElevationEndWait bounds how long an owner's override waits for the
 	// elevated session it terminated to end; 0 is DefaultElevationEndWait.
 	ElevationEndWait time.Duration
+	// DirectURL is the release source (a production build's GitHub
+	// Releases URL); empty when the build has none, as a lab build.
+	DirectURL string
+	// ProductDir holds the product slots; empty is product.Dir.
+	ProductDir string
+	// Arch is the box's architecture; empty is amd64.
+	Arch string
 }
 
 // DefaultElevationEndWait is how long an override waits for a terminated
@@ -81,6 +88,7 @@ type Policy struct {
 	WindowStart   string `json:"windowStart"`
 	WindowMinutes int    `json:"windowMinutes"`
 	MirrorURL     string `json:"mirrorUrl,omitempty"`
+	Direct        bool   `json:"direct,omitempty"`
 }
 
 // DefaultPolicy is a new box's: automatic in a daily 02:00 window of two
@@ -97,6 +105,7 @@ type historyEntry struct {
 	Outcome string    `json:"outcome"`
 	Code    string    `json:"code,omitempty"`
 	Detail  string    `json:"detail,omitempty"`
+	Target  string    `json:"target,omitempty"`
 }
 
 // MaintenanceBound is how long an apply or revert that went through holds
@@ -106,8 +115,9 @@ const MaintenanceBound = 15 * time.Minute
 
 type upgrades struct {
 	mu sync.Mutex
-	// lastWindow is the day (local) the window last applied a release.
-	lastWindow string
+	// lastWindow is the day (local) the window last applied a release, and
+	// lastProductWindow a product bundle.
+	lastWindow, lastProductWindow string
 	// maintUntil is when the maintenance an apply or revert set ends.
 	maintUntil time.Time
 }
@@ -231,7 +241,18 @@ func (s *Server) policy() Policy {
 }
 
 func (s *Server) history(action, version, actor string, err error, detail string) {
-	e := historyEntry{Time: s.o.Clock.Now().UTC(), Action: action, Version: version, Actor: actor, Outcome: "ok", Detail: detail}
+	s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_BASE, action, version, actor, err, detail)
+}
+
+func targetName(t osadminv1.UpdateTarget) string {
+	if t == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+		return "product"
+	}
+	return "base"
+}
+
+func (s *Server) historyFor(target osadminv1.UpdateTarget, action, version, actor string, err error, detail string) {
+	e := historyEntry{Time: s.o.Clock.Now().UTC(), Action: action, Version: version, Actor: actor, Outcome: "ok", Detail: detail, Target: targetName(target)}
 	if err != nil {
 		e.Outcome, e.Code = "failed", symbolOf(err)
 	}
@@ -266,7 +287,11 @@ func (s *Server) readHistory(limit int) []*osadminv1.UpgradeEvent {
 		if json.Unmarshal(sc.Bytes(), &e) != nil {
 			continue
 		}
-		all = append(all, &osadminv1.UpgradeEvent{Time: timestamppb.New(e.Time), Action: e.Action, Version: e.Version, Actor: e.Actor, Outcome: e.Outcome, Code: e.Code, Detail: e.Detail})
+		target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
+		if e.Target == "product" {
+			target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+		}
+		all = append(all, &osadminv1.UpgradeEvent{Time: timestamppb.New(e.Time), Action: e.Action, Version: e.Version, Actor: e.Actor, Outcome: e.Outcome, Code: e.Code, Detail: e.Detail, Target: target})
 	}
 	slices.Reverse(all)
 	if len(all) > limit {
@@ -358,12 +383,14 @@ type upgradeSvc struct {
 }
 
 func policyToWire(p Policy) *osadminv1.UpgradePolicy {
-	return &osadminv1.UpgradePolicy{Mode: p.Mode, WindowStart: p.WindowStart, WindowMinutes: int32(min(p.WindowMinutes, 1<<30)), MirrorUrl: p.MirrorURL} // #nosec G115 -- clamped
+	return &osadminv1.UpgradePolicy{Mode: p.Mode, WindowStart: p.WindowStart, WindowMinutes: int32(min(p.WindowMinutes, 1<<30)), MirrorUrl: p.MirrorURL, Direct: p.Direct} // #nosec G115 -- clamped
 }
 
 func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadminv1.GetUpgradesRequest]) (*connect.Response[osadminv1.GetUpgradesResponse], error) {
 	p := h.s.policy()
-	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "", History: h.s.readHistory(100)}
+	direct := h.s.o.Upgrade.DirectURL != ""
+	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && (!p.Direct || !direct), History: h.s.readHistory(100),
+		Product: h.s.productSlots(ctx), DirectAvailable: direct}
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
 	}
@@ -383,8 +410,8 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 
 func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[osadminv1.SetUpgradePolicyRequest]) (*connect.Response[osadminv1.SetUpgradePolicyResponse], error) {
 	w := r.Msg.GetPolicy()
-	p := Policy{Mode: w.GetMode(), WindowStart: w.GetWindowStart(), WindowMinutes: int(w.GetWindowMinutes()), MirrorURL: strings.TrimRight(strings.TrimSpace(w.GetMirrorUrl()), "/")}
-	callFrom(ctx).note("policy", "mode", p.Mode, "window", p.WindowStart+"+"+itoa(p.WindowMinutes)+"m", "mirror", p.MirrorURL)
+	p := Policy{Mode: w.GetMode(), WindowStart: w.GetWindowStart(), WindowMinutes: int(w.GetWindowMinutes()), MirrorURL: strings.TrimRight(strings.TrimSpace(w.GetMirrorUrl()), "/"), Direct: w.GetDirect()}
+	callFrom(ctx).note("policy", "mode", p.Mode, "window", p.WindowStart+"+"+itoa(p.WindowMinutes)+"m", "mirror", p.MirrorURL, "direct", strconv.FormatBool(p.Direct))
 	if p.Mode != "automatic" && p.Mode != "manual" {
 		return nil, codes.New(codes.AccessConfirm, "the mode is automatic or manual")
 	}
@@ -410,33 +437,41 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 	return connect.NewResponse(&osadminv1.SetUpgradePolicyResponse{}), nil
 }
 
-// FetchUpdate downloads a .bin from the mirror. With no mirror the box is
-// air-gapped and nothing is fetched.
+// FetchUpdate downloads a .bin, a base update or a product bundle, from
+// the mirror, then the release source when the policy allows direct
+// fetches. With neither the box is air-gapped and nothing is fetched.
 func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadminv1.FetchUpdateRequest]) (*connect.Response[osadminv1.FetchUpdateResponse], error) {
 	c := callFrom(ctx)
 	name := r.Msg.GetFileName()
 	c.note(name)
-	p := h.s.policy()
-	if p.MirrorURL == "" {
-		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured, so this box never fetches; upload the .bin instead")
+	srcs := h.s.sources(name, directPath(name))
+	if len(srcs) == 0 {
+		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the .bin instead")
 	}
 	if !binNameRE.MatchString(name) {
-		return nil, codes.New(codes.UpgradeUpload, "%q isn't a sneakers-appliance .bin name", name)
+		return nil, codes.New(codes.UpgradeUpload, "%q isn't a sneakers-appliance or sneakers-product .bin name", name)
 	}
-	id, n, err := h.s.fetch(ctx, p.MirrorURL+"/"+name)
+	var (
+		id, from string
+		n        int64
+		err      error
+	)
+	for _, src := range srcs {
+		if id, n, err = h.s.fetch(ctx, src.url); err == nil {
+			from = src.name
+			break
+		}
+	}
 	h.s.history("fetch", "", c.session.Admin, err, name)
 	if err != nil {
 		return nil, err
 	}
-	c.note(name, "upload", id, "bytes", strconv.FormatInt(n, 10))
-	return connect.NewResponse(&osadminv1.FetchUpdateResponse{UploadId: id}), nil
+	c.note(name, "upload", id, "bytes", strconv.FormatInt(n, 10), "source", from)
+	return connect.NewResponse(&osadminv1.FetchUpdateResponse{UploadId: id, Source: from}), nil
 }
 
 func (s *Server) fetch(ctx context.Context, target string) (string, int64, error) {
-	hc := s.o.Upgrade.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: time.Hour, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
-	}
+	hc := s.httpClient()
 	started := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
@@ -468,7 +503,11 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 		version = pkg.GetVersion()
 		c.note(id, "version", version, "kind", pkg.GetKind(), "channel", pkg.GetChannel())
 	}
-	h.s.history("stage", version, c.session.Admin, err, id)
+	target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
+	if pkg != nil {
+		target = pkg.GetTarget()
+	}
+	h.s.historyFor(target, "stage", version, c.session.Admin, err, id)
 	if err != nil {
 		return nil, err
 	}
@@ -499,7 +538,12 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 		return nil, err
 	}
 	h := p.Header
-	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size}
+	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
+		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE}
+	if h.IsProduct() {
+		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+		return pkg, s.stageProduct(ctx, path, p)
+	}
 	img, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
 		return pkg, err
@@ -562,10 +606,14 @@ func (c *call) by(action string) osaudit.Entry {
 
 func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {
 	c := callFrom(ctx)
-	v, overrode, err := h.s.apply(ctx, c.by("upgrade.apply"), r.Msg.GetElevationOverride())
-	c.note("box", "version", v)
+	apply, what := h.s.apply, "box"
+	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+		apply, what = h.s.applyProduct, "product"
+	}
+	v, overrode, err := apply(ctx, c.by("upgrade.apply"), r.Msg.GetElevationOverride())
+	c.note(what, "version", v)
 	if overrode != "" {
-		c.note("box", "overrode", overrode)
+		c.note(what, "overrode", overrode)
 	}
 	if err != nil {
 		return nil, err
@@ -612,6 +660,18 @@ func overrideDetail(id string) string {
 
 func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadminv1.RevertUpdateRequest]) (*connect.Response[osadminv1.RevertUpdateResponse], error) {
 	c := callFrom(ctx)
+	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+		c.note("product")
+		v, overrode, err := h.s.revertProduct(ctx, c.by("upgrade.revert"), r.Msg.GetElevationOverride())
+		c.note("product", "version", v)
+		if overrode != "" {
+			c.note("product", "overrode", overrode)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&osadminv1.RevertUpdateResponse{}), nil
+	}
 	c.note("box")
 	overrode, err := h.s.beginMaintenance(ctx, "update reverts", c.by("upgrade.revert"), r.Msg.GetElevationOverride())
 	if overrode != "" {
@@ -655,6 +715,7 @@ func (s *Server) UpgradeWindowTick(ctx context.Context) {
 		s.o.Logger.Info("osadmin: the update window waits for an active elevated session to end")
 		return
 	}
+	s.productWindow(ctx, day)
 	s.upgrades.mu.Lock()
 	if s.upgrades.lastWindow == day {
 		s.upgrades.mu.Unlock()
@@ -670,4 +731,18 @@ func (s *Server) UpgradeWindowTick(ctx context.Context) {
 	s.upgrades.mu.Unlock()
 	v, _, err := s.apply(ctx, osaudit.Entry{Actor: "window", Action: "upgrade.apply"}, nil)
 	s.write(osaudit.Entry{Actor: "window", Action: "upgrade.apply", Target: "box", Detail: map[string]string{"version": v, "surface": "window"}}, err)
+}
+
+// productWindow applies a staged product bundle once per window, before a
+// staged base release (whose apply reboots).
+func (s *Server) productWindow(ctx context.Context, day string) {
+	s.upgrades.mu.Lock()
+	if s.upgrades.lastProductWindow == day || s.slots().Status().Staged == "" {
+		s.upgrades.mu.Unlock()
+		return
+	}
+	s.upgrades.lastProductWindow = day
+	s.upgrades.mu.Unlock()
+	v, _, err := s.applyProduct(ctx, osaudit.Entry{Actor: "window", Action: "upgrade.apply"}, nil)
+	s.write(osaudit.Entry{Actor: "window", Action: "upgrade.apply", Target: "product", Detail: map[string]string{"version": v, "surface": "window"}}, err)
 }

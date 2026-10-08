@@ -1,0 +1,56 @@
+#!/bin/sh
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# lab-hook: LAB ONLY, for the image suite (test/image/k0s); see
+# lab-hook.yaml. Inert unless /run/sneakers/esp/lab-hook exists. In normal
+# operation it reports, on the serial line, that no k0s runs until a
+# product bundle is installed, then waits for one (the suite installs it
+# through the Updates API) and checks k0s, the hello stack and the edge.
+set -u
+[ -e /run/sneakers/esp/lab-hook ] || exit 0
+# The console services own the consoles and send other services' output to
+# /run/sneakers/console.log; the suite reads the serial line, so write there.
+if [ -c /dev/ttyS0 ]; then exec >/dev/ttyS0 2>&1; fi
+say() { echo "lab-hook: $*"; }
+product=/var/lib/sneakers/product/current
+
+k() { "$product/k0s" kubectl "$@"; }
+# wait_for <what> <command...>: retry every 10 seconds, for up to 40
+# minutes. busybox's sh here has no arithmetic: count with characters.
+wait_for() {
+  what="$1"; shift
+  i=""
+  until "$@" >/dev/null 2>&1; do
+    i="$i."
+    # After three minutes, show once what the cluster is doing.
+    if [ "${#i}" -eq 18 ] && [ -x "$product/k0s" ]; then
+      say "still waiting for $what"
+      k get pods -A -o wide
+      say "routes:"; ip -4 route show table all
+      say "addresses:"; ip -4 addr
+    fi
+    if [ "${#i}" -ge 240 ]; then
+      say "gave up waiting for $what"
+      [ -x "$product/k0s" ] && k get pods -A -o wide
+      exit 1
+    fi
+    sleep 10
+  done
+  say "$what"
+}
+
+if [ ! -s "$product/bundle.json" ]; then
+  if [ -e /var/lib/k0s/bin ]; then
+    say "k0s ran without a product bundle"
+  else
+    say "no product bundle, no k0s"
+  fi
+fi
+wait_for "product bundle installed" test -s "$product/bundle.json"
+wait_for "api up" k get --raw /readyz
+wait_for "node ready" k wait --for=condition=Ready node --all --timeout=10s
+wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l app=hello --timeout=10s
+wait_for "edge pod ready" k -n sneakers-edge wait --for=condition=Ready pod -l app=edge --timeout=10s
+k get nodes -o wide
+k get pods -A -o wide

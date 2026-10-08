@@ -1,13 +1,16 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Package bundle checks the airgap image bundle and the k0s binary in a root
-// tree against the pinned release (sneakers-release manifest/release.yaml).
+// Package bundle checks the product bundle's airgap images and k0s binary
+// against the pinned release (sneakers-release manifest/release.yaml), and
+// that a base root carries neither.
 //
-// The bundle lives at usr/share/sneakers/images/ in the root: one OCI image
-// archive per image, named <sha256 hex of the pinned digest>.tar, with the
-// org release-key signature of that digest beside it as
-// <hex>.tar.sigstore.json. Nothing else may be in the directory.
+// An unpacked product bundle holds release.yaml, the k0s binary as k0s,
+// the images under images/: one OCI image archive per image, named
+// <sha256 hex of the pinned digest>.tar, with the org release-key
+// signature of that digest beside it as <hex>.tar.sigstore.json, and the
+// stacks k0s applies under manifests/<stack>/*.yaml. Nothing else may be
+// in it.
 package bundle
 
 import (
@@ -33,12 +36,22 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 )
 
-// Paths inside the root tree.
+// Paths inside the base root tree. ImagesDir and K0sPath are where a root
+// carried the product before it shipped as its own bundle; a base root
+// must have neither.
 const (
 	ImagesDir   = "usr/share/sneakers/images"
 	K0sPath     = "usr/bin/k0s"
 	ReleasePath = "usr/share/sneakers/release/release.yaml"
 	SigSuffix   = ".sigstore.json"
+)
+
+// Paths inside an unpacked product bundle.
+const (
+	ProductRelease   = "release.yaml"
+	ProductK0s       = "k0s"
+	ProductImages    = "images"
+	ProductManifests = "manifests"
 )
 
 // Release is the part of release.yaml the bundle check reads. The file is
@@ -228,33 +241,99 @@ func verifyImageSignature(b []byte, hexd string, key *ecdsa.PublicKey) error {
 	return nil
 }
 
-// CheckRoot checks a root tree: the k0s binary is the pinned one for arch,
-// release.yaml in the root is relYAML, and the bundle matches.
-func CheckRoot(fsys fs.FS, relYAML []byte, arch string, key *ecdsa.PublicKey) error {
-	rel, err := ParseRelease(relYAML)
-	if err != nil {
+// CheckRoot checks a base root tree: release.yaml in it is relYAML, and it
+// carries no k0s and no images, which ship in the product bundle.
+func CheckRoot(fsys fs.FS, relYAML []byte) error {
+	if _, err := ParseRelease(relYAML); err != nil {
 		return err
 	}
-	wantK0s, err := rel.K0sSHA256(arch)
-	if err != nil {
-		return err
+	if _, err := fs.Stat(fsys, K0sPath); err == nil {
+		return codes.New(codes.KitBundleMismatch, "the base root has /%s; k0s ships in the product bundle", K0sPath)
 	}
-	f, err := fsys.Open(K0sPath)
-	if err != nil {
-		return codes.New(codes.KitBundleMismatch, "the root has no /%s", K0sPath)
-	}
-	h := sha256.New()
-	_, err = io.Copy(h, f)
-	_ = f.Close()
-	if err != nil {
-		return codes.New(codes.KitBundleMismatch, "/%s can't be read: %v", K0sPath, err)
-	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != wantK0s {
-		return codes.New(codes.KitBundleMismatch, "/%s has SHA-256 %s; release.yaml pins %s", K0sPath, got, wantK0s)
+	if entries, err := fs.ReadDir(fsys, ImagesDir); err == nil && len(entries) > 0 {
+		return codes.New(codes.KitBundleMismatch, "the base root holds images in /%s; they ship in the product bundle", ImagesDir)
 	}
 	inRoot, err := fs.ReadFile(fsys, ReleasePath)
 	if err != nil || !bytes.Equal(inRoot, relYAML) {
 		return codes.New(codes.KitBundleMismatch, "/%s isn't the verified release.yaml", ReleasePath)
 	}
-	return CheckImages(fsys, ImagesDir, rel, key)
+	return nil
 }
+
+// CheckProduct checks an unpacked product bundle: only the bundle's own
+// entries at the top, k0s is the binary its release.yaml pins for arch,
+// the images are exactly the pinned ones, each signed with key, and the
+// stacks are YAML files only. It returns the bundle's release.
+func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, error) {
+	top, err := fs.ReadDir(fsys, ".")
+	if err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "the product bundle can't be read: %v", err)
+	}
+	for _, e := range top {
+		switch e.Name() {
+		case ProductRelease, ProductK0s, ProductImages, ProductManifests:
+		default:
+			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
+		}
+	}
+	relYAML, err := fs.ReadFile(fsys, ProductRelease)
+	if err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "the product bundle has no %s", ProductRelease)
+	}
+	rel, err := ParseRelease(relYAML)
+	if err != nil {
+		return nil, err
+	}
+	want, err := rel.K0sSHA256(arch)
+	if err != nil {
+		return nil, err
+	}
+	f, err := fsys.Open(ProductK0s)
+	if err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "the product bundle has no k0s binary")
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	_ = f.Close()
+	if err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "the product bundle's k0s can't be read: %v", err)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+		return nil, codes.New(codes.KitBundleMismatch, "the product bundle's k0s has SHA-256 %s; its release.yaml pins %s", got, want)
+	}
+	if err := CheckImages(fsys, ProductImages, rel, key); err != nil {
+		return nil, err
+	}
+	if err := checkStacks(fsys); err != nil {
+		return nil, err
+	}
+	return rel, nil
+}
+
+// checkStacks allows manifests/<stack>/<file>.yaml and nothing else.
+func checkStacks(fsys fs.FS) error {
+	stacks, err := fs.ReadDir(fsys, ProductManifests)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "the product bundle's stacks can't be read: %v", err)
+	}
+	for _, st := range stacks {
+		if !st.IsDir() || !nameRE.MatchString(st.Name()) {
+			return codes.New(codes.KitBundleMismatch, "the product bundle's %s/%s isn't a stack directory", ProductManifests, st.Name())
+		}
+		files, err := fs.ReadDir(fsys, path.Join(ProductManifests, st.Name()))
+		if err != nil {
+			return codes.New(codes.KitBundleMismatch, "the stack %s can't be read: %v", st.Name(), err)
+		}
+		for _, f := range files {
+			if !f.Type().IsRegular() || !strings.HasSuffix(f.Name(), ".yaml") || !nameRE.MatchString(strings.TrimSuffix(f.Name(), ".yaml")) {
+				return codes.New(codes.KitBundleMismatch, "the stack %s holds %s, which isn't a YAML manifest", st.Name(), f.Name())
+			}
+		}
+	}
+	return nil
+}
+
+var nameRE = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,62}$`)

@@ -26,7 +26,10 @@
 # Output in $OUT: sneakers-<version>.efi (unsigned UKI), systemd-bootx64.efi
 # (unsigned), root-<version>.img, verity.json, release.yaml,
 # release.yaml.sigstore.json, systemd-version, sneakers-artifact and
-# sneakers-kit (production pins), and SHA256SUMS over all of them.
+# sneakers-kit (production pins), the product bundle packed for the sign
+# job (product-header.json, the header to sign, and product-payload.age,
+# encrypted to keys/production/update.pub; build/product/build.sh), and
+# SHA256SUMS over all of them. The base root carries no k0s or images.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,13 +64,17 @@ pins="-X $pkg.Channel=production -X $pkg.Version=$VERSION \
   -X $pkg.ReleaseKey=$(b64 "$keys/cosign.pub") -X $pkg.DBCert=$(b64 "$keys/db.crt") \
   -X $pkg.PKCert=$(b64 "$keys/PK.crt") -X $pkg.KEKCert=$(b64 "$keys/KEK.crt")"
 
-echo "release: bundle"
-RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" SIGNATURES="$SIGNATURES" ARCH="$arch" OUT="$work/images" \
-  bash "$root/build/bundle/build.sh"
+echo "release: product bundle"
+# It fits the base built here. Encrypting needs only the public update key;
+# the sign job signs the header and seals the .bin.
+VERSION="$VERSION" ARCH="$arch" CHANNEL=production BASES="$VERSION" RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" \
+  SIGNATURES="$SIGNATURES" K0S="$work/k0s" RECIPIENT="$keys/update.pub" OUT="$work/product" bash "$root/build/product/build.sh"
+cp "$work/product/bin/header.json" "$OUT/product-header.json"
+cp "$work/product/bin/payload.age" "$OUT/product-payload.age"
 
 echo "release: root"
-PINS_LDFLAGS="$pins" VERSION="$VERSION" ARCH="$arch" RELEASE="$OUT/release.yaml" K0S="$work/k0s" OPENSSH="$OPENSSH" \
-  BUSYBOX="$BUSYBOX" IMAGES="$work/images" OUT="$work/root" bash "$root/build/root/build.sh"
+PINS_LDFLAGS="$pins" VERSION="$VERSION" ARCH="$arch" RELEASE="$OUT/release.yaml" OPENSSH="$OPENSSH" \
+  BUSYBOX="$BUSYBOX" OUT="$work/root" bash "$root/build/root/build.sh"
 cp "$work/root/root-$VERSION.img" "$work/root/verity.json" "$OUT/"
 
 echo "release: UKI (unsigned)"

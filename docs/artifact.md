@@ -71,10 +71,13 @@ The first failure stops the run with its code and writes nothing.
    root image; the stored tree must match it byte for byte and give that root hash
    (`KIT_VERITY_MISMATCH`). The tree format is `veritysetup format`'s default: format 1, SHA-256,
    4096-byte blocks, the superblock at the hash offset, then the levels, top first.
-8. **Bundle:** the root is opened read-only as SquashFS. `/usr/bin/k0s` must have the SHA-256
-   `release.yaml` pins for the architecture, `/usr/share/sneakers/release/release.yaml` must be the
-   verified `release.yaml`, and the airgap bundle must hold exactly the images `release.yaml` pins
-   (`KIT_BUNDLE_MISMATCH`), each signed by the release key (`KIT_IMAGE_UNSIGNED`).
+8. **Base root:** the root is opened read-only as SquashFS.
+   `/usr/share/sneakers/release/release.yaml` must be the verified `release.yaml`, and the root
+   must carry no `/usr/bin/k0s` and no images in `/usr/share/sneakers/images/`
+   (`KIT_BUNDLE_MISMATCH`): k0s and the images ship in the product bundle, which the box checks
+   the same way when it unpacks one (k0s's SHA-256 and exactly the pinned images, each signed by
+   the release key, `KIT_BUNDLE_MISMATCH` or `KIT_IMAGE_UNSIGNED`;
+   [release.md](release.md#the-product-bundle)).
 9. **Enrolment material (amd64):** `keys/PK.esl`, `KEK.esl` and `db.esl` each hold exactly the
    pinned certificate; `PK.auth` and `KEK.auth` verify against PK and `db.auth` against KEK, each
    carrying its `.esl`; `dbx.esl` is a valid (at v0.1.0, empty) signature list
@@ -82,9 +85,9 @@ The first failure stops the run with its code and writes nothing.
    timestamp and data, as the firmware's does, and trusts only the pinned certificate, whatever
    the file embeds.
 
-## The airgap bundle in the root
+## The airgap images
 
-`/usr/share/sneakers/images/` holds one OCI image archive per pinned image, named
+The product bundle's `images/` holds one OCI image archive per pinned image, named
 `<sha256 hex of the pinned digest>.tar`, whose `index.json` lists that digest, and beside it
 `<hex>.tar.sigstore.json`, the release-key signature of that digest. Nothing else may be in the
 directory. The images pinned are those under `spec.services`, `spec.thirdParty`, `spec.platform`

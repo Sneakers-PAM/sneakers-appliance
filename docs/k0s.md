@@ -1,0 +1,128 @@
+# k0s on the box
+
+The appliance runs one k0s node: the controller with its worker (`k0s controller --enable-worker
+--no-taints`), a one-member etcd, kube-router for the pod network and kube-proxy in iptables mode.
+It isn't in the base image: k0s, its images and the product's stacks ship as the product bundle,
+installed after setup from the Updates page into its own slot on the state volume
+([upgrades.md](upgrades.md#the-product-bundle)). It starts in normal operation only, once the first
+admin exists and a bundle is installed, from that bundle's images, with no registry to reach.
+
+**Interim.** Until `sneakers-platformd` lands (#99, spec 3), the service table starts k0s through
+a small script, `os/k0s/k0s-interim`, which stands in for platformd: it prepares the box and
+starts k0s. The lab product bundle also carries a throwaway hello-world stack and a minimal edge
+on 443. platformd replaces the script,
+renders the config and deploys the real platform; the hello stack goes then.
+
+## What runs
+
+| Piece | Where | What |
+|---|---|---|
+| Service entry | `os/rootfs/services.d/k0s.yaml` | waits (`start-when`, [init.md](init.md#the-service-table)) for `/var/lib/sneakers/setup/done` and the installed bundle, `/var/lib/sneakers/product/current/bundle.json`, so a box with no bundle runs no k0s; a product apply or revert restarts it through the Services API. `k0s-interim run` (`exec`s `<current slot>/k0s controller --enable-worker --no-taints --config /run/sneakers/k0s/k0s.yaml --data-dir /var/lib/k0s`), root, `restart: always`, `stop-timeout: 2m`, after netd, phase `normal` only (the data directory is on the state volume). konnectivity, metrics-server, autopilot and the update prober are disabled: none is bundled, and the prober would reach the internet. While the console service owns the consoles, k0s's output goes to `/run/sneakers/console.log`. |
+| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | refuses to go on without an installed bundle; mounts cgroup2 on `/sys/fs/cgroup` when it isn't; makes the box's node name once (below); gives the kernel a host name when it has none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface and routes the Service range there (below); renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories; writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one; links the bundle's images into `/var/lib/k0s/images/`; copies each of the bundle's stacks, `<slot>/manifests/<name>/`, to `/var/lib/k0s/manifests/<name>/`; writes the box's own :8443 certificate as the `box-tls` Secret for the interim edge (below) |
+| Cluster config | `/etc/k0s/k0s.yaml.tmpl` (`os/k0s/k0s.yaml.tmpl`) | the API, etcd peer and node address `198.18.0.1`; the pod range `10.244.0.0/16` and the Service range `10.96.0.0/12` (k0s's defaults, named, and the defaults of the box's network settings, [network.md](network.md)); every system image pinned by `<tag>@sha256:<digest>`; `default_pull_policy: Never`; NodePorts on every address; telemetry off; etcd storage named `@NODE_NAME@`, the one field rendered <!-- scrub:allow=private-ip --> |
+| containerd config | `/etc/k0s/containerd.toml` (`os/k0s/containerd.toml`) | what k0s would write, with the sandbox (pause) image pinned by digest. It isn't marked `k0s_managed`, so k0s uses it as it is instead of writing into the read-only `/etc`. Drop-ins: `/etc/k0s/containerd.d/` (empty). |
+| Host paths in the root | the root | `/etc/cni -> /var/lib/cni-conf` and `/opt -> /var/lib/opt` (kube-router installs the CNI config and plugins there), `/var/run -> /run` (containerd's NRI socket), `/var/log -> /var/lib/log` (pod logs), `/etc/machine-id -> /var/lib/sneakers/machine-id`, `/etc/hosts` (localhost), `/bin/mount` and `/bin/umount` (busybox; the kubelet mounts tmpfs volumes with them), `/lib/modules` (empty: the kernel has no loadable modules), `/usr/libexec/k0s/kubelet-plugins/volume/exec` (empty) |
+
+k0s runs etcd, the API server and the scheduler as root here: the box has no `etcd`,
+`kube-apiserver` or `kube-scheduler` accounts, and k0s falls back to root when it can't find them.
+
+### The node's address and name
+
+The node's address is `198.18.0.1` on `sneakers0` (spec 3: RFC 2544 space, never routed), so a
+DHCP change on a real interface never changes the API server's certificates, etcd's peer address
+or the node's address. Its name, `sneakers-<8 hex>`, is made once from a random UUID and kept in
+`/var/lib/sneakers/k0s/node-name`. It's the kubelet's node name (`--hostname-override`) and the
+etcd member name, and it doesn't follow the host name netd sets, so it stays the same across
+reboots and upgrades and is unique when more boxes join.
+
+The Service range is routed on `sneakers0` too. kube-proxy reaches a ClusterIP by rewriting it
+(DNAT) on the way out, but the kernel looks up a route before that rewrite, so a host with no
+route covering the ClusterIP fails `connect()` with "network is unreachable". kube-router talks to
+the API through the `kubernetes` Service, so on a management network with no gateway
+(a static address without one, or QEMU's restricted user network in the image suite) it never
+started, and with it the pod network: pods stayed in ContainerCreating on the bridge CNI's "no IP
+ranges". With the route the cluster doesn't depend on the management network's gateway, the same
+as its address.
+
+### Multi-node later (spec 3, Section 2.12)
+
+k0s runs as `controller --enable-worker --no-taints` with a one-member etcd, never `--single` with
+kine, which can't take more nodes. Nothing here assumes one node: the hello stack is a Deployment
+and a Service, the node and etcd member names are per box, and the data stays in
+`/var/lib/k0s`. Joining (vNext) will need: a join token from the first box, the other boxes started
+as workers or as controllers for a three-member etcd, each box's etcd peer address moved from
+`198.18.0.1` to an address the others can reach (an etcd member update, done in place), and the
+edge, storage and backup design that section lists. The one-member etcd costs memory (roughly 100
+to 200 MB resident) and an fsync on every write; on SD cards that's the concern, and the arm64 run
+measures it.
+
+## Where its data lives
+
+Everything k0s writes is under `/var/lib/k0s` on the state volume (LUKS2, mounted at `/var/lib` by
+init): etcd, the PKI, containerd's image store and snapshots (`containerd/`), the binaries k0s
+unpacks (`bin/`), the kubelet's directory, the image links (`images/`) and the stacks
+(`manifests/`). The CNI files are in `/var/lib/cni-conf` and `/var/lib/opt`, and the host-local IP
+allocations in `/var/lib/cni`. The rendered config and k0s's run directory are on `/run` (tmpfs).
+A factory reset wipes them with the rest of the state.
+
+## The product bundle and the airgapped images
+
+The installed bundle's current slot, `/var/lib/sneakers/product/current` (a link to `a` or `b`),
+holds `k0s`, `release.yaml`, `images/` (one OCI archive per pinned image, each named by its digest,
+with its signature beside it) and `manifests/` ([release.md](release.md#the-product-bundle)). The
+box checked all of it before it linked the slot. At every start `k0s-interim prepare` links each
+archive into `/var/lib/k0s/images/`, which k0s imports into containerd when the worker starts, so
+the images aren't copied again. Each archive
+names its image `<image>@sha256:<digest>`, which is the name the kubelet asks for when a pod's
+image is `<image>:<tag>@sha256:<digest>`. With the pull policy `Never`, a pod whose image isn't
+bundled fails with `ErrImageNeverPull` instead of reaching for a registry.
+
+For k0s v1.36.4+k0s.1 the components left on need five images: pause, kube-proxy, CoreDNS,
+kube-router and its CNI installer (`cni-node`). A lab build pins them, the hello image and the
+edge's Traefik in `build/lab/images.txt` and signs each digest with that run's lab key. `os/k0s/config_test.go`
+fails when the config, the containerd sandbox and the lab list disagree. A production release
+takes its images from sneakers-release's `release.yaml`, which doesn't list k0s's images yet.
+
+## The hello-world stack and the interim edge (lab, throwaway)
+
+Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s/manifests/`:
+
+- `hello` runs busybox's httpd in the `sneakers-hello` namespace, as nobody with a read-only root,
+  and serves `hello from sneakers-appliance` on NodePort 30080. It goes when platformd lands (#99).
+- `edge` is a minimal edge, **interim until Traefik comes with the platform (#102)**: Traefik on the
+  host network in the `sneakers-edge` namespace, with every capability dropped but
+  `NET_BIND_SERVICE`. It serves `https://<box>/` on 443 from the hello NodePort, and 80 redirects to
+  https. TLS uses the box's own self-signed :8443 certificate, which `k0s-interim prepare` writes
+  as the `box-tls` Secret at each start (Traefik falls back to its own self-signed default without
+  it).
+- Once a bundle is installed, accessd opens 80 and 443 on the service interface (the management
+  one when the box has only one) through netd's `SetServicePorts`, after each product apply and
+  revert and when it starts. 22 and 8443 are as before. Before a bundle is installed nothing
+  listens on 80 or 443.
+
+## The kernel
+
+The kernel has everything built in, so what k0s, containerd, the kubelet, kube-proxy and
+kube-router need is in `os/kernel/config-base`: cgroup v2 and namespaces, overlayfs, veth, the
+bridge and `br_netfilter`, VXLAN, netfilter (nftables, the iptables compatibility layer, conntrack,
+NAT, ipset), plus inotify, POSIX timers, file handles, shebang scripts, PSI, conntrack over
+netlink, NFLOG, the ipset, limit, physdev and MARK matches and targets, REJECT, the nftables
+limit, log and reject expressions, and the dummy interface. `os/kernel/required.txt` fails the build without the ones k0s
+can't start without.
+
+## Testing
+
+`test/image/k0s` (the image suite, after each merge and nightly; it isn't run on pull requests)
+boots a lab disk without Secure Boot or a TPM and sets it up the whole way: the console wizard, the
+first admin's key over SSH, a recovery key and the first :8443 sign-in. In normal operation it
+checks that k0s waits (no product bundle, no k0s) and that 443 doesn't answer, then installs the
+lab product bundle through the Updates API (`POST /upload`, `StageUpdate`, `ApplyUpdate` with
+target product). The lab image's hook (`build/lab/overlay/.../lab-hook`) does nothing unless the
+ESP holds a `lab-hook` file, which only the suite writes: then it reports on the serial line (the
+console service owns the consoles) whether k0s ran before a bundle was installed, and waits for the
+bundle, the API, the node, the hello pod and the edge pod. After three minutes of waiting it
+prints, once, the pods, the routes and the addresses. The test then fetches `https://<box>/` from
+the host through QEMU's port forward and expects the hello text, checks that 80 redirects to
+https, that SSH and :8443 still answer, that `GetUpgrades` shows the installed product running,
+and that k0s doesn't crash-loop. The lab bundle is the one the lab build writes next to the disk
+(`SNEAKERS_PRODUCT`).

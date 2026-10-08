@@ -68,8 +68,8 @@ func TestRefusedBuildLeavesOutEmpty(t *testing.T) {
 		{name: "re-signed UKI", mutate: fixtures.ResignUKIWithRogueDB, code: codes.KitAuthenticode},
 		{name: "one byte of the root", mutate: fixtures.FlipRootByte, code: codes.KitVerityMismatch},
 		{name: "one byte of the arm64 root", arch: "arm64", mutate: fixtures.FlipRootByte, code: codes.KitVerityMismatch},
-		{name: "extra image", mutate: fixtures.Mutation{Root: fixtures.AddUnlistedImage}, code: codes.KitBundleMismatch},
-		{name: "missing image", mutate: fixtures.Mutation{Root: fixtures.RemoveListedImage}, code: codes.KitBundleMismatch},
+		{name: "k0s in the base root", mutate: fixtures.Mutation{Root: fixtures.AddK0sToRoot}, code: codes.KitBundleMismatch},
+		{name: "an image in the base root", mutate: fixtures.Mutation{Root: fixtures.AddImageToRoot}, code: codes.KitBundleMismatch},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

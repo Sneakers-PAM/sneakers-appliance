@@ -86,6 +86,7 @@ a sign-in from the last 5 minutes.
 | `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
 | `UpgradeService.ApplyUpdate` | owner | yes | `upgrade.apply` |
 | `UpgradeService.RevertUpdate` | owner | yes | `upgrade.revert` |
+| `UpgradeService.ListProductVersions` | admin | no | |
 | `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |

@@ -68,7 +68,7 @@ even when the kernel names the interfaces differently.
 | `Status` | the usable management and service addresses, the host name, the NTP sync and offset, and whether 22 and 8443 are open |
 | `ListInterfaces` | the NICs in bus order (virtual interfaces left out): name, MAC, link state and driver |
 | `SetManagementPorts` | opens or closes 22 and 8443 in the firewall (first boot) |
-| `SetServicePorts` | the product's accept rules on the service interface (spec 3 defines them; netd carries them) |
+| `SetServicePorts` | the product's accept rules on the service interface, or the management one when the box has only one (spec 3 defines them; netd carries them, in memory). accessd sets 80 and 443 once a product bundle is installed ([k0s.md](k0s.md)) |
 | `Watch` | a stream of the usable addresses and the host name: once at the start, then on every change |
 
 ### Addresses

@@ -72,8 +72,11 @@ type Options struct {
 	KeyCustody initv1connect.KeyCustodyServiceClient
 	Image      initv1connect.ImageServiceClient
 	Power      initv1connect.PowerServiceClient
-	Network    netdv1connect.NetworkServiceClient
-	Paths      Paths
+	// Services restarts the product service after a product apply or
+	// revert; nil can't.
+	Services initv1connect.ServicesServiceClient
+	Network  netdv1connect.NetworkServiceClient
+	Paths    Paths
 	// Cert describes :8443's own certificate, for Status. When CertDir is
 	// set, the certificate there is read instead, on every Status.
 	Cert    CertInfo

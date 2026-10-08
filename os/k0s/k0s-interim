@@ -1,0 +1,149 @@
+#!/bin/sh
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# k0s-interim prepare|run: k0s's pre-start hook and its launcher
+# (os/rootfs/services.d/k0s.yaml). INTERIM: it stands in for
+# sneakers-platformd (#99), which renders the config, owns the data
+# directory and the node's address, and starts k0s; it does only what k0s
+# can't start without on a read-only, systemd-free root. docs/k0s.md has
+# the layout. busybox's sh here has no arithmetic: counters are strings.
+#
+# k0s itself, its images and its stacks come from the installed product
+# bundle's current slot (internal/product), never from the base root; the
+# service entry doesn't start without one (start-when).
+set -eu
+data=/var/lib/k0s
+product=/var/lib/sneakers/product/current
+# The node's name, made once per box and kept on the state volume, so it
+# doesn't follow the host name netd sets and stays unique when more nodes
+# join (spec 3, Section 2.12).
+name_file=/var/lib/sneakers/k0s/node-name
+# The API and node address on the sneakers0 dummy interface (spec 3): a
+# DHCP change on a real interface never changes it, its certificates or
+# etcd's peer address. RFC 2544 space, never routed.
+node_ip=198.18.0.1
+# spec.network.serviceCIDR in k0s.yaml.tmpl (os/k0s/config_test.go).
+service_cidr=10.96.0.0/12 # scrub:allow=private-ip -- the k0s default
+say() { echo "k0s-interim: $*"; }
+
+prepare() {
+  if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
+    say "no product bundle is installed; k0s comes with it (Updates)"
+    exit 1
+  fi
+  # cgroup v2 for containerd and the kubelet.
+  if ! grep -q '^[^ ]* /sys/fs/cgroup cgroup2 ' /proc/mounts; then
+    mount -t cgroup2 -o nosuid,nodev,noexec cgroup2 /sys/fs/cgroup
+    say "mounted cgroup2 on /sys/fs/cgroup"
+  fi
+
+  if [ ! -s "$name_file" ]; then
+    mkdir -p "${name_file%/*}"
+    read -r uuid < /proc/sys/kernel/random/uuid
+    echo "sneakers-$(echo "$uuid" | cut -c1-8)" > "$name_file.new"
+    mv "$name_file.new" "$name_file"
+  fi
+  read -r name < "$name_file"
+  say "node $name"
+  # The API server labels its lease with the host name, which the kernel
+  # leaves as "(none)" until netd sets one.
+  read -r host < /proc/sys/kernel/hostname || host=""
+  case "$host" in
+    ""|"(none)") echo "$name" > /proc/sys/kernel/hostname ;;
+  esac
+  # /etc/machine-id leads here.
+  if [ ! -s /var/lib/sneakers/machine-id ]; then
+    read -r uuid < /proc/sys/kernel/random/uuid
+    echo "$uuid" | tr -d - > /var/lib/sneakers/machine-id.new
+    mv /var/lib/sneakers/machine-id.new /var/lib/sneakers/machine-id
+  fi
+
+  if ! ip link show sneakers0 >/dev/null 2>&1; then
+    ip link add sneakers0 type dummy
+  fi
+  ip link set sneakers0 up
+  if ! ip -4 addr show dev sneakers0 | grep -q "inet $node_ip/"; then
+    ip addr add "$node_ip/32" dev sneakers0
+  fi
+  # A ClusterIP is only rewritten by kube-proxy's DNAT after the kernel has
+  # found a route for it; with none (a management network with no gateway)
+  # connect() fails with "network is unreachable", and kube-router can't
+  # reach the API through the kubernetes Service. Routing the Service range on sneakers0 keeps
+  # the cluster off the management network's gateway, like its address.
+  ip route replace "$service_cidr" dev sneakers0 src "$node_ip"
+
+  mkdir -p /run/sneakers/k0s
+  sed "s/@NODE_NAME@/$name/g" /etc/k0s/k0s.yaml.tmpl > /run/sneakers/k0s/k0s.yaml
+
+  # The root's /etc/cni and /opt are links to these, where kube-router
+  # installs the CNI config and plugins.
+  mkdir -p /var/lib/cni-conf/net.d /var/lib/opt/cni/bin
+  # /var/log leads here (pod logs).
+  mkdir -p /var/lib/log
+  # The kubelet won't start a pod without a resolver file; netd writes the
+  # real one.
+  [ -e /run/sneakers/resolv.conf ] || : > /run/sneakers/resolv.conf
+
+  # The airgap images: k0s imports every archive in $data/images when its
+  # worker starts. Links into the current product slot, so the images
+  # aren't copied; links an earlier bundle left are replaced.
+  mkdir -p "$data/images"
+  for l in "$data"/images/*.tar; do
+    if [ -L "$l" ]; then rm -f "$l"; fi
+  done
+  slot="$(readlink -f "$product")"
+  n=""
+  for f in "$slot"/images/*.tar; do
+    [ -f "$f" ] || continue
+    ln -s "$f" "$data/images/"
+    n="$n."
+  done
+  say "linked ${#n} images from the product bundle $(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json") into $data/images"
+
+  # Stacks k0s applies on its own: each <slot>/manifests/<name>/ is copied
+  # to $data/manifests/<name>/, replacing what an earlier bundle put there.
+  for d in "$slot"/manifests/*/; do
+    [ -d "$d" ] || continue
+    stack="$(basename "$d")"
+    rm -rf "$data/manifests/$stack"
+    mkdir -p "$data/manifests/$stack"
+    cp "$d"*.yaml "$data/manifests/$stack/"
+    say "stack $stack in place"
+  done
+
+  # INTERIM, until Traefik comes with the platform (#102): the box's own
+  # :8443 certificate as the box-tls Secret for the edge, refreshed on
+  # every start (osadmin renews it). It stays on the encrypted state
+  # volume, in k0s's manifests and etcd.
+  tls=/var/lib/sneakers/osadmin
+  if [ -s "$tls/tls.crt" ] && [ -s "$tls/tls.key" ]; then
+    mkdir -p "$data/manifests/box-tls"
+    umask 077
+    {
+      printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sneakers-edge\n---\n'
+      printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: box-tls\n  namespace: sneakers-edge\ntype: kubernetes.io/tls\nstringData:\n'
+      printf '  tls.crt: |\n'; sed 's/^/    /' "$tls/tls.crt"
+      printf '  tls.key: |\n'; sed 's/^/    /' "$tls/tls.key"
+    } > "$data/manifests/box-tls/box-tls.yaml.new"
+    mv "$data/manifests/box-tls/box-tls.yaml.new" "$data/manifests/box-tls/box-tls.yaml"
+    umask 022
+    say "the box's certificate is in place for the edge"
+  fi
+}
+
+run() {
+  read -r name < "$name_file"
+  # k0s puts its own binaries first; the kubelet finds mount(8) in /bin.
+  export PATH=/usr/sbin:/usr/bin:/sbin:/bin
+  exec "$product/k0s" controller --enable-worker --no-taints \
+    --config /run/sneakers/k0s/k0s.yaml --data-dir "$data" \
+    --disable-components konnectivity-server,metrics-server,update-prober,autopilot \
+    --kubelet-extra-args="--hostname-override=$name --node-ip=$node_ip"
+}
+
+case "${1:-}" in
+  prepare) prepare ;;
+  run) run ;;
+  *) echo "usage: k0s-interim prepare|run" >&2; exit 2 ;;
+esac

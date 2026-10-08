@@ -13,7 +13,9 @@ import (
 	"filippo.io/age"
 	"github.com/spf13/cobra"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
@@ -101,13 +103,13 @@ func binPackCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&layout, "layout", "", "the signed artifact's OCI layout")
+	f.StringVar(&layout, "layout", "", "the signed artifact's OCI layout, or the unpacked product bundle")
 	f.StringVar(&recipient, "recipient", "", "the channel's update key recipient (age)")
 	f.StringVar(&h.Version, "version", "", "release version")
 	f.StringVar(&h.Arch, "arch", "amd64", "amd64 or arm64")
 	f.StringVar(&h.Channel, "channel", release.ChannelLab, "production or lab")
-	f.StringVar(&kind, "kind", string(updatepkg.KindFull), "full or patch")
-	f.StringSliceVar(&h.Bases, "base", nil, "a base version a patch applies to (repeatable)")
+	f.StringVar(&kind, "kind", string(updatepkg.KindFull), "full, patch or product")
+	f.StringSliceVar(&h.Bases, "base", nil, "a base version a patch applies to, or a product bundle fits (repeatable)")
 	f.StringVar(&out, "out", "", "the work directory for header.json and payload.age")
 	for _, req := range []string{"layout", "recipient", "version", "out"} {
 		_ = cmd.MarkFlagRequired(req)
@@ -233,6 +235,16 @@ func binVerifyCmd() *cobra.Command {
 				}
 				if err != nil {
 					return err
+				}
+				// The box checks an unpacked product bundle before it uses it.
+				if extract != "" && p.Header.IsProduct() {
+					key, err := sigbundle.ParsePublicKey(pub)
+					if err != nil {
+						return err
+					}
+					if err := product.Finish(extract, p.Header.Arch, key); err != nil {
+						return err
+					}
 				}
 			}
 			h := p.Header

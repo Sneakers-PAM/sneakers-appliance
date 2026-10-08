@@ -5,12 +5,16 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
+	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
 
 func runCmd(t *testing.T, args ...string) (string, error) {
@@ -84,5 +88,107 @@ func TestTheReleaseSteps(t *testing.T) {
 	}
 	if _, err := runCmd(t, "bin-verify", "--release-key", filepath.Join(tmp, "cosign.pub"), "--channel", "production", bin); err == nil || !strings.Contains(err.Error(), "lab package") {
 		t.Fatalf("a production verify of a lab package: %v", err)
+	}
+}
+
+// TestTheProductBundleSteps packs an unpacked product bundle the way the
+// release and lab builds do, seals it, verifies and extracts it (which
+// checks its k0s and images), and writes the index a mirror serves.
+func TestTheProductBundleSteps(t *testing.T) {
+	tmp := t.TempDir()
+	keys, tree, work, out, extract := filepath.Join(tmp, "keys"), filepath.Join(tmp, "tree"), filepath.Join(tmp, "work"), filepath.Join(tmp, "out"), filepath.Join(tmp, "x")
+	if _, err := runCmd(t, "lab-update-key", "--out", keys); err != nil {
+		t.Fatal(err)
+	}
+	k := fixtures.LabKeys(t)
+	writeTree(t, tree, k)
+	writeFile(t, filepath.Join(tmp, "cosign.pub"), k.Cosign.PublicPEM)
+
+	if got, err := runCmd(t, "product-check", "--dir", tree, "--release-key", filepath.Join(tmp, "cosign.pub"), "--arch", "amd64"); err != nil || !strings.HasPrefix(got, "checked product bundle") {
+		t.Fatalf("product-check: %q, %v", got, err)
+	}
+	header, err := runCmd(t, "bin-pack", "--layout", tree, "--recipient", filepath.Join(keys, "update.pub"),
+		"--version", "0.2.0", "--arch", "amd64", "--channel", "lab", "--kind", "product", "--base", "0.2.0", "--base", "0.2.1", "--out", work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := os.ReadFile(header) // #nosec G304 -- the test's own output
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(work, "header.sigstore.json"), k.Cosign.BlobBundle(t, hdr))
+	bin, err := runCmd(t, "bin-seal", "--work", work, "--bundle", filepath.Join(work, "header.sigstore.json"), "--out", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(bin) != "sneakers-product-0.2.0-amd64-LAB.bin" {
+		t.Fatalf("sealed %s", bin)
+	}
+	got, err := runCmd(t, "bin-verify", "--release-key", filepath.Join(tmp, "cosign.pub"), "--channel", "lab",
+		"--identity", filepath.Join(keys, "update.key"), "--extract", extract, bin)
+	if err != nil || got != "verified sneakers-product 0.2.0 amd64 product (lab)" {
+		t.Fatalf("verify printed %q, %v", got, err)
+	}
+	if fi, err := os.Stat(filepath.Join(extract, "k0s")); err != nil || fi.Mode().Perm() != 0o755 {
+		t.Fatalf("extracted k0s: %v %v", fi, err)
+	}
+
+	idx := filepath.Join(out, updatepkg.IndexName)
+	if _, err := runCmd(t, "product-index", "--out", idx, bin); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(idx) // #nosec G304 -- the test's own output
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index updatepkg.Index
+	if err := json.Unmarshal(b, &index); err != nil || len(index.Products) != 1 {
+		t.Fatalf("index %s: %v", b, err)
+	}
+	e := index.Products[0]
+	if e.Version != "0.2.0" || e.File != "sneakers-product-0.2.0-amd64-LAB.bin" || e.Channel != "lab" || len(e.Bases) != 2 || e.Size == 0 {
+		t.Fatalf("entry %+v", e)
+	}
+}
+
+func TestBinVerifyChecksAnExtractedProductBundle(t *testing.T) {
+	tmp := t.TempDir()
+	keys, tree, work, out := filepath.Join(tmp, "keys"), filepath.Join(tmp, "tree"), filepath.Join(tmp, "work"), filepath.Join(tmp, "out")
+	if _, err := runCmd(t, "lab-update-key", "--out", keys); err != nil {
+		t.Fatal(err)
+	}
+	k := fixtures.LabKeys(t)
+	writeTree(t, tree, k)
+	// A k0s other than the one release.yaml pins: signed and sealed all the
+	// same, the unpacked bundle is refused.
+	writeFile(t, filepath.Join(tree, "k0s"), []byte("not the pinned k0s"))
+	writeFile(t, filepath.Join(tmp, "cosign.pub"), k.Cosign.PublicPEM)
+	header, err := runCmd(t, "bin-pack", "--layout", tree, "--recipient", filepath.Join(keys, "update.pub"),
+		"--version", "0.2.0", "--channel", "lab", "--kind", "product", "--base", "0.2.0", "--out", work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, _ := os.ReadFile(header) // #nosec G304 -- the test's own output
+	writeFile(t, filepath.Join(work, "header.sigstore.json"), k.Cosign.BlobBundle(t, hdr))
+	bin, err := runCmd(t, "bin-seal", "--work", work, "--bundle", filepath.Join(work, "header.sigstore.json"), "--out", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCmd(t, "bin-verify", "--release-key", filepath.Join(tmp, "cosign.pub"), "--channel", "lab",
+		"--identity", filepath.Join(keys, "update.key"), "--extract", filepath.Join(tmp, "x"), bin); !codes.Is(err, codes.KitBundleMismatch) {
+		t.Fatalf("want KIT_BUNDLE_MISMATCH, got %v", err)
+	}
+}
+
+// writeTree writes the fixture product bundle to dir.
+func writeTree(t *testing.T, dir string, k fixtures.Keys) {
+	t.Helper()
+	m, _ := fixtures.ProductTree(t, k, "amd64", nil)
+	for name, f := range m {
+		p := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, p, f.Data)
 	}
 }
