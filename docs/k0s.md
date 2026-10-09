@@ -116,6 +116,10 @@ doesn't pin. Lab builds take `HELM_VERSION` from `build/ci/versions.env`, with t
 checked against its published SHA-256. A production bundle carries helm once sneakers-release's
 `release.yaml` pins it.
 
+`helm list -A` is empty by design: the appliance applies the product's stacks as k0s manifests, not
+Helm releases, because the update slots and revert track the manifests directly, and Helm's release
+state would sit outside them. The root shell's `help` says so.
+
 For k0s v1.36.4+k0s.1 the components left on need five images: pause, kube-proxy, CoreDNS,
 kube-router and its CNI installer (`cni-node`). A lab build pins them, the hello image and the
 edge's Traefik in `build/lab/images.txt` and signs each digest with that run's lab key. `os/k0s/config_test.go`

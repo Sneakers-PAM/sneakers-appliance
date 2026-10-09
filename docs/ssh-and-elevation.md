@@ -234,14 +234,24 @@ closed shell:
    data and resizes. The session ends after the policy's minutes, after 10 minutes idle, when the SSH
    client goes away, or when an owner ends it on the Sessions page.
 
-The root shell is busybox ash. Its prompt, `[root@<host> <n> min left] <dir> # `, shows the kernel
-host name ([network.md](network.md#dns-ntp-and-the-host-name): the configured name, else the DHCP
-name, else the box's own `sneakers-<8 hex>`), the minutes left and the working directory; busybox is
-built with the shell arithmetic and prompt escapes it needs (`build/busybox/busybox.config`).
+The root shell is busybox ash. Its prompt, `[root@<host> until <HH:MM> UTC] <dir> # `, shows the
+kernel host name ([network.md](network.md#dns-ntp-and-the-host-name): the configured name, else the
+DHCP name, else the box's own `sneakers-<8 hex>`), when the session ends and the working directory.
+It is plain text with only the prompt escapes `\h` and `\w`, nothing the shell expands or runs;
+sneakers-elevated warns a minute before the end.
+
+At its start the session says who it's for, that it's recorded and when it ends, and that `help`
+lists the commands that help troubleshoot the box. `help` comes from the shell's start file
+(`os/rootshell/rc.sh`, handed to ash through `ENV`): pods, logs, events, `k0s status`, the stacks
+k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. It
+also says why `helm list -A` is empty: the product's stacks are k0s manifests the appliance applies
+from the installed bundle, not Helm releases, because the update slots and revert track the
+manifests directly and Helm's release state would sit outside them.
 
 With a product installed, `kubectl` and `helm` work in the root shell against its k0s with no setup:
 `KUBECONFIG` is k0s's admin kubeconfig ([k0s.md](k0s.md#kubectl-and-helm-in-the-root-shell)).
-Without one, the shell says so once at its start.
+Without one, the shell says so once at its start, and `kubectl`, `helm` and `k0s` each answer "No
+product is installed yet" instead of a bare "not found".
 
 Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
 Removing an admin's key ends a root shell it opened.

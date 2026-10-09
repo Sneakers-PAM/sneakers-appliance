@@ -36,6 +36,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/os/rootshell"
 )
 
 // Accessd is the part of access.v1's ElevationService this uses.
@@ -76,9 +77,16 @@ type Options struct {
 	// DefaultKubeconfig), and kubectl and helm on the PATH reach its k0s.
 	Product    string
 	Kubeconfig string
-	PID        int
-	Logger     log.Logger
+	// RCDir is where the session's start file (os/rootshell's rc.sh, the
+	// shell's ENV) is written for the session's life; empty is
+	// DefaultRCDir.
+	RCDir  string
+	PID    int
+	Logger log.Logger
 }
+
+// DefaultRCDir holds the root shells' start files, on /run.
+const DefaultRCDir = "/run/sneakers/elevated"
 
 // DefaultProduct is the installed product's current slot, where k0s and
 // helm come from (the root's /usr/bin/kubectl and /usr/bin/helm link there).
@@ -119,6 +127,9 @@ func Run(ctx, terminated context.Context, o Options) (Result, error) {
 	}
 	if o.Kubeconfig == "" {
 		o.Kubeconfig = DefaultKubeconfig
+	}
+	if o.RCDir == "" {
+		o.RCDir = DefaultRCDir
 	}
 	if o.Ticket == "" || o.Admin == "" {
 		return Result{}, errors.New("there is no root-shell ticket")
@@ -168,14 +179,20 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		return elevation.ReasonExit, err
 	}
 	defer func() { _ = master.Close() }()
+	rc, err := writeRC(o.RCDir)
+	if err != nil {
+		return elevation.ReasonExit, err
+	}
+	defer func() { _ = os.Remove(rc) }()
 	cmd := exec.Command(o.Shell[0], o.Shell[1:]...) // #nosec G204 -- the fixed root shell
 	cmd.Env = []string{
+		"ENV=" + rc,
 		"HOME=/root", "USER=root", "LOGNAME=root", "SHELL=" + o.Shell[0],
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"TERM=" + termOf(os.Getenv("TERM")),
 		"SNEAKERS_ROOT_SHELL=" + admin,
 		"SNEAKERS_ROOT_SHELL_ENDS=" + strconv.FormatInt(ends.Unix(), 10),
-		"PS1=" + Prompt,
+		"PS1=" + PromptFor(ends),
 	}
 	_, err = os.Stat(filepath.Join(o.Product, product.BundleFile))
 	installed := err == nil
@@ -208,6 +225,7 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		_, _ = rec.Write(b)
 	}
 	say(fmt.Sprintf("Root shell for %s, recorded. It ends at %s UTC, or after %s without a key.", admin, ends.UTC().Format("15:04:05"), o.Idle))
+	say("Welcome to the appliance's root shell. Type help for the commands that help troubleshoot this box; exit leaves.")
 	if !installed {
 		say(NoProduct)
 	}
@@ -344,4 +362,25 @@ func fileSHA(path string) string {
 		return ""
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// writeRC writes the session's start file into dir and returns its path.
+func writeRC(dir string) (string, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("the shell's start file: %w", err)
+	}
+	f, err := os.CreateTemp(dir, "rc-*.sh")
+	if err != nil {
+		return "", fmt.Errorf("the shell's start file: %w", err)
+	}
+	if _, err := f.WriteString(rootshell.RC); err != nil {
+		_ = f.Close()
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("the shell's start file: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(f.Name())
+		return "", fmt.Errorf("the shell's start file: %w", err)
+	}
+	return f.Name(), nil
 }

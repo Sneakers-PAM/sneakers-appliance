@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 )
@@ -189,17 +190,22 @@ var promptNeeds = []struct {
 
 func TestTheRootPromptUsesOnlyWhatBusyboxBuilds(t *testing.T) {
 	on := busyboxConfig(t)
+	prompt := elevated.PromptFor(time.Now())
 	for _, n := range promptNeeds {
-		if !n.use.MatchString(elevated.Prompt) {
+		if !n.use.MatchString(prompt) {
 			continue
 		}
 		for _, sym := range n.syms {
 			if !on[sym] {
-				t.Errorf("the root shell's PS1 %q needs %s, which busybox.config doesn't build", elevated.Prompt, sym)
+				t.Errorf("the root shell's PS1 %q needs %s, which busybox.config doesn't build", prompt, sym)
 			}
 		}
 	}
-	if !strings.Contains(elevated.Prompt, `\h`) {
-		t.Errorf("the root shell's PS1 %q doesn't show the host name", elevated.Prompt)
+	if !strings.Contains(prompt, `\h`) {
+		t.Errorf("the root shell's PS1 %q doesn't show the host name", prompt)
+	}
+	// Plain text: nothing in the prompt is expanded or run.
+	if strings.ContainsAny(prompt, "$`") {
+		t.Errorf("the root shell's PS1 %q has an expansion", prompt)
 	}
 }
