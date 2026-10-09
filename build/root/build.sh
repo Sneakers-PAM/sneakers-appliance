@@ -3,7 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # build.sh: lay out the declared root tree (spec 1 Section 3.4, spec 2
-# Section 3), pack it as SquashFS (zstd) and append its dm-verity tree.
+# Section 3), pack it as an uncompressed SquashFS and append its dm-verity
+# tree.
 # Reproducible: the tree's modes are set explicitly, every file is root's,
 # file times come from SOURCE_DATE_EPOCH, and the verity salt and UUID are
 # fixed from the version. build/root/tree.txt is the declared tree;
@@ -178,7 +179,10 @@ mkdir -p "$OUT"
 img="$OUT/root-$VERSION.img"
 rm -f "$img"
 # mksquashfs takes its timestamps from SOURCE_DATE_EPOCH.
-mksquashfs "$tree" "$img" -comp zstd -all-root -no-xattrs -noappend -quiet
+# Uncompressed (inodes, ids, data, fragments, xattrs): SquashFS compresses each
+# block on its own, so a delta between two compressed roots saves little; the
+# .bin payload carries the root as it is, and a patch carries a zstd delta.
+mksquashfs "$tree" "$img" -comp zstd -noI -noId -noD -noF -noX -all-root -no-xattrs -noappend -quiet
 size="$(stat -c %s "$img")"
 pad=$(( (4096 - size % 4096) % 4096 ))
 [ "$pad" -eq 0 ] || head -c "$pad" /dev/zero >> "$img"

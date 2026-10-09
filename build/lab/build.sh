@@ -46,6 +46,8 @@
 #                version, no maximum)
 #   BRAND        a brand folder for the lab product bundle (optional;
 #                build/product/build.sh, docs/artifact.md#the-brand)
+#   LAB_MIRROR   the lab mirror the build names as its built-in update
+#                source (release.Mirrors; comma-separated; optional)
 #
 # Output: $OUT/version (the version with the build number, which every
 # file name below carries), $OUT/keys.txt (the SHA-256 fingerprint of each
@@ -57,6 +59,7 @@
 # sneakers-product-index.json, to upload on the Updates page or serve from
 # a lab mirror. The signed UKI, $OUT/work/sneakers-<version>.efi, carries
 # the lab update key (internal/ukikey), which decrypts the bundle.
+# build/lab/units.sh then makes the three update units from this output.
 #
 # The lab release pins the images in build/lab/images.txt (k0s's own, the
 # throwaway hello-world one and the interim edge), signs each pinned digest
@@ -172,7 +175,7 @@ sign_blob "$work/release.yaml" "$work/release.yaml.sigstore.json"
 
 pkg=github.com/Sneakers-PAM/sneakers-appliance/internal/release
 b64() { base64 -w0 < "$1"; }
-pins="-X $pkg.Channel=lab -X $pkg.Version=$version \
+pins="-X $pkg.Channel=lab -X $pkg.Version=$version -X $pkg.Mirrors=${LAB_MIRROR:-} \
   -X $pkg.ReleaseKey=$(b64 "$KEYS/cosign.pub") -X $pkg.DBCert=$(b64 "$KEYS/db.crt") \
   -X $pkg.PKCert=$(b64 "$KEYS/PK.crt") -X $pkg.KEKCert=$(b64 "$KEYS/KEK.crt")"
 
@@ -191,7 +194,8 @@ done
 # The bundle fits the base built here and newer, unless PRODUCT_MIN_BASE and
 # PRODUCT_MAX_BASE say otherwise; BASES keeps it installable on boxes that
 # predate the range.
-VERSION="$version" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
+product_inputs="$(RELEASE="$work/release.yaml" STACKS="$here/stacks" bash "$here/units.sh" inputs product)"
+INPUTS="$product_inputs" VERSION="$version" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
   SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
   BRAND="${BRAND:-}" bash "$root/build/product/build.sh"
 sign_blob "$work/product/bin/header.json" "$work/product/bin/header.sigstore.json"

@@ -88,11 +88,14 @@ func productCheckCmd() *cobra.Command {
 }
 
 // productIndexCmd writes the index a mirror or a release serves next to
-// its .bin files: product bundles in its products section, base releases
-// in its base section. It reads only their headers: the box verifies each
+// its .bin files (format 2): product bundles in its products section, the
+// units' releases in baseOS and baseWeb, a base release from before the
+// units in base, and with --bridge a Base OS release in base too, under
+// its legacy name. It reads only their headers: the box verifies each
 // .bin when it's staged.
 func productIndexCmd() *cobra.Command {
 	var out string
+	var bridges []string
 	cmd := &cobra.Command{
 		Use:     "product-index <file.bin>...",
 		Aliases: []string{"index"},
@@ -107,6 +110,16 @@ func productIndexCmd() *cobra.Command {
 				}
 				idx.Add(h, size)
 			}
+			for _, a := range bridges {
+				h, size, err := indexHeader(a)
+				if err != nil {
+					return err
+				}
+				if updatepkg.UnitOf(h) != updatepkg.UnitBaseOS || h.Kind != updatepkg.KindFull {
+					return fmt.Errorf("%s isn't a Base OS full release; only one bridges", a)
+				}
+				idx.AddBridge(h, size)
+			}
 			b, err := json.MarshalIndent(idx, "", "  ")
 			if err != nil {
 				return err
@@ -119,6 +132,7 @@ func productIndexCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&out, "out", "", "the index file to write")
+	cmd.Flags().StringSliceVar(&bridges, "bridge", nil, "a Base OS full .bin to list in the legacy base section too (repeatable)")
 	_ = cmd.MarkFlagRequired("out")
 	return cmd
 }

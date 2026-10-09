@@ -35,6 +35,24 @@ every lab file name says which commit it is (`sneakers-0.0.0-lab.20261007d-g1a2b
 the `.ova` and the `.bin` likewise); the version it used is in `$OUT/version`. In
 CI the keys live on a tmpfs that's unmounted at the end of the job; nothing built is uploaded.
 
+**The three units.** `build/lab/units.sh` then makes a lab build's update units (spec 7) from its
+output with the same keys: `OUT=<build output> KEYS=<keys> bash build/lab/units.sh` writes, in
+`$OUT/units` (or `UNITS`), the Base OS full `.bin` (`BRIDGE=1` also writes it under the old name and
+lists it in the index's legacy base section, for boxes from before the units), the Base Web `.bin`
+(when the build made pages, `WEB`), the product bundle, a Base OS patch from each build output in
+`PATCH_FROM`, and the format 2 index over them all (and over the `.bin` files of the directories in
+`INDEX_ALSO`). `CHECK_FROM` makes a patch that's built and checked but goes to `checked-only/`, out
+of the index. Every patch is opened as a box on its base opens it (that build's signed UKI),
+rebuilt from the base artifact with the box's own code (`sneakers-artifact patch-check`), and the
+rebuilt layout verified by both builds' kits. Each `.bin` has its input digest beside it
+(`<file>.inputs`, also in its signed header): `units.sh inputs baseOS` (the appliance tree and the
+components in `KERNEL`, `VERITYSETUP`, `OPENSSH`, `BUSYBOX` and `STATIC`), `inputs baseWeb` (the
+built pages, `PAGES`) and `inputs product` (`RELEASE`, the image digests and pins, and `STACKS`),
+for a release job to compare with the last published release. `build/lab/units_test.sh` checks the
+digests. From build m the root image is an uncompressed SquashFS (`build/root/build.sh`), so a
+delta between two roots stays small; the `.bin` payload isn't compressed yet, so a Base OS full
+file carries the root at its full size.
+
 `build/keys/lab-keys.sh` refuses to touch a `KEYS` directory that already holds a key set, so a
 build pointed at a shared, on-disk lab key folder can never silently replace its private keys:
 `NEW_KEYS=1` replaces the set on purpose, `REUSE_KEYS=1` keeps it as is (refused if the set is only

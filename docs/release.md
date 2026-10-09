@@ -16,6 +16,47 @@ The `.bin` is the update package. The box downloads it from the GitHub Release, 
 uploads the identical file through :8443 or the console on an air-gapped box. Both paths read it
 the same way, and the box contacts no other package source.
 
+## The three update units
+
+From build m a box updates three units on their own, each its own signed `.bin`:
+
+| Unit | Holds | File name (full) | Patch |
+|---|---|---|---|
+| Base OS | the root image, the UKI, the loader and the Secure Boot files | `sneakers-appliance-baseOS-<version>-<arch>.bin` | `sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin` |
+| Base Web | the :8443 admin pages, static files with a signed manifest | `sneakers-appliance-baseWeb-<version>-<arch>.bin` | none yet |
+| Product | the product bundle | `sneakers-product-<version>-<arch>.bin`, unchanged | none yet |
+
+- A lab file adds `-LAB` before `.bin`. A production Base OS or Base Web version carries the build's
+  short commit once, after the version (`sneakers-appliance-baseOS-0.3.0-g1a2b3c4-amd64.bin`); a lab
+  version already ends with it.
+- One version line: a release stamps the units it ships with its version, and a unit it doesn't
+  ship keeps its earlier version. "Tied" means the same major.minor (below).
+- Base Web is one file per architecture, with the same pages in each.
+- A header with no `unit` is a Base OS from before the units and keeps its old name,
+  `sneakers-appliance-<version>-<arch>.bin`.
+
+**Patches.** `sneakers-artifact patch-make --base <layout> --target <layout> --out <dir>` writes a
+Base OS patch's payload (the target layout less its root image and UKI, plus `zstd -19
+--long=30 --patch-from` deltas) and `patch-spec.json`, after checking that each delta rebuilds its
+blob exactly with the box's own decoder. `bin-pack --unit baseOS --patch-spec <dir>/patch-spec.json`
+puts the base, the target and the full file's name in the header. After the header is signed and
+sealed, `patch-check --base <layout> <patch.bin>` opens it the way the box does (verify, decrypt)
+and rebuilds the target from the base layout; with `--extract` the rebuilt layout is left for
+`sneakers-kit verify`. A patch that doesn't rebuild is never published. How the box applies one is
+in [upgrades.md](upgrades.md#base-os-patches).
+
+**Base Web.** `sneakers-artifact web-pack --pages <built pages> --version <v> --commit <sha> --out <dir>`
+lays out the payload, `pages/` and `web.yaml` (with `--requires-baseos-min` and
+`--requires-baseos-before` for a range other than its own major.minor); the build signs
+`web.yaml` into `web.yaml.sig` with the release key, `web-check --dir <dir>` loads it the way
+:8443 does, and `bin-pack --unit baseWeb --layout <dir>` packs it, one file per architecture.
+
+**The bridge.** A box on build l fetches only the old names and can't apply a patch or a Base Web.
+The m release publishes its Base OS full file a second time under the old name (the same bytes;
+the name isn't signed: `bin-seal --bridge`), and lists it in the index's legacy `base` section
+(`index --bridge`). l to m is a full Base OS update; the first patch a box applies is m to m1. Later
+releases don't bridge.
+
 ## The `.bin` format
 
 ```
@@ -29,10 +70,16 @@ The header:
 
 | Field | Meaning |
 |---|---|
-| `format`, `name` | `1`, `sneakers-appliance` |
+| `format`, `name` | `1`; `sneakers-appliance` (Base OS), `sneakers-appliance-web` (Base Web: a box from before the units refuses the name, so it never takes one for a root image) or `sneakers-product` |
+| `unit` | `baseOS` or `baseWeb`; absent on a header from before the units (Base OS) and on a product's |
+| `commit` | the short commit the file was built from; its name carries it |
+| `epoch` | the signing-key generation it needs; absent reads as 1. A box takes only units of its own epoch (`UPGRADE_EPOCH`); a patch never crosses one |
+| `requires` | a Base Web's `baseOS` range, `min` inclusive and `before` exclusive; absent, the same major.minor as its version (lab ranges take the lab pre-releases). A product's range stays `min_base` and `max_base` |
+| `inputs` | the SHA-256 of the unit's build inputs, which the release job compares with the last published release to decide whether the unit changed (`build/lab/units.sh inputs`) |
 | `version`, `arch` | the release version (SemVer, pre-release identifiers may hold hyphens, as a lab build number does: `0.0.0-lab.20261007d-g1a2b3c4`), `amd64` or `arm64` |
-| `kind` | `full`, or `patch` for a hotfix |
+| `kind` | `full`, or `patch` for a Base OS delta |
 | `bases` | a patch's exact base versions; a full version has none |
+| `method`, `base`, `target` | a patch's method (`zstd-patch-from/1`), its base (version, root image size and SHA-256, UKI SHA-256) and its target (version, root image and UKI SHA-256, the full `.bin` to take instead) |
 | `channel` | `production` or `lab` |
 | `recipient` | the SHA-256 of the age recipient the payload is encrypted to |
 | `payload` | the ciphertext's `sha256` and `size` |
@@ -87,11 +134,13 @@ How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundl
 `build/product/build.sh` lays the bundle out (with `BRAND=<folder>` for a brand), runs that check (`sneakers-artifact product-check`)
 and packs it for a base range (`MIN_BASE` and the optional `MAX_BASE`, `bin-pack --kind product --min-base ... --max-base ...`; `BASES`, `--base`, still adds exact bases for older boxes); the caller signs the
 header and seals it with `bin-seal`. `sneakers-artifact product-index` (also `index`) writes the
-index a mirror serves next to the `.bin` files: version, architecture, channel, the base range and
-bases, file name and size per product bundle under `products`, and the same per base release (with
-`kind`, full or patch) under `base`. Give it every `.bin` the mirror serves; the box only uses the
-index to offer a choice, and verifies each `.bin` when it's staged. An index with no `base`
-section (from before it existed) still reads: it offers products only. `bin-verify --extract` on a product bundle also runs the
+index a mirror serves next to the `.bin` files, format 2: version, architecture, channel, the base range and
+bases, file name and size per product bundle under `products`; the Base OS releases (with `kind`,
+full or patch, a patch's `base_root_sha256`, and each `epoch`, `commit` and `inputs`) under `baseOS`;
+the Base Web releases (with `requires`) under `baseWeb`; and a base release from before the units,
+or a `--bridge` file under its old name, under `base`. Give it every `.bin` the mirror serves; the
+box only uses the index to offer a choice, and verifies each `.bin` when it's staged. An index with
+no `base` section (from before it existed) still reads: it offers products only. `bin-verify --extract` on a product bundle also runs the
 box's check.
 
 ### product.yaml

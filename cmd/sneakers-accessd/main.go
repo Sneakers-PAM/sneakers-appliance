@@ -282,6 +282,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			},
 			DirectURL: directURL(pins.Channel),
 			Arch:      runtime.GOARCH,
+			// sneakers-osadmin serves the pages and says which it serves.
+			WebServedFile:  filepath.Join(paths.OwnDir(), osadmin.WebServedFile),
+			BuiltinMirrors: builtinMirrors(),
 		},
 	})
 	d.Attach(store, api)
@@ -401,6 +404,17 @@ func bootID(lg log.Logger) string {
 
 // directURL is the release source a build fetches from directly; a lab
 // build has none (lab packages are never published).
+// builtinMirrors is the built-in source list a lab build names.
+func builtinMirrors() []string {
+	var out []string
+	for _, u := range strings.Split(release.Mirrors, ",") {
+		if u = strings.TrimSpace(u); u != "" {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
 func directURL(channel string) string {
 	if channel == release.ChannelProduction {
 		return releaseSource

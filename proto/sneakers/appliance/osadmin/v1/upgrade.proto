@@ -98,6 +98,16 @@ service UpgradeService {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {role: ROLE_ADMIN};
   }
+  // CheckUpdates (Check now) reads the index again from the policy's
+  // source and answers what it offers for each unit: the Base OS (full and
+  // patch), the Base Web and the product, each line labelled full or patch
+  // with its size, the one to take marked preferred. The answer is kept and
+  // GetUpgrades returns it as last_check. Refused with UPGRADE_AIR_GAPPED
+  // when the box has no source.
+  rpc CheckUpdates(CheckUpdatesRequest) returns (CheckUpdatesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
   rpc SetUpgradePolicy(SetUpgradePolicyRequest) returns (SetUpgradePolicyResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -123,17 +133,61 @@ message UpgradePolicy {
   // direct fetches from the release source (the GitHub Release) when no
   // mirror is set or the mirror fails. Off by default.
   bool direct = 5;
+  // source is where the box takes updates from: builtin (the list
+  // compiled into the signed root for its channel, walked in order:
+  // production, the release download location; lab, the lab mirror the
+  // build names), manual (mirror_url) or none (upload only). Empty is a
+  // policy from before the source: mirror_url, then the release source
+  // when direct is on, as before. GetUpgrades always answers it filled
+  // in: a set mirror_url reads as manual, direct with no mirror as
+  // builtin, neither as none.
+  string source = 6;
 }
 
-// UpdateTarget is what an update changes. Unspecified is the base image,
-// as before product bundles.
+// UpdateTarget is what an update changes: one of the three update units.
+// Unspecified is the Base OS, as before product bundles.
 enum UpdateTarget {
   UPDATE_TARGET_UNSPECIFIED = 0;
-  // UPDATE_TARGET_BASE is the base image: the OS slots and a reboot.
+  // UPDATE_TARGET_BASE is the Base OS: the root image, the UKI and the
+  // boot files, in the A/B root slots, applied with a reboot.
   UPDATE_TARGET_BASE = 1;
   // UPDATE_TARGET_PRODUCT is the product bundle: k0s, its images and the
   // product, in their own slots on the state volume.
   UPDATE_TARGET_PRODUCT = 2;
+  // UPDATE_TARGET_BASE_WEB is the Base Web: the :8443 admin pages, in the
+  // web slots on the state volume, switched in place with no reboot.
+  // Apply and Revert take a fresh code, need no maintenance and leave the
+  // root slots, the product, the sessions and elevation alone.
+  UPDATE_TARGET_BASE_WEB = 3;
+}
+
+// BaseWebStatus is the Base Web: which pages :8443 serves, and its slots.
+message BaseWebStatus {
+  // running_version is the served pages' version; the built-in pages
+  // carry the running Base OS's.
+  string running_version = 1;
+  // source is slot or built-in; slot is the served slot, a or b.
+  string source = 2;
+  string slot = 3;
+  // reason says why the built-in pages serve (no Base Web is installed,
+  // the current slot failed its checks or doesn't fit the running Base
+  // OS), or why the last switch didn't take.
+  string reason = 4;
+  // current_version is what the current link names, served or not.
+  string current_version = 5;
+  string staged_version = 6;
+  // previous_version is the slot a revert goes back to; empty when a
+  // revert goes to the built-in pages (can_revert says whether there's
+  // anything to revert).
+  string previous_version = 7;
+  bool can_revert = 8;
+  // builtin_version is the running root's own pages' version.
+  string builtin_version = 9;
+  // requires_base_os is what the current Base Web needs of the Base OS,
+  // such as "0.3.0 to before 0.4.0"; fits is whether the running Base OS
+  // is in it.
+  string requires_base_os = 10;
+  bool fits = 11;
 }
 
 // ProductSlots are the product bundle's slots on the state volume.
@@ -152,6 +206,12 @@ message ProductSlots {
   // :8443 nav shows the product's own section under it, and only while it
   // is set.
   string name = 5;
+  // requires_base_os is the installed product's base range in words, such
+  // as "0.2.0 to 0.3.0" (inclusive); empty with none installed, or for a
+  // bundle that names exact bases only. fits is whether the running Base
+  // OS is in it.
+  string requires_base_os = 6;
+  bool fits = 7;
 }
 
 // ProductVersion is one product bundle a source offers.
@@ -191,6 +251,11 @@ message UpdatePackage {
   // ProductVersion.
   string min_base = 10;
   string max_base = 11;
+  // full_bin is a Base OS patch's full release: the file the box takes
+  // instead when the patch doesn't fit or doesn't rebuild.
+  string full_bin = 12;
+  // source is where the file came from: upload, mirror or direct.
+  string source = 13;
 }
 
 // HeldUpload is a received or fetched .bin that hasn't been staged or
@@ -321,6 +386,97 @@ message GetUpgradesResponse {
   HeldUpload held_upload = 18;
   // receiving is true while an upload or fetch is coming in.
   bool receiving = 19;
+  // base_web is the Base Web unit.
+  BaseWebStatus base_web = 20;
+  // last_check is the last CheckUpdates answer since osadmin started;
+  // unset before the first.
+  CheckUpdatesResponse last_check = 21;
+  // fetch_progress is the last fetch, while it runs and after; unset
+  // before the first.
+  FetchProgress fetch_progress = 22;
+  // base_os_note says, for a staged Base OS whose built-in pages the
+  // installed Base Web doesn't fit, what the box serves after the reboot.
+  string base_os_note = 23;
+}
+
+// FetchProgress is a fetch of one .bin from a source.
+message FetchProgress {
+  string file_name = 1;
+  // target is the unit the file's name says.
+  UpdateTarget target = 2;
+  // state is querying (asking the source for the file), downloading,
+  // verifying (the signature and the SHA-256, as at stage), done or
+  // failed.
+  string state = 3;
+  // done_bytes of total_bytes came in; total_bytes is 0 when the source
+  // didn't say. bytes_per_second is the average since the download
+  // started, and eta_seconds what's left at that speed (0 when unknown).
+  int64 done_bytes = 4;
+  int64 total_bytes = 5;
+  int64 bytes_per_second = 6;
+  int64 eta_seconds = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  // source is mirror, builtin or direct.
+  string source = 10;
+  // verified is true when the downloaded file's signature, channel and
+  // SHA-256 checked out; error and code say why not, or why the fetch
+  // failed. A file that failed the check is still held, for Verify and
+  // stage to refuse and remove, or Cancel.
+  bool verified = 11;
+  string error = 12;
+  string code = 13;
+  string upload_id = 14;
+}
+
+// UnitOffer is one file the source offers for a unit.
+message UnitOffer {
+  UpdateTarget target = 1;
+  string version = 2;
+  // kind is full or patch.
+  string kind = 3;
+  // file_name is what FetchUpdate takes.
+  string file_name = 4;
+  int64 size = 5;
+  // preferred marks the line to take: for the newest Base OS, its patch
+  // when it fits the running base and the box has the memory to rebuild
+  // it, else its full file.
+  bool preferred = 6;
+  // bases are a patch's base versions.
+  repeated string bases = 7;
+  // needs is what the file needs of the Base OS, such as "0.3.0 to before
+  // 0.4.0" (Base Web) or "0.2.0 or newer" (a product).
+  string needs = 8;
+  // note says what taking it means for the other units, such as "After
+  // the reboot the box serves the built-in pages of 0.4.0 until a Base Web
+  // for 0.4 is installed".
+  string note = 9;
+  // outside_product_range is a Base OS outside the installed product's
+  // range: staging it needs the owner's override.
+  bool outside_product_range = 10;
+  string product_range = 11;
+  string commit = 12;
+}
+
+message CheckUpdatesRequest {}
+
+message CheckUpdatesResponse {
+  // source is the source the index came from: mirror, builtin or direct,
+  // and url its address.
+  string source = 1;
+  string url = 2;
+  // index_format is the index's format: 2 with the units' lists, 0 or 1
+  // before.
+  int32 index_format = 3;
+  google.protobuf.Timestamp checked_at = 4;
+  // The offers for each unit, newest first.
+  repeated UnitOffer base_os = 5;
+  repeated UnitOffer base_web = 6;
+  repeated UnitOffer product = 7;
+  // base_web_waits names a newer Base Web the running Base OS doesn't fit
+  // and the Base OS it needs, such as "Base Web 0.4.0 needs Base OS 0.4.0
+  // to before 0.5.0"; empty when there's none.
+  string base_web_waits = 8;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch
@@ -354,6 +510,11 @@ message MirrorStatus {
   string server_sha256 = 13;
   // pin_matched is true when the pinned fingerprint matched it.
   bool pin_matched = 14;
+  // source is the policy's source (builtin or manual) and url the mirror
+  // this status is for; builtin_urls is the built-in list, in order.
+  string source = 15;
+  string url = 16;
+  repeated string builtin_urls = 17;
 }
 
 message FetchUpdateRequest {

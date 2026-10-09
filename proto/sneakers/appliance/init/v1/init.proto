@@ -142,6 +142,22 @@ message UnstageResponse {
 message StageRequest {
   // reference is a registry reference or a path to an OCI layout archive.
   string reference = 1;
+  // patch is set when reference is a Base OS patch's unpacked payload: the
+  // target's layout without its root image and UKI, plus their deltas.
+  // init checks the running root slot and UKI against the base, rebuilds
+  // both blobs, checks them against the target's SHA-256, and only then
+  // stages the layout (UPGRADE_PATCH_BASE, UPGRADE_PATCH_RESULT).
+  StagePatch patch = 2;
+}
+
+// StagePatch is what a patch's signed header names, as osadmin verified it.
+message StagePatch {
+  string base_version = 1;
+  string base_root_sha256 = 2;
+  int64 base_root_size = 3;
+  string base_uki_sha256 = 4;
+  string root_sha256 = 5;
+  string uki_sha256 = 6;
 }
 
 message StageResponse {

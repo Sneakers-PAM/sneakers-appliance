@@ -34,6 +34,7 @@ import (
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/basepatch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
@@ -54,7 +55,6 @@ const (
 
 var (
 	uploadIDRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	binNameRE  = regexp.MustCompile(`^sneakers-(appliance|product)-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?-(amd64|arm64)(-LAB)?\.bin$`)
 	windowRE   = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 )
 
@@ -86,6 +86,24 @@ type UpgradeOptions struct {
 	// ProductUpEvery is how often Options.ProductUp is asked while a
 	// product comes up; 0 is DefaultProductUpEvery.
 	ProductUpEvery time.Duration
+	// WebDir holds the web slots; empty is webslots.Dir. WebServedFile is
+	// the status sneakers-osadmin writes of the pages it serves; empty
+	// doesn't wait for a switch to be served. WebSwitchWait bounds that
+	// wait; 0 is DefaultWebSwitchWait.
+	WebDir        string
+	WebServedFile string
+	WebSwitchWait time.Duration
+	// BuiltinWebVersion is the running root's own pages' version; empty is
+	// release.Version.
+	BuiltinWebVersion string
+	// BuiltinMirrors are the built-in source list's mirrors (a lab build's
+	// release.Mirrors), tried in order before the release source.
+	BuiltinMirrors []string
+	// MemAvailable reads the free memory; nil reads /proc/meminfo.
+	// PatchMinFree is the free memory below which a full .bin is preferred
+	// to a patch; 0 is DefaultPatchMinFree.
+	MemAvailable func() int64
+	PatchMinFree int64
 }
 
 // DefaultElevationEndWait is how long an override waits for a terminated
@@ -99,6 +117,9 @@ type Policy struct {
 	WindowMinutes int    `json:"windowMinutes"`
 	MirrorURL     string `json:"mirrorUrl,omitempty"`
 	Direct        bool   `json:"direct,omitempty"`
+	// Source is builtin, manual or none; empty is a policy from before it
+	// (effectiveSource).
+	Source string `json:"source,omitempty"`
 }
 
 // DefaultPolicy is a new box's: automatic in a daily 02:00 window of two
@@ -260,10 +281,24 @@ func (s *Server) history(action, version, actor string, err error, detail string
 }
 
 func targetName(t osadminv1.UpdateTarget) string {
-	if t == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+	switch t {
+	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
 		return "product"
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		return "web"
 	}
 	return "base"
+}
+
+// targetOf is the target a stored name names.
+func targetOf(name string) osadminv1.UpdateTarget {
+	switch name {
+	case "product":
+		return osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+	case "web":
+		return osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB
+	}
+	return osadminv1.UpdateTarget_UPDATE_TARGET_BASE
 }
 
 func (s *Server) historyFor(target osadminv1.UpdateTarget, action, version, actor string, err error, detail string) {
@@ -302,10 +337,7 @@ func (s *Server) readHistory(limit int) []*osadminv1.UpgradeEvent {
 		if json.Unmarshal(sc.Bytes(), &e) != nil {
 			continue
 		}
-		target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
-		if e.Target == "product" {
-			target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
-		}
+		target := targetOf(e.Target)
 		all = append(all, &osadminv1.UpgradeEvent{Time: timestamppb.New(e.Time), Action: e.Action, Version: e.Version, Actor: e.Actor, Outcome: e.Outcome, Code: e.Code, Detail: e.Detail, Target: target})
 	}
 	slices.Reverse(all)
@@ -332,6 +364,15 @@ type uploadMeta struct {
 	Size   int64     `json:"size"`
 	At     time.Time `json:"at"`
 	Source string    `json:"source"`
+}
+
+// uploadSource is where an upload came from: upload, mirror or direct.
+func (s *Server) uploadSource(id string) string {
+	var m uploadMeta
+	if raw, err := os.ReadFile(filepath.Join(s.uploadsDir(), id+".json")); err == nil { // #nosec G304 -- an upload this box made
+		_ = json.Unmarshal(raw, &m)
+	}
+	return m.Source
 }
 
 func (s *Server) uploadsDir() string { return filepath.Join(s.o.Paths.APIDir(), uploadsDir) }
@@ -558,15 +599,17 @@ type upgradeSvc struct {
 	s *Server
 }
 
-func policyToWire(p Policy) *osadminv1.UpgradePolicy {
-	return &osadminv1.UpgradePolicy{Mode: p.Mode, WindowStart: p.WindowStart, WindowMinutes: int32(min(p.WindowMinutes, 1<<30)), MirrorUrl: p.MirrorURL, Direct: p.Direct} // #nosec G115 -- clamped
+func policyToWire(p Policy, directAvailable bool) *osadminv1.UpgradePolicy {
+	return &osadminv1.UpgradePolicy{Mode: p.Mode, WindowStart: p.WindowStart, WindowMinutes: int32(min(p.WindowMinutes, 1<<30)), MirrorUrl: p.MirrorURL, Direct: p.Direct, // #nosec G115 -- clamped
+		Source: effectiveSource(p, directAvailable)}
 }
 
 func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadminv1.GetUpgradesRequest]) (*connect.Response[osadminv1.GetUpgradesResponse], error) {
 	p := h.s.policy()
 	direct := h.s.o.Upgrade.DirectURL != ""
-	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && (!p.Direct || !direct), History: h.s.readHistory(100),
-		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p), HeldUpload: h.s.heldUpload()}
+	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p, direct), AirGapped: len(h.s.sources(updatepkg.IndexName, updatepkg.IndexName)) == 0, History: h.s.readHistory(100),
+		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p), HeldUpload: h.s.heldUpload(), BaseWeb: h.s.baseWebStatus(ctx),
+		LastCheck: h.s.lastCheck(), FetchProgress: h.s.fetchProgress()}
 	h.s.upgrades.mu.Lock()
 	out.Receiving = h.s.upgrades.receiving > 0
 	h.s.upgrades.mu.Unlock()
@@ -576,6 +619,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 		out.PreviousVersion, out.PreviousSlot = h.s.previous(st.Msg)
 		out.NextStageRemoves = st.Msg.GetNextStageRemoves()
 		out.UpgradeProgress = h.s.progressToWire(st.Msg)
+		out.BaseOsNote = h.s.baseOSNote(st.Msg.GetStagedVersion())
 	} else {
 		out.UpgradeProgress = h.s.progressToWire(nil)
 	}
@@ -595,8 +639,17 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 
 func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[osadminv1.SetUpgradePolicyRequest]) (*connect.Response[osadminv1.SetUpgradePolicyResponse], error) {
 	w := r.Msg.GetPolicy()
-	p := Policy{Mode: w.GetMode(), WindowStart: w.GetWindowStart(), WindowMinutes: int(w.GetWindowMinutes()), MirrorURL: strings.TrimRight(strings.TrimSpace(w.GetMirrorUrl()), "/"), Direct: w.GetDirect()}
-	callFrom(ctx).note("policy", "mode", p.Mode, "window", p.WindowStart+"+"+itoa(p.WindowMinutes)+"m", "mirror", p.MirrorURL, "direct", strconv.FormatBool(p.Direct))
+	p := Policy{Mode: w.GetMode(), WindowStart: w.GetWindowStart(), WindowMinutes: int(w.GetWindowMinutes()), MirrorURL: strings.TrimRight(strings.TrimSpace(w.GetMirrorUrl()), "/"), Direct: w.GetDirect(), Source: w.GetSource()}
+	callFrom(ctx).note("policy", "mode", p.Mode, "window", p.WindowStart+"+"+itoa(p.WindowMinutes)+"m", "mirror", p.MirrorURL, "direct", strconv.FormatBool(p.Direct), "source", p.Source)
+	switch p.Source {
+	case "", SourceBuiltIn, SourceNone:
+	case SourceManual:
+		if p.MirrorURL == "" {
+			return nil, codes.New(codes.AccessConfirm, "the manual source needs a mirror URL")
+		}
+	default:
+		return nil, codes.New(codes.AccessConfirm, "the source is builtin, manual or none")
+	}
 	if p.Mode != "automatic" && p.Mode != "manual" {
 		return nil, codes.New(codes.AccessConfirm, "the mode is automatic or manual")
 	}
@@ -616,7 +669,7 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 	if err := writeAtomic(h.s.ownPath(policyFile), b); err != nil {
 		return nil, err
 	}
-	h.s.o.Logger.Info("osadmin: update policy set", log.F("mode", p.Mode), log.F("mirror", p.MirrorURL), log.F("direct", p.Direct))
+	h.s.o.Logger.Info("osadmin: update policy set", log.F("mode", p.Mode), log.F("mirror", p.MirrorURL), log.F("direct", p.Direct), log.F("source", p.Source))
 	return connect.NewResponse(&osadminv1.SetUpgradePolicyResponse{}), nil
 }
 
@@ -631,7 +684,7 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	if len(srcs) == 0 {
 		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the .bin instead")
 	}
-	if !binNameRE.MatchString(name) {
+	if !updatepkg.ValidFileName(name) {
 		return nil, codes.New(codes.UpgradeUpload, "%q isn't a sneakers-appliance or sneakers-product .bin name", name)
 	}
 	if err := h.s.reserveReceive(); err != nil {
@@ -643,10 +696,16 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 		err      error
 	)
 	for _, src := range srcs {
+		h.s.beginFetch(name, src.name)
 		if id, n, err = h.s.fetch(ctx, src, uploadMeta{Name: name, Source: src.name}); err == nil {
 			from = src.name
 			break
 		}
+	}
+	if err != nil {
+		h.s.fetchState(func(f *osadminv1.FetchProgress) { f.State, f.Error, f.Code = "failed", describe(err), symbolOf(err) })
+	} else {
+		h.s.verifyFetched(id)
 	}
 	h.s.releaseReceive()
 	h.s.history("fetch", "", c.session.Admin, err, name)
@@ -663,8 +722,12 @@ func (s *Server) fetch(ctx context.Context, src source, meta uploadMeta) (id str
 	started := time.Now()
 	resp, peer, err := s.open(ctx, src, ".bin")
 	if err == nil {
-		id, n, err = s.saveUpload(resp.Body, meta)
+		s.fetchState(func(f *osadminv1.FetchProgress) { f.State, f.TotalBytes = "downloading", max(resp.ContentLength, 0) })
+		id, n, err = s.saveUpload(&progressReader{r: resp.Body, s: s, total: resp.ContentLength, started: time.Now()}, meta)
 		_ = resp.Body.Close()
+		if err == nil {
+			s.fetchState(func(f *osadminv1.FetchProgress) { f.DoneBytes, f.TotalBytes, f.EtaSeconds = n, n, 0 })
+		}
 	}
 	s.fetched(ctx, src, ".bin", peer, started, n, err)
 	return id, n, err
@@ -707,7 +770,11 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	}
 	h.s.finishSteps(stepStage)
 	out := &osadminv1.StageUpdateResponse{Package: pkg}
-	if target != osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+	switch target {
+	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		out.Slot = h.s.webSlots().Status().StagedSlot
+	default:
 		out.Slot = h.s.otherSlot()
 	}
 	return connect.NewResponse(out), nil
@@ -738,14 +805,68 @@ func (s *Server) previous(st *initv1.ImageServiceStatusResponse) (version, slot 
 // make room for it. The upload and its unpacked layout are removed once
 // init has staged it.
 func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
-	path, err := s.uploadPath(id)
-	if err != nil {
+	if _, err := s.uploadPath(id); err != nil {
 		return nil, nil, err
 	}
 	if err := s.beginStaging(); err != nil {
 		return nil, nil, err
 	}
 	defer s.endStaging()
+	pkg, removed, err := s.stageHeld(ctx, id, overrideRange)
+	if fb := s.patchFallback(ctx, pkg, err); fb != "" {
+		return s.stageHeld(ctx, fb, overrideRange)
+	} else if code, ok := patchRefusal(err); ok && pkg.GetFullBin() != "" {
+		err = codes.New(code, "%s Upload the full release instead: %s.", strings.TrimSuffix(remoteSentence(err), "."), pkg.GetFullBin())
+	}
+	return pkg, removed, err
+}
+
+// patchRefusal is the code of a patch that didn't fit or didn't rebuild,
+// as init or this box refused it.
+func patchRefusal(err error) (int, bool) {
+	for _, c := range []int{codes.UpgradePatchBase, codes.UpgradePatchResult} {
+		if remoteIs(err, c) {
+			return c, true
+		}
+	}
+	return 0, false
+}
+
+// remoteIs reports whether err carries code, here or as init's Connect
+// error, whose message starts with the code's symbol.
+func remoteIs(err error, code int) bool {
+	if err == nil {
+		return false
+	}
+	if codes.Is(err, code) {
+		return true
+	}
+	ce := new(connect.Error)
+	return errors.As(err, &ce) && strings.HasPrefix(ce.Message(), codes.Symbol(code)+" (")
+}
+
+// remoteSentence is err's sentence without its code, here or from init.
+func remoteSentence(err error) string {
+	if ce := new(connect.Error); errors.As(err, &ce) {
+		m := ce.Message()
+		if i := strings.Index(m, "): "); i >= 0 {
+			return m[i+3:]
+		}
+		return m
+	}
+	d := describe(err)
+	if i := strings.Index(d, "): "); i >= 0 {
+		return d[i+3:]
+	}
+	return d
+}
+
+// stageHeld stages the upload id while the stage is held.
+func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
+	path, err := s.uploadPath(id)
+	if err != nil {
+		return nil, nil, err
+	}
 	// What's staged isn't known until the header is read, so the record
 	// starts with the verify step alone.
 	s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED, "", "")
@@ -764,9 +885,12 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 		s.reject(path, err)
 		return nil, nil, err
 	}
-	if p.Header.IsProduct() {
+	switch updatepkg.UnitOf(p.Header) {
+	case updatepkg.UnitProduct:
 		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "", "")
-	} else {
+	case updatepkg.UnitBaseWeb:
+		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB, "", s.freeWebSlot())
+	default:
 		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, "", s.otherSlot())
 	}
 	s.setStep(stepVerify, "")
@@ -774,13 +898,24 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 		s.reject(path, err)
 		return nil, nil, err
 	}
+	if err := updatepkg.CheckEpoch(p.Header, updatepkg.BoxEpoch); err != nil {
+		s.reject(path, err)
+		return nil, nil, err
+	}
 	h := p.Header
 	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
-		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, MinBase: h.MinBase, MaxBase: h.MaxBase}
+		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, MinBase: h.MinBase, MaxBase: h.MaxBase, Source: s.uploadSource(id)}
+	if h.Target != nil {
+		pkg.FullBin = h.Target.FullBin
+	}
 	s.setVersion(h.Version)
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
 		return pkg, nil, s.stageProduct(ctx, path, p)
+	}
+	if updatepkg.UnitOf(h) == updatepkg.UnitBaseWeb {
+		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB
+		return pkg, nil, s.stageWeb(ctx, path, p)
 	}
 	img, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
@@ -789,6 +924,16 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 	if err := h.AppliesTo(img.Msg.GetRunningVersion()); err != nil {
 		s.reject(path, err)
 		return pkg, nil, err
+	}
+	var patch *initv1.StagePatch
+	if h.Kind == updatepkg.KindPatch {
+		spec, err := basepatch.SpecOf(h)
+		if err != nil {
+			s.reject(path, err)
+			return pkg, nil, err
+		}
+		patch = &initv1.StagePatch{BaseVersion: spec.BaseVersion, BaseRootSha256: spec.BaseRootSHA256, BaseRootSize: spec.BaseRootSize, BaseUkiSha256: spec.BaseUKISHA256,
+			RootSha256: spec.RootSHA256, UkiSha256: spec.UKISHA256}
 	}
 	if err := s.fitsInstalledProduct(h.Version, overrideRange); err != nil {
 		return pkg, nil, err
@@ -810,13 +955,60 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 		return pkg, nil, err
 	}
 	s.setStep(stepStage, "Writing the release into "+slotName(s.otherSlot())+".")
-	res, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir}))
+	if patch != nil {
+		s.setStep(stepStage, "Rebuilding the release from the patch and "+h.Base.Version+", then writing it into "+slotName(s.otherSlot())+".")
+	}
+	res, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir, Patch: patch}))
 	if err != nil {
+		if patch != nil {
+			s.removeUpload(path)
+		}
 		return pkg, nil, err
 	}
 	s.removeUpload(path)
 	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version), log.F("removed", strings.Join(res.Msg.GetRemovedVersions(), ",")))
 	return pkg, res.Msg.GetRemovedVersions(), nil
+}
+
+// patchFallback takes the full .bin of a patch's release when the patch
+// didn't fit the running base or didn't rebuild (spec 5, Section 2.10.3):
+// for a patch fetched from a source, it fetches the full file the signed
+// header names from the same sources and returns its upload id, with an
+// audit entry; "" when there's nothing to fall back to. An uploaded patch
+// isn't followed by a fetch: the refusal names the full file instead.
+func (s *Server) patchFallback(ctx context.Context, pkg *osadminv1.UpdatePackage, err error) string {
+	code, ok := patchRefusal(err)
+	if !ok || pkg.GetKind() != string(updatepkg.KindPatch) {
+		return ""
+	}
+	full := pkg.GetFullBin()
+	c := callFrom(ctx)
+	e := c.by("upgrade.patch-fallback")
+	e.Target = "release " + pkg.GetVersion()
+	e.Detail = map[string]string{"version": pkg.GetVersion(), "reason": codes.Symbol(code), "full": full, "source": pkg.GetSource()}
+	if full == "" || pkg.GetSource() == "" || pkg.GetSource() == "upload" {
+		s.o.Logger.Warn("osadmin: a patch didn't apply; upload the full .bin", log.F("version", pkg.GetVersion()), log.F("full", full), log.F("error", describe(err)))
+		return ""
+	}
+	s.o.Logger.Warn("osadmin: a patch didn't apply; fetching the full .bin", log.F("version", pkg.GetVersion()), log.F("full", full), log.F("reason", codes.Symbol(code)))
+	var id string
+	var ferr error
+	for _, src := range s.sources(full, directPath(full)) {
+		s.beginFetch(full, src.name)
+		if id, _, ferr = s.fetch(ctx, src, uploadMeta{Name: full, Source: src.name}); ferr == nil {
+			break
+		}
+	}
+	if len(s.sources(full, directPath(full))) == 0 {
+		ferr = codes.New(codes.UpgradeAirGapped, "no source to fetch %s from", full)
+	}
+	s.write(e, ferr)
+	s.history("fallback", pkg.GetVersion(), c.session.Admin, ferr, full)
+	if ferr != nil {
+		s.o.Logger.Warn("osadmin: the full .bin wasn't fetched", log.F("full", full), log.F("error", describe(ferr)))
+		return ""
+	}
+	return id
 }
 
 // fitsInstalledProduct refuses a base release outside the installed
@@ -928,13 +1120,15 @@ func (h *upgradeSvc) DiscardUpdate(ctx context.Context, r *connect.Request[osadm
 	switch target {
 	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
 		v, err = h.s.slots().Unstage()
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		v, err = h.s.webSlots().Unstage()
 	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE:
 		var res *connect.Response[initv1.UnstageResponse]
 		if res, err = h.s.o.Image.Unstage(ctx, connect.NewRequest(&initv1.UnstageRequest{})); err == nil {
 			v = res.Msg.GetVersion()
 		}
 	default:
-		return nil, codes.New(codes.AccessConfirm, "name the upload to drop, or the target (base or product) to unstage")
+		return nil, codes.New(codes.AccessConfirm, "name the upload to drop, or the target (base, web or product) to unstage")
 	}
 	if v != "" {
 		c.note("release "+v, "version", v, "target", targetName(target))
@@ -949,6 +1143,14 @@ func (h *upgradeSvc) DiscardUpdate(ctx context.Context, r *connect.Request[osadm
 
 func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {
 	c := callFrom(ctx)
+	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
+		v, err := h.s.applyWeb(ctx, c.by("upgrade.apply"))
+		c.note("web", "version", v)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&osadminv1.ApplyUpdateResponse{}), nil
+	}
 	apply, what := h.s.apply, "box"
 	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
 		apply, what = h.s.applyProduct, "product"
@@ -1154,6 +1356,15 @@ func overrideDetail(id string) string {
 
 func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadminv1.RevertUpdateRequest]) (*connect.Response[osadminv1.RevertUpdateResponse], error) {
 	c := callFrom(ctx)
+	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
+		c.note("web")
+		v, err := h.s.revertWeb(ctx, c.by("upgrade.revert"))
+		c.note("web", "version", v)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&osadminv1.RevertUpdateResponse{}), nil
+	}
 	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
 		c.note("product")
 		v, overrode, err := h.s.revertProduct(ctx, c.by("upgrade.revert"), r.Msg.GetElevationOverride())

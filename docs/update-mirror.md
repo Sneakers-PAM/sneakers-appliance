@@ -6,10 +6,17 @@ in [upgrades.md](upgrades.md#an-internal-mirror).
 
 ## What it is
 
-- **One internal source, in the policy.** The mirror is a setting of the update policy (owner),
-  not a choice made per download. Fetches and the product list try it first, then the release
-  source when `direct` is on, the same order as before. With no mirror and `direct` off the box
-  stays air-gapped and never makes a network fetch.
+- **One source, in the policy.** The source is a setting of the update policy (owner,
+  `UpgradePolicy.source`), not a choice made per download:
+  - `builtin`: the list compiled into the signed root for the build's channel, walked in order.
+    A production build's list is the release download location; a lab build's is the lab mirror
+    the build names (`release.Mirrors`), then the release source when the build has one.
+  - `manual`: the mirror URL (`mirror_url`).
+  - `none`: upload only. The box never makes a network fetch (`UPGRADE_AIR_GAPPED`).
+
+  A policy from before the source reads as one: a set mirror URL is `manual`, `direct` on with no
+  mirror is `builtin`, neither is `none`. Until the owner saves it with a source, a policy with
+  both a mirror and `direct` keeps its old order, the mirror then the release source.
 - **`http://` or `https://`.** The URL has a host, no user name or password and no query; the
   box adds the file name to it.
 - **Integrity never depends on the transport.** Every `.bin` is checked against the release key,
@@ -22,7 +29,7 @@ in [upgrades.md](upgrades.md#an-internal-mirror).
 - **The system roots by default.** A mirror with a certificate from a public CA needs nothing
   more. The root image carries no CA bundle, so accessd uses Go's embedded copy of the Mozilla
   roots (`golang.org/x/crypto/x509roots/fallback`); the release source is checked the same way.
-- **A private CA, for the mirror only.** An owner adds the internal CA (one or more PEM CA
+- **A private CA, for the mirrors only** (the manual one and the built-in list's). An owner adds the internal CA (one or more PEM CA
   certificates) on the Certificates page (`TlsService.SetUpdateTrust`). The box adds it to the
   roots of the mirror's fetches and of nothing else: not the release source, not :8443, not the
   product. It's kept in `/var/lib/sneakers/osadmin-api/update-trust.json` and read on every fetch,
@@ -39,8 +46,9 @@ in [upgrades.md](upgrades.md#an-internal-mirror).
 
 ## What the owner sees
 
-- `GetUpgrades.mirror_status`: the scheme, whether a private CA and a pin are set, and the last
-  mirror fetch: when, its result and code, and for HTTPS the server certificate's subject, issuer,
+- `GetUpgrades.mirror_status`: the source and the URL it's about (with the built-in list, the entry
+  last fetched from, and the whole list), the scheme, whether a private CA and a pin are set, and
+  the last fetch: when, its result and code, and for HTTPS the server certificate's subject, issuer,
   expiry, fingerprint and whether the pin matched. For HTTP it says "plain HTTP: integrity from
   the signature only". It's kept in memory, so after a restart it reads "not checked yet" until
   the next fetch (Check now on Updates is one).

@@ -18,6 +18,7 @@ import (
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/basepatch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/imageupgrade"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/verify"
@@ -33,6 +34,12 @@ type Images interface {
 	Kept() ([]string, error)
 	NextStageRemoves() ([]string, error)
 	Unstage(ctx context.Context) (string, error)
+}
+
+// patching is an Images that stages a Base OS patch, as
+// *imageupgrade.Stager does.
+type patching interface {
+	StagePatch(ctx context.Context, dir string, p basepatch.Spec, arch string) (string, error)
 }
 
 // writing is an Images that reports a Stage's progress writing the slot,
@@ -70,7 +77,18 @@ func (h *imageHandler) Stage(ctx context.Context, r *connect.Request[initv1.Stag
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	v, err := h.im.Stage(ctx, src, h.arch)
+	var v string
+	if p := r.Msg.GetPatch(); p != nil {
+		pi, ok := h.im.(patching)
+		if !ok || !filepath.IsAbs(r.Msg.GetReference()) {
+			return nil, toConnect(codes.New(codes.UpgradePatchBase, "this init can't apply a patch from %s; take the full .bin", src.String()))
+		}
+		h.log.Info("initapi: Image.Stage of a patch", log.F("base", p.GetBaseVersion()))
+		v, err = pi.StagePatch(ctx, r.Msg.GetReference(), basepatch.Spec{BaseVersion: p.GetBaseVersion(), BaseRootSHA256: p.GetBaseRootSha256(), BaseRootSize: p.GetBaseRootSize(),
+			BaseUKISHA256: p.GetBaseUkiSha256(), RootSHA256: p.GetRootSha256(), UKISHA256: p.GetUkiSha256()}, h.arch)
+	} else {
+		v, err = h.im.Stage(ctx, src, h.arch)
+	}
 	if err != nil {
 		h.log.Warn("initapi: Image.Stage refused", log.F("source", src.String()), log.F("error", codes.Describe(err)))
 		return nil, toConnect(err)

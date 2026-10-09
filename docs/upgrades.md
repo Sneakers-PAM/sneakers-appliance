@@ -167,6 +167,23 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    `GetUpgrades.active_elevations` lists the open elevated shells, so the page shows who holds one
    before an owner tries.
 
+**The three cards, Check now and a fetch's progress.** The Updates page shows one card per unit,
+Base OS, Base Web and Product (spec 7), each from `GetUpgrades`: the Base OS's running, previous
+and staged versions (and `base_os_note` when a staged Base OS's built-in pages are what the box
+serves after the reboot); the Base Web's (`base_web`: what serves, from which slot or the built-in
+pages, and why); the product's (`product`, with its base range and whether the running Base OS is
+in it). `CheckUpdates` (Check now, any admin) reads the index again from the policy's source on
+every press and answers each unit's offers: the Base OS's full and patch files (a patch only for
+the running base), the Base Web's (only those that fit the running Base OS; `base_web_waits` names
+a newer one that needs a newer Base OS), and the product's, each with its size and what it needs,
+the one to take marked `preferred` (the newest Base OS's patch, unless the box has less free
+memory than the rebuild needs, 600 MB by default). `GetUpgrades.last_check` keeps the last answer.
+While `FetchUpdate` runs, `GetUpgrades.fetch_progress` reports its state (`querying`,
+`downloading`, `verifying`, `done` or `failed`), the bytes, the speed and the time left; once the
+file is in, its signature and SHA-256 are checked as a stage will (`verified`), and a file that
+fails stays held for Verify and stage to refuse, or Cancel. Install an update is the upload, for
+air-gapped boxes: the uploaded file's signed header picks its card.
+
 **The elevation override.** An owner may end the open shell and go ahead in the same request:
 Apply and Revert take an `elevation_override` with the session's id, a typed confirmation of its
 admin and id (`bob E-7KQ2`) and a reason. The override is owner only and needs the same fresh
@@ -194,6 +211,75 @@ product, the `staged` link and its slot's files go, and the installed and previo
 Nothing is dropped while a stage runs (`UPGRADE_BUSY`), and with nothing staged it's
 `UPGRADE_NOT_STAGED`. A base stage removes the previous release to make room (above), so after
 unstaging one there's no previous release to revert to until the next apply.
+
+## Base OS patches
+
+A patch is a smaller way to deliver exactly the same Base OS release (spec 5, Section 2.10). Its
+`.bin` (`sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin`) carries the target's
+signed OCI layout without its two large blobs, the root image and the UKI, plus a `zstd
+--patch-from` delta of each against the base's. Its signed header names the base (version, the root
+image's size and SHA-256, the UKI's SHA-256), the target (the root image's and UKI's SHA-256) and
+the full `.bin` of the same release.
+
+1. **Verify** as every `.bin`; the header must name the running version as its base
+   (`UPGRADE_PATCH_BASE`) and carry the hashes (`UPGRADE_FORMAT` otherwise).
+2. **Decrypt and unpack** the payload, then `Image.Stage` with the patch's spec. init reads the
+   first `root_size` bytes of the running root slot and the running UKI from the ESP and checks
+   both against the base's SHA-256 before anything is written (`UPGRADE_PATCH_BASE`).
+3. **Rebuild** both blobs from the base and the deltas, and check each against the target's
+   SHA-256, which is also the blob's digest in the signed artifact (`UPGRADE_PATCH_RESULT`, nothing
+   staged). The layout is then the one the full `.bin` unpacks, and the usual Stage runs on it, the
+   whole verify chain included.
+4. **Fallback:** when a fetched patch is refused at step 2 or 3, osadmin fetches the full `.bin`
+   the header names from the same sources and stages it instead, with an `upgrade.patch-fallback`
+   audit entry (the version, the reason and the full file) and a `fallback` line in the history.
+   An uploaded patch isn't followed by a fetch: the refusal names the full file to upload.
+
+Apply, Revert, boot counting and retention are unchanged: a patched box is byte for byte the box
+the full `.bin` makes. The rebuild needs about the root image's size in memory (some 200 MB) and
+the same again on the state volume while it runs.
+
+## Base Web
+
+The :8443 admin pages are their own update unit (spec 7): static files with a signed manifest,
+switched in place with no reboot. The osadmin binary and the API the pages call stay in the Base
+OS, so no code from a Base Web ever runs on the box; switching one changes the pages only.
+
+- **The slots.** `/var/lib/sneakers/web/a` and `b`, with the links `current`, `staged` and
+  `previous`, the product slots' pattern. A slot holds `pages/`, `web.yaml` (the version, commit,
+  `requires`, and every file's path, size and SHA-256), `web.yaml.sig` (a Sigstore bundle over
+  `web.yaml` by the channel's release key) and `header.json`, the verified `.bin` header, written
+  last; a slot without it is never used.
+- **Every load checks** the signature against the release key in the running root, reads every
+  listed file and checks its size and SHA-256, and refuses any other file, a link or a path outside
+  `pages/` (`UPGRADE_WEB_LOAD`). The set is then served from memory, so what's on disk later
+  can't change what's served until the next load, which checks again.
+- **Stage** (`target` is the package's own: `UPDATE_TARGET_BASE_WEB`). The package must fit the
+  running Base OS (its header's `requires.baseOS`, or its own major.minor): a Base Web for another
+  Base OS is refused with `UPGRADE_COMPAT`, saying what it needs, what runs and what to install
+  first, nothing is written, and the upload is kept so it can be staged once the Base OS fits. It
+  must be newer than the pages served now (`UPGRADE_DOWNGRADE`). It's decrypted, unpacked into the
+  slot `current` doesn't name, and loaded there with every check before `staged` is set.
+- **Apply and Revert** (`target: UPDATE_TARGET_BASE_WEB`) take a fresh code like every Apply and
+  Revert, but need no maintenance and are never held by an elevated shell: they don't touch the
+  root slots, the UKI, the ESP, k0s, the product (443 keeps serving), the network, the :8443
+  sessions or elevation. Apply moves `current` to the staged slot (the old one becomes
+  `previous`); Revert moves it back, or with no previous slot removes it, so the built-in pages
+  serve. A revert to a Base Web that doesn't fit the running Base OS is refused (`UPGRADE_COMPAT`).
+  The steps are switching and loading: sneakers-osadmin, which serves :8443, sees the link change
+  within a second, loads the slot and swaps what it serves in one step. accessd waits for
+  sneakers-osadmin's record of what it serves (`web-served.json` in its own directory); when the
+  pages don't take, the links go back, the step fails with `UPGRADE_WEB_LOAD`, and the pages
+  served before keep serving.
+- **Open browsers.** The set that was replaced keeps answering for files the new one lacks (an
+  open page's hashed assets) until the next switch, and every API answer carries the served
+  version in `X-Sneakers-Web-Version`, so a page built as another version offers a reload.
+- **At start** sneakers-osadmin serves the `current` slot when it passes the checks and fits the
+  running Base OS, else the root's built-in pages, which every Base OS still carries. Updates says
+  which (`GetUpgrades.base_web`: the served version, `slot` or `built-in`, and why).
+- **A Base OS update first.** The Base OS never waits for a Base Web: after a Base OS update whose
+  pages the installed Base Web doesn't fit, the box serves the new root's built-in pages until a
+  fitting Base Web is installed.
 
 ## An internal mirror
 

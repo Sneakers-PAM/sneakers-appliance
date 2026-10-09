@@ -122,10 +122,11 @@ jobs:
         run: bash build/keys/lab-keys_test.sh
       - name: Root image is reproducible and holds the declared tree
         run: bash build/root/build_test.sh
-      - name: Release guard, production fingerprint check, kit floor and lab pages stamp
+      - name: Release guard, production fingerprint check, kit floor, lab pages stamp and unit input digests
         run: |
           bash build/release/guard_test.sh
           bash build/release/check-fingerprints_test.sh
           bash build/release/build_test.sh
           bash build/release/kitmin_test.sh
           bash build/lab/pages_test.sh
+          bash build/lab/units_test.sh

@@ -21,6 +21,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"syscall"
 	"time"
@@ -34,19 +35,23 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/front"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/webslots"
 )
 
 // Port is the appliance admin's port.
 const Port = "8443"
 
 type config struct {
-	state, assets, accessSock string
+	state, assets, web, accessSock string
 }
 
 func main() {
 	var c config
 	flag.StringVar(&c.state, "state", "/var/lib/sneakers", "the state volume (osadmin writes only its own directory)")
-	flag.StringVar(&c.assets, "assets", "/usr/share/sneakers/osadmin", "the static admin pages")
+	flag.StringVar(&c.assets, "assets", "/usr/share/sneakers/osadmin", "the built-in admin pages, served when no Base Web is installed or it doesn't load")
+	flag.StringVar(&c.web, "web", webslots.Dir, "the Base Web slots")
 	flag.StringVar(&c.accessSock, "access-socket", accessapi.SocketPath, "accessd's socket")
 	flag.Parse()
 	lg := log.NewLoggerWithOptions("sneakers-osadmin", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatJSON), log.WithDefaultLevel(log.LevelError))
@@ -75,17 +80,22 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	tr := unixTransport(c.accessSock)
 	binding := accessv1connect.NewBindingServiceClient(&http.Client{Timeout: 30 * time.Second, Transport: tr}, "http://access.sock")
 	paths := osadmin.Paths{State: c.state}
-	var assets fs.FS
+	var builtin fs.FS
 	if st, err := os.Stat(c.assets); err == nil && st.IsDir() {
-		assets = os.DirFS(c.assets)
+		builtin = os.DirFS(c.assets)
 	} else {
-		lg.Warn("osadmin: no admin pages installed; serving the API only", log.F("path", c.assets))
+		lg.Warn("osadmin: no built-in admin pages; serving the API only until a Base Web is installed", log.F("path", c.assets))
+	}
+	live := webslots.NewLive(builtin, release.Version)
+	if err := watchWeb(ctx, c, paths, builtin, live, lg); err != nil {
+		return err
 	}
 	f := front.New(front.Options{
 		Backend:    &url.URL{Scheme: "http", Host: "access.sock"},
 		Transport:  tr,
-		Assets:     assets,
+		Assets:     live,
 		StatusFile: accessapi.StatusFile,
+		WebVersion: live.Version,
 		Logger:     lg,
 	})
 
@@ -125,6 +135,29 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		}
 		lg.Info("osadmin: management addresses or host name changed; rebinding")
 	}
+}
+
+// webEvery is how often the served pages are checked against the
+// current web slot.
+const webEvery = time.Second
+
+// watchWeb serves the current Base Web slot when it loads and fits the
+// running Base OS, else the built-in pages, and follows the slot's
+// changes until ctx ends.
+func watchWeb(ctx context.Context, c config, paths osadmin.Paths, builtin fs.FS, live *webslots.Live, lg log.Logger) error {
+	pins, err := release.Load()
+	if err != nil {
+		return err
+	}
+	key, err := sigbundle.ParsePublicKey(pins.ReleaseKeyPEM)
+	if err != nil {
+		return err
+	}
+	w := &webslots.Watcher{Slots: webslots.Slots{Dir: c.web}, Key: key, Channel: pins.Channel, BaseOS: release.Version, Builtin: builtin, BuiltinVersion: release.Version,
+		Live: live, StatusFile: filepath.Join(paths.OwnDir(), osadmin.WebServedFile), Logger: lg}
+	w.Sync()
+	go w.Run(ctx, webEvery)
+	return nil
 }
 
 func addresses(ctx context.Context, binding accessv1connect.BindingServiceClient) (string, []string, error) {

@@ -60,7 +60,9 @@ func labUpdateKeyCmd() *cobra.Command {
 func binPackCmd() *cobra.Command {
 	var (
 		h                      updatepkg.Header
-		kind                   string
+		kind, unit             string
+		needMin, needBefore    string
+		patchSpecPath          string
 		layout, recipient, out string
 	)
 	cmd := &cobra.Command{
@@ -82,7 +84,15 @@ func binPackCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			h.Kind = updatepkg.Kind(kind)
+			h.Kind, h.Unit = updatepkg.Kind(kind), updatepkg.Unit(unit)
+			if patchSpecPath != "" {
+				if err := readPatchSpec(patchSpecPath, &h); err != nil {
+					return err
+				}
+			}
+			if needMin != "" || needBefore != "" {
+				h.Requires = map[updatepkg.Unit]updatepkg.Range{updatepkg.UnitBaseOS: {Min: needMin, Before: needBefore}}
+			}
 			h, err = updatepkg.Encrypt(&payload, h, r, ct)
 			if cerr := ct.Close(); err == nil {
 				err = cerr
@@ -112,6 +122,13 @@ func binPackCmd() *cobra.Command {
 	f.StringSliceVar(&h.Bases, "base", nil, "a base version a patch applies to (repeatable); for a product bundle, an exact base for boxes that predate --min-base")
 	f.StringVar(&h.MinBase, "min-base", "", "the oldest base version a product bundle fits (inclusive)")
 	f.StringVar(&h.MaxBase, "max-base", "", "the newest base version a product bundle fits (inclusive; optional)")
+	f.StringVar(&unit, "unit", "", "baseOS or baseWeb (empty: a base release named as before the units)")
+	f.StringVar(&h.Commit, "commit", "", "the short commit the package is built from; the file name carries it")
+	f.IntVar(&h.Epoch, "epoch", 0, "the signing-key epoch (0 leaves it out, which reads as 1)")
+	f.StringVar(&h.Inputs, "inputs", "", "the SHA-256 of the unit's build inputs (units.sh inputs)")
+	f.StringVar(&needMin, "requires-baseos-min", "", "a Base Web package: the oldest Base OS it fits (default: its own major.minor)")
+	f.StringVar(&needBefore, "requires-baseos-before", "", "a Base Web package: the first Base OS it no longer fits")
+	f.StringVar(&patchSpecPath, "patch-spec", "", "a Base OS patch: the "+patchSpecFile+" patch-make wrote (sets --kind patch and the base)")
 	f.StringVar(&out, "out", "", "the work directory for header.json and payload.age")
 	for _, req := range []string{"layout", "recipient", "version", "out"} {
 		_ = cmd.MarkFlagRequired(req)
@@ -121,6 +138,7 @@ func binPackCmd() *cobra.Command {
 
 func binSealCmd() *cobra.Command {
 	var work, bundle, out string
+	var bridge bool
 	cmd := &cobra.Command{
 		Use:   "bin-seal",
 		Short: "Join the header, its signature bundle and the payload into the .bin",
@@ -158,10 +176,16 @@ func binSealCmd() *cobra.Command {
 			if err := f.Close(); err != nil {
 				return err
 			}
+			if bridge {
+				if err := copyBridge(dst, p.Header, out); err != nil {
+					return err
+				}
+			}
 			_, err = fmt.Fprintln(cmd.OutOrStdout(), dst)
 			return err
 		},
 	}
+	cmd.Flags().BoolVar(&bridge, "bridge", false, "a Base OS full release: also write the same file under the name a box from before the units fetches")
 	cmd.Flags().StringVar(&work, "work", "", "the work directory bin-pack wrote")
 	cmd.Flags().StringVar(&bundle, "bundle", "", "the signature bundle over header.json")
 	cmd.Flags().StringVar(&out, "out", "", "the output directory")
@@ -169,6 +193,28 @@ func binSealCmd() *cobra.Command {
 		_ = cmd.MarkFlagRequired(req)
 	}
 	return cmd
+}
+
+// copyBridge writes the sealed Base OS file dst a second time under its
+// legacy name (the bytes are the same; the name isn't signed).
+func copyBridge(dst string, h updatepkg.Header, out string) error {
+	if updatepkg.UnitOf(h) != updatepkg.UnitBaseOS || h.Kind != updatepkg.KindFull || h.Unit == "" {
+		return fmt.Errorf("only a Base OS full release (bin-pack --unit baseOS) has a bridge copy")
+	}
+	src, err := os.Open(dst) // #nosec G304 -- the file just sealed
+	if err != nil {
+		return err
+	}
+	defer func() { _ = src.Close() }()
+	b, err := os.Create(filepath.Join(out, updatepkg.LegacyFileName(h))) // #nosec G304 -- the output directory
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(b, src); err != nil {
+		_ = b.Close()
+		return err
+	}
+	return b.Close()
 }
 
 // sealedPrefix is the package without its payload, enough to read the
@@ -284,6 +330,15 @@ func readRecipient(p string) (*age.X25519Recipient, error) {
 		return nil, fmt.Errorf("%s isn't an age X25519 recipient", p)
 	}
 	return x, nil
+}
+
+// identityOf reads the update key from a key file, or from a UKI as the
+// box does.
+func identityOf(keyFile, uki string) (age.Identity, error) {
+	if keyFile != "" {
+		return readIdentity(keyFile)
+	}
+	return ukiIdentity(uki)
 }
 
 func readIdentity(p string) (age.Identity, error) {

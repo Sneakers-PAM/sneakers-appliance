@@ -359,7 +359,9 @@ func lowerFirst(s string) string {
 // step is active, otherwise the status screen, which warns about a step
 // that failed (a reboot that never came, say).
 func Screen(c consoleui.Chrome, d Data, now time.Time) tui.Page {
-	if p := d.Status.Status.GetUpgradeProgress(); p.GetInProgress() {
+	// A Base Web switch takes seconds and leaves the box and the product
+	// alone: the status screen stays.
+	if p := d.Status.Status.GetUpgradeProgress(); p.GetInProgress() && p.GetTarget() != osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
 		return MaintenancePage(c, p)
 	}
 	return Page(c, d, now)

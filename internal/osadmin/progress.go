@@ -111,6 +111,10 @@ func stageLabel(target osadminv1.UpdateTarget, slot string) string {
 	switch {
 	case target == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
 		return "Staging into the free product slot"
+	case target == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB && slot != "":
+		return "Staging into web slot " + slot
+	case target == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		return "Staging into the free web slot"
 	case slot != "":
 		return "Staging into slot " + slot
 	}
@@ -128,6 +132,13 @@ func stepsFor(action string, target osadminv1.UpdateTarget, slot string, followU
 	var out []progressStep
 	if action != "revert" {
 		out = append(out, progressStep{ID: stepVerify, Label: "Verifying (signature, channel, SHA-256)"}, progressStep{ID: stepStage, Label: stageLabel(target, slot)})
+	}
+	if target == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
+		out = append(out, progressStep{ID: stepSwitch, Label: "Switching the admin pages"}, progressStep{ID: stepLoad, Label: "Loading and checking the pages"})
+		for i := range out {
+			out[i].State = statePending
+		}
+		return out
 	}
 	out = append(out, progressStep{ID: stepSwitch, Label: "Switching slots"})
 	if product {
@@ -147,7 +158,7 @@ func stepsFor(action string, target osadminv1.UpdateTarget, slot string, followU
 // interrupted are the steps osadmin runs itself, start to end, in one
 // call: one found active when osadmin starts was cut off. A switch or a
 // reboot found active is the reboot the apply ended in.
-var interrupted = map[string]bool{stepVerify: true, stepStage: true, stepRestart: true}
+var interrupted = map[string]bool{stepVerify: true, stepStage: true, stepRestart: true, stepLoad: true}
 
 // loadProgress reads the record once, failing a step osadmin was cut off
 // in the middle of.
@@ -394,11 +405,8 @@ func (s *Server) progressToWire(img *initv1.ImageServiceStatusResponse) *osadmin
 	if r == nil {
 		return nil
 	}
-	target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
-	switch r.Target {
-	case "product":
-		target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
-	case "":
+	target := targetOf(r.Target)
+	if r.Target == "" {
 		target = osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED
 	}
 	out := &osadminv1.UpgradeProgress{Action: r.Action, Target: target, Version: r.Version, Code: r.Code, StartedAt: timestamppb.New(r.Started), UpdatedAt: timestamppb.New(r.Updated)}

@@ -285,3 +285,27 @@ func TestImageServiceUnstagesThroughInit(t *testing.T) {
 		t.Fatalf("status after unstaging: %v %v", st, err)
 	}
 }
+
+// A Stage that names a patch goes to the stager's patch path, which checks
+// the running slot first: a stager whose slots can't read it refuses the
+// patch, and a relative reference is never taken for one.
+func TestAStageOfAPatchIsRebuiltFromTheRunningSlot(t *testing.T) {
+	dir, pins := fixtures.Build(t, fixtures.Options{})
+	const running = "0.0.0-lab.20261007e-gabc1234"
+	esp := espDir(t.TempDir())
+	if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(running)), strings.NewReader("running")); err != nil {
+		t.Fatal(err)
+	}
+	s := &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Pins: pins, Running: running, InitVersion: running, WorkDir: t.TempDir()}
+	c := serveImages(t, s)
+	ctx := context.Background()
+	patch := &initv1.StagePatch{BaseVersion: running, BaseRootSha256: strings.Repeat("a", 64), BaseRootSize: 10, BaseUkiSha256: strings.Repeat("b", 64), RootSha256: strings.Repeat("c", 64), UkiSha256: strings.Repeat("d", 64)}
+	for _, ref := range []string{dir, "relative/layout"} {
+		if _, err := c.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: ref, Patch: patch})); err == nil || !strings.Contains(err.Error(), "UPGRADE_PATCH_BASE") {
+			t.Fatalf("%s: %v", ref, err)
+		}
+	}
+	if st, _ := c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); st.Msg.GetStagedVersion() != "" {
+		t.Fatal("a refused patch staged something")
+	}
+}
