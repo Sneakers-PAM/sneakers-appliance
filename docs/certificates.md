@@ -9,7 +9,7 @@ assigns one to each endpoint.
 | Endpoint | Answers on | Its certificate must cover | In this release |
 |---|---|---|---|
 | `admin` | :8443 on each management address | the host name or a management address | live |
-| `product` | 443, every product route on one host | the product host | "Available when the product is installed" |
+| `product` | 443, every product route on one host | the box's names, as for `admin` | live once a product is installed ("Available when the product is installed" before) |
 
 ### The box's names
 
@@ -34,9 +34,9 @@ reports (`192.0.2.10/24`), and link-local addresses are left out. That's what a 
 names check and Revert compare and what the :8443 check below connects to.
 
 An endpoint's source is exactly one of an **assigned certificate** from the store or **cert-manager
-(ACME)**. :8443 also has the box's own self-signed certificate, which it starts with and which
-Revert to self-signed puts back. ACME answers `TLS_ACME_UNAVAILABLE` ("Not available yet") until the
-product bundle brings cert-manager.
+(ACME)**. Both endpoints also have the box's own self-signed certificate, which they start with and
+which Revert to self-signed puts back. ACME answers `TLS_ACME_UNAVAILABLE` ("Not available yet")
+until the box drives the product bundle's cert-manager.
 
 ## Adding a certificate
 
@@ -77,6 +77,20 @@ and the `Endpoint` read the live file, so the fingerprint they show follows the 
 takes one change at a time but keeps answering reads during that check, so Status and the console
 stay live while a certificate is being applied; the endpoint shows its old assignment until the
 check passes.
+
+Assigning a certificate to `product` keeps it on the state volume
+(`/var/lib/sneakers/platform/tls/product.{crt,key}`, root only) and writes the `box-tls` stack k0s
+applies (`/var/lib/k0s/manifests/box-tls/`, `internal/productedge`): the Secret `box-tls` in
+`sneakers-edge` with the chain, the key and `traefik-tls.yaml`, a Traefik dynamic config that makes
+them the default certificate. The edge mounts that file next to its routes in one projected
+directory, which Traefik's file provider watches, so the new certificate is served as soon as the
+kubelet updates the volume (up to a minute), with no restart. accessd then connects to
+`127.0.0.1:443` and compares the served fingerprint; if the new certificate isn't served within 3
+minutes, the previous pair is put back (`TLS_NOT_SERVED`). Revert to self-signed on `product`
+drops the assigned pair and the edge goes back to the box's own certificate, the one :8443 has,
+checked the same way. At every k0s start `k0s-interim` writes the same stack from the assigned pair
+when there is one, else from :8443's. Every assignment and revert is audited (`tls.endpoint.assign`,
+`tls.endpoint.revert`), as for `admin`.
 
 ## Update trust
 

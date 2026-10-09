@@ -149,3 +149,69 @@ func TestTheEdgeAsksEdgefallForThePortsRightBeforeTraefikBinds(t *testing.T) {
 	}
 	t.Fatal("edge.yaml has no Deployment")
 }
+
+// The edge's file provider reads the routes and the default certificate
+// from one projected directory: the edge ConfigMap, and the box-tls
+// Secret's Traefik config as tls.yaml (optional, so the edge starts without
+// it). The kubelet updates the directory when the Secret changes and
+// Traefik reloads it, so a new certificate needs no restart.
+func TestTheEdgeReadsItsCertificateFromAWatchedDirectory(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "stacks", "edge", "edge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var d struct {
+			Kind string `yaml:"kind"`
+			Data map[string]string
+			Spec struct {
+				Template struct {
+					Spec struct {
+						Containers []struct {
+							VolumeMounts []struct {
+								Name      string `yaml:"name"`
+								MountPath string `yaml:"mountPath"`
+							} `yaml:"volumeMounts"`
+						} `yaml:"containers"`
+						Volumes []struct {
+							Name      string `yaml:"name"`
+							Projected *struct {
+								Sources []struct {
+									ConfigMap *struct{ Name string } `yaml:"configMap"`
+									Secret    *struct {
+										Name     string `yaml:"name"`
+										Optional bool   `yaml:"optional"`
+										Items    []struct{ Key, Path string }
+									} `yaml:"secret"`
+								} `yaml:"sources"`
+							} `yaml:"projected"`
+						} `yaml:"volumes"`
+					} `yaml:"spec"`
+				} `yaml:"template"`
+			} `yaml:"spec"`
+		}
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind == "ConfigMap" && strings.Contains(d.Data["dynamic.yaml"], "certFile") {
+			t.Fatal("the routes' ConfigMap still names a certificate file")
+		}
+		if d.Kind != "Deployment" {
+			continue
+		}
+		s := d.Spec.Template.Spec
+		if len(s.Volumes) != 1 || s.Volumes[0].Projected == nil || len(s.Containers[0].VolumeMounts) != 1 || s.Containers[0].VolumeMounts[0].MountPath != "/etc/traefik/dynamic" {
+			t.Fatalf("volumes %+v mounts %+v", s.Volumes, s.Containers[0].VolumeMounts)
+		}
+		src := s.Volumes[0].Projected.Sources
+		if len(src) != 2 || src[0].ConfigMap == nil || src[0].ConfigMap.Name != "edge" || src[1].Secret == nil || src[1].Secret.Name != "box-tls" || !src[1].Secret.Optional ||
+			len(src[1].Secret.Items) != 1 || src[1].Secret.Items[0].Key != "traefik-tls.yaml" || src[1].Secret.Items[0].Path != "tls.yaml" {
+			t.Fatalf("sources %+v", src)
+		}
+		return
+	}
+	t.Fatal("edge.yaml has no Deployment")
+}

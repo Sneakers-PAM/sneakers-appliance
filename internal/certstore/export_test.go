@@ -3,7 +3,10 @@
 
 package certstore
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 // SetProbePort points the default :8443 check at port for one test.
 func SetProbePort(t *testing.T, port string) {
@@ -14,3 +17,9 @@ func SetProbePort(t *testing.T, port string) {
 
 // SetOwnName sets Options.OwnName on an opened store, for a test.
 func (s *Store) SetOwnName(f func() string) { s.o.OwnName = f }
+
+// SetProduct sets Options.Product and Options.ProductProbe on an opened
+// store, for a test.
+func (s *Store) SetProduct(e ProductEdge, probe func(ctx context.Context, fingerprint string) error) {
+	s.o.Product, s.o.ProductProbe = e, probe
+}

@@ -79,7 +79,7 @@ shell, the console and :8443 show the same sentence.
 | 3810 | `TLS_IN_USE` | the certificate is in use by an endpoint, or is the box's self-signed one |
 | 3811 | `TLS_LIMIT` | the store already holds 32 certificates or 8 pending CSRs |
 | 3812 | `TLS_ENDPOINT_UNAVAILABLE` | the endpoint isn't on this box yet (the product endpoint needs the product installed) |
-| 3813 | `TLS_NOT_SERVED` | the new certificate wasn't served within 15 seconds, so the previous one was put back |
+| 3813 | `TLS_NOT_SERVED` | the new certificate wasn't served in time (15 seconds on :8443, 3 minutes on 443), so the previous one was put back |
 | 3814 | `TLS_ACME_UNAVAILABLE` | ACME through cert-manager isn't available yet; it comes with the product bundle |
 | 3815 | `TLS_NO_HOSTNAME` | the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network |
 

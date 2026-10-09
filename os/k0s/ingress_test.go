@@ -106,8 +106,10 @@ func TestTheEdgeServesTheProductsIngresses(t *testing.T) {
 	if flags["--providers.kubernetesingress.ingressClass"] != "traefik" {
 		t.Errorf("the ingress class is %q; want traefik", flags["--providers.kubernetesingress.ingressClass"])
 	}
-	if _, ok := flags["--providers.file.filename"]; !ok {
-		t.Error("the file provider (the /_box/ route) is gone")
+	// The file provider (the /_box/ route and the default certificate)
+	// reads a directory it watches, so a new certificate is served live.
+	if flags["--providers.file.directory"] != "/etc/traefik/dynamic" || flags["--providers.file.watch"] != "true" {
+		t.Errorf("the file provider (the /_box/ route) is gone or doesn't watch its directory: %q %q", flags["--providers.file.directory"], flags["--providers.file.watch"])
 	}
 	if flags["--entryPoints.websecure.http.tls"] != "true" {
 		t.Error("websecure doesn't terminate TLS for every router; an Ingress without a tls block would be served as plain HTTP on 443")

@@ -96,6 +96,10 @@ const (
 	ExpiryWarning   = 30 * 24 * time.Hour
 	// ProbeTimeout is how long the new certificate has to be served.
 	ProbeTimeout = 15 * time.Second
+	// ProductProbeTimeout is how long 443 has to serve a new product
+	// certificate: k0s applies the box-tls Secret, the kubelet updates the
+	// edge's volume (up to a minute) and Traefik reloads.
+	ProductProbeTimeout = 3 * time.Minute
 	// selfSignedID is the box's own certificate's store id.
 	selfSignedID = "self-signed"
 )
@@ -135,9 +139,15 @@ type Options struct {
 	Probe func(ctx context.Context, fingerprint string) error
 	// Own hands a file written into AdminDir to the osadmin user; nil
 	// leaves it as written.
-	Own    func(*os.File) error
-	Now    func() time.Time
-	Logger log.Logger
+	Own func(*os.File) error
+	// Product is the product's edge (443); nil keeps the Product endpoint
+	// unavailable.
+	Product ProductEdge
+	// ProductProbe checks 443 serves the certificate with this
+	// fingerprint, within ProductProbeTimeout; nil dials 127.0.0.1:443.
+	ProductProbe func(ctx context.Context, fingerprint string) error
+	Now          func() time.Time
+	Logger       log.Logger
 }
 
 // Certificate is a store certificate.
@@ -292,6 +302,11 @@ func Open(o Options) (*Store, error) {
 		return nil, fmt.Errorf("tls: %w", err)
 	}
 	s := &Store{o: o, st: state{Version: 1, Endpoints: map[string]assignment{}}}
+	if o.ProductProbe == nil {
+		s.o.ProductProbe = func(ctx context.Context, fp string) error {
+			return HandshakeProbe(ctx, []string{"127.0.0.1"}, "443", fp)
+		}
+	}
 	if o.Probe == nil {
 		s.o.Probe = func(ctx context.Context, fp string) error {
 			_, addrs, err := s.names(ctx)
@@ -353,9 +368,7 @@ func (s *Store) snapshot(host string, addrs []string) Snapshot {
 	for _, r := range s.st.CSRs {
 		out.CSRs = append(out.CSRs, CSR{ID: r.ID, Subject: r.Subject, KeyType: r.KeyType, PEM: r.PEM, Names: slices.Clone(r.Names), Created: r.Created})
 	}
-	out.Endpoints = []Endpoint{s.adminEndpoint(host, addrs), {
-		ID: EndpointProduct, Name: "Product (443)", Reason: productReason, State: StateUnavailable, Source: EndpointAssigned,
-	}}
+	out.Endpoints = []Endpoint{s.adminEndpoint(host, addrs), s.productEndpoint(host, addrs)}
 	out.ACME = ACMEState{Reason: ACMEReason}
 	return out
 }
@@ -805,6 +818,9 @@ func (s *Store) Assign(ctx context.Context, endpoint, id string) (Endpoint, erro
 	if err := s.checkEndpoint(endpoint); err != nil {
 		return Endpoint{}, err
 	}
+	if endpoint == EndpointProduct {
+		return s.assignProduct(ctx, id)
+	}
 	if id == selfSignedID {
 		return s.revert(ctx)
 	}
@@ -856,6 +872,9 @@ func (s *Store) Revert(ctx context.Context, endpoint string) (Endpoint, error) {
 	defer s.change()()
 	if err := s.checkEndpoint(endpoint); err != nil {
 		return Endpoint{}, err
+	}
+	if endpoint == EndpointProduct {
+		return s.revertProduct(ctx)
 	}
 	return s.revert(ctx)
 }
@@ -929,6 +948,9 @@ func (s *Store) checkEndpoint(endpoint string) error {
 	case EndpointAdmin:
 		return nil
 	case EndpointProduct:
+		if s.o.Product != nil && s.o.Product.Installed() {
+			return nil
+		}
 		return codes.New(codes.TLSEndpointUnavailable, "the product endpoint is available when the product is installed")
 	}
 	return codes.New(codes.TLSUnknown, "no endpoint has the id %q", endpoint)

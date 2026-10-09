@@ -57,6 +57,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productedge"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -221,6 +222,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 		},
 		OwnName: func() string { name, _ := boxname.Ensure(c.state); return name },
+		// The Product (443) endpoint: the box-tls Secret k0s applies, which
+		// the edge reloads live.
+		Product: &productedge.Edge{Slot: elevated.DefaultProduct, Dir: filepath.Join(c.state, "platform", "tls"), AdminDir: paths.OwnDir(), Manifests: "/var/lib/k0s/manifests"},
 		Own:     func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
 		Logger:  lg,
 	})

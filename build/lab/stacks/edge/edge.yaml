@@ -3,9 +3,10 @@
 #
 # INTERIM, LAB ONLY, until Traefik comes with the platform (#102): a
 # minimal edge that serves the hello stack on the box's normal ports.
-# Traefik runs on the host network and listens on 443 (TLS with the box's
-# own certificate, the :8443 one, which k0s-interim hands in as the
-# box-tls Secret; without it Traefik's own self-signed default) and on 80,
+# Traefik runs on the host network and listens on 443 (TLS with the
+# certificate the box hands in as the box-tls Secret: the one assigned to
+# the Product (443) endpoint, else the box's own :8443 one; without it
+# Traefik's own self-signed default) and on 80,
 # which redirects to https. It forwards to the hello NodePort on the node
 # address. accessd opens 80 and 443 on the service interface once the
 # product bundle is installed (docs/k0s.md). Ping has its own entry point
@@ -111,12 +112,6 @@ data:
           loadBalancer:
             servers:
               - url: http://198.18.0.1:30080
-    tls:
-      stores:
-        default:
-          defaultCertificate:
-            certFile: /tls/tls.crt
-            keyFile: /tls/tls.key
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -165,7 +160,8 @@ spec:
             - --entryPoints.websecure.address=:443
             - --entryPoints.websecure.http.tls=true
             - --entryPoints.traefik.address=127.0.0.1:9000
-            - --providers.file.filename=/etc/traefik/dynamic.yaml
+            - --providers.file.directory=/etc/traefik/dynamic
+            - --providers.file.watch=true
             - --providers.kubernetesingress
             - --providers.kubernetesingress.ingressClass=traefik
             - --providers.kubernetesingress.namespaces=sneakers
@@ -195,17 +191,24 @@ spec:
             limits:
               memory: 128Mi
           volumeMounts:
-            - name: config
-              mountPath: /etc/traefik
+            - name: dynamic
+              mountPath: /etc/traefik/dynamic
               readOnly: true
-            - name: tls
-              mountPath: /tls
-              readOnly: true
+      # The routes (the edge ConfigMap) and the default certificate (the
+      # box-tls Secret's traefik-tls.yaml, which k0s-interim and the
+      # Certificates page's Product (443) assignment write) in one
+      # directory: Traefik's file provider watches it, so a new
+      # certificate is served as soon as the kubelet updates the volume,
+      # with no restart. Without the Secret Traefik serves its own default.
       volumes:
-        - name: config
-          configMap:
-            name: edge
-        - name: tls
-          secret:
-            secretName: box-tls
-            optional: true
+        - name: dynamic
+          projected:
+            sources:
+              - configMap:
+                  name: edge
+              - secret:
+                  name: box-tls
+                  optional: true
+                  items:
+                    - key: traefik-tls.yaml
+                      path: tls.yaml
