@@ -81,6 +81,9 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 
 	next := harness.Boot(t, opts(vm.Disk(0)))
 	next.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
+	// QEMU's user network offers no host name, so the kernel has the box's
+	// own name, never "(none)".
+	next.Expect(`lab-hook: host name sneakers-[0-9a-f]{8}\b`, 5*time.Minute)
 	next.Expect(`lab-hook: no product bundle, no k0s`, 5*time.Minute)
 	next.Expect(`services: waiting for start-when paths .*service=k0s`, time.Minute)
 	if body, err := httpsGet(httpsPort); err == nil {

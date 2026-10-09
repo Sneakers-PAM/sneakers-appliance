@@ -196,6 +196,15 @@ func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 	}
 	// Back to the starting page if one of init's own screens asked.
 	screen.starting()
+	if opened {
+		if host, err := bootHostname(stateRoot); err != nil {
+			lg.Error(err, "init: the box has no name of its own; the host name waits for netd")
+		} else if err := unix.Sethostname([]byte(host)); err != nil {
+			lg.Error(err, "init: the host name wasn't set", log.F("hostname", host))
+		} else {
+			lg.Info("init: host name set", log.F("hostname", host))
+		}
+	}
 
 	tbl, err := services.Load(os.DirFS("/"), services.Dir)
 	if err != nil {
