@@ -131,6 +131,8 @@ about the box.
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ProductService.ListExposedValues` | admin | no | |
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
+| `McpService.GetMcp` | admin | no | |
+| `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
@@ -201,8 +203,6 @@ The pages for these services show "Not available in this release" until their ba
 | `TlsService.CreateCsr` | admin | no | `tls.csr.create` |
 | `TlsService.UploadCertificate` | admin | no | `tls.certificate.upload` |
 | `TlsService.SetAdminCertificate` | owner | yes | `tls.admin-certificate.set` |
-| `McpService.GetMcp` | admin | no | |
-| `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `BackupService.GetBackups` | admin | no | |
 | `BackupService.SetBackupPolicy` | admin | no | `backup.policy.set` |
 | `BackupService.RunBackup` | admin | no | `backup.run` |

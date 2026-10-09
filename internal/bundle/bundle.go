@@ -341,10 +341,51 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	if err := checkBrand(fsys); err != nil {
 		return nil, err
 	}
-	if err := productspec.Check(fsys); err != nil {
+	if err := checkSpec(fsys, rel); err != nil {
 		return nil, err
 	}
 	return rel, nil
+}
+
+// checkSpec checks product.yaml, when there is one, and that the bundle
+// carries what it names: an image for every component (matched by the
+// image's last path element) and every stack a switch gates.
+func checkSpec(fsys fs.FS, rel *Release) error {
+	if err := productspec.Check(fsys); err != nil {
+		return err
+	}
+	b, err := fs.ReadFile(fsys, ProductSpec)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "product.yaml can't be read: %v", err)
+	}
+	spec, err := productspec.Parse(b)
+	if err != nil {
+		return err
+	}
+	images, err := rel.Images()
+	if err != nil {
+		return err
+	}
+	have := map[string]bool{}
+	for _, im := range images {
+		have[path.Base(im)] = true
+	}
+	for _, c := range spec.Components {
+		if !have[c.Image] {
+			return codes.New(codes.KitBundleMismatch, "the product bundle has no %s: no image %s is pinned in its release.yaml", c.Name, c.Image)
+		}
+	}
+	for _, w := range spec.Switches {
+		for _, st := range w.Stacks {
+			if fi, err := fs.Stat(fsys, path.Join(ProductManifests, st)); err != nil || !fi.IsDir() {
+				return codes.New(codes.KitBundleMismatch, "the product bundle has no stack %s, which the switch %s turns on", st, w.Name)
+			}
+		}
+	}
+	return nil
 }
 
 // checkBinary checks that the bundle's binary name has the SHA-256 want.

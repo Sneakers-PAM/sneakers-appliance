@@ -132,8 +132,39 @@ that token alone, for the declared key only. A name the bundle doesn't declare i
 everyone, owners included, and nothing is asked of the cluster for it. A bundle without
 `product.yaml` exposes nothing.
 
+It also declares the product's **components** and **switches**:
+
+```yaml
+components:                 # what every bundle of the product carries
+  - {name: PostgreSQL, image: postgres}        # by the image's last path element
+  - {name: sneakers-mcp, image: sneakers-mcp}
+switches:                   # parts an admin turns on and off on :8443
+  - name: mcp
+    label: The MCP server
+    default: false
+    stacks: [sneakers-mcp]  # bundle stacks k0s applies only while it's on
+    restart: [sneakers/deployment/sneakers-gateway]  # restarted after a change
+```
+
+The bundle check refuses a bundle whose `release.yaml` pins no image for a declared component
+("the product bundle has no sneakers-mcp: no image sneakers-mcp is pinned in its release.yaml"), or that lacks a
+stack a switch gates. Once a bundle checks out the box records the gated stacks in the slot
+(`switch-stacks`: switch, stack, default). `k0s-interim` copies a gated stack to k0s only while its
+switch is on, from the setting an admin made (`/var/lib/sneakers/platform/switches`, on the state
+volume, so it outlives a reboot, an update and a revert) or else the default; the product's
+progress after an apply doesn't wait for a stack that's off. The MCP page (`McpService`) drives the
+switch named `mcp` (and `machine-api` when the product declares one; without it the machine API
+stays on): `SetMcp` keeps the setting, puts the switch's stacks in front of k0s or takes them away
+(k0s removes their objects), and restarts the workloads it names with the installed bundle's k0s,
+audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
+installed`.
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
-`build/product/sneakers/product.yaml`.
+`build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
+Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,
+off by default, which gates the `sneakers-mcp` stack. That stack holds the MCP server, Hydra and the
+ConfigMap that gives the gateway and the staff web app their MCP settings, so none of it runs, and
+neither app offers the MCP, until an admin turns it on.
 
 - **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it

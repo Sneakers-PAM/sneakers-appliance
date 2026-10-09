@@ -31,6 +31,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/onetime"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
@@ -129,6 +130,9 @@ type Options struct {
 	Shells Shells
 	// Assets are the static admin pages; nil serves a short notice.
 	Assets fs.FS
+	// Switches turn the installed product's switches (its MCP) on and
+	// off; nil answers the MCP page with no product.
+	Switches *productswitch.Switches
 	// Exposed reads the installed product's exposed values as the
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.
@@ -201,7 +205,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewElevationServiceHandler(&elevationSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewRootShellServiceHandler(&rootShellSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(&tlsSvc{s: s}, opts))
-	mux.Handle(osadminv1connect.NewMcpServiceHandler(osadminv1connect.UnimplementedMcpServiceHandler{}, opts))
+	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewProductServiceHandler(&productSvc{s: s}, opts))

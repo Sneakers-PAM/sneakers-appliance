@@ -20,6 +20,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"runtime"
@@ -57,7 +58,9 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productedge"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
@@ -221,6 +224,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 		},
 		OwnName: func() string { name, _ := boxname.Ensure(c.state); return name },
+		// The Product (443) endpoint: the box-tls Secret k0s applies, which
+		// the edge reloads live.
+		Product: &productedge.Edge{Slot: elevated.DefaultProduct, Dir: filepath.Join(c.state, "platform", "tls"), AdminDir: paths.OwnDir(), Manifests: "/var/lib/k0s/manifests"},
 		Own:     func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
 		Logger:  lg,
 	})
@@ -242,6 +248,14 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		ProductUp: &productup.Probe{
 			Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s",
 			Containerd: "/run/k0s/containerd.sock", Edge: "127.0.0.1:443",
+			SwitchDir: filepath.Join(c.state, "platform"),
+		},
+		// The installed product's switches (the MCP page): their stacks
+		// go in front of k0s or away, and the installed bundle's k0s
+		// restarts what reads them.
+		Switches: &productswitch.Switches{
+			Dir: filepath.Join(c.state, "platform"), Slot: filepath.Join(product.Dir, "current"), Manifests: "/var/lib/k0s/manifests",
+			Restart: rolloutRestart(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig), Logger: lg,
 		},
 		Paths:           paths,
 		BoxStateFile:    boxstate.File,
@@ -325,6 +339,20 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			}
 			d.RefreshStatus(ctx)
 		}
+	}
+}
+
+// rolloutRestart restarts a workload with the installed bundle's k0s as
+// kubectl on the admin kubeconfig.
+func rolloutRestart(k0s, kubeconfig string) func(ctx context.Context, ns, kind, name string) error {
+	return func(ctx context.Context, ns, kind, name string) error {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, k0s, "kubectl", "--kubeconfig", kubeconfig, "-n", ns, "rollout", "restart", kind+"/"+name).CombinedOutput() // #nosec G204 -- the installed bundle's k0s on a workload product.yaml names
+		if err != nil {
+			return fmt.Errorf("rollout restart %s/%s/%s: %w: %s", ns, kind, name, err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
 }
 

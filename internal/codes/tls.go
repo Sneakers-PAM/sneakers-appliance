@@ -37,7 +37,7 @@ var tlsEntries = []apperr.Entry{
 	{Code: TLSInUse, Symbol: "TLS_IN_USE", Title: "tls", Cause: "the certificate is in use by an endpoint, or is the box's self-signed one"},
 	{Code: TLSLimit, Symbol: "TLS_LIMIT", Title: "tls", Cause: "the store already holds 32 certificates or 8 pending CSRs"},
 	{Code: TLSEndpointUnavailable, Symbol: "TLS_ENDPOINT_UNAVAILABLE", Title: "tls", Cause: "the endpoint isn't on this box yet (the product endpoint needs the product installed)"},
-	{Code: TLSNotServed, Symbol: "TLS_NOT_SERVED", Title: "tls", Cause: "the new certificate wasn't served within 15 seconds, so the previous one was put back"},
+	{Code: TLSNotServed, Symbol: "TLS_NOT_SERVED", Title: "tls", Cause: "the new certificate wasn't served in time (15 seconds on :8443, 3 minutes on 443), so the previous one was put back"},
 	{Code: TLSACMEUnavailable, Symbol: "TLS_ACME_UNAVAILABLE", Title: "tls", Cause: "ACME through cert-manager isn't available yet; it comes with the product bundle"},
 	{Code: TLSNoHostname, Symbol: "TLS_NO_HOSTNAME", Title: "tls", Cause: "the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network"},
 }

@@ -60,6 +60,46 @@ exposed_rbac() {
   fi
 }
 
+# switched_off <slot> <stack> <state file>: whether a switch the bundle
+# declares gates the stack and is off (internal/productswitch): the state
+# an admin set on :8443, else the default the slot records.
+switched_off() {
+  [ -s "$1/switch-stacks" ] || return 1
+  while read -r sw st def; do
+    [ "$st" = "$2" ] || continue
+    v="$def"
+    if [ -s "$3" ]; then
+      while read -r name val; do
+        if [ "$name" = "$sw" ]; then v="$val"; fi
+      done < "$3"
+    fi
+    [ "$v" = off ] && return 0
+    return 1
+  done < "$1/switch-stacks"
+  return 1
+}
+
+# box_tls <crt> <key> <stack dir>: the box-tls Secret in sneakers-edge
+# with the chain and key, and the Traefik dynamic config that makes them
+# the default certificate (traefik-tls.yaml), which the edge mounts next to
+# its routes and reloads live. internal/productedge renders the same.
+box_tls() {
+  mkdir -p "$3"
+  umask 077
+  {
+    printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sneakers-edge\n---\n'
+    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: box-tls\n  namespace: sneakers-edge\ntype: kubernetes.io/tls\nstringData:\n'
+    printf '  tls.crt: |\n'; sed 's/^/    /' "$1"
+    printf '  tls.key: |\n'; sed 's/^/    /' "$2"
+    printf '  traefik-tls.yaml: |\n'
+    printf '    tls:\n      stores:\n        default:\n          defaultCertificate:\n'
+    printf '            certFile: |\n'; sed 's/^/              /' "$1"
+    printf '            keyFile: |\n'; sed 's/^/              /' "$2"
+  } > "$3/box-tls.yaml.new"
+  mv "$3/box-tls.yaml.new" "$3/box-tls.yaml"
+  umask 022
+}
+
 prepare() {
   if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
     say "no product bundle is installed; k0s comes with it (Updates)"
@@ -136,28 +176,29 @@ prepare() {
     [ -d "$d" ] || continue
     stack="$(basename "$d")"
     rm -rf "$data/manifests/$stack"
+    if switched_off "$slot" "$stack" /var/lib/sneakers/platform/switches; then
+      say "stack $stack is off (its switch on :8443)"
+      continue
+    fi
     mkdir -p "$data/manifests/$stack"
     cp "$d"*.yaml "$data/manifests/$stack/"
     say "stack $stack in place"
   done
   exposed_rbac "$slot" "$data/manifests/sneakers-appliance-exposed"
 
-  # INTERIM, until Traefik comes with the platform (#102): the box's own
-  # :8443 certificate as the box-tls Secret for the edge, refreshed on
-  # every start (osadmin renews it). It stays on the encrypted state
-  # volume, in k0s's manifests and etcd.
+  # INTERIM, until Traefik comes with the platform (#102): the box-tls
+  # Secret for the edge, refreshed on every start: the certificate assigned
+  # to the Product (443) endpoint when there is one (internal/productedge,
+  # which also writes this stack live when it's assigned), else the box's
+  # own :8443 certificate (osadmin renews it). It stays on the encrypted
+  # state volume, in k0s's manifests and etcd.
   tls=/var/lib/sneakers/osadmin
-  if [ -s "$tls/tls.crt" ] && [ -s "$tls/tls.key" ]; then
-    mkdir -p "$data/manifests/box-tls"
-    umask 077
-    {
-      printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sneakers-edge\n---\n'
-      printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: box-tls\n  namespace: sneakers-edge\ntype: kubernetes.io/tls\nstringData:\n'
-      printf '  tls.crt: |\n'; sed 's/^/    /' "$tls/tls.crt"
-      printf '  tls.key: |\n'; sed 's/^/    /' "$tls/tls.key"
-    } > "$data/manifests/box-tls/box-tls.yaml.new"
-    mv "$data/manifests/box-tls/box-tls.yaml.new" "$data/manifests/box-tls/box-tls.yaml"
-    umask 022
+  assigned=/var/lib/sneakers/platform/tls
+  if [ -s "$assigned/product.crt" ] && [ -s "$assigned/product.key" ]; then
+    box_tls "$assigned/product.crt" "$assigned/product.key" "$data/manifests/box-tls"
+    say "the certificate assigned to the product's edge is in place"
+  elif [ -s "$tls/tls.crt" ] && [ -s "$tls/tls.key" ]; then
+    box_tls "$tls/tls.crt" "$tls/tls.key" "$data/manifests/box-tls"
     say "the box's certificate is in place for the edge"
   fi
 }
