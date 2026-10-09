@@ -127,10 +127,7 @@ func (k *console) statusView(ctx context.Context) func() (tui.Page, bool) {
 		if time.Since(k.loaded) >= k.d.Refresh {
 			k.load(ctx)
 		}
-		if p := k.data.Status.Status.GetUpgradeProgress(); p.GetInProgress() {
-			return MaintenancePage(k.c, p), false
-		}
-		return Page(k.c, k.data, k.d.Now()), false
+		return Screen(k.c, k.data, k.d.Now()), false
 	}
 }
 

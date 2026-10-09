@@ -128,3 +128,4 @@ shell, the console and :8443 show the same sentence.
 | 2511 | `UPGRADE_NOT_STAGED` | no release is staged to apply |
 | 2512 | `UPGRADE_ELEVATED` | an elevated shell is open (the refusal names it); it ends, or an owner terminates it or overrides it (which ends it), before an update applies or reverts |
 | 2513 | `UPGRADE_PRODUCT_BASE` | the product bundle doesn't fit the base version this box runs |
+| 2514 | `UPGRADE_NO_REBOOT` | an apply or revert was accepted, but the box didn't reboot within the bound |

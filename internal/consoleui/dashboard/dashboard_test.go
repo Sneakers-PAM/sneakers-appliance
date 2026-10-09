@@ -519,3 +519,25 @@ func TestTheSSHLineSaysTheKeyComesFromTheAdminPage(t *testing.T) {
 		t.Fatalf("the SSH line doesn't say where the key comes from:\n%s", text)
 	}
 }
+
+// The status view shows the maintenance screen only while a step is
+// active: once a reboot that never came is given up on, it's back on the
+// status screen with the failure as a warning.
+func TestTheStatusViewLeavesMaintenanceWhenTheRebootIsGivenUp(t *testing.T) {
+	c := chrome(full, keycustody.ModeTPM)
+	waiting := status()
+	waiting.UpgradeProgress = progress("apply", "0.1.1", "reboot", "The box restarts into 0.1.1.")
+	if got, want := dashboard.Screen(c, data(waiting), now).Frame(80, 24).Text(), dashboard.MaintenancePage(c, waiting.UpgradeProgress).Frame(80, 24).Text(); got != want {
+		t.Fatalf("while rebooting the status view shows:\n%s", got)
+	}
+	missed := status()
+	missed.UpgradeProgress = progress("apply", "0.1.1", "reboot", "")
+	missed.UpgradeProgress.InProgress, missed.UpgradeProgress.Failed, missed.UpgradeProgress.Code = false, true, "UPGRADE_NO_REBOOT"
+	missed.UpgradeProgress.Steps[3].State = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED
+	missed.UpgradeProgress.Steps[3].Detail = "The box didn't reboot into 0.1.1 within 10 minutes. Apply again, or restart the box."
+	p := dashboard.Screen(c, data(missed), now)
+	if txt := p.Frame(120, 60).Text(); !strings.Contains(txt, "didn't reboot into 0.1.1") || strings.Contains(txt, "Leave it powered on") {
+		t.Fatalf("after the reboot was given up on the status view shows:\n%s", txt)
+	}
+	tuitest.Golden(t, "dashboard-upgrade-reboot-missed", p)
+}

@@ -795,6 +795,11 @@ func (s *Server) afterReboot(ctx context.Context) bool {
 	default:
 		return false
 	}
+	if r.active() == stepReboot && s.sameBoot(r) {
+		// osadmin restarted, the box didn't: the reboot is still to come,
+		// and the watchdog gives up on it if it never does.
+		return false
+	}
 	st, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
 		s.setStep(stepHealth, "Waiting for init to answer: "+err.Error())
@@ -816,6 +821,46 @@ func (s *Server) afterReboot(ctx context.Context) bool {
 	s.failStepLocked(stepHealth, why, "")
 	s.progress.mu.Unlock()
 	return false
+}
+
+// RebootBound is how long the reboot step of an apply or revert may stay
+// active on the boot it started on before the watchdog fails it.
+const RebootBound = 10 * time.Minute
+
+// sameBoot reports whether r's reboot step started on the running boot.
+func (s *Server) sameBoot(r *progressRecord) bool {
+	return s.o.BootID != "" && r.BootID == s.o.BootID
+}
+
+// RebootWatchdog fails the reboot step of an apply or revert that has
+// waited RebootBound on the boot it started on: init took the reboot but
+// the box never went down. The step fails with UPGRADE_NO_REBOOT, so the
+// console and :8443 leave the maintenance screen, and maintenance ends so
+// Apply is offered again. The boot entry the switch made is left as it
+// is. The command calls it each minute.
+func (s *Server) RebootWatchdog() {
+	s.progress.mu.Lock()
+	s.loadProgress()
+	r := s.progress.rec
+	if r == nil || r.active() != stepReboot || !s.sameBoot(r) {
+		s.progress.mu.Unlock()
+		return
+	}
+	waited := s.o.Clock.Now().Sub(r.RebootAt)
+	if waited < RebootBound {
+		s.progress.mu.Unlock()
+		return
+	}
+	action, version := r.Action, r.Version
+	err := codes.New(codes.UpgradeNoReboot, "the box didn't reboot into %s within %d minutes", version, int(RebootBound.Minutes()))
+	why := "The box didn't reboot into " + version + " within " + strconv.Itoa(int(RebootBound.Minutes())) + " minutes. Apply again, or restart the box."
+	s.failStepLocked(stepReboot, why, codes.Symbol(codes.UpgradeNoReboot))
+	s.progress.mu.Unlock()
+	s.o.Logger.Warn("osadmin: the reboot never came; the update step failed", log.F("action", action), log.F("version", version), log.F("waited", waited.Round(time.Second).String()))
+	s.endMaintenance()
+	s.history(action, version, "osadmin", err, "no reboot after "+waited.Round(time.Second).String())
+	s.write(osaudit.Entry{Actor: "osadmin", Action: "upgrade.reboot-missed", Target: "box", Detail: map[string]string{"version": version, "action": action, "waited": waited.Round(time.Second).String()}}, err)
+	s.consoleChanged()
 }
 
 // rebootInto runs an apply's or a revert's switch, then the reboot into
