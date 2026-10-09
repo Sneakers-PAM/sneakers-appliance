@@ -68,6 +68,17 @@ service UpgradeService {
       audit: "upgrade.revert"
     };
   }
+  // DiscardUpdate drops a held upload or fetched file by id (its .bin,
+  // any partial .tmp and unpacked layout), or, with no id, unstages the
+  // staged release of target: the base release's boot entry, or the
+  // product's staged slot. It is refused with UPGRADE_BUSY while a stage
+  // is under way, and audited.
+  rpc DiscardUpdate(DiscardUpdateRequest) returns (DiscardUpdateResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "upgrade.discard"
+    };
+  }
   // ListProductVersions lists the product bundles this box may install:
   // stable versions for its architecture and channel that fit the running
   // base, newer than the installed product. It reads the index from the
@@ -138,7 +149,8 @@ message ProductVersion {
   string version = 1;
   string arch = 2;
   string channel = 3;
-  // bases are the base versions the bundle fits.
+  // bases are the base versions a bundle sealed before the range existed
+  // fits.
   repeated string bases = 4;
   // file_name is what FetchUpdate takes, such as
   // sneakers-product-0.2.0-amd64.bin.
@@ -146,6 +158,11 @@ message ProductVersion {
   int64 size = 6;
   // source is mirror or direct: where the index came from.
   string source = 7;
+  // min_base and max_base are the bundle's base range, inclusive; max_base
+  // is empty when it has no maximum, and both are empty for a bundle that
+  // names exact bases only.
+  string min_base = 8;
+  string max_base = 9;
 }
 
 // UpdatePackage is a verified .bin's signed header.
@@ -160,6 +177,24 @@ message UpdatePackage {
   string sha256 = 7;
   int64 size = 8;
   UpdateTarget target = 9;
+  // min_base and max_base are a product bundle's base range, as in
+  // ProductVersion.
+  string min_base = 10;
+  string max_base = 11;
+}
+
+// HeldUpload is a received or fetched .bin that hasn't been staged or
+// discarded yet. While one is held, a new upload or fetch is refused with
+// UPGRADE_BUSY.
+message HeldUpload {
+  string upload_id = 1;
+  // file_name is the name the browser sent (X-File-Name) or the fetched
+  // file's; empty when the browser sent none.
+  string file_name = 2;
+  int64 size = 3;
+  google.protobuf.Timestamp received_at = 4;
+  // source is upload, mirror or direct.
+  string source = 5;
 }
 
 message UpgradeEvent {
@@ -265,6 +300,11 @@ message GetUpgradesResponse {
   // mirror_status is the mirror's transport and its last fetch; unset when
   // no mirror is configured.
   MirrorStatus mirror_status = 17;
+  // held_upload is the file waiting to be verified (staged) or discarded;
+  // unset when there's none.
+  HeldUpload held_upload = 18;
+  // receiving is true while an upload or fetch is coming in.
+  bool receiving = 19;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch
@@ -315,6 +355,10 @@ message FetchUpdateResponse {
 
 message StageUpdateRequest {
   string upload_id = 1;
+  // override_product_range stages a base release even though the
+  // installed product bundle's base range doesn't include it; without it
+  // that stage is refused with UPGRADE_PRODUCT_BASE.
+  bool override_product_range = 2;
 }
 
 message StageUpdateResponse {
@@ -351,6 +395,19 @@ message RevertUpdateRequest {
   UpdateTarget target = 2;
   // totp_code is a fresh code from the owner's authenticator.
   string totp_code = 3;
+}
+
+message DiscardUpdateRequest {
+  // upload_id is the held upload or fetched file to drop.
+  string upload_id = 1;
+  // target is what to unstage when upload_id is empty: the base release or
+  // the product bundle.
+  UpdateTarget target = 2;
+}
+
+message DiscardUpdateResponse {
+  // version is the release unstaged; empty when an upload was dropped.
+  string version = 1;
 }
 
 message ListProductVersionsRequest {}

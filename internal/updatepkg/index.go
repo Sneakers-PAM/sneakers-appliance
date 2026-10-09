@@ -34,13 +34,16 @@ type IndexEntry struct {
 	Arch    string   `json:"arch"`
 	Channel string   `json:"channel"`
 	Bases   []string `json:"bases"`
-	File    string   `json:"file"`
-	Size    int64    `json:"size"`
+	// MinBase and MaxBase are the bundle's base range, when it has one.
+	MinBase string `json:"min_base,omitempty"`
+	MaxBase string `json:"max_base,omitempty"`
+	File    string `json:"file"`
+	Size    int64  `json:"size"`
 }
 
 // EntryOf is h's index entry for a sealed file of size bytes.
 func EntryOf(h Header, size int64) IndexEntry {
-	return IndexEntry{Version: h.Version, Arch: h.Arch, Channel: h.Channel, Bases: slices.Clone(h.Bases), File: FileName(h), Size: size}
+	return IndexEntry{Version: h.Version, Arch: h.Arch, Channel: h.Channel, Bases: slices.Clone(h.Bases), MinBase: h.MinBase, MaxBase: h.MaxBase, File: FileName(h), Size: size}
 }
 
 // ReadIndex parses an index of at most 1 MiB.
@@ -66,10 +69,10 @@ func ReadIndex(r io.Reader) (Index, error) {
 func (idx Index) Offer(arch, channel, base, installed string) []IndexEntry {
 	var out []IndexEntry
 	for _, e := range idx.Products {
-		h := Header{Format: Format, Name: NameProduct, Version: e.Version, Arch: e.Arch, Kind: KindProduct, Bases: e.Bases, Channel: e.Channel}
+		h := Header{Format: Format, Name: NameProduct, Version: e.Version, Arch: e.Arch, Kind: KindProduct, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel}
 		switch {
 		case h.check() != nil, e.Arch != arch, e.Channel != channel, e.File != FileName(h):
-		case !slices.Contains(e.Bases, base):
+		case h.AppliesTo(base) != nil:
 		case channel == release.ChannelProduction && semver.Prerelease("v"+e.Version) != "":
 		case installed != "" && semver.Compare("v"+e.Version, "v"+installed) <= 0:
 		default:

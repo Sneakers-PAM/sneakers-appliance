@@ -37,6 +37,7 @@ import (
 	"slices"
 
 	"filippo.io/age"
+	"golang.org/x/mod/semver"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -76,10 +77,17 @@ type Header struct {
 	Version string `json:"version"`
 	Arch    string `json:"arch"`
 	Kind    Kind   `json:"kind"`
-	// Bases are the exact versions a patch applies to, or the base
-	// versions a product bundle fits; a full version has none.
-	Bases   []string `json:"bases,omitempty"`
-	Channel string   `json:"channel"`
+	// Bases are the exact versions a patch applies to. A product bundle
+	// sealed before MinBase existed names the base versions it fits here.
+	Bases []string `json:"bases,omitempty"`
+	// MinBase and MaxBase are the base versions a product bundle fits,
+	// SemVer and inclusive; MaxBase is optional. When MinBase is set it
+	// wins over Bases, which a bundle may still carry for boxes that
+	// predate the range. Added fields: a header without them reads as
+	// before.
+	MinBase string `json:"min_base,omitempty"`
+	MaxBase string `json:"max_base,omitempty"`
+	Channel string `json:"channel"`
 	// Recipient is the hex SHA-256 of the age recipient the payload is
 	// encrypted to.
 	Recipient string `json:"recipient"`
@@ -108,22 +116,45 @@ func (h Header) check() error {
 	if (h.Name == NameProduct) != (h.Kind == KindProduct) {
 		return codes.New(codes.UpgradeFormat, "a %s header can't be of kind %s", h.Name, h.Kind)
 	}
+	if (h.MinBase != "" || h.MaxBase != "") && h.Kind != KindProduct {
+		return codes.New(codes.UpgradeFormat, "only a product bundle names a base range")
+	}
 	switch h.Kind {
 	case KindFull:
 		if len(h.Bases) > 0 {
 			return codes.New(codes.UpgradeFormat, "a full version names no base versions")
 		}
-	case KindPatch, KindProduct:
-		if len(h.Bases) == 0 {
-			return codes.New(codes.UpgradeFormat, "a %s names the base versions it applies to", h.Kind)
+	case KindProduct:
+		if h.MaxBase != "" && h.MinBase == "" {
+			return codes.New(codes.UpgradeFormat, "a base range with a maximum names its minimum")
 		}
-		for _, b := range h.Bases {
-			if !versionRE.MatchString(b) {
+		for _, b := range []string{h.MinBase, h.MaxBase} {
+			if b != "" && !versionRE.MatchString(b) {
 				return codes.New(codes.UpgradeFormat, "the base version %q isn't a release version", b)
 			}
 		}
+		if h.MinBase != "" && h.MaxBase != "" && semver.Compare("v"+h.MaxBase, "v"+h.MinBase) < 0 {
+			return codes.New(codes.UpgradeFormat, "the base range %s to %s ends before it starts", h.MinBase, h.MaxBase)
+		}
+		return checkBases(h)
+	case KindPatch:
+		return checkBases(h)
 	default:
 		return codes.New(codes.UpgradeFormat, "the kind %q isn't full, patch or product", h.Kind)
+	}
+	return nil
+}
+
+// checkBases checks h's exact base versions: there must be some, unless a
+// product bundle names its range instead.
+func checkBases(h Header) error {
+	if len(h.Bases) == 0 && h.MinBase == "" {
+		return codes.New(codes.UpgradeFormat, "a %s names the base versions it applies to", h.Kind)
+	}
+	for _, b := range h.Bases {
+		if !versionRE.MatchString(b) {
+			return codes.New(codes.UpgradeFormat, "the base version %q isn't a release version", b)
+		}
 	}
 	return nil
 }
@@ -143,15 +174,39 @@ func (h Header) IsProduct() bool { return h.Kind == KindProduct }
 // AppliesTo reports whether the package can be applied on a box running
 // base version running. A full version always can, subject to the upgrade
 // path rules elsewhere; a patch only on one of its exact base versions,
-// and a product bundle only on a base it names.
+// and a product bundle only on a base in its range, or, for a bundle
+// sealed before the range existed, one it names.
 func (h Header) AppliesTo(running string) error {
 	switch {
 	case h.Kind == KindPatch && !slices.Contains(h.Bases, running):
 		return codes.New(codes.UpgradePatchBase, "the patch %s is for %v; this box runs %s", h.Version, h.Bases, running)
-	case h.Kind == KindProduct && !slices.Contains(h.Bases, running):
+	case h.Kind == KindProduct && h.HasRange() && !h.InRange(running):
+		return codes.New(codes.UpgradeProductBase, "the product bundle %s needs base %s; this box runs %s", h.Version, h.RangeText(), running)
+	case h.Kind == KindProduct && !h.HasRange() && !slices.Contains(h.Bases, running):
 		return codes.New(codes.UpgradeProductBase, "the product bundle %s fits the base versions %v; this box runs %s", h.Version, h.Bases, running)
 	}
 	return nil
+}
+
+// HasRange reports whether a product bundle names its base range; one
+// sealed before the range existed names exact bases only.
+func (h Header) HasRange() bool { return h.MinBase != "" }
+
+// InRange reports whether base is inside the range, both ends inclusive.
+func (h Header) InRange(base string) bool {
+	if semver.Compare("v"+base, "v"+h.MinBase) < 0 {
+		return false
+	}
+	return h.MaxBase == "" || semver.Compare("v"+base, "v"+h.MaxBase) <= 0
+}
+
+// RangeText is the range as a refusal says it: "0.2.0 to 0.3.0", or
+// "0.2.0 or newer" without a maximum.
+func (h Header) RangeText() string {
+	if h.MaxBase == "" {
+		return h.MinBase + " or newer"
+	}
+	return h.MinBase + " to " + h.MaxBase
 }
 
 // NameFor is the header name a package of kind k carries.

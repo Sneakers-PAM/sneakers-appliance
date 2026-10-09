@@ -68,19 +68,47 @@ func (s Slots) target(link string) string {
 }
 
 func (s Slots) version(link string) string {
+	h, _ := s.header(link)
+	return h.Version
+}
+
+func (s Slots) header(link string) (updatepkg.Header, bool) {
 	dir := s.target(link)
 	if dir == "" {
-		return ""
+		return updatepkg.Header{}, false
 	}
 	b, err := os.ReadFile(filepath.Join(dir, BundleFile)) // #nosec G304 -- a slot of ours
 	if err != nil {
-		return ""
+		return updatepkg.Header{}, false
 	}
 	var h updatepkg.Header
 	if json.Unmarshal(b, &h) != nil {
-		return ""
+		return updatepkg.Header{}, false
 	}
-	return h.Version
+	return h, true
+}
+
+// Installed is the installed bundle's verified header, if there is one.
+func (s Slots) Installed() (updatepkg.Header, bool) { return s.header(linkCurrent) }
+
+// Unstage drops the staged bundle: the staged link and its slot's files.
+// The installed and previous slots are untouched. With nothing staged
+// it's UPGRADE_NOT_STAGED. It returns the version dropped.
+func (s Slots) Unstage() (string, error) {
+	v, dir := s.version(linkStaged), s.target(linkStaged)
+	if v == "" || dir == "" {
+		return "", codes.New(codes.UpgradeNotStaged, "no product bundle is staged")
+	}
+	if err := s.unlink(linkStaged); err != nil {
+		return "", err
+	}
+	if dir == s.target(linkCurrent) || dir == s.target(linkPrevious) {
+		return v, nil
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return v, fmt.Errorf("product: %w", err)
+	}
+	return v, nil
 }
 
 // Stage fills the slot current doesn't name with h's bundle: fill unpacks

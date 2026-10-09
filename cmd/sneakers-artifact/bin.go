@@ -109,7 +109,9 @@ func binPackCmd() *cobra.Command {
 	f.StringVar(&h.Arch, "arch", "amd64", "amd64 or arm64")
 	f.StringVar(&h.Channel, "channel", release.ChannelLab, "production or lab")
 	f.StringVar(&kind, "kind", string(updatepkg.KindFull), "full, patch or product")
-	f.StringSliceVar(&h.Bases, "base", nil, "a base version a patch applies to, or a product bundle fits (repeatable)")
+	f.StringSliceVar(&h.Bases, "base", nil, "a base version a patch applies to (repeatable); for a product bundle, an exact base for boxes that predate --min-base")
+	f.StringVar(&h.MinBase, "min-base", "", "the oldest base version a product bundle fits (inclusive)")
+	f.StringVar(&h.MaxBase, "max-base", "", "the newest base version a product bundle fits (inclusive; optional)")
 	f.StringVar(&out, "out", "", "the work directory for header.json and payload.age")
 	for _, req := range []string{"layout", "recipient", "version", "out"} {
 		_ = cmd.MarkFlagRequired(req)

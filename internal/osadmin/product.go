@@ -13,8 +13,8 @@ package osadmin
 import (
 	"context"
 	"errors"
-	"os"
 	"regexp"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -126,7 +126,7 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 		}
 		out := &osadminv1.ListProductVersionsResponse{BaseVersion: base}
 		for _, e := range idx.Offer(s.arch(), s.o.Upgrade.Channel, base, installed) {
-			out.Versions = append(out.Versions, &osadminv1.ProductVersion{Version: e.Version, Arch: e.Arch, Channel: e.Channel, Bases: e.Bases, FileName: e.File, Size: e.Size, Source: src.name})
+			out.Versions = append(out.Versions, &osadminv1.ProductVersion{Version: e.Version, Arch: e.Arch, Channel: e.Channel, Bases: e.Bases, FileName: e.File, Size: e.Size, Source: src.name, MinBase: e.MinBase, MaxBase: e.MaxBase})
 		}
 		s.o.Logger.Info("osadmin: product versions listed", log.F("source", src.name), log.F("base", base), log.F("installed", installed), log.F("offered", len(out.Versions)))
 		return connect.NewResponse(out), nil
@@ -158,6 +158,9 @@ func (s *Server) stageProduct(ctx context.Context, path string, p *updatepkg.Pac
 		s.reject(path, err)
 		return err
 	}
+	if !p.Header.HasRange() {
+		s.o.Logger.Info("osadmin: the product bundle names exact bases, not a base range; accepted as sealed before the range existed", log.F("version", p.Header.Version), log.F("bases", strings.Join(p.Header.Bases, ",")))
+	}
 	key, err := sigbundle.ParsePublicKey(s.o.Upgrade.ReleaseKeyPEM)
 	if err != nil {
 		return codes.Wrap(codes.KitPinMissing, err)
@@ -172,9 +175,7 @@ func (s *Server) stageProduct(ctx context.Context, path string, p *updatepkg.Pac
 		s.o.Logger.Warn("osadmin: product bundle not staged", log.F("version", p.Header.Version), log.F("error", describe(err)))
 		return err
 	}
-	if err := os.Remove(path); err != nil {
-		s.o.Logger.Warn("osadmin: a staged product bundle's upload wasn't removed", log.F("error", err.Error()))
-	}
+	s.removeUpload(path)
 	s.o.Logger.Info("osadmin: product bundle staged", log.F("version", p.Header.Version))
 	return nil
 }

@@ -89,6 +89,7 @@ type fakeInit struct {
 	nextRemoves []string
 	activated   int
 	rollbacks   int
+	unstaged    int
 	// revertedBy is the admin the last Rollback named; Status then reports
 	// the staged release as reverted from.
 	revertedBy string
@@ -231,6 +232,18 @@ func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageReque
 		i.f.layoutSeen = true
 	}
 	return connect.NewResponse(&initv1.StageResponse{Version: "0.2.0", RemovedVersions: i.f.removes}), nil
+}
+
+func (i fakeImage) Unstage(context.Context, *connect.Request[initv1.UnstageRequest]) (*connect.Response[initv1.UnstageResponse], error) {
+	i.f.mu.Lock()
+	defer i.f.mu.Unlock()
+	if i.f.stagedVer == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(codes.Describe(codes.New(codes.UpgradeNotStaged, "no release is staged"))))
+	}
+	v := i.f.stagedVer
+	i.f.stagedVer = ""
+	i.f.unstaged++
+	return connect.NewResponse(&initv1.UnstageResponse{Version: v}), nil
 }
 
 func (i fakeImage) Activate(context.Context, *connect.Request[initv1.ActivateRequest]) (*connect.Response[initv1.ActivateResponse], error) {

@@ -85,6 +85,8 @@ const (
 	ImageServiceRollbackProcedure = "/sneakers.appliance.init.v1.ImageService/Rollback"
 	// ImageServiceStatusProcedure is the fully-qualified name of the ImageService's Status RPC.
 	ImageServiceStatusProcedure = "/sneakers.appliance.init.v1.ImageService/Status"
+	// ImageServiceUnstageProcedure is the fully-qualified name of the ImageService's Unstage RPC.
+	ImageServiceUnstageProcedure = "/sneakers.appliance.init.v1.ImageService/Unstage"
 	// PowerServiceRebootProcedure is the fully-qualified name of the PowerService's Reboot RPC.
 	PowerServiceRebootProcedure = "/sneakers.appliance.init.v1.PowerService/Reboot"
 	// PowerServicePowerOffProcedure is the fully-qualified name of the PowerService's PowerOff RPC.
@@ -452,6 +454,10 @@ type ImageServiceClient interface {
 	MarkGood(context.Context, *connect.Request[v1.MarkGoodRequest]) (*connect.Response[v1.MarkGoodResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
 	Status(context.Context, *connect.Request[v1.ImageServiceStatusRequest]) (*connect.Response[v1.ImageServiceStatusResponse], error)
+	// Unstage removes the staged release's ESP entry (UPGRADE_NOT_STAGED when
+	// none is staged), so it never boots; the slot's contents are left for
+	// the next Stage to overwrite.
+	Unstage(context.Context, *connect.Request[v1.UnstageRequest]) (*connect.Response[v1.UnstageResponse], error)
 }
 
 // NewImageServiceClient constructs a client for the sneakers.appliance.init.v1.ImageService
@@ -495,6 +501,12 @@ func NewImageServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(imageServiceMethods.ByName("Status")),
 			connect.WithClientOptions(opts...),
 		),
+		unstage: connect.NewClient[v1.UnstageRequest, v1.UnstageResponse](
+			httpClient,
+			baseURL+ImageServiceUnstageProcedure,
+			connect.WithSchema(imageServiceMethods.ByName("Unstage")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -505,6 +517,7 @@ type imageServiceClient struct {
 	markGood *connect.Client[v1.MarkGoodRequest, v1.MarkGoodResponse]
 	rollback *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
 	status   *connect.Client[v1.ImageServiceStatusRequest, v1.ImageServiceStatusResponse]
+	unstage  *connect.Client[v1.UnstageRequest, v1.UnstageResponse]
 }
 
 // Stage calls sneakers.appliance.init.v1.ImageService.Stage.
@@ -532,6 +545,11 @@ func (c *imageServiceClient) Status(ctx context.Context, req *connect.Request[v1
 	return c.status.CallUnary(ctx, req)
 }
 
+// Unstage calls sneakers.appliance.init.v1.ImageService.Unstage.
+func (c *imageServiceClient) Unstage(ctx context.Context, req *connect.Request[v1.UnstageRequest]) (*connect.Response[v1.UnstageResponse], error) {
+	return c.unstage.CallUnary(ctx, req)
+}
+
 // ImageServiceHandler is an implementation of the sneakers.appliance.init.v1.ImageService service.
 type ImageServiceHandler interface {
 	Stage(context.Context, *connect.Request[v1.StageRequest]) (*connect.Response[v1.StageResponse], error)
@@ -539,6 +557,10 @@ type ImageServiceHandler interface {
 	MarkGood(context.Context, *connect.Request[v1.MarkGoodRequest]) (*connect.Response[v1.MarkGoodResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
 	Status(context.Context, *connect.Request[v1.ImageServiceStatusRequest]) (*connect.Response[v1.ImageServiceStatusResponse], error)
+	// Unstage removes the staged release's ESP entry (UPGRADE_NOT_STAGED when
+	// none is staged), so it never boots; the slot's contents are left for
+	// the next Stage to overwrite.
+	Unstage(context.Context, *connect.Request[v1.UnstageRequest]) (*connect.Response[v1.UnstageResponse], error)
 }
 
 // NewImageServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -578,6 +600,12 @@ func NewImageServiceHandler(svc ImageServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(imageServiceMethods.ByName("Status")),
 		connect.WithHandlerOptions(opts...),
 	)
+	imageServiceUnstageHandler := connect.NewUnaryHandler(
+		ImageServiceUnstageProcedure,
+		svc.Unstage,
+		connect.WithSchema(imageServiceMethods.ByName("Unstage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.init.v1.ImageService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ImageServiceStageProcedure:
@@ -590,6 +618,8 @@ func NewImageServiceHandler(svc ImageServiceHandler, opts ...connect.HandlerOpti
 			imageServiceRollbackHandler.ServeHTTP(w, r)
 		case ImageServiceStatusProcedure:
 			imageServiceStatusHandler.ServeHTTP(w, r)
+		case ImageServiceUnstageProcedure:
+			imageServiceUnstageHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -617,6 +647,10 @@ func (UnimplementedImageServiceHandler) Rollback(context.Context, *connect.Reque
 
 func (UnimplementedImageServiceHandler) Status(context.Context, *connect.Request[v1.ImageServiceStatusRequest]) (*connect.Response[v1.ImageServiceStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.ImageService.Status is not implemented"))
+}
+
+func (UnimplementedImageServiceHandler) Unstage(context.Context, *connect.Request[v1.UnstageRequest]) (*connect.Response[v1.UnstageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.ImageService.Unstage is not implemented"))
 }
 
 // PowerServiceClient is a client for the sneakers.appliance.init.v1.PowerService service.

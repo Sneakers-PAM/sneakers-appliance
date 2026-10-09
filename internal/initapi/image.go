@@ -32,6 +32,7 @@ type Images interface {
 	MarkGood(ctx context.Context, keep []string) error
 	Kept() ([]string, error)
 	NextStageRemoves() ([]string, error)
+	Unstage(ctx context.Context) (string, error)
 }
 
 // writing is an Images that reports a Stage's progress writing the slot,
@@ -147,4 +148,17 @@ func imageHandlerFor(o Options) (string, http.Handler) {
 		return initv1connect.NewImageServiceHandler(initv1connect.UnimplementedImageServiceHandler{})
 	}
 	return initv1connect.NewImageServiceHandler(&imageHandler{im: o.Images, arch: runtime.GOARCH, log: o.Logger})
+}
+
+func (h *imageHandler) Unstage(ctx context.Context, _ *connect.Request[initv1.UnstageRequest]) (*connect.Response[initv1.UnstageResponse], error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.log.Info("initapi: Image.Unstage")
+	v, err := h.im.Unstage(ctx)
+	if err != nil {
+		h.log.Warn("initapi: Image.Unstage refused", log.F("error", codes.Describe(err)))
+		return nil, toConnect(err)
+	}
+	h.log.Info("initapi: Image.Unstage done", log.F("version", v))
+	return connect.NewResponse(&initv1.UnstageResponse{Version: v}), nil
 }

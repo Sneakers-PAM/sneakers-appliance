@@ -67,7 +67,9 @@ same release key and encrypted to the same update key, with these header fields:
 |---|---|
 | `name` | `sneakers-product` (signed, so a base `.bin` can't pass for a product bundle or the reverse) |
 | `kind` | `product` |
-| `bases` | the base versions it fits; the box refuses it on any other (`UPGRADE_PRODUCT_BASE`), before it decrypts anything |
+| `min_base` | the oldest base version it fits, SemVer, inclusive; the box refuses it on an older base (`UPGRADE_PRODUCT_BASE`, naming the range and the running base), before it decrypts anything |
+| `max_base` | the newest base version it fits, inclusive; optional (no maximum when it's absent) |
+| `bases` | exact base versions, for boxes that predate `min_base`; a box that reads `min_base` ignores them. A bundle sealed before the range existed carries only `bases` and is still accepted on one of them, with a note in osadmin's log. To be dropped before v0.1.0 |
 
 The payload is the unpacked bundle as a tar: `release.yaml`, the `k0s` binary, the `helm` binary
 when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
@@ -80,17 +82,18 @@ each signed by the release key, and YAML stacks only (`KIT_BUNDLE_MISMATCH`, `KI
 How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundle).
 
 `build/product/build.sh` lays the bundle out, runs that check (`sneakers-artifact product-check`)
-and packs it for a base version list (`bin-pack --kind product --base ...`); the caller signs the
+and packs it for a base range (`MIN_BASE` and the optional `MAX_BASE`, `bin-pack --kind product --min-base ... --max-base ...`; `BASES`, `--base`, still adds exact bases for older boxes); the caller signs the
 header and seals it with `bin-seal`. `sneakers-artifact product-index` writes the index a mirror
-serves next to the bundles: version, architecture, channel, bases, file name and size per bundle,
+serves next to the bundles: version, architecture, channel, the base range and bases, file name and size per bundle,
 which the box only uses to offer a choice. `bin-verify --extract` on a product bundle also runs the
 box's check.
 
-- **A release:** the build job packs the bundle for the release's own version
+- **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it
   with the key in the signed UKI, checks it and writes the index.
 - **A lab build:** `build/lab/build.sh` writes `product/sneakers-product-<version>-amd64-LAB.bin` and
-  its index next to the disk, for the base it built, and checks it with the key in its signed UKI.
+  its index next to the disk, for the base it built and newer (`PRODUCT_MIN_BASE` and
+  `PRODUCT_MAX_BASE` set another range, as a test of the refusal does), and checks it with the key in its signed UKI.
 
 ## Lab and production keys
 

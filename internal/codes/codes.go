@@ -64,6 +64,7 @@ const (
 	UpgradeElevated      = 2512
 	UpgradeProductBase   = 2513
 	UpgradeNoReboot      = 2514
+	UpgradeBusy          = 2515
 	// The internal mirror's TLS refusals sit apart from the run above, so
 	// other upgrade codes can follow 2514.
 	UpgradeMirrorUntrusted = 2520
@@ -120,8 +121,9 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeUpload, Symbol: "UPGRADE_UPLOAD", Title: "upgrade", Cause: "the upload or fetch is unknown, too large, or failed"},
 	{Code: UpgradeNotStaged, Symbol: "UPGRADE_NOT_STAGED", Title: "upgrade", Cause: "no release is staged to apply"},
 	{Code: UpgradeElevated, Symbol: "UPGRADE_ELEVATED", Title: "upgrade", Cause: "an elevated shell is open; it ends, or an owner terminates it or overrides it (which ends it), before an update applies or reverts"},
-	{Code: UpgradeProductBase, Symbol: "UPGRADE_PRODUCT_BASE", Title: "upgrade", Cause: "the product bundle doesn't fit the base version this box runs"},
+	{Code: UpgradeProductBase, Symbol: "UPGRADE_PRODUCT_BASE", Title: "upgrade", Cause: "the product bundle doesn't fit the base version this box runs, or a base release is outside the installed product's base range"},
 	{Code: UpgradeNoReboot, Symbol: "UPGRADE_NO_REBOOT", Title: "upgrade", Cause: "an apply or revert was accepted, but the box didn't reboot within the bound"},
+	{Code: UpgradeBusy, Symbol: "UPGRADE_BUSY", Title: "upgrade", Cause: "a file is already coming in or waiting, or a stage is under way; verify or cancel it first"},
 	{Code: UpgradeMirrorUntrusted, Symbol: "UPGRADE_MIRROR_UNTRUSTED", Title: "upgrade", Cause: "the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host"},
 	{Code: UpgradeMirrorPin, Symbol: "UPGRADE_MIRROR_PIN", Title: "upgrade", Cause: "the HTTPS mirror's certificate isn't the one the update trust pins"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},

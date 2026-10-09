@@ -75,9 +75,10 @@ pins="-X $pkg.Channel=production -X $pkg.Version=$VERSION \
   -X $pkg.PKCert=$(b64 "$keys/PK.crt") -X $pkg.KEKCert=$(b64 "$keys/KEK.crt")"
 
 echo "release: product bundle"
-# It fits the base built here. Encrypting needs only the public update key;
+# It fits the base built here and newer (BASES for boxes that predate the
+# range). Encrypting needs only the public update key;
 # the sign job signs the header and seals the .bin.
-env "${helm_env[@]}" VERSION="$VERSION" ARCH="$arch" CHANNEL=production BASES="$VERSION" RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" \
+env "${helm_env[@]}" VERSION="$VERSION" ARCH="$arch" CHANNEL=production MIN_BASE="$VERSION" BASES="$VERSION" RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" \
   SIGNATURES="$SIGNATURES" K0S="$work/k0s" RECIPIENT="$keys/update.pub" OUT="$work/product" bash "$root/build/product/build.sh"
 cp "$work/product/bin/header.json" "$OUT/product-header.json"
 cp "$work/product/bin/payload.age" "$OUT/product-payload.age"
