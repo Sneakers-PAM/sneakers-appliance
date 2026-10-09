@@ -209,6 +209,8 @@ staged and previous versions, whether k0s is running, and `name`, the installed 
 people ("Sneakers", from the current slot's `<name>-product` header name; empty with no product).
 The :8443 nav shows the product's own section under that name, and only while it is set; the closed
 shell's product group follows the same header ([ssh-and-elevation.md](ssh-and-elevation.md#product-commands)).
+`GetStatus.product` carries the same slots, for the console's Product line
+([console.md](console.md#the-status-screen)).
 
 **The policy** (owner, no code): `automatic` applies a staged release once inside the daily window
 (default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. The

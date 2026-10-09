@@ -93,16 +93,71 @@ func health(d Data) tui.Line {
 	return status("Health", "DEGRADED", tui.Warn, fmt.Sprintf("%d of %d services running", ok, all))
 }
 
-func product(d Data) tui.Line {
+// base is the base release running, its slot, and what's staged or kept
+// to go back to.
+func base(d Data) tui.Line {
+	st := d.Status.Status
+	if st == nil {
+		return status("Base", "UNKNOWN", tui.Warn, "no status yet")
+	}
+	v := st.GetRunningVersion()
+	if v == "" {
+		v = st.GetVersion()
+	}
+	detail := v + " in slot " + d.Slot
+	switch {
+	case st.GetStagedVersion() != "":
+		detail += "; " + st.GetStagedVersion() + " staged"
+	case st.GetPreviousVersion() != "":
+		detail += "; " + st.GetPreviousVersion() + " to go back"
+	}
+	return status("Base", "OK", tui.OK, detail)
+}
+
+// product is the product bundle: from platformd once it's in the build,
+// until then from the product's slots in Status.
+func product(d Data, now time.Time) tui.Line {
 	switch {
 	case sources.IsNotInstalled(d.PlatformErr):
-		return status("Product", "NONE", tui.Dim, "installed from the admin page, Updates")
+		return productSlots(d.Status.Status, now)
 	case d.PlatformErr != nil:
 		return status("Product", "DOWN", tui.Alert, "the platform isn't answering")
 	case d.Platform.State == "running":
 		return status("Product", "OK", tui.OK, "Sneakers-PAM running")
 	}
 	return status("Product", strings.ToUpper(d.Platform.State), tui.Warn, "")
+}
+
+// productSlots is the Product line from Status's product slots: NONE
+// before the first install, FAILED for a day after a product update
+// failed, else whether the installed version runs, with what's staged or
+// kept to go back to.
+func productSlots(st *osadminv1.GetStatusResponse, now time.Time) tui.Line {
+	if st == nil {
+		return status("Product", "UNKNOWN", tui.Warn, "no status yet")
+	}
+	p := st.GetProduct()
+	if u := st.GetUpgradeProgress(); u.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT && u.GetFailed() && now.Sub(u.GetUpdatedAt().AsTime()) < failedStepShown {
+		return status("Product", "FAILED", tui.Alert, "the update to "+u.GetVersion()+" failed")
+	}
+	v := p.GetInstalledVersion()
+	if v == "" {
+		if s := p.GetStagedVersion(); s != "" {
+			return status("Product", "NONE", tui.Dim, s+" staged; install it from Updates")
+		}
+		return status("Product", "NONE", tui.Dim, "installed from the admin page, Updates")
+	}
+	if !p.GetRunning() {
+		return status("Product", "STOPPED", tui.Alert, v+" isn't running")
+	}
+	detail := v + " running"
+	switch {
+	case p.GetStagedVersion() != "":
+		detail += "; " + p.GetStagedVersion() + " staged"
+	case p.GetPreviousVersion() != "":
+		detail += "; " + p.GetPreviousVersion() + " to go back"
+	}
+	return status("Product", "OK", tui.OK, detail)
 }
 
 // countdown is how long until t, as 23h59m or 4m10s.
@@ -216,7 +271,7 @@ func Keys(d Data) tui.Line {
 func Page(c consoleui.Chrome, d Data, now time.Time) tui.Page {
 	c.Info = Info(d)
 	st := d.Status.Status
-	b := []tui.Line{health(d), product(d), c.ProtectionStatus(label), c.ClockLine(label), tui.Text("")}
+	b := []tui.Line{health(d), base(d), product(d, now), c.ProtectionStatus(label), c.ClockLine(label), tui.Text("")}
 	urls := sources.URLHosts(st.GetManagementAddresses())
 	switch {
 	case d.NetErr != nil:

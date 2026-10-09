@@ -1,8 +1,8 @@
 +--------------------------------------------------------------+
 |  /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node       |
 +--------------------------------------------------------------+
-|                                                              |
 |   Health        DEGRADED 2 of 3 services running             |
+|   Base          OK      0.1.0 in slot A                      |
 |   Product       DOWN    the platform isn't answering         |
 |   Protection    FULL    Secure Boot on, key in the TPM       |
 |   Clock         OK      synced 18:03 UTC                     |

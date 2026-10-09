@@ -2,10 +2,10 @@
 |  /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node       |
 +--------------------------------------------------------------+
 |   Health        OK      all services running                 |
+|   Base          OK      0.1.0 in slot A; 0.1.1 staged        |
 |   Product       OK      Sneakers-PAM running                 |
 |   Protection    FULL    Secure Boot on, key in the TPM       |
 |   Clock         OK      synced 18:03 UTC                     |
-|                                                              |
 |   Admin         https://192.0.2.10:8443                      |
 |                 https://sneakers.example.org:8443            |
 |   SSH           192.0.2.10:22                                |

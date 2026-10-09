@@ -1,8 +1,8 @@
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM Appliance\e[0m\e[2m   0.1.0  slot A  1 node\e[0m       \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Health        \e[1;33mDEGRADED\e[0m\e[2m 2 of 3 services running\e[0m             \e[34m|\e[0m
+\e[34m|\e[0m   Base          \e[1;32mOK\e[0m\e[2m      0.1.0 in slot A\e[0m                      \e[34m|\e[0m
 \e[34m|\e[0m   Product       \e[1;31mDOWN\e[0m\e[2m    the platform isn't answering\e[0m         \e[34m|\e[0m
 \e[34m|\e[0m   Protection    \e[1;32mFULL\e[0m\e[2m    Secure Boot on, key in the TPM\e[0m       \e[34m|\e[0m
 \e[34m|\e[0m   Clock         \e[1;32mOK\e[0m\e[2m      synced 18:03 UTC\e[0m                     \e[34m|\e[0m

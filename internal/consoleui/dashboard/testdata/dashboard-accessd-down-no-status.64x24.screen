@@ -3,6 +3,7 @@
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        UNKNOWN no status yet                        |
+|   Base          UNKNOWN no status yet                        |
 |   Product                                                    |
 |   Protection    UNKNOWN the boot hasn't answered yet         |
 |   Clock         UNKNOWN 18:03 UTC                            |
@@ -11,7 +12,6 @@
 |                                                              |
 |   ! The appliance services aren't answering yet; there's     |
 |     no status to show.                                       |
-|                                                              |
 |                                                              |
 |                                                              |
 |                                                              |

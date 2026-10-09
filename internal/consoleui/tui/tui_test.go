@@ -149,6 +149,22 @@ func TestAFullBodyMovesUpBeforeItIsCut(t *testing.T) {
 	}
 }
 
+// Still short of room, the body's blank rows go before any line is cut.
+func TestBlankRowsGoBeforeTheBodyIsCut(t *testing.T) {
+	p := page()
+	p.Body = nil
+	for i := 0; i < 17; i++ {
+		p.Body = append(p.Body, tui.Text(fmt.Sprintf("line %d", i)))
+		if i == 3 || i == 9 {
+			p.Body = append(p.Body, tui.Text(""))
+		}
+	}
+	text := p.Frame(64, 24).Text()
+	if strings.Contains(text, "...") || !strings.Contains(text, "line 0") || !strings.Contains(text, "line 16") {
+		t.Fatalf("frame:\n%s", text)
+	}
+}
+
 func TestALongBodyIsCutWithANote(t *testing.T) {
 	p := page()
 	for i := 0; i < 40; i++ {

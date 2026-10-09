@@ -3,9 +3,9 @@
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        OK      all services running                 |
-|   Base          OK      0.1.0 in slot A                      |
-|   Product       OK      Sneakers-PAM running                 |
-|   Protection    REDUCED no TPM, Secure Boot on               |
+|   Base          OK      0.1.0 in slot A; 0.0.9 to go back    |
+|   Product       OK      0.1.0-lab.hello.1 running            |
+|   Protection    FULL    Secure Boot on, key in the TPM       |
 |   Clock         OK      synced 18:03 UTC                     |
 |                                                              |
 |   Admin         https://192.0.2.10:8443                      |

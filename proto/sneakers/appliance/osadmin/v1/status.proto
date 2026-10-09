@@ -162,6 +162,9 @@ message GetStatusResponse {
   // upgrade_progress is the last stage, apply or revert, step by step;
   // unset when the box has made none.
   UpgradeProgress upgrade_progress = 25;
+  // product is the product bundle's slots, as GetUpgrades gives them, for
+  // the console's status screen.
+  ProductSlots product = 26;
 }
 
 message SetSecureBootRequest {
