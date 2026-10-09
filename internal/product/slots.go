@@ -132,14 +132,20 @@ func (s Slots) Stage(h updatepkg.Header, fill func(dir string) error, key *ecdsa
 	return nil
 }
 
-// Finish checks an unpacked product bundle in dir and makes its k0s
-// executable (the payload's files are all 0644).
+// Finish checks an unpacked product bundle in dir and makes its k0s and
+// helm executable (the payload's files are all 0644).
 func Finish(dir, arch string, key *ecdsa.PublicKey) error {
 	if _, err := bundle.CheckProduct(os.DirFS(dir), arch, key); err != nil {
 		return err
 	}
-	if err := os.Chmod(filepath.Join(dir, bundle.ProductK0s), 0o755); err != nil { // #nosec G302 -- the checked k0s binary
-		return fmt.Errorf("product: %w", err)
+	for _, bin := range []string{bundle.ProductK0s, bundle.ProductHelm} {
+		err := os.Chmod(filepath.Join(dir, bin), 0o755) // #nosec G302 -- a checked binary
+		if bin == bundle.ProductHelm && errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("product: %w", err)
+		}
 	}
 	return nil
 }

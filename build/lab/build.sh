@@ -29,6 +29,9 @@
 #   K0S          the k0s binary for the product bundle (default: the K0S_VERSION
 #                release from build/ci/versions.env, downloaded and checked
 #                against K0S_SHA256_AMD64)
+#   HELM         the helm binary for the product bundle (default: the
+#                HELM_VERSION release from build/ci/versions.env, its tarball
+#                downloaded and checked against HELM_TGZ_SHA256_AMD64)
 #   DISK_SIZE    the raw disk's size (default 64G)
 #   KIT_MIN      the oldest kit or init version that may verify the release
 #                (spec.kitMin; default 0.0.0-0, any)
@@ -100,6 +103,17 @@ if [ -z "$k0s" ]; then
   [ "$got" = "$K0S_SHA256_AMD64" ] || { echo "lab: k0s $K0S_VERSION has SHA-256 $got, want $K0S_SHA256_AMD64" >&2; exit 1; }
 fi
 k0s_sum="$(sha256sum "$k0s" | cut -d' ' -f1)"
+helm="${HELM:-}"
+if [ -z "$helm" ]; then
+  helm="$work/helm"
+  echo "lab: helm $HELM_VERSION"
+  curl -fsSL --retry 3 -o "$work/helm.tar.gz" "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz"
+  got="$(sha256sum "$work/helm.tar.gz" | cut -d' ' -f1)"
+  [ "$got" = "$HELM_TGZ_SHA256_AMD64" ] || { echo "lab: helm $HELM_VERSION has SHA-256 $got, want $HELM_TGZ_SHA256_AMD64" >&2; exit 1; }
+  tar -xzOf "$work/helm.tar.gz" linux-amd64/helm > "$helm"
+  rm -f "$work/helm.tar.gz"
+fi
+helm_sum="$(sha256sum "$helm" | cut -d' ' -f1)"
 
 # images.txt: <group> <name> <image> <digest>, groups k0s and thirdParty.
 images=()
@@ -134,6 +148,11 @@ ${third_party%$'\n'}
         arm64: $k0s_sum
       images:
 ${k0s_images%$'\n'}
+    helm:
+      version: $HELM_VERSION
+      sha256:
+        amd64: $helm_sum
+        arm64: $helm_sum
 YAML
 sign_blob() { # file bundle
   cosign sign-blob --yes --key "$KEYS/cosign.key" --bundle "$2" \
@@ -161,7 +180,7 @@ for line in "${images[@]}"; do
 done
 # The bundle fits the base built here, and nothing else.
 VERSION="$version" CHANNEL=lab BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
-  SIGNATURES="$work/image-sigs" K0S="$k0s" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
+  SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
   bash "$root/build/product/build.sh"
 sign_blob "$work/product/bin/header.json" "$work/product/bin/header.sigstore.json"
 rm -rf "$OUT/product"

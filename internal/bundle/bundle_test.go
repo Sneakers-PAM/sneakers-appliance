@@ -51,6 +51,20 @@ func TestCheckProductAcceptsTheFixture(t *testing.T) {
 	}
 }
 
+// A release.yaml from before helm shipped pins none, and its bundle has
+// none.
+func TestCheckProductAcceptsABundleWithoutHelm(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	tree, _ := fixtures.ProductTree(t, k, "amd64", func(m fstest.MapFS) {
+		fixtures.UnpinHelm(m)
+		delete(m, bundle.ProductHelm)
+	})
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestProductCheckBothDirections(t *testing.T) {
 	k := fixtures.LabKeys(t)
 	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
@@ -64,6 +78,9 @@ func TestProductCheckBothDirections(t *testing.T) {
 		"rogue signed":   {fixtures.ResignImageWithRogue(k), codes.KitImageUnsigned},
 		"wrong k0s":      {fixtures.SwapK0sBinary, codes.KitBundleMismatch},
 		"no k0s":         {func(m fstest.MapFS) { delete(m, bundle.ProductK0s) }, codes.KitBundleMismatch},
+		"wrong helm":     {fixtures.SwapHelmBinary, codes.KitBundleMismatch},
+		"no helm":        {func(m fstest.MapFS) { delete(m, bundle.ProductHelm) }, codes.KitBundleMismatch},
+		"unpinned helm":  {fixtures.UnpinHelm, codes.KitBundleMismatch},
 		"stray image":    {func(m fstest.MapFS) { m[bundle.ProductImages+"/notes.txt"] = &fstest.MapFile{Data: []byte("x")} }, codes.KitBundleMismatch},
 		"stray file":     {func(m fstest.MapFS) { m["notes.txt"] = &fstest.MapFile{Data: []byte("x")} }, codes.KitBundleMismatch},
 		"no release":     {func(m fstest.MapFS) { delete(m, bundle.ProductRelease) }, codes.KitBundleMismatch},

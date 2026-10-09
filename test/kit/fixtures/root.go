@@ -64,9 +64,15 @@ func ProductTree(t testing.TB, k Keys, arch string, edit func(fstest.MapFS)) (fs
 	other := sha256.Sum256(append([]byte("other arch"), k0s...))
 	sums := map[string]string{"amd64": hex.EncodeToString(other[:]), "arm64": hex.EncodeToString(other[:])}
 	sums[arch] = hex.EncodeToString(k0sSum[:])
+	helm := random(t, 16<<10)
+	helmSum := sha256.Sum256(helm)
+	helmOther := sha256.Sum256(append([]byte("other arch"), helm...))
+	helmSums := map[string]string{"amd64": hex.EncodeToString(helmOther[:]), "arm64": hex.EncodeToString(helmOther[:])}
+	helmSums[arch] = hex.EncodeToString(helmSum[:])
 
 	m := fstest.MapFS{
-		bundle.ProductK0s: {Data: k0s, Mode: 0o755},
+		bundle.ProductK0s:  {Data: k0s, Mode: 0o755},
+		bundle.ProductHelm: {Data: helm, Mode: 0o755},
 		bundle.ProductManifests + "/hello/hello.yaml": {Data: []byte("apiVersion: v1\nkind: Namespace\nmetadata:\n  name: hello\n")},
 	}
 	groups := map[string]map[string]map[string]string{"services": {}, "thirdParty": {}}
@@ -93,7 +99,10 @@ func ProductTree(t testing.TB, k Keys, arch string, edit func(fstest.MapFS)) (fs
 		"spec": map[string]any{
 			"services":   groups["services"],
 			"thirdParty": groups["thirdParty"],
-			"kubernetes": map[string]any{"k0s": map[string]any{"version": "v1.36.4+k0s.1", "sha256": sums, "images": k0sImages}},
+			"kubernetes": map[string]any{
+				"k0s":  map[string]any{"version": "v1.36.4+k0s.1", "sha256": sums, "images": k0sImages},
+				"helm": map[string]any{"version": "v4.3.0", "sha256": helmSums},
+			},
 		},
 	}
 	relYAML, err := json.Marshal(rel) // JSON is YAML
@@ -245,6 +254,26 @@ func ResignImageWithRogue(k Keys) func(fstest.MapFS) {
 // SwapK0sBinary replaces the product bundle's k0s with another binary.
 func SwapK0sBinary(m fstest.MapFS) {
 	m[bundle.ProductK0s] = &fstest.MapFile{Data: []byte(fmt.Sprintf("not k0s %d", len(m))), Mode: 0o755}
+}
+
+// SwapHelmBinary replaces the product bundle's helm with another binary.
+func SwapHelmBinary(m fstest.MapFS) {
+	m[bundle.ProductHelm] = &fstest.MapFile{Data: []byte(fmt.Sprintf("not helm %d", len(m))), Mode: 0o755}
+}
+
+// UnpinHelm drops helm's pin from the product bundle's release.yaml, as a
+// release.yaml from before helm shipped with the product.
+func UnpinHelm(m fstest.MapFS) {
+	var rel map[string]any
+	if err := json.Unmarshal(m[bundle.ProductRelease].Data, &rel); err != nil {
+		panic(err)
+	}
+	delete(rel["spec"].(map[string]any)["kubernetes"].(map[string]any), "helm")
+	b, err := json.Marshal(rel)
+	if err != nil {
+		panic(err)
+	}
+	m[bundle.ProductRelease] = &fstest.MapFile{Data: b}
 }
 
 func digestOf(b []byte) digest.Digest { return digest.SHA256.FromBytes(b) }
