@@ -95,6 +95,11 @@ names its image `<image>@sha256:<digest>`, which is the name the kubelet asks fo
 image is `<image>:<tag>@sha256:<digest>`. With the pull policy `Never`, a pod whose image isn't
 bundled fails with `ErrImageNeverPull` instead of reaching for a registry.
 
+Each `manifests/<stack>/` goes to `/var/lib/k0s/manifests/<stack>/`, which k0s applies. When the
+bundle exposes values ([release.md](release.md#productyaml)), the slot also holds the RBAC the box
+rendered for them, `exposed-rbac.yaml`, and `prepare` puts it in the stack
+`sneakers-appliance-exposed`; with none, that stack goes and k0s deletes what it held.
+
 ### kubectl and helm in the root shell
 
 The root shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-root-shell)) reaches the installed
@@ -110,6 +115,10 @@ box refuses a bundle whose helm doesn't match the pin, or that carries a helm it
 doesn't pin. Lab builds take `HELM_VERSION` from `build/ci/versions.env`, with the upstream tarball
 checked against its published SHA-256. A production bundle carries helm once sneakers-release's
 `release.yaml` pins it.
+
+`helm list -A` is empty by design: the appliance applies the product's stacks as k0s manifests, not
+Helm releases, because the update slots and revert track the manifests directly, and Helm's release
+state would sit outside them. The root shell's `help` says so.
 
 For k0s v1.36.4+k0s.1 the components left on need five images: pause, kube-proxy, CoreDNS,
 kube-router and its CNI installer (`cni-node`). A lab build pins them, the hello image and the
@@ -144,9 +153,9 @@ Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s
   `127.0.0.1:9180`, and the hello route's `box-page` middleware serves edgefall's box-state page for
   `502` to `504`. The hello page loads `/_box/poll.js`, so an open tab shows "Sneakers-PAM is
   rebooting" and the like through a reboot, a shutdown or an update, and comes back by itself; while
-  k0s is down edgefall answers 80 and 443 itself ([edge-fallback.md](edge-fallback.md)). The
-  edge's `edge-handoff` init container asks edgefall for 80 and 443 just before Traefik starts,
-  so they're held until then rather than refused while k0s brings the edge up.
+  k0s is down edgefall answers 80 and 443 itself ([edge-fallback.md](edge-fallback.md)). Traefik's
+  start command asks edgefall for 80 and 443 right before it execs `traefik`, so they're held
+  until then rather than refused while k0s brings the edge up.
 - Once a bundle is installed, accessd opens 80 and 443 on the service interface (the management
   one when the box has only one) through netd's `SetServicePorts`, after each product apply and
   revert and when it starts. 22 and 8443 are as before. Before a bundle is installed nothing

@@ -14,11 +14,14 @@ import (
 	"testing"
 	"time"
 
+	log "github.com/Bugs5382/go-log"
+
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/firewall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netlink"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/timesync"
 )
 
@@ -337,8 +340,11 @@ type box struct {
 	clk     *clock.Fake
 	// fallback is the box's own name (Options.Fallback).
 	fallback string
-	d        *netd.Daemon
-	cancel   context.CancelFunc
+	// audit and logger, when set, are netd's audit log and logger.
+	audit  osaudit.Appender
+	logger log.Logger
+	d      *netd.Daemon
+	cancel context.CancelFunc
 }
 
 var (
@@ -356,7 +362,7 @@ func newBox(t *testing.T, links ...netd.Link) *box {
 
 func (b *box) start() *netd.Daemon {
 	b.t.Helper()
-	d, err := netd.New(netd.Options{StateDir: b.state, RunDir: b.run, Sys: b.sys, Workers: b.workers, NewTimeSync: b.time.New, Clock: b.clk, Fallback: b.fallback})
+	d, err := netd.New(netd.Options{StateDir: b.state, RunDir: b.run, Sys: b.sys, Workers: b.workers, NewTimeSync: b.time.New, Clock: b.clk, Fallback: b.fallback, Audit: b.audit, Logger: b.logger})
 	if err != nil {
 		b.t.Fatal(err)
 	}

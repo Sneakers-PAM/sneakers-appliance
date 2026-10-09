@@ -25,6 +25,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/firewall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netlink"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/timesync"
 )
 
@@ -48,6 +49,9 @@ type Options struct {
 	NewTimeSync func(servers []string, src timesync.Source) TimeSync
 	Clock       clock.Clock
 	Logger      log.Logger
+	// Audit is the OS audit log; netd writes a change it undoes at start
+	// to it (network.revert). Nil writes nothing.
+	Audit osaudit.Appender
 	// Fallback is the box's own name (internal/boxname): the kernel host
 	// name while neither the settings nor DHCP give one. It is never
 	// reported as the host name, so certificates don't take it.
@@ -179,9 +183,19 @@ func (d *Daemon) Start(ctx context.Context) error {
 func (d *Daemon) load() (network.Settings, bool, error) {
 	lg := d.o.Logger
 	if prev, err := network.ReadFile(d.prevFile()); err == nil {
-		lg.Warn("netd: a network change was left unconfirmed; undoing it", log.F("error", codes.Describe(codes.New(codes.NetReverted, "the network change wasn't confirmed and was undone at start"))))
-		_ = os.Remove(d.prevFile())
-		return prev, true, nil
+		reverted := codes.New(codes.NetReverted, "the network change wasn't confirmed before the box stopped and was undone at start")
+		lg.Error(reverted, "netd: a network change was left unconfirmed; undoing it")
+		d.rev.RevertedAtStart()
+		d.auditStartRevert()
+		// network.yaml takes prev before the undo file goes, so a stop
+		// in between undoes the change again rather than keeping it.
+		if err := network.WriteFile(d.settingsFile(), prev); err != nil {
+			return network.Settings{}, false, err
+		}
+		if err := removeDurably(d.prevFile()); err != nil {
+			lg.Error(err, "netd: network.prev.yaml not removed")
+		}
+		return prev, false, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		lg.Error(err, "netd: network.prev.yaml unreadable; ignoring it")
 	}
@@ -267,6 +281,15 @@ func (d *Daemon) Set(next network.Settings) (string, error) {
 		return "", err
 	}
 	prev, _ := d.Get()
+	if !d.rev.Pending() && network.KeepsReach(prev, next) {
+		// Nothing here can cut the admin off, so there's nothing to heal:
+		// it's kept at once, with no window and no undo file.
+		if err := d.applyAndSave(next, true); err != nil {
+			return "", err
+		}
+		d.o.Logger.Info("netd: settings changed and kept (no address, interface or allow-list change)", log.F("management", next.Management.Name))
+		return "", nil
+	}
 	if !d.rev.Pending() {
 		if err := network.WriteFile(d.prevFile(), prev); err != nil {
 			return "", err
@@ -299,14 +322,33 @@ func (d *Daemon) knownNICs(s network.Settings) error {
 }
 
 // Confirm keeps the pending change.
+// The change counts as kept only once network.prev.yaml is gone for
+// good, so the next start never undoes a confirmed change.
 func (d *Daemon) Confirm(token string) error {
-	if err := d.rev.Confirm(token); err != nil {
-		return err
+	return d.rev.Confirm(token, func() error { return removeDurably(d.prevFile()) })
+}
+
+// auditStartRevert writes the change undone at start to the OS audit log,
+// as osadmin writes one its window undid.
+func (d *Daemon) auditStartRevert() {
+	if d.o.Audit == nil {
+		return
 	}
-	if err := os.Remove(d.prevFile()); err != nil && !errors.Is(err, os.ErrNotExist) {
-		d.o.Logger.Warn("netd: network.prev.yaml not removed", log.F("error", err.Error()))
+	last, _ := d.rev.Last()
+	e := osaudit.Entry{Actor: "netd", Action: "network.revert", Target: "network", Outcome: "refused", Code: codes.Symbol(codes.NetReverted),
+		Detail: map[string]string{"change": last.ID, "at": "start", "surface": "netd"}}
+	if err := d.o.Audit.Append(e); err != nil {
+		d.o.Logger.Error(err, "netd: the undone change wasn't audited")
 	}
-	return nil
+}
+
+// removeDurably removes path and syncs its directory, so the removal
+// survives a power cut right after it.
+func removeDurably(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("netd: %w", err)
+	}
+	return network.SyncDir(filepath.Dir(path))
 }
 
 func (d *Daemon) reverted(network.Settings, error) {
@@ -696,7 +738,7 @@ func (d *Daemon) effective() (s network.Settings, dns []netip.Addr, search, ntp 
 		ntp = ntp[:network.MaxNTP]
 	}
 	if len(ntp) == 0 {
-		src = timesync.SourceNone
+		ntp, src = slices.Clone(network.DefaultNTP), timesync.SourceDefault
 	}
 	host = s.Hostname
 	if host == "" {
@@ -915,6 +957,8 @@ func (d *Daemon) Status() Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	st := Status{Management: a.Management, Service: a.Service, Hostname: a.Hostname}
+	st.LearntDNS, st.LearntSearch, st.LearntNTP = d.learnt(d.settings)
+	_, _, _, st.NTPServers, _, _ = d.effective()
 	if d.table != nil {
 		st.SSHOpen, st.HTTPSOpen = d.table.Open22, d.table.Open8443
 	}

@@ -76,4 +76,7 @@ docker run --rm --platform "$platform" \
     fi
     "/out/sgdisk-${ARCH}" --version
   '
+# shellcheck source=build/lib/stamp.sh
+source "$root/build/lib/stamp.sh"
+static_stamp gptfdisk "$arch" > "$out/gptfdisk-$arch.stamp"
 echo "gptfdisk: wrote $out/sgdisk-$arch"

@@ -7,10 +7,13 @@ import (
 	"bufio"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 )
@@ -189,17 +192,51 @@ var promptNeeds = []struct {
 
 func TestTheRootPromptUsesOnlyWhatBusyboxBuilds(t *testing.T) {
 	on := busyboxConfig(t)
+	prompt := elevated.PromptFor(time.Now())
 	for _, n := range promptNeeds {
-		if !n.use.MatchString(elevated.Prompt) {
+		if !n.use.MatchString(prompt) {
 			continue
 		}
 		for _, sym := range n.syms {
 			if !on[sym] {
-				t.Errorf("the root shell's PS1 %q needs %s, which busybox.config doesn't build", elevated.Prompt, sym)
+				t.Errorf("the root shell's PS1 %q needs %s, which busybox.config doesn't build", prompt, sym)
 			}
 		}
 	}
-	if !strings.Contains(elevated.Prompt, `\h`) {
-		t.Errorf("the root shell's PS1 %q doesn't show the host name", elevated.Prompt)
+	if !strings.Contains(prompt, `\h`) {
+		t.Errorf("the root shell's PS1 %q doesn't show the host name", prompt)
+	}
+	// Plain text: nothing in the prompt is expanded or run.
+	if strings.ContainsAny(prompt, "$`") {
+		t.Errorf("the root shell's PS1 %q has an expansion", prompt)
+	}
+}
+
+// The root shell's troubleshooting applets are built (base64 for a
+// Secret's data, hostname, which, nslookup and nc with -z), and nc can't
+// listen. With SNEAKERS_TEST_BUSYBOX set, the built busybox lists them.
+func TestTheRootShellHasTheTroubleshootingApplets(t *testing.T) {
+	on := busyboxConfig(t)
+	for _, sym := range []string{"CONFIG_BASE64", "CONFIG_HOSTNAME", "CONFIG_WHICH", "CONFIG_NSLOOKUP", "CONFIG_NC", "CONFIG_NC_110_COMPAT", "CONFIG_NC_EXTRA"} {
+		if !on[sym] {
+			t.Errorf("busybox.config doesn't build %s", sym)
+		}
+	}
+	if on["CONFIG_NC_SERVER"] {
+		t.Error("nc may listen (CONFIG_NC_SERVER)")
+	}
+	bb := os.Getenv("SNEAKERS_TEST_BUSYBOX")
+	if bb == "" {
+		return
+	}
+	out, err := exec.Command(bb, "--list").Output() // #nosec G204 -- the test's busybox
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := strings.Fields(string(out))
+	for _, a := range []string{"base64", "hostname", "which", "nslookup", "nc"} {
+		if !slices.Contains(have, a) {
+			t.Errorf("the built busybox has no %s", a)
+		}
 	}
 }

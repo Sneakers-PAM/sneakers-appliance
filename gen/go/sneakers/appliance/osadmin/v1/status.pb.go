@@ -102,6 +102,13 @@ const (
 	// WARNING_KIND_TLS_NAMES: an endpoint's certificate no longer covers any
 	// of the names it answers on.
 	WarningKind_WARNING_KIND_TLS_NAMES WarningKind = 10
+	// WARNING_KIND_NETWORK_PENDING: a network change waits for its
+	// confirmation and reverts on its own when the window ends.
+	WarningKind_WARNING_KIND_NETWORK_PENDING WarningKind = 11
+	// WARNING_KIND_NETWORK_REVERTED: the last network change wasn't
+	// confirmed and was undone (by the window, or at start after a reboot
+	// or an update inside it).
+	WarningKind_WARNING_KIND_NETWORK_REVERTED WarningKind = 12
 )
 
 // Enum value maps for WarningKind.
@@ -118,6 +125,8 @@ var (
 		8:  "WARNING_KIND_TLS_EXPIRING",
 		9:  "WARNING_KIND_TLS_EXPIRED",
 		10: "WARNING_KIND_TLS_NAMES",
+		11: "WARNING_KIND_NETWORK_PENDING",
+		12: "WARNING_KIND_NETWORK_REVERTED",
 	}
 	WarningKind_value = map[string]int32{
 		"WARNING_KIND_UNSPECIFIED":             0,
@@ -131,6 +140,8 @@ var (
 		"WARNING_KIND_TLS_EXPIRING":            8,
 		"WARNING_KIND_TLS_EXPIRED":             9,
 		"WARNING_KIND_TLS_NAMES":               10,
+		"WARNING_KIND_NETWORK_PENDING":         11,
+		"WARNING_KIND_NETWORK_REVERTED":        12,
 	}
 )
 
@@ -552,7 +563,10 @@ type GetStatusResponse struct {
 	UpgradeProgress *UpgradeProgress `protobuf:"bytes,25,opt,name=upgrade_progress,json=upgradeProgress,proto3" json:"upgrade_progress,omitempty"`
 	// product is the product bundle's slots, as GetUpgrades gives them, for
 	// the console's status screen.
-	Product       *ProductSlots `protobuf:"bytes,26,opt,name=product,proto3" json:"product,omitempty"`
+	Product *ProductSlots `protobuf:"bytes,26,opt,name=product,proto3" json:"product,omitempty"`
+	// network_change is the network change that waits for its
+	// confirmation, and how the last one ended, so every page can show it.
+	NetworkChange *NetworkChange `protobuf:"bytes,27,opt,name=network_change,json=networkChange,proto3" json:"network_change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -769,6 +783,104 @@ func (x *GetStatusResponse) GetProduct() *ProductSlots {
 	return nil
 }
 
+func (x *GetStatusResponse) GetNetworkChange() *NetworkChange {
+	if x != nil {
+		return x.NetworkChange
+	}
+	return nil
+}
+
+// NetworkChange is the state of the network change window.
+type NetworkChange struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// pending is true while a change waits for ConfirmNetwork;
+	// revert_seconds_left is how long it still waits, and change_id names it
+	// in the audit.
+	Pending           bool   `protobuf:"varint,1,opt,name=pending,proto3" json:"pending,omitempty"`
+	RevertSecondsLeft int32  `protobuf:"varint,2,opt,name=revert_seconds_left,json=revertSecondsLeft,proto3" json:"revert_seconds_left,omitempty"`
+	ChangeId          string `protobuf:"bytes,3,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	// last_reverted is true when the last change that waited was undone;
+	// last_reverted_at_start when that was because the box restarted inside
+	// its window. last_change_id names it.
+	LastReverted        bool   `protobuf:"varint,4,opt,name=last_reverted,json=lastReverted,proto3" json:"last_reverted,omitempty"`
+	LastRevertedAtStart bool   `protobuf:"varint,5,opt,name=last_reverted_at_start,json=lastRevertedAtStart,proto3" json:"last_reverted_at_start,omitempty"`
+	LastChangeId        string `protobuf:"bytes,6,opt,name=last_change_id,json=lastChangeId,proto3" json:"last_change_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *NetworkChange) Reset() {
+	*x = NetworkChange{}
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkChange) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkChange) ProtoMessage() {}
+
+func (x *NetworkChange) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkChange.ProtoReflect.Descriptor instead.
+func (*NetworkChange) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *NetworkChange) GetPending() bool {
+	if x != nil {
+		return x.Pending
+	}
+	return false
+}
+
+func (x *NetworkChange) GetRevertSecondsLeft() int32 {
+	if x != nil {
+		return x.RevertSecondsLeft
+	}
+	return 0
+}
+
+func (x *NetworkChange) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *NetworkChange) GetLastReverted() bool {
+	if x != nil {
+		return x.LastReverted
+	}
+	return false
+}
+
+func (x *NetworkChange) GetLastRevertedAtStart() bool {
+	if x != nil {
+		return x.LastRevertedAtStart
+	}
+	return false
+}
+
+func (x *NetworkChange) GetLastChangeId() string {
+	if x != nil {
+		return x.LastChangeId
+	}
+	return ""
+}
+
 type SetSecureBootRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	On              bool                   `protobuf:"varint,1,opt,name=on,proto3" json:"on,omitempty"`
@@ -779,7 +891,7 @@ type SetSecureBootRequest struct {
 
 func (x *SetSecureBootRequest) Reset() {
 	*x = SetSecureBootRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -791,7 +903,7 @@ func (x *SetSecureBootRequest) String() string {
 func (*SetSecureBootRequest) ProtoMessage() {}
 
 func (x *SetSecureBootRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -804,7 +916,7 @@ func (x *SetSecureBootRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecureBootRequest.ProtoReflect.Descriptor instead.
 func (*SetSecureBootRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{7}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SetSecureBootRequest) GetOn() bool {
@@ -829,7 +941,7 @@ type SetSecureBootResponse struct {
 
 func (x *SetSecureBootResponse) Reset() {
 	*x = SetSecureBootResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -841,7 +953,7 @@ func (x *SetSecureBootResponse) String() string {
 func (*SetSecureBootResponse) ProtoMessage() {}
 
 func (x *SetSecureBootResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -854,7 +966,7 @@ func (x *SetSecureBootResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecureBootResponse.ProtoReflect.Descriptor instead.
 func (*SetSecureBootResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{8}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{9}
 }
 
 var File_sneakers_appliance_osadmin_v1_status_proto protoreflect.FileDescriptor
@@ -883,7 +995,8 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
 	"totalBytes\x12/\n" +
-	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xf7\t\n" +
+	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xcc\n" +
+	"\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1a\n" +
@@ -917,7 +1030,15 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x10previous_version\x18\x17 \x01(\tR\x0fpreviousVersion\x12#\n" +
 	"\rprevious_slot\x18\x18 \x01(\tR\fpreviousSlot\x12Y\n" +
 	"\x10upgrade_progress\x18\x19 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\x12E\n" +
-	"\aproduct\x18\x1a \x01(\v2+.sneakers.appliance.osadmin.v1.ProductSlotsR\aproduct\"Q\n" +
+	"\aproduct\x18\x1a \x01(\v2+.sneakers.appliance.osadmin.v1.ProductSlotsR\aproduct\x12S\n" +
+	"\x0enetwork_change\x18\x1b \x01(\v2,.sneakers.appliance.osadmin.v1.NetworkChangeR\rnetworkChange\"\xf6\x01\n" +
+	"\rNetworkChange\x12\x18\n" +
+	"\apending\x18\x01 \x01(\bR\apending\x12.\n" +
+	"\x13revert_seconds_left\x18\x02 \x01(\x05R\x11revertSecondsLeft\x12\x1b\n" +
+	"\tchange_id\x18\x03 \x01(\tR\bchangeId\x12#\n" +
+	"\rlast_reverted\x18\x04 \x01(\bR\flastReverted\x123\n" +
+	"\x16last_reverted_at_start\x18\x05 \x01(\bR\x13lastRevertedAtStart\x12$\n" +
+	"\x0elast_change_id\x18\x06 \x01(\tR\flastChangeId\"Q\n" +
 	"\x14SetSecureBootRequest\x12\x0e\n" +
 	"\x02on\x18\x01 \x01(\bR\x02on\x12)\n" +
 	"\x10confirm_hostname\x18\x02 \x01(\tR\x0fconfirmHostname\"\x17\n" +
@@ -926,7 +1047,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"Protection\x12\x1a\n" +
 	"\x16PROTECTION_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPROTECTION_FULL\x10\x01\x12\x16\n" +
-	"\x12PROTECTION_REDUCED\x10\x02*\xf2\x02\n" +
+	"\x12PROTECTION_REDUCED\x10\x02*\xb7\x03\n" +
 	"\vWarningKind\x12\x1c\n" +
 	"\x18WARNING_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15WARNING_KIND_EXPOSURE\x10\x01\x12#\n" +
@@ -939,7 +1060,9 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x19WARNING_KIND_TLS_EXPIRING\x10\b\x12\x1c\n" +
 	"\x18WARNING_KIND_TLS_EXPIRED\x10\t\x12\x1a\n" +
 	"\x16WARNING_KIND_TLS_NAMES\x10\n" +
-	"2\xa1\x03\n" +
+	"\x12 \n" +
+	"\x1cWARNING_KIND_NETWORK_PENDING\x10\v\x12!\n" +
+	"\x1dWARNING_KIND_NETWORK_REVERTED\x10\f2\xa1\x03\n" +
 	"\rStatusService\x12y\n" +
 	"\tGetStatus\x12/.sneakers.appliance.osadmin.v1.GetStatusRequest\x1a0.sneakers.appliance.osadmin.v1.GetStatusResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
 	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.set\x12v\n" +
@@ -958,7 +1081,7 @@ func file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_status_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sneakers_appliance_osadmin_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_sneakers_appliance_osadmin_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_sneakers_appliance_osadmin_v1_status_proto_goTypes = []any{
 	(Protection)(0),               // 0: sneakers.appliance.osadmin.v1.Protection
 	(WarningKind)(0),              // 1: sneakers.appliance.osadmin.v1.WarningKind
@@ -969,36 +1092,38 @@ var file_sneakers_appliance_osadmin_v1_status_proto_goTypes = []any{
 	(*Component)(nil),             // 6: sneakers.appliance.osadmin.v1.Component
 	(*Disk)(nil),                  // 7: sneakers.appliance.osadmin.v1.Disk
 	(*GetStatusResponse)(nil),     // 8: sneakers.appliance.osadmin.v1.GetStatusResponse
-	(*SetSecureBootRequest)(nil),  // 9: sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	(*SetSecureBootResponse)(nil), // 10: sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	(*UpgradeProgress)(nil),       // 11: sneakers.appliance.osadmin.v1.UpgradeProgress
-	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
-	(*FactoryReset)(nil),          // 13: sneakers.appliance.osadmin.v1.FactoryReset
-	(*ProductSlots)(nil),          // 14: sneakers.appliance.osadmin.v1.ProductSlots
+	(*NetworkChange)(nil),         // 9: sneakers.appliance.osadmin.v1.NetworkChange
+	(*SetSecureBootRequest)(nil),  // 10: sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	(*SetSecureBootResponse)(nil), // 11: sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	(*UpgradeProgress)(nil),       // 12: sneakers.appliance.osadmin.v1.UpgradeProgress
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(*FactoryReset)(nil),          // 14: sneakers.appliance.osadmin.v1.FactoryReset
+	(*ProductSlots)(nil),          // 15: sneakers.appliance.osadmin.v1.ProductSlots
 }
 var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
-	11, // 0: sneakers.appliance.osadmin.v1.GetPhaseResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	12, // 0: sneakers.appliance.osadmin.v1.GetPhaseResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
 	1,  // 1: sneakers.appliance.osadmin.v1.Warning.kind:type_name -> sneakers.appliance.osadmin.v1.WarningKind
 	0,  // 2: sneakers.appliance.osadmin.v1.GetStatusResponse.protection:type_name -> sneakers.appliance.osadmin.v1.Protection
 	7,  // 3: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
 	6,  // 4: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
-	12, // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
+	13, // 5: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
 	5,  // 6: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
-	13, // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	12, // 8: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
-	11, // 9: sneakers.appliance.osadmin.v1.GetStatusResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
-	14, // 10: sneakers.appliance.osadmin.v1.GetStatusResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
-	4,  // 11: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
-	9,  // 12: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	2,  // 13: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
-	8,  // 14: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	10, // 15: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	3,  // 16: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
-	14, // [14:17] is the sub-list for method output_type
-	11, // [11:14] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	14, // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	13, // 8: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	12, // 9: sneakers.appliance.osadmin.v1.GetStatusResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	15, // 10: sneakers.appliance.osadmin.v1.GetStatusResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
+	9,  // 11: sneakers.appliance.osadmin.v1.GetStatusResponse.network_change:type_name -> sneakers.appliance.osadmin.v1.NetworkChange
+	4,  // 12: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
+	10, // 13: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	2,  // 14: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
+	8,  // 15: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	11, // 16: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	3,  // 17: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
+	15, // [15:18] is the sub-list for method output_type
+	12, // [12:15] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_status_proto_init() }
@@ -1015,7 +1140,7 @@ func file_sneakers_appliance_osadmin_v1_status_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_status_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_status_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -52,6 +52,10 @@ func (h *networkSvc) GetNetwork(ctx context.Context, _ *connect.Request[osadminv
 		ManagementAddresses: netdapi.Bare(st.Msg.GetManagementAddresses()), ServiceAddresses: st.Msg.GetServiceAddresses(),
 		NtpSynced: st.Msg.GetNtpSynced(), NtpOffsetMs: st.Msg.GetNtpOffsetMs(),
 		PendingChangeId: g.Msg.GetChangeId(), RevertSecondsLeft: g.Msg.GetSecondsLeft(),
+		LearntDns: st.Msg.GetLearntDns(), LearntSearch: st.Msg.GetLearntSearch(), LearntNtp: st.Msg.GetLearntNtp(), NtpServers: st.Msg.GetNtpServers(),
+	}
+	if l := g.Msg.GetLast(); l.GetReverted() {
+		out.LastChangeReverted, out.LastChangeRevertedAtStart, out.LastChangeId = true, l.GetAtStart(), l.GetChangeId()
 	}
 	// The token lets the page confirm after a reload or from the change's
 	// new address; only an owner may confirm, so only an owner gets it.
@@ -78,6 +82,11 @@ func (h *networkSvc) SetNetwork(ctx context.Context, r *connect.Request[osadminv
 	}
 	out := &osadminv1.SetNetworkResponse{Token: res.Msg.GetToken(), RevertAfterSeconds: res.Msg.GetRevertAfterSeconds()}
 	out.MovesManagement, out.NewUrl, out.NewCertificate = moves(prev.Msg.GetSettings(), r.Msg.GetSettings())
+	if out.GetToken() == "" {
+		c.note("network", "kept", "at-once")
+		h.s.o.Logger.Info("osadmin: network change kept at once (no address, interface or allow-list change)", log.F("by", c.session.Admin))
+		return connect.NewResponse(out), nil
+	}
 	id := res.Msg.GetChangeId()
 	c.note("network", "change", id)
 	h.s.o.Logger.Info("osadmin: network change applied, waiting for confirmation", log.F("by", c.session.Admin), log.F("change", id),
@@ -120,8 +129,10 @@ func (h *networkSvc) checkRevert(id string) {
 }
 
 // auditRevert writes a reverted change to the audit once.
+// A change undone at start is netd's own to audit: osadmin may not have
+// run inside its window.
 func (h *networkSvc) auditRevert(l *netdv1.ChangeOutcome) {
-	if !l.GetReverted() || l.GetChangeId() == "" {
+	if !l.GetReverted() || l.GetChangeId() == "" || l.GetAtStart() {
 		return
 	}
 	h.s.revertMu.Lock()
@@ -131,7 +142,7 @@ func (h *networkSvc) auditRevert(l *netdv1.ChangeOutcome) {
 	}
 	h.s.revertAudited = l.GetChangeId()
 	h.s.revertMu.Unlock()
-	h.s.o.Logger.Warn("osadmin: the network change wasn't confirmed and was undone", log.F("change", l.GetChangeId()))
+	h.s.o.Logger.Error(nil, "osadmin: the network change wasn't confirmed and was undone", log.F("change", l.GetChangeId()))
 	h.s.write(osaudit.Entry{Actor: "netd", Action: "network.revert", Target: "network", Detail: map[string]string{"change": l.GetChangeId(), "surface": "netd"}},
 		codes.New(codes.NetReverted, "the network change wasn't confirmed in time and was undone"))
 }

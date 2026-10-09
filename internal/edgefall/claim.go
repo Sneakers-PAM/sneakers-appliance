@@ -133,3 +133,29 @@ func (c *Claimer) Close() {
 	defer c.mu.Unlock()
 	c.release()
 }
+
+// WatchTaken dials addr (443, on loopback) every step after a handoff until
+// something accepts, at most for limit, and reports how long it refused:
+// the gap between edgefall letting 443 go and the edge binding it, or that
+// nothing took it in time.
+func WatchTaken(addr string, limit, step time.Duration, report func(gap time.Duration, taken bool)) {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	target := net.JoinHostPort(host, port)
+	start := time.Now()
+	for time.Since(start) < limit {
+		c, err := net.DialTimeout("tcp", target, step)
+		if err == nil {
+			_ = c.Close()
+			report(time.Since(start), true)
+			return
+		}
+		time.Sleep(step)
+	}
+	report(time.Since(start), false)
+}

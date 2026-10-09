@@ -74,6 +74,21 @@ func WriteFile(path string, s Settings) error {
 	if err := os.Rename(tmp.Name(), path); err != nil {
 		return fmt.Errorf("network: %w", err)
 	}
+	return SyncDir(filepath.Dir(path))
+}
+
+// SyncDir flushes dir's entries, so a rename or removal in it survives a
+// power cut.
+func SyncDir(dir string) error {
+	f, err := os.Open(dir) // #nosec G304 -- netd's own settings directory
+	if err != nil {
+		return fmt.Errorf("network: %w", err)
+	}
+	err = f.Sync()
+	_ = f.Close()
+	if err != nil {
+		return fmt.Errorf("network: %w", err)
+	}
 	return nil
 }
 

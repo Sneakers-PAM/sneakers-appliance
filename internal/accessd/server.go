@@ -85,6 +85,9 @@ type Options struct {
 	// HostKeyDir is where the SSH host keys live
 	// (/var/lib/sneakers/ssh); empty never makes them.
 	HostKeyDir string
+	// HostCA signs the host keys' certificates (rootkey.Key); nil leaves
+	// sshd presenting its bare host keys.
+	HostCA HostCA
 	// Elevated is sneakers-elevated, which runs a root shell.
 	Elevated string
 	// StartSSHD has init start sshd: the first admin exists.
@@ -187,6 +190,7 @@ var shellMethods = map[string]bool{
 	accessv1connect.AccessServiceRemoveAdminProcedure:       true,
 	accessv1connect.AccessServiceListKeysProcedure:          true,
 	accessv1connect.AccessServiceRemoveKeyProcedure:         true,
+	accessv1connect.AccessServiceGetExposedValueProcedure:   true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceSetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceConfirmNetworkProcedure:   true,

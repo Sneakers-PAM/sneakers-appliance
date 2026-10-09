@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,6 +33,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
@@ -83,6 +85,13 @@ func run() int {
 	defer b.EndLogin(context.WithoutCancel(ctx), login)
 	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: stdin, Out: os.Stdout, Err: os.Stderr,
 		Product: productinfo.Installed(productinfo.Dir)}
+	if e.Product.Present() {
+		// The values the bundle exposes to this login's role; accessd
+		// checks the role again on every read.
+		if spec, err := productspec.Load(filepath.Join(productinfo.Dir, "current")); err == nil {
+			e.Values = shell.ValuesFor(spec, b.Role)
+		}
+	}
 	if tty {
 		e.RootShell = rootShell(fd)
 	}

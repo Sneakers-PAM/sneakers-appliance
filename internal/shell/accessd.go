@@ -61,7 +61,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -105,6 +105,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 	case "rootshell.begin", "rootshell.open":
 		res, err = s.rootShell(ctx, r)
+	case "product.value":
+		res, err = s.productValue(ctx, r.Args[0])
 	default:
 		return Result{}, false, nil
 	}
@@ -116,6 +118,33 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		return Result{}, true, fromAccessd(err)
 	}
 	return res, true, nil
+}
+
+// productValue prints one value the product exposes, with the link that
+// takes it; a one-time value that was used prints only that.
+func (s *Services) productValue(ctx context.Context, name string) (Result, error) {
+	out, err := s.Access.GetExposedValue(ctx, connect.NewRequest(&accessv1.GetExposedValueRequest{Name: name}))
+	if err != nil {
+		return Result{}, err
+	}
+	m := out.Msg.GetValue()
+	e := m.GetEntry()
+	label := Printable(e.GetLabel())
+	if label == "" {
+		label = Printable(m.GetProductTitle()) + "'s " + Printable(e.GetName())
+	}
+	if e.GetConsumed() {
+		return Result{Text: label + " was already used and removed; there's nothing to show.", Data: map[string]any{"name": e.GetName(), "consumed": true}}, nil
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s:\n\n    %s\n", label, Printable(m.GetValue()))
+	if link := Printable(e.GetLink()); link != "" {
+		fmt.Fprintf(&b, "\nUse it at %s\n", link)
+	}
+	if e.GetOneTime() {
+		b.WriteString("It works once; after that it's removed.\n")
+	}
+	return Result{Text: b.String(), Data: map[string]any{"name": e.GetName(), "consumed": false, "value": m.GetValue(), "link": e.GetLink()}}, nil
 }
 
 func (s *Services) rootShell(ctx context.Context, r Request) (Result, error) {

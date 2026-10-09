@@ -24,6 +24,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/bundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
@@ -160,10 +161,14 @@ func (s Slots) Stage(h updatepkg.Header, fill func(dir string) error, key *ecdsa
 	return nil
 }
 
-// Finish checks an unpacked product bundle in dir and makes its k0s and
-// helm executable (the payload's files are all 0644).
+// Finish checks an unpacked product bundle in dir, makes its k0s and
+// helm executable (the payload's files are all 0644) and renders the RBAC
+// for the values its product.yaml exposes (productspec.WriteRBAC).
 func Finish(dir, arch string, key *ecdsa.PublicKey) error {
 	if _, err := bundle.CheckProduct(os.DirFS(dir), arch, key); err != nil {
+		return err
+	}
+	if err := productspec.WriteRBAC(dir); err != nil {
 		return err
 	}
 	for _, bin := range []string{bundle.ProductK0s, bundle.ProductHelm} {

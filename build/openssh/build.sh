@@ -72,4 +72,7 @@ docker run --rm \
       chown "$OWNER" "/out/$b"
     done
   '
-echo "openssh: wrote $out/{sshd,sshd-session,sshd-auth,ssh-keygen}"
+# shellcheck source=build/lib/stamp.sh
+source "$root/build/lib/stamp.sh"
+openssh_stamp > "$out/openssh.stamp"
+echo "openssh: wrote $out/{sshd,sshd-session,sshd-auth,ssh-keygen}, stamped $(cat "$out/openssh.stamp")"

@@ -70,7 +70,10 @@ var fieldNames = []string{"Port", "Address", "Gateway", "DNS server"}
 
 // form is the address being set by hand.
 type form struct {
-	nics    []sources.NIC
+	nics []sources.NIC
+	// base is the box's current settings, which the form changes only
+	// where it was edited; zero when netd gave none.
+	base    network.Settings
 	port    string
 	address netip.Prefix
 	gateway netip.Addr
@@ -188,6 +191,11 @@ func Edit(ctx context.Context, u *tui.UI, d Deps) (bool, error) {
 		return false, err
 	}
 	f := form{nics: nics}
+	if cur, err := d.Network.Get(ctx); err == nil {
+		f.base = cur
+	} else {
+		d.Logger.Warn("netedit: the current settings can't be read; the address goes on the defaults", log.F("error", err.Error()))
+	}
 	for _, n := range nics {
 		if n.Link {
 			f.port = n.Name
@@ -280,10 +288,20 @@ func (f *form) set(field int, line string) error {
 	return nil
 }
 
-// Settings is the form as netd settings: the static address on its
-// family, the other family left as it comes.
+// Settings is the form as netd settings: the box's current settings with
+// the static address on its family and, when one was typed, the DNS
+// server. On another port than the current one that port's families start
+// from the defaults; everything else (NTP, the host name, the search
+// domains, the allow-list, the time zone, the proxy, the cluster ranges)
+// stays as it was.
 func (f form) settings() network.Settings {
-	s := network.Defaults(f.port)
+	s := f.base
+	if s.Management.Name == "" {
+		s = network.Defaults(f.port)
+	}
+	if s.Management.Name != f.port {
+		s.Management = network.Defaults(f.port).Management
+	}
 	if f.address.Addr().Is4() {
 		s.Management.IPv4 = network.Family4{Mode: network.V4Static, Address: f.address, Gateway: f.gateway}
 	} else {

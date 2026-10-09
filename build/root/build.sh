@@ -21,7 +21,9 @@
 #                  ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX        the static busybox (build/busybox/build.sh)
 #   STATIC         directory with cryptsetup-<arch>, veritysetup-<arch>,
-#                  mke2fs-<arch>, sgdisk-<arch> (optional)
+#                  mke2fs-<arch>, sgdisk-<arch> and their stamps
+#                  (build/static); first boot can't make the state volumes
+#                  without them
 #   SERVICES       the service table (default os/rootfs/services.d)
 #   OSADMIN_ASSETS the :8443 static pages (sneakers-web apps/appliance-admin;
 #                  optional, the directory stays empty without them)
@@ -32,12 +34,18 @@
 #                  test hook and throwaway stacks); it may not replace any
 #                  file the tree already has
 #   OUT            output directory: root-<version>.img and verity.json
+#
+# Every prebuilt input (OpenSSH, busybox and the static tools) must carry
+# the stamp its build script writes for the current pins and config
+# (build/lib/stamp.sh); a stale or unstamped one is refused, and each
+# input's SHA-256 is logged. Before it packs the tree, every program the
+# code and the service tables run must be in it (build/tools/rootexecs).
 set -euo pipefail
 umask 022
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${VERSION:?}" "${RELEASE:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+: "${VERSION:?}" "${RELEASE:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${STATIC:?set STATIC to the static tools (build/static)}" "${OUT:?}"
 if [ -n "${K0S:-}" ] || [ -n "${IMAGES:-}" ]; then
   echo "root: k0s and the images ship in the product bundle (build/product/build.sh), not the base root" >&2
   exit 1
@@ -51,6 +59,19 @@ for b in sshd sshd-session sshd-auth ssh-keygen; do
   [ -f "$OPENSSH/$b" ] || { echo "root: $OPENSSH/$b is missing (build/openssh/build.sh)" >&2; exit 1; }
 done
 [ -f "$BUSYBOX" ] || { echo "root: $BUSYBOX is missing (build/busybox/build.sh)" >&2; exit 1; }
+for b in cryptsetup veritysetup mke2fs sgdisk; do
+  [ -f "$STATIC/$b-$arch" ] || { echo "root: $STATIC/$b-$arch is missing (build/static)" >&2; exit 1; }
+done
+# shellcheck source=build/lib/stamp.sh
+source "$root/build/lib/stamp.sh"
+stamp_check "$(dirname "$BUSYBOX")/busybox.stamp" "$(busybox_stamp)" busybox || exit 1
+stamp_check "$OPENSSH/openssh.stamp" "$(openssh_stamp)" OpenSSH || exit 1
+for t in cryptsetup e2fsprogs gptfdisk; do
+  stamp_check "$STATIC/$t-$arch.stamp" "$(static_stamp "$t" "$arch")" "static $t" || exit 1
+done
+for f in "$RELEASE" "$BUSYBOX" "$OPENSSH"/{sshd,sshd-session,sshd-auth,ssh-keygen} "$STATIC"/{cryptsetup,veritysetup,mke2fs,sgdisk}-"$arch"; do
+  echo "root: input $f sha256 $(sha256sum "$f" | cut -d' ' -f1)"
+done
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -81,12 +102,10 @@ install -m 0755 "$OPENSSH/ssh-keygen" "$tree/usr/bin/ssh-keygen"
 # (FEATURE_SH_STANDALONE).
 install -m 0755 "$BUSYBOX" "$tree/bin/busybox"
 ln -s busybox "$tree/bin/sh"
-if [ -n "${STATIC:-}" ]; then
-  install -m 0755 "$STATIC/cryptsetup-$arch" "$tree/usr/sbin/cryptsetup"
-  install -m 0755 "$STATIC/veritysetup-$arch" "$tree/usr/sbin/veritysetup"
-  install -m 0755 "$STATIC/mke2fs-$arch" "$tree/usr/sbin/mkfs.ext4"
-  install -m 0755 "$STATIC/sgdisk-$arch" "$tree/usr/sbin/sgdisk"
-fi
+install -m 0755 "$STATIC/cryptsetup-$arch" "$tree/usr/sbin/cryptsetup"
+install -m 0755 "$STATIC/veritysetup-$arch" "$tree/usr/sbin/veritysetup"
+install -m 0755 "$STATIC/mke2fs-$arch" "$tree/usr/sbin/mkfs.ext4"
+install -m 0755 "$STATIC/sgdisk-$arch" "$tree/usr/sbin/sgdisk"
 
 # What the base OS gives k0s, which itself comes with the product bundle
 # (docs/k0s.md): its config template, containerd's config (k0s would
@@ -138,6 +157,9 @@ if [ -n "${LAB_OVERLAY:-}" ]; then
   done < <(find "$LAB_OVERLAY" -type f -print0 | sort -z)
   echo "root: lab overlay from $LAB_OVERLAY"
 fi
+
+# Every program the code and the service tables run is in the tree.
+go run "$root/build/tools/rootexecs" --src "$root" --tree "$tree" --services "$tree/usr/lib/sneakers/services.d"
 
 # /etc is read-only: the account files and the resolver config live in /run.
 cp -P "$root"/os/rootfs/etc/{passwd,group,shadow} "$tree/etc/"

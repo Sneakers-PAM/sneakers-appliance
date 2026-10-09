@@ -25,6 +25,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/timesync"
 )
 
@@ -67,13 +68,22 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err != nil {
 		lg.Warn("netd: the box has no name of its own; the host name waits for the settings or DHCP", log.F("error", err.Error()))
 	}
+	// netd audits the clock's steps in the box's OS audit log, which the
+	// other root daemons append to under the same lock.
+	var audit osaudit.Appender
+	if l, err := osaudit.Open(filepath.Join(c.state, "os-audit"), osaudit.Options{Logger: lg}); err == nil {
+		audit = l
+	} else {
+		lg.Warn("netd: the OS audit log can't be opened; clock steps are only logged", log.F("error", err.Error()))
+	}
 	d, err := netd.New(netd.Options{
 		Fallback: own,
 		StateDir: c.state, RunDir: c.run,
 		Sys:         netd.Linux{},
 		Workers:     netd.Clients{Logger: lg},
-		NewTimeSync: netd.TimeSyncs(timesync.SystemClock(), filepath.Join(c.state, "netd", "clock-floor"), buildTime(), lg),
+		NewTimeSync: netd.TimeSyncs(timesync.SystemClock(), filepath.Join(c.state, "netd", "clock-floor"), buildTime(), lg, audit),
 		Logger:      lg,
+		Audit:       audit,
 	})
 	if err != nil {
 		return err

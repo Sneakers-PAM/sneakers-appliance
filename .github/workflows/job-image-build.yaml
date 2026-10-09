@@ -65,7 +65,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/out
-          key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env') }}
+          key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env', 'build/lib/**') }}
       - name: Build cryptsetup, veritysetup, mke2fs and sgdisk
         if: steps.cache.outputs.cache-hit != 'true'
         run: |

@@ -129,7 +129,11 @@ type Options struct {
 	Shells Shells
 	// Assets are the static admin pages; nil serves a short notice.
 	Assets fs.FS
-	Logger log.Logger
+	// Exposed reads the installed product's exposed values as the
+	// appliance's own service account (kubeapi.Client on the box); nil
+	// reads none.
+	Exposed ExposedReader
+	Logger  log.Logger
 }
 
 // Server is the appliance admin.
@@ -200,6 +204,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(osadminv1connect.UnimplementedMcpServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewProductServiceHandler(&productSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewModulesServiceHandler(osadminv1connect.UnimplementedModulesServiceHandler{}, opts))
 	mux.HandleFunc("GET /export/audit-log", s.exportAudit)
 	mux.HandleFunc("POST /upload", s.handleUpload)
@@ -213,13 +218,14 @@ type Handlers struct {
 	Access    osadminv1connect.AccessServiceHandler
 	Network   osadminv1connect.NetworkServiceHandler
 	Elevation osadminv1connect.ElevationServiceHandler
+	Product   osadminv1connect.ProductServiceHandler
 }
 
 // Handlers returns the handlers.
 func (s *Server) Handlers() Handlers {
 	return Handlers{
 		Status: &status{s: s}, Setup: &setup{s: s}, Access: &accessSvc{s: s}, Network: &networkSvc{s: s},
-		Elevation: &elevationSvc{s: s},
+		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s},
 	}
 }
 

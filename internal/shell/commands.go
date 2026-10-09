@@ -18,6 +18,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
 // Origin is where a command line came from.
@@ -69,6 +70,9 @@ type Env struct {
 	// Product is the installed product; its commands are offered under its
 	// name only while one is installed.
 	Product productinfo.Info
+	// Values are the values the product exposes to this session's role,
+	// each a command in the product's section.
+	Values []Value
 }
 
 type flagSpec struct {
@@ -124,6 +128,49 @@ var specs = []spec{
 	{path: "poweroff", short: "Shut the appliance down", action: "power.off", origins: both, confirm: "poweroff"},
 }
 
+// Value is one value the installed product exposes to this session (its
+// product.yaml's exposed_values for the session's role): a command in the
+// product's section.
+type Value struct {
+	Name, Label string
+}
+
+// specsFor is the command table with p installed: the base's and p's
+// own commands, then one per value p exposes to this session.
+func specsFor(p productinfo.Info, values []Value) []spec {
+	if !p.Present() || len(values) == 0 {
+		return specs
+	}
+	out := slices.Clone(specs)
+	for _, v := range values {
+		short := v.Label
+		if short == "" {
+			short = p.Title + "'s " + v.Name
+		}
+		out = append(out, spec{path: v.Name, short: short + " (shown to the roles the product names)", action: "product.value", origins: []Origin{OriginSSH}, product: true, run: runValue(v.Name)})
+	}
+	return out
+}
+
+// runValue reads one exposed value; the name is fixed by the command, never
+// typed.
+func runValue(name string) func(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]string) (Result, error) {
+	return func(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]string) (Result, error) {
+		return e.Backend.Call(ctx, Request{Action: "product.value", Args: []string{name}})
+	}
+}
+
+// ValuesFor are the values spec exposes to role (owner or admin).
+func ValuesFor(spec productspec.Spec, role string) []Value {
+	var out []Value
+	for _, v := range spec.ExposedValues {
+		if v.Allows(role) {
+			out = append(out, Value{Name: v.Name, Label: v.Label})
+		}
+	}
+	return out
+}
+
 // Command is a resolved command line.
 type Command struct{ s *spec }
 
@@ -157,7 +204,7 @@ func Resolve(words []string) *Command {
 // Actions are every backend call a command line can make. Nothing else
 // leaves the shell.
 func Actions() []string {
-	out := []string{"rootshell.open", "network.confirm"}
+	out := []string{"rootshell.open", "network.confirm", "product.value"}
 	for _, s := range specs {
 		if !slices.Contains(out, s.action) {
 			out = append(out, s.action)
@@ -181,9 +228,10 @@ func Names(o Origin) []string { return NamesFor(o, productinfo.Info{}) }
 
 // NamesFor are the command paths offered in origin o with product p
 // installed: the base's, then p's own under its name.
-func NamesFor(o Origin, p productinfo.Info) []string {
+// values are the product's exposed values this session may read.
+func NamesFor(o Origin, p productinfo.Info, values ...Value) []string {
 	var out []string
-	for _, s := range specs {
+	for _, s := range specsFor(p, values) {
 		if !slices.Contains(s.origins, o) {
 			continue
 		}
@@ -291,8 +339,9 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 		groups[e.Product.Name] = g
 		root.AddCommand(g)
 	}
-	for i := range specs {
-		s := &specs[i]
+	all := specsFor(e.Product, e.Values)
+	for i := range all {
+		s := &all[i]
 		path := s.path
 		if s.product {
 			if !e.Product.Present() {
@@ -427,14 +476,30 @@ func readLine(in io.Reader) string {
 	return strings.TrimSpace(line)
 }
 
+// asker is the interactive terminal, which reads a line with a prompt of
+// its own.
+type asker interface {
+	AskLine(prompt string) (string, error)
+}
+
+// ask prints prompt and reads one line: on the interactive terminal as
+// its own prompt, so the answer ends the line and the menu's prompt comes
+// back on the next one.
+func ask(e *Env, prompt string) string {
+	if a, ok := e.In.(asker); ok {
+		line, _ := a.AskLine(prompt)
+		return strings.TrimSpace(line)
+	}
+	_, _ = fmt.Fprint(e.Out, prompt)
+	return readLine(e.In)
+}
+
 func typedConfirm(e *Env, word string) bool {
-	_, _ = fmt.Fprintf(e.Out, "Type %s to confirm: ", word)
-	return readLine(e.In) == word
+	return ask(e, fmt.Sprintf("Type %s to confirm: ", word)) == word
 }
 
 func yes(e *Env, prompt string) bool {
-	_, _ = fmt.Fprintf(e.Out, "%s [y/N] ", prompt)
-	a := strings.ToLower(readLine(e.In))
+	a := strings.ToLower(ask(e, prompt+" [y/N] "))
 	return a == "y" || a == "yes"
 }
 
@@ -470,11 +535,21 @@ func runRootShell(ctx context.Context, e *Env, _ *Command, _ []string, flags map
 	data, _ := res.Data.(map[string]string)
 	challenge := data["challenge"]
 	_, _ = fmt.Fprintln(e.Out, res.Text)
-	lines := bufio.NewReader(e.In)
-	for {
+	var lines *bufio.Reader
+	readCode := func() string {
+		if a, ok := e.In.(asker); ok {
+			line, _ := a.AskLine("Code: ")
+			return strings.TrimSpace(line)
+		}
+		if lines == nil {
+			lines = bufio.NewReader(e.In)
+		}
 		_, _ = fmt.Fprint(e.Out, "Code: ")
 		line, _ := lines.ReadString('\n')
-		code := strings.TrimSpace(line)
+		return strings.TrimSpace(line)
+	}
+	for {
+		code := readCode()
 		if code == "" {
 			return Result{Text: "No code typed; the challenge stays open until it expires."}, nil
 		}

@@ -70,6 +70,18 @@ func (s *Server) renderSSH(st access.State) error {
 	for _, a := range Bindable(ns.Msg.GetManagementAddresses()) {
 		listen = append(listen, netip.MustParseAddr(a))
 	}
+	certs := false
+	if s.o.HostCA != nil {
+		var names []string
+		for _, a := range listen {
+			names = append(names, a.String())
+		}
+		if certs, err = SignHostCerts(s.o.HostCA, s.o.HostKeyDir, osadmin.HostPrincipals(ns.Msg.GetHostname(), names), time.Now()); err != nil {
+			s.o.Logger.Error(err, "accessd: the host certificates weren't signed; sshd presents the bare host keys")
+		} else if certs {
+			s.o.Logger.Info("accessd: host certificates signed", log.F("hostname", ns.Msg.GetHostname()), log.F("addresses", len(names)))
+		}
+	}
 	in := sshconfig.Input{ListenAddrs: listen, State: st, Paths: s.sshPaths()}
 	var check func(string) error
 	if s.o.Paths.SSHD != "" {
@@ -79,8 +91,8 @@ func (s *Server) renderSSH(st access.State) error {
 	if err != nil {
 		return err
 	}
-	s.o.Logger.Debug("accessd: sshd files rendered", log.F("listen", len(listen)), log.F("configChanged", changed))
-	if changed {
+	s.o.Logger.Debug("accessd: sshd files rendered", log.F("listen", len(listen)), log.F("configChanged", changed), log.F("certsChanged", certs))
+	if changed || certs {
 		s.reloadSSHD()
 	}
 	return nil

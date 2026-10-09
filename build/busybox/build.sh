@@ -52,4 +52,7 @@ docker run --rm \
     cp .config /out/busybox.config.full
     chown "$OWNER" /out/busybox /out/busybox.config.full
   '
-echo "busybox: wrote $out/busybox"
+# shellcheck source=build/lib/stamp.sh
+source "$root/build/lib/stamp.sh"
+busybox_stamp > "$out/busybox.stamp"
+echo "busybox: wrote $out/busybox ($(sha256sum "$out/busybox" | cut -d' ' -f1)), stamped $(cat "$out/busybox.stamp")"

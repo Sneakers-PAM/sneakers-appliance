@@ -86,7 +86,7 @@ func setup(t *testing.T, ends time.Duration) (*fakeAccessd, *osaudit.Log, *syncB
 	out := &syncBuf{}
 	pr, _ := io.Pipe()
 	t.Cleanup(func() { _ = pr.Close() })
-	return fa, l, out, elevated.Options{Accessd: fa, Ticket: "ticket-1", Admin: "bob", Audit: l, In: pr, Out: out, PID: 99}
+	return fa, l, out, elevated.Options{Accessd: fa, Ticket: "ticket-1", Admin: "bob", Audit: l, In: pr, Out: out, PID: 99, RCDir: t.TempDir()}
 }
 
 // The ticket is used up before the shell starts; the session is
@@ -247,5 +247,32 @@ func TestWithNoProductTheShellSaysSo(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "kc=[]") || strings.Count(out.String(), "No product is installed; kubectl and helm come with it.") != 1 {
 		t.Fatalf("out %q", out.String())
+	}
+}
+
+// The prompt is plain text (the host name, the session's end and the
+// directory, nothing the shell runs), the shell's ENV start file defines
+// help, and the welcome says so.
+func TestTheShellsPromptHelpAndWelcome(t *testing.T) {
+	_, _, out, o := setup(t, 30*time.Minute)
+	o.RCDir = t.TempDir()
+	o.Product = t.TempDir()
+	o.Shell = []string{"/bin/sh", "-c", `echo "ps1=[$PS1]"; . "$ENV"; help | head -n 3`}
+	if _, err := elevated.Run(context.Background(), context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, `ps1=[[root@\h until `) || !strings.Contains(got, ` UTC] \w # ]`) {
+		t.Fatalf("prompt: %q", got)
+	}
+	if !strings.Contains(got, "Troubleshooting this box") || !strings.Contains(got, "Type help") {
+		t.Fatalf("help or the welcome: %q", got)
+	}
+	if ents, _ := os.ReadDir(o.RCDir); len(ents) != 0 {
+		t.Fatalf("the start file outlived the session: %v", ents)
+	}
+	p := elevated.PromptFor(time.Date(2026, 10, 9, 18, 45, 0, 0, time.UTC))
+	if p != `[root@\h until 18:45 UTC] \w # ` || strings.ContainsAny(p, "$`") {
+		t.Fatalf("PromptFor %q", p)
 	}
 }

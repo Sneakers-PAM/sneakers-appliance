@@ -34,6 +34,11 @@ const (
 	// StepThreshold is RFC 5905 STEPT: offsets above it are stepped, smaller
 	// ones slewed.
 	StepThreshold = 128 * time.Millisecond
+	// MaxSlew is the largest backwards offset a running box slews rather
+	// than steps. The kernel absorbs a slew at up to 500 ppm, so a clock
+	// that booted a few seconds fast is right again within hours and never
+	// runs backwards; a larger error is stepped, and reported (OnStep).
+	MaxSlew = 30 * time.Second
 
 	// bootAttempts is one request plus up to three retries per server at
 	// boot, the same burst as NTP's iburst. The spacing is a retransmission
@@ -86,6 +91,10 @@ type Config struct {
 	Dial func(ctx context.Context, addr netip.AddrPort) (net.Conn, error)
 	// Rand supplies the request nonce. Nil uses crypto/rand.
 	Rand io.Reader
+	// OnStep, when set, is told about every step after it's made: the
+	// offset, the server and whether it was the boot sync's. netd audits
+	// it.
+	OnStep func(offset time.Duration, server string, boot bool)
 
 	QueryTimeout time.Duration
 	RetryGap     time.Duration
@@ -566,12 +575,13 @@ func (e *Engine) apply(samples []Sample, errs map[string]error, boot bool) {
 	case abs <= StepThreshold:
 	case boot || s.Offset > 0:
 		step = true
+	case abs <= MaxSlew:
+		// A running box slews a small error back, so its clock never runs
+		// backwards for it.
+		e.log.Info("clock ahead of the servers; slewing it back", "server", s.Server, "offset", s.Offset)
 	default:
-		// Stepping a live CA backwards would reorder audit and issuance
-		// times. Refuse, and leave the clock for the operator to look at.
-		e.log.Error("refused a backwards clock step on a running node", "server", s.Server, "offset", s.Offset)
-		e.fail(fmt.Sprintf("refused a backwards step of %v on a running node (server %s)", -s.Offset, s.Server), slog.LevelError)
-		return
+		e.log.Warn("clock far ahead of the servers; stepping it back", "server", s.Server, "offset", s.Offset)
+		step = true
 	}
 	now := e.cfg.Clock.Now()
 	if step {
@@ -590,6 +600,9 @@ func (e *Engine) apply(samples []Sample, errs map[string]error, boot bool) {
 			return
 		}
 		e.log.Info("clock stepped", "server", s.Server, "offset", s.Offset, "boot", boot)
+		if e.cfg.OnStep != nil {
+			e.cfg.OnStep(s.Offset, s.Server, boot)
+		}
 	} else {
 		if err := e.cfg.Clock.Slew(s.Offset); err != nil {
 			e.log.Error("clock slew failed", "offset", s.Offset, "err", err)

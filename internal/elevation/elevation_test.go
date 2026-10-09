@@ -298,7 +298,9 @@ func TestTheTicketStartsTheShellOnceForItsAdmin(t *testing.T) {
 	if got.State != elevation.Ended || got.RecordingSHA256 != "abc" || f.svc.Active() {
 		t.Fatalf("after the end %+v", got)
 	}
-	if e, ok := f.audit.last("rootshell.end"); !ok || e.Outcome != elevation.ReasonExit {
+	// A root shell that ended is never a refusal: the entry is ok, and how
+	// it ended is in the detail.
+	if e, ok := f.audit.last("rootshell.end"); !ok || e.Outcome != "ok" || e.Code != "" || e.Detail["reason"] != elevation.ReasonExit {
 		t.Fatalf("end audit %+v", e)
 	}
 }

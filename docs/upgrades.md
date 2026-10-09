@@ -97,13 +97,15 @@ like the others:
 | `k0s` | Starting k0s | the Kubernetes API answers (`/readyz`) |
 | `images` | Importing the images | containerd lists every image in the bundle's `images/` (the detail counts them) |
 | `manifests` | Applying the product's stacks | every stack in the bundle's `manifests/` has an object labelled `k0s.k0sproject.io/stack` (the detail names those still missing) |
-| `pods` | Waiting for the pods to be ready | every pod that should run is Ready; a finished Job's pod doesn't count (the detail counts them) |
+| `pods` | Waiting for the pods to be ready | every stack's Deployment, StatefulSet and DaemonSet has rolled out (the controller saw the latest spec, every replica is updated and available, a StatefulSet's revision is current), every pod that should run is Ready, and no old pod is still stopping; a finished Job's pod doesn't count (the detail names the workload or counts the pods) |
 | `edge` | Opening the product on 443 | `https://127.0.0.1:443/` answers without `Sneakers-Box-State` and not with 502 to 504: the product, not edgefall's page or an edge error |
 
 accessd (root) asks the installed bundle's own k0s (`k0s kubectl` with
 `/var/lib/k0s/pki/admin.conf`, `k0s ctr` on `/run/k0s/containerd.sock`) every 3 seconds
-(`internal/productup`); the apply has answered by then, and the record follows on its own. An
-edge that answers with the product ends it, whatever the earlier checks say. A step can go back (a
+(`internal/productup`); the apply has answered by then, and the record follows on its own. The
+edge answering isn't proof on its own: on an update over a running product the old pods answer
+while they drain, so it counts only once the rollout above is done and the old pods are gone. A
+step can go back (a
 pod falls over), and the step after it is pending again. A check that fails leaves the step where
 it was. When the product hasn't come up 20 minutes (`ProductUpBound`) after following began, the
 step it's on fails with `UPGRADE_PRODUCT_START`; the root shell's `kubectl` shows what holds it.

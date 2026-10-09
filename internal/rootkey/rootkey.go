@@ -7,7 +7,9 @@
 // in TPM mode a copied state volume yields neither. The private key is held
 // in memory only; it signs the SSH user certificates of the keys the box
 // issues and makes the root-shell codes. Only its public half is written,
-// for sshd's TrustedUserCAKeys.
+// for sshd's TrustedUserCAKeys. The host CA, a second key sealed the same
+// way, signs the box's SSH host certificates, so a client that trusts it
+// (a @cert-authority line) never sees a host key prompt.
 package rootkey
 
 import (
@@ -37,6 +39,12 @@ const (
 	// PublicFile is the root key's public half in the SSH directory, the
 	// key sshd trusts as its only user CA.
 	PublicFile = "root_key.pub"
+	// HostCAName is the KeyCustody item the host CA is sealed as: a key of
+	// its own, which signs only the box's SSH host certificates.
+	HostCAName = "host-ca-key"
+	// HostCAPublicFile is the host CA's public half in the SSH directory,
+	// what a client's @cert-authority known_hosts line names.
+	HostCAPublicFile = "host_ca.pub"
 )
 
 // codeDomain separates root-shell code signatures from anything else the
@@ -55,6 +63,7 @@ type Key struct {
 	signer ssh.Signer
 	priv   ed25519.PrivateKey
 	pepper []byte
+	hostCA ssh.Signer
 }
 
 // Load unseals the root key and the pepper, making and sealing each the
@@ -64,7 +73,7 @@ func Load(sealer Sealer, sshDir string, lg log.Logger) (*Key, error) {
 	if lg == nil {
 		lg = log.Nop()
 	}
-	keyPEM, made, err := loadOrMake(sealer, SealedName, newKeyPEM)
+	keyPEM, made, err := loadOrMake(sealer, SealedName, func() ([]byte, error) { return newKeyPEM("sneakers-appliance root key") })
 	if err != nil {
 		return nil, fmt.Errorf("root key: %w", err)
 	}
@@ -97,14 +106,28 @@ func Load(sealer Sealer, sshDir string, lg log.Logger) (*Key, error) {
 	if len(pepper) != PepperSize {
 		return nil, fmt.Errorf("pepper: the sealed item is %d bytes, not %d", len(pepper), PepperSize)
 	}
-	k := &Key{signer: signer, priv: *priv, pepper: pepper}
+	caPEM, made, err := loadOrMake(sealer, HostCAName, func() ([]byte, error) { return newKeyPEM("sneakers-appliance host CA") })
+	if err != nil {
+		return nil, fmt.Errorf("host CA: %w", err)
+	}
+	if made {
+		lg.Info("rootkey: made and sealed the SSH host CA")
+	}
+	hostCA, err := ssh.ParsePrivateKey(caPEM)
+	if err != nil {
+		return nil, fmt.Errorf("host CA: the sealed item doesn't parse: %w", err)
+	}
+	k := &Key{signer: signer, priv: *priv, pepper: pepper, hostCA: hostCA}
 	if err := os.MkdirAll(sshDir, 0o700); err != nil {
 		return nil, fmt.Errorf("root key: %w", err)
 	}
 	if err := writeFile(filepath.Join(sshDir, PublicFile), ssh.MarshalAuthorizedKey(signer.PublicKey()), 0o644); err != nil {
 		return nil, fmt.Errorf("root key: %w", err)
 	}
-	lg.Info("rootkey: loaded", log.F("fingerprint", k.Fingerprint()))
+	if err := writeFile(filepath.Join(sshDir, HostCAPublicFile), ssh.MarshalAuthorizedKey(hostCA.PublicKey()), 0o644); err != nil {
+		return nil, fmt.Errorf("host CA: %w", err)
+	}
+	lg.Info("rootkey: loaded", log.F("fingerprint", k.Fingerprint()), log.F("hostCA", ssh.FingerprintSHA256(hostCA.PublicKey())))
 	return k, nil
 }
 
@@ -129,12 +152,12 @@ func loadOrMake(sealer Sealer, name string, mk func() ([]byte, error)) ([]byte, 
 	return b, true, nil
 }
 
-func newKeyPEM() ([]byte, error) {
+func newKeyPEM(comment string) ([]byte, error) {
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
-	block, err := ssh.MarshalPrivateKey(priv, "sneakers-appliance root key")
+	block, err := ssh.MarshalPrivateKey(priv, comment)
 	if err != nil {
 		return nil, err
 	}
@@ -165,6 +188,36 @@ func (k *Key) IssueUserCert(pub ssh.PublicKey, admin string, serial uint64, vali
 	}
 	if err := c.SignCert(rand.Reader, k.signer); err != nil {
 		return nil, fmt.Errorf("root key: signing: %w", err)
+	}
+	return c, nil
+}
+
+// HostCAPublicKey is the host CA's public half.
+func (k *Key) HostCAPublicKey() ssh.PublicKey { return k.hostCA.PublicKey() }
+
+// SignHostCert signs an SSH host certificate for the host key pub, valid
+// for principals (the box's names and addresses) from validAfter to
+// validBefore.
+func (k *Key) SignHostCert(pub ssh.PublicKey, principals []string, validAfter, validBefore time.Time) (*ssh.Certificate, error) {
+	serial := make([]byte, 8)
+	if _, err := rand.Read(serial); err != nil {
+		return nil, fmt.Errorf("host CA: %w", err)
+	}
+	var s uint64
+	for _, b := range serial {
+		s = s<<8 | uint64(b)
+	}
+	c := &ssh.Certificate{
+		Key:             pub,
+		Serial:          s,
+		CertType:        ssh.HostCert,
+		KeyId:           "host " + ssh.FingerprintSHA256(pub),
+		ValidPrincipals: principals,
+		ValidAfter:      uint64(max(validAfter.Unix(), 0)),  // #nosec G115 -- clamped
+		ValidBefore:     uint64(max(validBefore.Unix(), 0)), // #nosec G115 -- clamped
+	}
+	if err := c.SignCert(rand.Reader, k.hostCA); err != nil {
+		return nil, fmt.Errorf("host CA: signing: %w", err)
 	}
 	return c, nil
 }

@@ -65,3 +65,40 @@ func TestFieldsRefuseWhatDoesntFit(t *testing.T) {
 		t.Errorf("port %q: %v", f.port, err)
 	}
 }
+
+// An address set by hand changes only the family it's on and, when one is
+// typed, the DNS server: NTP, the host name, the search domains, the
+// allow-list, the time zone, the proxy, the cluster ranges and the other
+// family stay as the box has them.
+func TestAnAddressSetByHandKeepsTheOtherSettings(t *testing.T) {
+	base := network.Defaults("ens192")
+	base.Management.IPv6 = network.Family6{Mode: network.V6Static, Address: netip.MustParsePrefix("2001:db8::10/64")}
+	base.Hostname = "box1.sneakers.example.org"
+	base.NTP = []string{"time.example.org"}
+	base.Search = []string{"sneakers.example.org"}
+	base.DNS = []netip.Addr{netip.MustParseAddr("192.0.2.53")}
+	base.AllowList = []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")}
+	base.TimeZone = "Europe/Paris"
+	base.HTTPSProxy = "http://proxy.example.org:3128"
+	base.Cluster.Pods = netip.MustParsePrefix("10.200.0.0/16") // scrub:allow=private-ip -- a cluster range
+	f := form{port: "ens192", base: base, address: netip.MustParsePrefix("192.0.2.10/24"), gateway: netip.MustParseAddr("192.0.2.1")}
+	s := f.settings()
+	if s.Management.IPv4.Mode != network.V4Static || s.Management.IPv4.Address != f.address || s.Management.IPv6 != base.Management.IPv6 {
+		t.Fatalf("management %+v", s.Management)
+	}
+	if s.Hostname != base.Hostname || len(s.NTP) != 1 || len(s.Search) != 1 || len(s.AllowList) != 1 || s.TimeZone != base.TimeZone || s.HTTPSProxy != base.HTTPSProxy || s.Cluster != base.Cluster {
+		t.Fatalf("lost a setting: %+v", s)
+	}
+	if len(s.DNS) != 1 || s.DNS[0] != base.DNS[0] {
+		t.Fatalf("dns %v, want the box's when none is typed", s.DNS)
+	}
+	f.dns = netip.MustParseAddr("192.0.2.54")
+	if s := f.settings(); len(s.DNS) != 1 || s.DNS[0] != f.dns {
+		t.Fatalf("dns %v, want the typed one", s.DNS)
+	}
+	// Another port starts that port's families afresh; the rest stays.
+	f.port = "ens224"
+	if s := f.settings(); s.Management.Name != "ens224" || s.Management.IPv6.Mode != network.V6SLAAC || s.Hostname != base.Hostname || len(s.NTP) != 1 {
+		t.Fatalf("another port %+v", s)
+	}
+}

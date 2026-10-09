@@ -26,6 +26,7 @@ import "sneakers/appliance/netd/v1/netd.proto";
 import "sneakers/appliance/osadmin/v1/access.proto";
 import "sneakers/appliance/osadmin/v1/elevation.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/product.proto";
 import "sneakers/appliance/osadmin/v1/setup.proto";
 import "sneakers/appliance/osadmin/v1/status.proto";
 
@@ -58,6 +59,10 @@ service AccessService {
   rpc RemoveKey(RemoveKeyRequest) returns (RemoveKeyResponse);
   // AddRecoveryKey is the console's (root only).
   rpc AddRecoveryKey(AddRecoveryKeyRequest) returns (AddRecoveryKeyResponse);
+  // GetExposedValue is the closed shell's "<product> <name>": osadmin's
+  // ProductService.GetExposedValue run as the login's admin, so the shell
+  // reads exactly what :8443 would, under the same allow-list and audit.
+  rpc GetExposedValue(GetExposedValueRequest) returns (GetExposedValueResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -710,3 +715,11 @@ message EndSshLoginRequest {
 }
 
 message EndSshLoginResponse {}
+
+message GetExposedValueRequest {
+  string name = 1;
+}
+
+message GetExposedValueResponse {
+  sneakers.appliance.osadmin.v1.GetExposedValueResponse value = 1;
+}

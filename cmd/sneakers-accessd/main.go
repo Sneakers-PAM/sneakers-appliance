@@ -43,16 +43,21 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/kubeapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
@@ -184,6 +189,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		StatusFile: filepath.Join(c.run, "access", "status.json"),
 		Elevation:  elev,
 		HostKeyDir: paths.SSHDir(),
+		HostCA:     root,
 		AuditDir:   audit.Dir(),
 		Logger:     lg,
 	})
@@ -214,8 +220,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			}
 			return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 		},
-		Own:    func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
-		Logger: lg,
+		OwnName: func() string { name, _ := boxname.Ensure(c.state); return name },
+		Own:     func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
+		Logger:  lg,
 	})
 	if err != nil {
 		return err
@@ -247,7 +254,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		OnFirstAdmin:    func() { go startSSHD() },
 		OnConsoleChange: d.ConsoleChanged,
 		Shells:          &sshsession.Proc{},
-		Logger:          lg,
+		// The installed product's exposed values, read as the appliance's
+		// own service account (the admin kubeconfig only mints its token).
+		Exposed: &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount},
+		Logger:  lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and
@@ -261,6 +271,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		},
 	})
 	d.Attach(store, api)
+	// The host certificates name the box's host name and addresses: a
+	// change re-renders sshd's files, which signs them again.
+	go watchNames(ctx, netdapi.NewClient(c.netdSock), lg, d.Rerender)
 	defer api.Close()
 
 	srv, err := listen(c.socket, d, lg)
@@ -312,6 +325,38 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			}
 			d.RefreshStatus(ctx)
 		}
+	}
+}
+
+// watchNames calls changed on each of netd's address and host name events
+// after the first; a broken stream is opened again.
+func watchNames(ctx context.Context, netd netdv1connect.NetworkServiceClient, lg log.Logger, changed func()) {
+	for ctx.Err() == nil {
+		stream, err := netd.Watch(ctx, connect.NewRequest(&netdv1.WatchRequest{}))
+		if err == nil {
+			first := true
+			for stream.Receive() {
+				if !first {
+					lg.Info("accessd: the box's addresses or host name changed; re-signing the host certificates", log.F("hostname", stream.Msg().GetHostname()))
+					changed()
+				}
+				first = false
+			}
+			err = stream.Err()
+			_ = stream.Close()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			err = errors.New("the stream ended")
+		}
+		lg.Warn("accessd: netd's address events stopped; watching again", log.F("error", err.Error()))
+		select {
+		case <-ctx.Done():
+		case <-time.After(5 * time.Second):
+		}
+		changed()
 	}
 }
 

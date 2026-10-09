@@ -55,6 +55,9 @@ is never used, and the previous one stays.
   signed for the admin's name ([access.md](access.md#issued-ssh-keys)). Password,
   keyboard-interactive and empty-password logins are off, and so is `PermitRootLogin`.
 - `RevokedKeys /var/lib/sneakers/ssh/revoked.krl`: removed keys, as keys and as certificate serials.
+- `HostCertificate /var/lib/sneakers/ssh/ssh_host_<kind>_key-cert.pub` for each host key that has
+  one: a host certificate signed by the box's SSH host CA (below), offered first
+  (`HostKeyAlgorithms` lists the certificate types before the bare keys).
 - `DisableForwarding yes`, `PermitTunnel no`, `PermitUserRC no`, `PermitUserEnvironment no`, and no
   `Subsystem` line, so there is no sftp or scp.
 - `ForceCommand /usr/bin/sneakers-shell` and `ExposeAuthInfo yes`, so the closed shell learns which
@@ -64,9 +67,35 @@ is never used, and the previous one stays.
   and their certificate types; ML-KEM and sntrup761 hybrid key exchange or curve25519;
   ChaCha20-Poly1305 and AES-GCM; encrypt-then-MAC SHA-2 MACs.
 
+### The host CA and the known_hosts line
+
+The box has two SSH CAs. The user CA is the root key ([access.md](access.md#issued-ssh-keys)),
+which signs the admins' certificates. The host CA is a key of its own, made at accessd's first start
+and sealed through KeyCustody like the root key (`host-ca-key`), with its public half in
+`/var/lib/sneakers/ssh/host_ca.pub`. accessd signs a host certificate for each host key with it
+(`ssh_host_ed25519_key-cert.pub`, `ssh_host_rsa_key-cert.pub`), for the box's host name and its
+management addresses (link-local ones left out), valid for a year. It signs them again whenever it
+renders sshd's files and the host key, the names or the addresses changed (netd's address and host
+name events re-render), or in a certificate's last 30 days, and then tells sshd to reload.
+
+A client that trusts the host CA never sees a host key prompt. Both CA public keys are in the
+`IssueSshKey` answer and in `ListAdmins` (`user_ca_public_key`, and `known_hosts` with
+`known_hosts_file_name` on the key download, `host_ca` on Access): the known_hosts line is
+
+```text
+@cert-authority box1.sneakers.example.org,192.0.2.10 ssh-ed25519 AAAA... sneakers-appliance host CA
+```
+
+Add it to `~/.ssh/known_hosts` (or point `-o UserKnownHostsFile=` at the downloaded file), and
+`ssh -o StrictHostKeyChecking=yes` connects with no prompt; a host certificate from any other CA is
+refused.
+
 The tests run the pinned static sshd's `sshd -t` on the rendered config, and
 `TestRealSshdTakesOnlyTheRootKeysCertificates` logs in against it: a certificate from the root key
 works, a plain key or another CA's certificate doesn't, and a revoked serial is refused.
+`TestRealSshdPresentsItsHostCertificate` connects with only the `@cert-authority` line in
+known_hosts and strict host key checking, with Go's client and, when `SNEAKERS_TEST_SSH` names
+OpenSSH's `ssh`, with that too; a line for another CA is refused.
 `TestRealSshdAuditsABareIssuedKey` sends an issued key without its certificate and checks the
 audit entry. The Static tools workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary
 it built.
@@ -160,7 +189,32 @@ product's name from the current product slot's header (`/var/lib/sneakers/produc
 the `<name>-product` header name without `-product`) when the login starts. With no product
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
 `sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, which answers
-`NOT_AVAILABLE` until the product's MCP switch lands.
+`NOT_AVAILABLE` until the product's MCP switch lands, and the product's exposed values.
+
+### Product values
+
+A product's bundle may expose Secret values to owners and admins
+([release.md](release.md#productyaml)), such as Sneakers' one-time setup token. Each is a command
+in the product's group, `<product> <name>` (`sneakers setup-token`), over SSH only, offered only to
+the roles the bundle lists for it (the shell reads the slot's `product.yaml` and the login's role).
+It asks accessd, which runs `ProductService.GetExposedValue` as the login's admin, so the role is
+checked again there, and prints the value with its label and link:
+
+```text
+Sneakers setup token:
+
+    stp_...
+
+Use it at https://box1.sneakers.example.org/admin/setup
+It works once; after that it's removed.
+```
+
+A one-time value is consumed once the product's signal says so (for Sneakers, the gateway's
+`/setup/state` answering `needsSetup: false`), and from then on the command only says it was used.
+If the signal can't be read yet the value is still shown. There is no command that reads or lists any
+other Secret. Each read is audited as `product.value.read` with the name and the outcome (`shown`
+or `consumed`), never the value; a value that can't be read yet (k0s or the product isn't up) is
+`PRODUCT_VALUE_UNAVAILABLE`.
 
 ## The root shell
 
@@ -180,14 +234,24 @@ closed shell:
    data and resizes. The session ends after the policy's minutes, after 10 minutes idle, when the SSH
    client goes away, or when an owner ends it on the Sessions page.
 
-The root shell is busybox ash. Its prompt, `[root@<host> <n> min left] <dir> # `, shows the kernel
-host name ([network.md](network.md#dns-ntp-and-the-host-name): the configured name, else the DHCP
-name, else the box's own `sneakers-<8 hex>`), the minutes left and the working directory; busybox is
-built with the shell arithmetic and prompt escapes it needs (`build/busybox/busybox.config`).
+The root shell is busybox ash. Its prompt, `[root@<host> until <HH:MM> UTC] <dir> # `, shows the
+kernel host name ([network.md](network.md#dns-ntp-and-the-host-name): the configured name, else the
+DHCP name, else the box's own `sneakers-<8 hex>`), when the session ends and the working directory.
+It is plain text with only the prompt escapes `\h` and `\w`, nothing the shell expands or runs;
+sneakers-elevated warns a minute before the end.
+
+At its start the session says who it's for, that it's recorded and when it ends, and that `help`
+lists the commands that help troubleshoot the box. `help` comes from the shell's start file
+(`os/rootshell/rc.sh`, handed to ash through `ENV`): pods, logs, events, `k0s status`, the stacks
+k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. It
+also says why `helm list -A` is empty: the product's stacks are k0s manifests the appliance applies
+from the installed bundle, not Helm releases, because the update slots and revert track the
+manifests directly and Helm's release state would sit outside them.
 
 With a product installed, `kubectl` and `helm` work in the root shell against its k0s with no setup:
 `KUBECONFIG` is k0s's admin kubeconfig ([k0s.md](k0s.md#kubectl-and-helm-in-the-root-shell)).
-Without one, the shell says so once at its start.
+Without one, the shell says so once at its start, and `kubectl`, `helm` and `k0s` each answer "No
+product is installed yet" instead of a bare "not found".
 
 Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
 Removing an admin's key ends a root shell it opened.

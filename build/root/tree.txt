@@ -64,7 +64,11 @@ drwxr-xr-x 0/0 /usr/libexec/sneakers
 -rwxr-xr-x 0/0 /usr/libexec/sneakers-elevated
 -rwxr-xr-x 0/0 /usr/libexec/sneakers/k0s-interim
 drwxr-xr-x 0/0 /usr/sbin
+-rwxr-xr-x 0/0 /usr/sbin/cryptsetup
+-rwxr-xr-x 0/0 /usr/sbin/mkfs.ext4
+-rwxr-xr-x 0/0 /usr/sbin/sgdisk
 -rwxr-xr-x 0/0 /usr/sbin/sshd
+-rwxr-xr-x 0/0 /usr/sbin/veritysetup
 drwxr-xr-x 0/0 /usr/share
 drwxr-xr-x 0/0 /usr/share/sneakers
 drwxr-xr-x 0/0 /usr/share/sneakers/charts

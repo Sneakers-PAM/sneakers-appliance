@@ -81,8 +81,25 @@ type GetNetworkResponse struct {
 	PendingChangeId string `protobuf:"bytes,8,opt,name=pending_change_id,json=pendingChangeId,proto3" json:"pending_change_id,omitempty"`
 	// revert_seconds_left is how long the pending change still waits.
 	RevertSecondsLeft int32 `protobuf:"varint,9,opt,name=revert_seconds_left,json=revertSecondsLeft,proto3" json:"revert_seconds_left,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// last_change_reverted is true when the most recent change that waited
+	// for a confirmation was undone; last_change_reverted_at_start when that
+	// happened because the box stopped or restarted inside its window.
+	// last_change_id names it in the audit.
+	LastChangeReverted        bool   `protobuf:"varint,10,opt,name=last_change_reverted,json=lastChangeReverted,proto3" json:"last_change_reverted,omitempty"`
+	LastChangeRevertedAtStart bool   `protobuf:"varint,11,opt,name=last_change_reverted_at_start,json=lastChangeRevertedAtStart,proto3" json:"last_change_reverted_at_start,omitempty"`
+	LastChangeId              string `protobuf:"bytes,12,opt,name=last_change_id,json=lastChangeId,proto3" json:"last_change_id,omitempty"`
+	// learnt_dns, learnt_search and learnt_ntp are what DHCP and router
+	// advertisements gave the box, which the page shows next to the typed
+	// values; the resolver and the clock use them where the settings name
+	// none.
+	LearntDns    []string `protobuf:"bytes,13,rep,name=learnt_dns,json=learntDns,proto3" json:"learnt_dns,omitempty"`
+	LearntSearch []string `protobuf:"bytes,14,rep,name=learnt_search,json=learntSearch,proto3" json:"learnt_search,omitempty"`
+	LearntNtp    []string `protobuf:"bytes,15,rep,name=learnt_ntp,json=learntNtp,proto3" json:"learnt_ntp,omitempty"`
+	// ntp_servers are the servers the clock asks now: the settings', else
+	// DHCP's, else the image's default pool.
+	NtpServers    []string `protobuf:"bytes,16,rep,name=ntp_servers,json=ntpServers,proto3" json:"ntp_servers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetNetworkResponse) Reset() {
@@ -178,6 +195,55 @@ func (x *GetNetworkResponse) GetRevertSecondsLeft() int32 {
 	return 0
 }
 
+func (x *GetNetworkResponse) GetLastChangeReverted() bool {
+	if x != nil {
+		return x.LastChangeReverted
+	}
+	return false
+}
+
+func (x *GetNetworkResponse) GetLastChangeRevertedAtStart() bool {
+	if x != nil {
+		return x.LastChangeRevertedAtStart
+	}
+	return false
+}
+
+func (x *GetNetworkResponse) GetLastChangeId() string {
+	if x != nil {
+		return x.LastChangeId
+	}
+	return ""
+}
+
+func (x *GetNetworkResponse) GetLearntDns() []string {
+	if x != nil {
+		return x.LearntDns
+	}
+	return nil
+}
+
+func (x *GetNetworkResponse) GetLearntSearch() []string {
+	if x != nil {
+		return x.LearntSearch
+	}
+	return nil
+}
+
+func (x *GetNetworkResponse) GetLearntNtp() []string {
+	if x != nil {
+		return x.LearntNtp
+	}
+	return nil
+}
+
+func (x *GetNetworkResponse) GetNtpServers() []string {
+	if x != nil {
+		return x.NtpServers
+	}
+	return nil
+}
+
 type SetNetworkRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Settings      *v1.Settings           `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
@@ -224,9 +290,13 @@ func (x *SetNetworkRequest) GetSettings() *v1.Settings {
 
 type SetNetworkResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// token is what ConfirmNetwork takes.
-	Token              string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	RevertAfterSeconds int32  `protobuf:"varint,2,opt,name=revert_after_seconds,json=revertAfterSeconds,proto3" json:"revert_after_seconds,omitempty"`
+	// token is what ConfirmNetwork takes. Empty when the change was kept at
+	// once, with nothing to confirm: a change of only the DNS servers,
+	// search domains, NTP servers, time zone or proxy can't cut the admin
+	// off, so it has no window.
+	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// revert_after_seconds is the window; 0 when the change was kept at once.
+	RevertAfterSeconds int32 `protobuf:"varint,2,opt,name=revert_after_seconds,json=revertAfterSeconds,proto3" json:"revert_after_seconds,omitempty"`
 	// moves_management is true when the change moves the management
 	// address: the page that applied it loses the box and has to confirm from
 	// new_url.
@@ -472,7 +542,7 @@ var File_sneakers_appliance_osadmin_v1_network_proto protoreflect.FileDescriptor
 const file_sneakers_appliance_osadmin_v1_network_proto_rawDesc = "" +
 	"\n" +
 	"+sneakers/appliance/osadmin/v1/network.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a%sneakers/appliance/netd/v1/netd.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\x13\n" +
-	"\x11GetNetworkRequest\"\x94\x03\n" +
+	"\x11GetNetworkRequest\"\xb2\x05\n" +
 	"\x12GetNetworkResponse\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\x12\x18\n" +
 	"\apending\x18\x02 \x01(\bR\apending\x121\n" +
@@ -483,7 +553,18 @@ const file_sneakers_appliance_osadmin_v1_network_proto_rawDesc = "" +
 	"\rntp_offset_ms\x18\x06 \x01(\x03R\vntpOffsetMs\x12#\n" +
 	"\rpending_token\x18\a \x01(\tR\fpendingToken\x12*\n" +
 	"\x11pending_change_id\x18\b \x01(\tR\x0fpendingChangeId\x12.\n" +
-	"\x13revert_seconds_left\x18\t \x01(\x05R\x11revertSecondsLeft\"U\n" +
+	"\x13revert_seconds_left\x18\t \x01(\x05R\x11revertSecondsLeft\x120\n" +
+	"\x14last_change_reverted\x18\n" +
+	" \x01(\bR\x12lastChangeReverted\x12@\n" +
+	"\x1dlast_change_reverted_at_start\x18\v \x01(\bR\x19lastChangeRevertedAtStart\x12$\n" +
+	"\x0elast_change_id\x18\f \x01(\tR\flastChangeId\x12\x1d\n" +
+	"\n" +
+	"learnt_dns\x18\r \x03(\tR\tlearntDns\x12#\n" +
+	"\rlearnt_search\x18\x0e \x03(\tR\flearntSearch\x12\x1d\n" +
+	"\n" +
+	"learnt_ntp\x18\x0f \x03(\tR\tlearntNtp\x12\x1f\n" +
+	"\vntp_servers\x18\x10 \x03(\tR\n" +
+	"ntpServers\"U\n" +
 	"\x11SetNetworkRequest\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"\xc9\x01\n" +
 	"\x12SetNetworkResponse\x12\x14\n" +

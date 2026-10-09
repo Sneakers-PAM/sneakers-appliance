@@ -60,4 +60,7 @@ docker run --rm --platform "$platform" \
     fi
     "/out/mke2fs-${ARCH}" -V
   '
+# shellcheck source=build/lib/stamp.sh
+source "$root/build/lib/stamp.sh"
+static_stamp e2fsprogs "$arch" > "$out/e2fsprogs-$arch.stamp"
 echo "e2fsprogs: wrote $out/mke2fs-$arch"

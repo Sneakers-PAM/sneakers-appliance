@@ -117,3 +117,104 @@ func TestTheRevertIsAudited(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// The Network page says when the last change was undone because the box
+// restarted inside its window.
+func TestGetNetworkSaysAChangeWasUndoneAtStart(t *testing.T) {
+	b := newBox(t, true)
+	ctx := context.Background()
+	b.netd.mu.Lock()
+	b.netd.last = &netdv1.ChangeOutcome{ChangeId: "start-abc123", Reverted: true, AtStart: true}
+	b.netd.mu.Unlock()
+	alice := b.browser()
+	alice.signIn("alice")
+	g, err := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL).GetNetwork(ctx, connect.NewRequest(&osadminv1.GetNetworkRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := g.Msg
+	if !m.GetLastChangeReverted() || !m.GetLastChangeRevertedAtStart() || m.GetLastChangeId() != "start-abc123" {
+		t.Fatalf("last change %v %v %q", m.GetLastChangeReverted(), m.GetLastChangeRevertedAtStart(), m.GetLastChangeId())
+	}
+}
+
+// A change netd kept at once has nothing to confirm: no token, no window,
+// and no revert check later.
+func TestAChangeKeptAtOnceHasNothingToConfirm(t *testing.T) {
+	b := newBox(t, true)
+	ctx := context.Background()
+	b.netd.mu.Lock()
+	b.netd.keepAtOnce = true
+	b.netd.mu.Unlock()
+	alice := b.browser()
+	alice.signIn("alice")
+	set := defaultSettings()
+	set.Dns = []string{"192.0.2.53"}
+	res, err := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL).SetNetwork(ctx, connect.NewRequest(&osadminv1.SetNetworkRequest{Settings: set}))
+	if err != nil || res.Msg.GetToken() != "" || res.Msg.GetRevertAfterSeconds() != 0 {
+		t.Fatalf("set %v %v", res, err)
+	}
+	if e := lastEntry(t, b.log, "network.set"); e.Outcome != "ok" || e.Detail["kept"] != "at-once" {
+		t.Fatalf("set entry %+v", e)
+	}
+}
+
+// Status carries the change window, so every page (and the console) can
+// say a change waits for its confirmation, or that the last one was
+// undone.
+func TestStatusSaysANetworkChangeWaitsOrWasUndone(t *testing.T) {
+	b := newBox(t, true)
+	ctx := context.Background()
+	alice := b.browser()
+	alice.signIn("alice")
+	sc := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL)
+	set := defaultSettings()
+	set.AllowList = []string{"192.0.2.0/24"}
+	if _, err := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL).SetNetwork(ctx, connect.NewRequest(&osadminv1.SetNetworkRequest{Settings: set})); err != nil {
+		t.Fatal(err)
+	}
+	warned := func(st *osadminv1.GetStatusResponse, kind osadminv1.WarningKind) bool {
+		for _, w := range st.GetWarnings() {
+			if w.GetKind() == kind {
+				return true
+			}
+		}
+		return false
+	}
+	st, err := sc.GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nc := st.Msg.GetNetworkChange(); !nc.GetPending() || nc.GetRevertSecondsLeft() != 95 || nc.GetChangeId() != "chg-1" || !warned(st.Msg, osadminv1.WarningKind_WARNING_KIND_NETWORK_PENDING) {
+		t.Fatalf("pending %v", st.Msg.GetNetworkChange())
+	}
+	b.netd.mu.Lock()
+	b.netd.pending = ""
+	b.netd.last = &netdv1.ChangeOutcome{ChangeId: "start-abc123", Reverted: true, AtStart: true}
+	b.netd.mu.Unlock()
+	st, err = sc.GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nc := st.Msg.GetNetworkChange(); nc.GetPending() || !nc.GetLastRevertedAtStart() || !warned(st.Msg, osadminv1.WarningKind_WARNING_KIND_NETWORK_REVERTED) {
+		t.Fatalf("after the undo %v", st.Msg.GetNetworkChange())
+	}
+}
+
+// The Network page shows what DHCP gave next to the typed settings.
+func TestGetNetworkShowsWhatDHCPGave(t *testing.T) {
+	b := newBox(t, true)
+	b.netd.mu.Lock()
+	b.netd.learnt = &netdv1.StatusResponse{LearntDns: []string{"192.0.2.53"}, LearntSearch: []string{"sneakers.example.org"}, LearntNtp: []string{"192.0.2.123"}, NtpServers: []string{"192.0.2.123"}}
+	b.netd.mu.Unlock()
+	alice := b.browser()
+	alice.signIn("alice")
+	g, err := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL).GetNetwork(context.Background(), connect.NewRequest(&osadminv1.GetNetworkRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := g.Msg
+	if len(m.GetLearntDns()) != 1 || m.GetLearntDns()[0] != "192.0.2.53" || len(m.GetLearntSearch()) != 1 || len(m.GetLearntNtp()) != 1 || len(m.GetNtpServers()) != 1 {
+		t.Fatalf("learnt %v %v %v %v", m.GetLearntDns(), m.GetLearntSearch(), m.GetLearntNtp(), m.GetNtpServers())
+	}
+}

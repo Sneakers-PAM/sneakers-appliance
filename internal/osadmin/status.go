@@ -6,6 +6,7 @@ package osadmin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -63,8 +64,19 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		if !out.NtpSynced {
 			add(osadminv1.WarningKind_WARNING_KIND_NTP_UNSYNCED, "The clock isn't synchronised with an NTP server.")
 		}
-		if ng, gerr := s.o.Network.Get(ctx, connect.NewRequest(&netdv1.GetRequest{})); gerr == nil && exposed(out.ManagementAddresses, ng.Msg.GetSettings().GetAllowList()) {
-			add(osadminv1.WarningKind_WARNING_KIND_EXPOSURE, "The management interface has a public address and the allow-list lets any source reach ports 22 and 8443.")
+		if ng, gerr := s.o.Network.Get(ctx, connect.NewRequest(&netdv1.GetRequest{})); gerr == nil {
+			if exposed(out.ManagementAddresses, ng.Msg.GetSettings().GetAllowList()) {
+				add(osadminv1.WarningKind_WARNING_KIND_EXPOSURE, "The management interface has a public address and the allow-list lets any source reach ports 22 and 8443.")
+			}
+			out.NetworkChange = networkChange(ng.Msg)
+			switch nc := out.NetworkChange; {
+			case nc.GetPending():
+				add(osadminv1.WarningKind_WARNING_KIND_NETWORK_PENDING, fmt.Sprintf("A network change waits for its confirmation and reverts in %d seconds unless an owner confirms it on the Network page.", nc.GetRevertSecondsLeft()))
+			case nc.GetLastRevertedAtStart():
+				add(osadminv1.WarningKind_WARNING_KIND_NETWORK_REVERTED, "The last network change wasn't confirmed before the box restarted, so it was undone at start.")
+			case nc.GetLastReverted():
+				add(osadminv1.WarningKind_WARNING_KIND_NETWORK_REVERTED, "The last network change wasn't confirmed in time and was undone.")
+			}
 		}
 	}
 
@@ -211,4 +223,16 @@ func (s *Server) confirmHostname(ctx context.Context, typed string) error {
 		return codes.New(codes.AccessConfirm, "type the box's host name to confirm")
 	}
 	return nil
+}
+
+// networkChange is netd's change window as Status gives it.
+func networkChange(g *netdv1.GetResponse) *osadminv1.NetworkChange {
+	nc := &osadminv1.NetworkChange{Pending: g.GetPending()}
+	if nc.Pending {
+		nc.RevertSecondsLeft, nc.ChangeId = g.GetSecondsLeft(), g.GetChangeId()
+	}
+	if l := g.GetLast(); l.GetReverted() {
+		nc.LastReverted, nc.LastRevertedAtStart, nc.LastChangeId = true, l.GetAtStart(), l.GetChangeId()
+	}
+	return nc
 }

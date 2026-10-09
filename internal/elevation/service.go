@@ -438,8 +438,10 @@ func (s *Service) begin(ticket, admin string, pid int) (Request, time.Time, erro
 // End records how an active session ended and its recording's hash.
 func (s *Service) End(id, reason, recordingSHA string) error {
 	r, err := s.end(id, reason, recordingSHA)
+	// The end is never a refusal: it's ok, with how it ended (exit, idle,
+	// time-box, terminated) in the detail.
 	s.audit(osaudit.Entry{Actor: "sneakers-elevated", Action: "rootshell.end", Target: r.Name(),
-		Detail: map[string]string{"request": id, "admin": r.Admin, "recordingSha256": recordingSHA}}, reason, err)
+		Detail: map[string]string{"request": id, "admin": r.Admin, "recordingSha256": recordingSHA, "reason": reason}}, "ok", err)
 	if err == nil {
 		s.changed()
 	}

@@ -675,8 +675,11 @@ type ChangeOutcome struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	// reverted is true when the change was undone for lack of a Confirm.
-	Reverted      bool  `protobuf:"varint,2,opt,name=reverted,proto3" json:"reverted,omitempty"`
-	AtUnix        int64 `protobuf:"varint,3,opt,name=at_unix,json=atUnix,proto3" json:"at_unix,omitempty"`
+	Reverted bool  `protobuf:"varint,2,opt,name=reverted,proto3" json:"reverted,omitempty"`
+	AtUnix   int64 `protobuf:"varint,3,opt,name=at_unix,json=atUnix,proto3" json:"at_unix,omitempty"`
+	// at_start is true when the box stopped or restarted inside the
+	// change's window and netd undid it when it started again.
+	AtStart       bool `protobuf:"varint,4,opt,name=at_start,json=atStart,proto3" json:"at_start,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -732,6 +735,13 @@ func (x *ChangeOutcome) GetAtUnix() int64 {
 	return 0
 }
 
+func (x *ChangeOutcome) GetAtStart() bool {
+	if x != nil {
+		return x.AtStart
+	}
+	return false
+}
+
 type SetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Settings      *Settings              `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
@@ -778,9 +788,13 @@ func (x *SetRequest) GetSettings() *Settings {
 
 type SetResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// token is what Confirm takes.
+	// token is what Confirm takes. Empty when the change was kept at once:
+	// one that leaves the interfaces, addresses, host name, allow-list and
+	// cluster ranges alone (DNS, search domains, NTP, the time zone, the
+	// proxy) can't cut the admin off and has no window.
 	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	// revert_after_seconds is how long the change waits for Confirm.
+	// revert_after_seconds is how long the change waits for Confirm; 0 when
+	// it was kept at once.
 	RevertAfterSeconds int32 `protobuf:"varint,2,opt,name=revert_after_seconds,json=revertAfterSeconds,proto3" json:"revert_after_seconds,omitempty"`
 	// change_id names the change in logs and the audit.
 	ChangeId      string `protobuf:"bytes,3,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
@@ -1124,8 +1138,17 @@ type StatusResponse struct {
 	// ntp_offset_ms is the last measured offset.
 	NtpOffsetMs int64 `protobuf:"varint,5,opt,name=ntp_offset_ms,json=ntpOffsetMs,proto3" json:"ntp_offset_ms,omitempty"`
 	// ssh_open and https_open say whether the firewall accepts 22 and 8443.
-	SshOpen       bool `protobuf:"varint,6,opt,name=ssh_open,json=sshOpen,proto3" json:"ssh_open,omitempty"`
-	HttpsOpen     bool `protobuf:"varint,7,opt,name=https_open,json=httpsOpen,proto3" json:"https_open,omitempty"`
+	SshOpen   bool `protobuf:"varint,6,opt,name=ssh_open,json=sshOpen,proto3" json:"ssh_open,omitempty"`
+	HttpsOpen bool `protobuf:"varint,7,opt,name=https_open,json=httpsOpen,proto3" json:"https_open,omitempty"`
+	// learnt_dns, learnt_search and learnt_ntp are what DHCP and router
+	// advertisements gave, management interface first. The resolver and the
+	// clock use them where the settings name none.
+	LearntDns    []string `protobuf:"bytes,8,rep,name=learnt_dns,json=learntDns,proto3" json:"learnt_dns,omitempty"`
+	LearntSearch []string `protobuf:"bytes,9,rep,name=learnt_search,json=learntSearch,proto3" json:"learnt_search,omitempty"`
+	LearntNtp    []string `protobuf:"bytes,10,rep,name=learnt_ntp,json=learntNtp,proto3" json:"learnt_ntp,omitempty"`
+	// ntp_servers are the servers the clock asks now: the settings', else
+	// DHCP's, else the image's default pool.
+	NtpServers    []string `protobuf:"bytes,11,rep,name=ntp_servers,json=ntpServers,proto3" json:"ntp_servers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1207,6 +1230,34 @@ func (x *StatusResponse) GetHttpsOpen() bool {
 		return x.HttpsOpen
 	}
 	return false
+}
+
+func (x *StatusResponse) GetLearntDns() []string {
+	if x != nil {
+		return x.LearntDns
+	}
+	return nil
+}
+
+func (x *StatusResponse) GetLearntSearch() []string {
+	if x != nil {
+		return x.LearntSearch
+	}
+	return nil
+}
+
+func (x *StatusResponse) GetLearntNtp() []string {
+	if x != nil {
+		return x.LearntNtp
+	}
+	return nil
+}
+
+func (x *StatusResponse) GetNtpServers() []string {
+	if x != nil {
+		return x.NtpServers
+	}
+	return nil
 }
 
 type ListInterfacesRequest struct {
@@ -1728,11 +1779,12 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\x05token\x18\x03 \x01(\tR\x05token\x12\x1b\n" +
 	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12!\n" +
 	"\fseconds_left\x18\x05 \x01(\x05R\vsecondsLeft\x12=\n" +
-	"\x04last\x18\x06 \x01(\v2).sneakers.appliance.netd.v1.ChangeOutcomeR\x04last\"a\n" +
+	"\x04last\x18\x06 \x01(\v2).sneakers.appliance.netd.v1.ChangeOutcomeR\x04last\"|\n" +
 	"\rChangeOutcome\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1a\n" +
 	"\breverted\x18\x02 \x01(\bR\breverted\x12\x17\n" +
-	"\aat_unix\x18\x03 \x01(\x03R\x06atUnix\"N\n" +
+	"\aat_unix\x18\x03 \x01(\x03R\x06atUnix\x12\x19\n" +
+	"\bat_start\x18\x04 \x01(\bR\aatStart\"N\n" +
 	"\n" +
 	"SetRequest\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"r\n" +
@@ -1752,7 +1804,7 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\rChecksRequest\"K\n" +
 	"\x0eChecksResponse\x129\n" +
 	"\x06checks\x18\x01 \x03(\v2!.sneakers.appliance.netd.v1.CheckR\x06checks\"\x0f\n" +
-	"\rStatusRequest\"\x89\x02\n" +
+	"\rStatusRequest\"\x8d\x03\n" +
 	"\x0eStatusResponse\x121\n" +
 	"\x14management_addresses\x18\x01 \x03(\tR\x13managementAddresses\x12+\n" +
 	"\x11service_addresses\x18\x02 \x03(\tR\x10serviceAddresses\x12\x1a\n" +
@@ -1762,7 +1814,15 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\rntp_offset_ms\x18\x05 \x01(\x03R\vntpOffsetMs\x12\x19\n" +
 	"\bssh_open\x18\x06 \x01(\bR\asshOpen\x12\x1d\n" +
 	"\n" +
-	"https_open\x18\a \x01(\bR\thttpsOpen\"\x17\n" +
+	"https_open\x18\a \x01(\bR\thttpsOpen\x12\x1d\n" +
+	"\n" +
+	"learnt_dns\x18\b \x03(\tR\tlearntDns\x12#\n" +
+	"\rlearnt_search\x18\t \x03(\tR\flearntSearch\x12\x1d\n" +
+	"\n" +
+	"learnt_ntp\x18\n" +
+	" \x03(\tR\tlearntNtp\x12\x1f\n" +
+	"\vntp_servers\x18\v \x03(\tR\n" +
+	"ntpServers\"\x17\n" +
 	"\x15ListInterfacesRequest\"\\\n" +
 	"\x03Nic\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +

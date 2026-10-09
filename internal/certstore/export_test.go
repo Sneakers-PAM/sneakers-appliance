@@ -11,3 +11,6 @@ func SetProbePort(t *testing.T, port string) {
 	probePort = port
 	t.Cleanup(func() { probePort = prev })
 }
+
+// SetOwnName sets Options.OwnName on an opened store, for a test.
+func (s *Store) SetOwnName(f func() string) { s.o.OwnName = f }

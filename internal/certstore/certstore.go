@@ -126,6 +126,10 @@ type Options struct {
 	Sealer   Sealer
 	// Names returns the box's management host name and addresses.
 	Names func(context.Context) (host string, addrs []string, err error)
+	// OwnName is the box's own name (internal/boxname), which a CSR names
+	// when the box has no host name from the settings or DHCP; nil names
+	// none.
+	OwnName func() string
 	// Probe checks :8443 serves the certificate with this fingerprint,
 	// within ProbeTimeout; nil uses HandshakeProbe on the addresses.
 	Probe func(ctx context.Context, fingerprint string) error
@@ -512,7 +516,19 @@ func (s *Store) GenerateCSR(ctx context.Context, r CSRRequest) (CSR, error) {
 		}
 		return nil
 	}
+	if host == "" && s.o.OwnName != nil {
+		// The box's own name is a single label; it's the name the console
+		// shows, so the request carries it.
+		if own := strings.ToLower(s.o.OwnName()); own != "" && dnsLabelRE.MatchString(own) && !seen[own] {
+			seen[own] = true
+			dns = append(dns, own)
+			host = own
+		}
+	}
 	for _, n := range boxNames(host, addrs) {
+		if seen[n] {
+			continue
+		}
 		if err := add(n); err != nil {
 			return CSR{}, err
 		}

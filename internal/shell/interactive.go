@@ -23,7 +23,7 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 		if key != '\t' {
 			return "", 0, false
 		}
-		done := CompleteFor(e.Origin, e.Product, line[:pos])
+		done := CompleteFor(e.Origin, e.Product, line[:pos], e.Values...)
 		if done == line[:pos] {
 			return "", 0, false
 		}
@@ -31,7 +31,7 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 	}
 	session := *e
 	session.Out, session.Err = t, t
-	session.In = &termLines{t: t}
+	session.In = &termLines{t: t, prompt: prompt}
 	_, _ = io.WriteString(t, "Type help for the commands, exit to leave.\n")
 	for {
 		if ctx.Err() != nil {
@@ -57,8 +57,19 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 // termLines lets a command read a confirmation from the terminal it runs
 // on: each Read returns one more line.
 type termLines struct {
-	t   *term.Terminal
-	buf []byte
+	t      *term.Terminal
+	prompt string
+	buf    []byte
+}
+
+// AskLine reads one line with prompt as the terminal's prompt, then puts
+// the menu's prompt back: a command's question is its own line, and the
+// menu's prompt never follows it on the same line.
+func (r *termLines) AskLine(prompt string) (string, error) {
+	r.buf = nil
+	r.t.SetPrompt(prompt)
+	defer r.t.SetPrompt(r.prompt)
+	return r.t.ReadLine()
 }
 
 func (r *termLines) Read(p []byte) (int, error) {
@@ -79,7 +90,7 @@ func (r *termLines) Read(p []byte) (int, error) {
 func Complete(o Origin, typed string) string { return CompleteFor(o, productinfo.Info{}, typed) }
 
 // CompleteFor is Complete with product p's commands too.
-func CompleteFor(o Origin, p productinfo.Info, typed string) string {
+func CompleteFor(o Origin, p productinfo.Info, typed string, values ...Value) string {
 	words := strings.Fields(typed)
 	trailing := strings.HasSuffix(typed, " ") || typed == ""
 	if !trailing && len(words) > 0 {
@@ -92,7 +103,7 @@ func CompleteFor(o Origin, p productinfo.Info, typed string) string {
 	}
 	seen := map[string]bool{}
 	var next []string
-	for _, name := range append(NamesFor(o, p), "help", "exit") {
+	for _, name := range append(NamesFor(o, p, values...), "help", "exit") {
 		p := strings.Fields(name)
 		if len(p) <= len(words) || !hasPrefixWords(p, words) {
 			continue

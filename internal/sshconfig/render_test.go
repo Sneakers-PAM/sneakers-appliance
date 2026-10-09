@@ -263,3 +263,20 @@ func TestTheBannerSaysHowToSendTheCertificate(t *testing.T) {
 		}
 	}
 }
+
+// A host key with a certificate next to it (<key>-cert.pub, which accessd
+// signs with the host CA) is presented with it: a HostCertificate line per
+// certificate that exists, none for a key without one.
+func TestAHostKeysCertificateIsPresented(t *testing.T) {
+	keys := t.TempDir()
+	p := sshconfig.DefaultPaths()
+	p.ConfigDir = filepath.Join(t.TempDir(), "ssh")
+	p.HostKeys = []string{filepath.Join(keys, "ssh_host_ed25519_key"), filepath.Join(keys, "ssh_host_rsa_key")}
+	mustNoErr(t, os.WriteFile(p.HostKeys[0]+"-cert.pub", []byte(ssh.CertAlgoED25519v01+" AAAA\n"), 0o644))
+	dir := t.TempDir()
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), State: twoAdmins(t), Paths: p}, dir))
+	cfg := readFile(t, filepath.Join(dir, "sshd_config"))
+	if !strings.Contains(cfg, "HostCertificate "+p.HostKeys[0]+"-cert.pub\n") || strings.Contains(cfg, "HostCertificate "+p.HostKeys[1]) {
+		t.Fatalf("config:\n%s", cfg)
+	}
+}

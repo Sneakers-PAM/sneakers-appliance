@@ -112,7 +112,7 @@ func TestTheRootShellEndToEnd(t *testing.T) {
 	if _, err := console.EndElevatedSession(ctx, connect.NewRequest(&accessv1.EndElevatedSessionRequest{Id: begin.Msg.GetElevation().GetId(), Reason: "idle", RecordingSha256: "abc"})); err != nil {
 		t.Fatal(err)
 	}
-	if e := lastEntry(t, b.log, "rootshell.end"); e.Outcome != "idle" {
+	if e := lastEntry(t, b.log, "rootshell.end"); e.Outcome != "ok" || e.Detail["reason"] != "idle" {
 		t.Fatalf("audit %+v", e)
 	}
 }

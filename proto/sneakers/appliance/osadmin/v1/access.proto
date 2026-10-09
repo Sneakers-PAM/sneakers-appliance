@@ -281,6 +281,14 @@ message ListAdminsResponse {
   // root_key is the box's root key: its type and SHA256: fingerprint
   // (the key itself never leaves the box).
   HostKey root_key = 7;
+  // user_ca_public_key is the root key's public half, the user CA sshd
+  // trusts (an authorized_keys line).
+  string user_ca_public_key = 8;
+  // host_ca is the box's SSH host CA: its type and fingerprint.
+  HostKey host_ca = 9;
+  // known_hosts is the "@cert-authority <names> <host CA key>" line for
+  // a client's known_hosts, as IssueSshKey gives it.
+  string known_hosts = 10;
 }
 
 message AddAdminRequest {
@@ -402,6 +410,16 @@ message IssueSshKeyResponse {
   string pem = 11;
   // pem_file_name is <file_name>.pem.
   string pem_file_name = 12;
+  // user_ca_public_key is the box's user CA (its root key's public half),
+  // which signed the certificate; for reference.
+  string user_ca_public_key = 13;
+  // known_hosts is a line for the client's known_hosts that trusts the
+  // box's host CA for its host name and management addresses:
+  // "@cert-authority <names> <host CA key>". sshd presents a host
+  // certificate that CA signed, so the first login has no host key prompt.
+  string known_hosts = 14;
+  // known_hosts_file_name is known_hosts_<box>, for known_hosts.
+  string known_hosts_file_name = 15;
 }
 
 message ChangePasswordRequest {

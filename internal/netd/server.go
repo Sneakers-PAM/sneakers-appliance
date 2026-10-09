@@ -50,7 +50,7 @@ func (h *handler) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*co
 		out.SecondsLeft = int32(p.Left(h.d.o.Clock.Now()).Seconds())
 	}
 	if l, ok := h.d.LastChange(); ok {
-		out.Last = &netdv1.ChangeOutcome{ChangeId: l.ID, Reverted: l.Reverted, AtUnix: l.At.Unix()}
+		out.Last = &netdv1.ChangeOutcome{ChangeId: l.ID, Reverted: l.Reverted, AtUnix: l.At.Unix(), AtStart: l.AtStart}
 	}
 	return connect.NewResponse(out), nil
 }
@@ -64,7 +64,12 @@ func (h *handler) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) 
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &netdv1.SetResponse{Token: tok, RevertAfterSeconds: int32(network.RevertAfter.Seconds())}
+	out := &netdv1.SetResponse{Token: tok}
+	if tok == "" {
+		// Kept at once: no window, nothing to confirm.
+		return connect.NewResponse(out), nil
+	}
+	out.RevertAfterSeconds = int32(network.RevertAfter.Seconds())
 	if p, ok := h.d.PendingChange(); ok && p.Token == tok {
 		out.ChangeId = p.ID
 	}
@@ -95,6 +100,7 @@ func (h *handler) Status(context.Context, *connect.Request[netdv1.StatusRequest]
 	return connect.NewResponse(&netdv1.StatusResponse{
 		ManagementAddresses: st.Management, ServiceAddresses: st.Service, Hostname: st.Hostname,
 		NtpSynced: st.NTPSynced, NtpOffsetMs: st.NTPOffset.Milliseconds(), SshOpen: st.SSHOpen, HttpsOpen: st.HTTPSOpen,
+		LearntDns: addrStrings(st.LearntDNS), LearntSearch: st.LearntSearch, LearntNtp: st.LearntNTP, NtpServers: st.NTPServers,
 	}), nil
 }
 
@@ -155,4 +161,12 @@ func (h *handler) Watch(ctx context.Context, _ *connect.Request[netdv1.WatchRequ
 			}
 		}
 	}
+}
+
+func addrStrings(in []netip.Addr) []string {
+	out := make([]string, 0, len(in))
+	for _, a := range in {
+		out = append(out, a.String())
+	}
+	return out
 }

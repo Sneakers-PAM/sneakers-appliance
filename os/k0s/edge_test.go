@@ -30,6 +30,7 @@ type edgeDeployment struct {
 				Containers []struct {
 					Name           string   `yaml:"name"`
 					Image          string   `yaml:"image"`
+					Command        []string `yaml:"command"`
 					Args           []string `yaml:"args"`
 					ReadinessProbe *struct {
 						HTTPGet *struct {
@@ -105,10 +106,12 @@ func TestTheEdgeProbesTraefiksPingOnItsOwnLoopbackEntryPoint(t *testing.T) {
 
 // edgefall holds 443 from k0s's start until the edge asks for it, so the
 // product URL answers with the box-state page instead of refusing while
-// Traefik comes up. The edge's init container asks on edgefall's loopback
-// listener, just before Traefik binds, from Traefik's own image (its
-// busybox wget), and never fails the pod when edgefall doesn't answer.
-func TestTheEdgeAsksEdgefallForThePortsBeforeTraefikStarts(t *testing.T) {
+// Traefik comes up. Traefik's own container asks on edgefall's loopback
+// listener (its busybox wget) right before it execs traefik, so 443 is
+// free only for the moment Traefik takes to bind it, not for the kubelet
+// starting another container on a box that starts every pod at once; and
+// a failure (no edgefall) never stops Traefik.
+func TestTheEdgeAsksEdgefallForThePortsRightBeforeTraefikBinds(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "stacks", "edge", "edge.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -125,14 +128,22 @@ func TestTheEdgeAsksEdgefallForThePortsBeforeTraefikStarts(t *testing.T) {
 			continue
 		}
 		s := d.Spec.Template.Spec
-		if len(s.InitContainers) != 1 || len(s.Containers) == 0 {
+		if len(s.InitContainers) != 0 || len(s.Containers) != 1 {
 			t.Fatalf("init containers %+v", s.InitContainers)
 		}
-		ic := s.InitContainers[0]
-		cmd := strings.Join(ic.Command, " ")
-		if ic.Image != s.Containers[0].Image || !strings.Contains(cmd, "wget") || !strings.Contains(cmd, "--post-data=") ||
-			!strings.Contains(cmd, "http://127.0.0.1:9180/_box/edge-handoff") || !strings.HasSuffix(strings.TrimSpace(cmd), "|| true") {
-			t.Fatalf("the handoff init container is %s %q", ic.Image, cmd)
+		c := s.Containers[0]
+		if len(c.Command) != 4 || c.Command[0] != "/bin/sh" || c.Command[1] != "-c" || c.Command[3] != "traefik" {
+			t.Fatalf("traefik's command %q", c.Command)
+		}
+		script := c.Command[2]
+		handoff, run, ok := strings.Cut(script, ";")
+		if !ok || !strings.Contains(handoff, "wget") || !strings.Contains(handoff, "--post-data=") ||
+			!strings.Contains(handoff, "http://127.0.0.1:9180/_box/edge-handoff") || !strings.HasSuffix(strings.TrimSpace(handoff), "|| true") ||
+			strings.TrimSpace(run) != `exec traefik "$@"` {
+			t.Fatalf("traefik's start %q", script)
+		}
+		if len(c.Args) == 0 || !strings.HasPrefix(c.Args[0], "--entryPoints.") {
+			t.Fatalf("traefik's args %q", c.Args)
 		}
 		return
 	}

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -102,6 +103,11 @@ var (
 	DefaultPods     = netip.MustParsePrefix("10.244.0.0/16") // scrub:allow=private-ip -- the k0s default
 	DefaultServices = netip.MustParsePrefix("10.96.0.0/12")  // scrub:allow=private-ip -- the k0s default
 )
+
+// DefaultNTP is the image's default time servers, used while neither the
+// settings nor DHCP name one: the public NTP pool. An admin replaces it by
+// naming servers in the settings.
+var DefaultNTP = []string{"0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org"} // scrub:allow=fqdn -- the public NTP pool
 
 // Defaults is the first-boot screen's starting point on nic: DHCP for IPv4,
 // SLAAC for IPv6, everything else from DHCP.
@@ -348,4 +354,18 @@ func validateCluster(s Settings) error {
 		}
 	}
 	return nil
+}
+
+// KeepsReach reports whether going from prev to next leaves everything
+// that decides how the admin reaches the box alone: the interfaces, their
+// addresses, the host name (the :8443 certificate follows it), the
+// allow-list and the cluster ranges. Such a change (DNS, search domains,
+// NTP, the time zone, the proxy) can't cut anyone off, so it needs no
+// confirmation window.
+func KeepsReach(prev, next Settings) bool {
+	a, b := prev, next
+	for _, s := range []*Settings{&a, &b} {
+		s.DNS, s.Search, s.NTP, s.TimeZone, s.HTTPSProxy = nil, nil, nil, "", ""
+	}
+	return reflect.DeepEqual(a, b)
 }

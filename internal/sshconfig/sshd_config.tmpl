@@ -5,6 +5,9 @@ ListenAddress {{.}}
 {{- range .HostKeys}}
 HostKey {{.}}
 {{- end}}
+{{- range .HostCertificates}}
+HostCertificate {{.}}
+{{- end}}
 AuthenticationMethods publickey
 PubkeyAuthentication yes
 PasswordAuthentication no

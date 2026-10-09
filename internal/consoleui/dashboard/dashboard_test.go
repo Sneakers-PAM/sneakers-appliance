@@ -586,6 +586,13 @@ func TestTheBaseAndProductLines(t *testing.T) {
 	failedProduct.UpgradeProgress.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
 	failedProduct.UpgradeProgress.InProgress, failedProduct.UpgradeProgress.Failed = false, true
 	failedProduct.UpgradeProgress.Steps[2].State = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED
+	// A bundle refused while it was staged never touched the running
+	// product: its line stays OK.
+	refused := withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.1.0-lab.hello.1", Running: true})
+	refused.UpgradeProgress = progress("stage", "0.2.0", "verify", "")
+	refused.UpgradeProgress.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+	refused.UpgradeProgress.InProgress, refused.UpgradeProgress.Failed, refused.UpgradeProgress.Code = false, true, "UPGRADE_SIGNATURE"
+	refused.UpgradeProgress.Steps[0].State = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED
 	baseStaged := withProduct(nil)
 	baseStaged.StagedVersion = "0.1.1"
 	baseBack := withProduct(nil)
@@ -602,6 +609,7 @@ func TestTheBaseAndProductLines(t *testing.T) {
 		{"running with a way back", noPlatform(withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.2.0", PreviousVersion: "0.1.0", Running: true})), []string{"Product       OK      0.2.0 running; 0.1.0 to go back"}},
 		{"installed, stopped", noPlatform(withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.1.0"})), []string{"Product       STOPPED 0.1.0 isn't running"}},
 		{"the last product update failed", noPlatform(failedProduct), []string{"Product       FAILED  the update to 0.2.0 failed"}},
+		{"a refused bundle leaves the product alone", noPlatform(refused), []string{"Product       OK      0.1.0-lab.hello.1 running"}},
 		{"base staged", noPlatform(baseStaged), []string{"Base          OK      0.1.0 in slot A; 0.1.1 staged"}},
 		{"base with a way back", noPlatform(baseBack), []string{"Base          OK      0.1.0 in slot A; 0.0.9 to go back"}},
 		{"no status", dashboard.Data{Status: sources.StatusView{Err: errors.New("connection refused")}, Slot: "A", PlatformErr: sources.NotInstalled{What: "The platform"}}, []string{"Base          UNKNOWN no status yet", "Product       UNKNOWN no status yet"}},

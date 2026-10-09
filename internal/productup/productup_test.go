@@ -27,7 +27,10 @@ type fakeK0s struct {
 	images   string
 	stacks   map[string]bool
 	podsJSON string
-	calls    []string
+	// workloads is the stacks' Deployments, StatefulSets and DaemonSets as
+	// JSON; empty is none.
+	workloads string
+	calls     []string
 }
 
 func (f *fakeK0s) run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -50,6 +53,11 @@ func (f *fakeK0s) run(_ context.Context, name string, args ...string) ([]byte, e
 		return nil, nil
 	case strings.Contains(line, "get pods"):
 		return []byte(f.podsJSON), nil
+	case strings.Contains(line, "get deployments,statefulsets,daemonsets"):
+		if f.workloads == "" {
+			return []byte(`{"items":[]}`), nil
+		}
+		return []byte(f.workloads), nil
 	}
 	return nil, errors.New("unexpected " + line)
 }
@@ -162,5 +170,35 @@ func TestTheProbeUsesTheBundlesK0s(t *testing.T) {
 	check(t, p)
 	if len(k.calls) != 1 || k.calls[0] != "k0s kubectl --kubeconfig /var/lib/k0s/pki/admin.conf get --raw /readyz" {
 		t.Fatalf("calls %q", k.calls)
+	}
+}
+
+const rollingOut = `{"items":[{"kind":"Deployment","metadata":{"namespace":"sneakers","name":"sneakers-gateway","generation":3,"labels":{"k0s.k0sproject.io/stack":"sneakers"}},
+ "spec":{"replicas":1},"status":{"observedGeneration":3,"replicas":2,"updatedReplicas":%d,"availableReplicas":1,"readyReplicas":1}}]}`
+
+const oldPodStopping = `{"items":[
+ {"metadata":{"name":"gw-new"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}},
+ {"metadata":{"name":"gw-old","deletionTimestamp":"2026-10-09T18:00:00Z"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}}]}`
+
+// An update over a running product isn't done while the edge answers from
+// the old pods: each stack's workloads must have rolled out (every replica
+// updated and available, the latest generation seen) and the old pods must
+// be gone first.
+func TestAnUpdateWaitsForTheRolloutAndTheOldPods(t *testing.T) {
+	e := edge(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	k := &fakeK0s{apiUp: true, images: "sha256:" + hexA + " sha256:" + hexB, stacks: map[string]bool{"edge": true, "hello": true},
+		podsJSON: strings.Replace(twoPods, "%s", "True", 1), workloads: strings.Replace(rollingOut, "%d", "0", 1)}
+	p := probe(t, k, e)
+	if r := check(t, p); r.Step != productup.StepPods || !strings.Contains(r.Detail, "sneakers/sneakers-gateway") {
+		t.Fatalf("the old pods still answer, the rollout hasn't started: %+v", r)
+	}
+	k.workloads = strings.Replace(strings.Replace(rollingOut, "%d", "1", 1), `"replicas":2`, `"replicas":1`, 1)
+	k.podsJSON = oldPodStopping
+	if r := check(t, p); r.Step != productup.StepPods || r.Detail != "1 old pod still stopping" {
+		t.Fatalf("rolled out, an old pod stopping: %+v", r)
+	}
+	k.podsJSON = strings.Replace(twoPods, "%s", "True", 1)
+	if r := check(t, p); r.Step != "" {
+		t.Fatalf("rolled out and the old pods gone: %+v", r)
 	}
 }

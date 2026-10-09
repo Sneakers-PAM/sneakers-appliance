@@ -118,3 +118,39 @@ func TestNoCertificateNoClaim(t *testing.T) {
 		t.Fatal("held without a certificate")
 	}
 }
+
+// After a handoff edgefall watches for the edge taking 443 and says how
+// long 443 refused in between, or that nothing took it, so the gap shows
+// in the box's log.
+func TestTheHandoffGapIsMeasured(t *testing.T) {
+	https := freePort(t)
+	var got []time.Duration
+	missed := 0
+	edgefall.WatchTaken(https, 2*time.Second, 20*time.Millisecond, func(gap time.Duration, taken bool) {
+		if taken {
+			got = append(got, gap)
+		} else {
+			missed++
+		}
+	})
+	if missed != 1 || len(got) != 0 {
+		t.Fatalf("nothing took 443: missed %d, taken %v", missed, got)
+	}
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		ln, err := net.Listen("tcp", https)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		t.Cleanup(func() { _ = ln.Close() })
+	}()
+	edgefall.WatchTaken(https, 5*time.Second, 20*time.Millisecond, func(gap time.Duration, taken bool) {
+		if taken {
+			got = append(got, gap)
+		}
+	})
+	if len(got) != 1 || got[0] < 100*time.Millisecond || got[0] > 3*time.Second {
+		t.Fatalf("gap %v", got)
+	}
+}
