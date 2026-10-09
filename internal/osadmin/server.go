@@ -133,6 +133,10 @@ type Options struct {
 	// Switches turn the installed product's switches (its MCP) on and
 	// off; nil answers the MCP page with no product.
 	Switches *productswitch.Switches
+	// BoxSecrets makes the Secrets the current product slot declares
+	// (boxsecrets.Store on the box) at each product apply and revert,
+	// before the product restarts; nil makes none.
+	BoxSecrets BoxSecrets
 	// Exposed reads the installed product's exposed values as the
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.

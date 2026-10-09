@@ -54,3 +54,40 @@ switches:
     restart:
       - sneakers/deployment/sneakers-gateway
       - sneakers/deployment/sneakers-web-staff
+
+# The Secrets every box makes for itself (internal/boxsecrets): accessd
+# generates the values on the box the first time a bundle declares them,
+# keeps them on the state volume and writes them as the
+# sneakers-appliance-secrets stack, so no bundle carries a secret value and
+# no two boxes share one. Updates and reverts keep them. The bundle's stacks
+# read them by these names (build/product/sneakers/values.yaml).
+box_secrets:
+  - secret: sneakers/sneakers-bundled
+    keys:
+      - {key: password, generate: password}
+      - {key: postgres-password, generate: password}
+      - {key: valkey-password, generate: password}
+      - {key: redis-url, value: "redis://:{valkey-password}@sneakers-valkey:6379/0"}
+  - secret: sneakers/sneakers-kratos
+    keys:
+      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-postgres:5432/sneakers_kratos?sslmode=disable"}
+      - {key: secretsDefault, generate: password}
+      - {key: secretsCookie, generate: password}
+      - {key: secretsCipher, generate: password}
+      # Kratos's courier is off (the identity service sends the mail); the
+      # chart still reads the key.
+      - {key: smtpConnectionURI, value: "smtp://smtp.example.org:25/?disable_starttls=true"}
+  - secret: sneakers/sneakers-hydra
+    keys:
+      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-postgres:5432/sneakers_hydra?sslmode=disable"}
+      - {key: secretsSystem, generate: password}
+      - {key: secretsCookie, generate: password}
+  # The vault root key and the TOTP encryption key (32 bytes each, base64).
+  # Losing them loses the data they protect: back them up (#254).
+  - secret: sneakers/sneakers-box
+    keys:
+      - {key: VAULT_ROOT_KEK, generate: key32}
+      - {key: TOTP_ENC_KEY, generate: key32}
+  - secret: sneakers/sneakers-setup-token
+    keys:
+      - {key: SETUP_TOKEN, generate: token}
