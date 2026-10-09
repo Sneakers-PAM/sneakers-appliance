@@ -86,7 +86,7 @@ A factory reset wipes them with the rest of the state.
 ## The product bundle and the airgapped images
 
 The installed bundle's current slot, `/var/lib/sneakers/product/current` (a link to `a` or `b`),
-holds `k0s`, `release.yaml`, `images/` (one OCI archive per pinned image, each named by its digest,
+holds `k0s`, `helm` (when its `release.yaml` pins one), `release.yaml`, `images/` (one OCI archive per pinned image, each named by its digest,
 with its signature beside it) and `manifests/` ([release.md](release.md#the-product-bundle)). The
 box checked all of it before it linked the slot. At every start `k0s-interim prepare` links each
 archive into `/var/lib/k0s/images/`, which k0s imports into containerd when the worker starts, so
@@ -94,6 +94,22 @@ the images aren't copied again. Each archive
 names its image `<image>@sha256:<digest>`, which is the name the kubelet asks for when a pod's
 image is `<image>:<tag>@sha256:<digest>`. With the pull policy `Never`, a pod whose image isn't
 bundled fails with `ErrImageNeverPull` instead of reaching for a registry.
+
+### kubectl and helm in the root shell
+
+The root shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-root-shell)) reaches the installed
+k0s with no setup. `/usr/bin/kubectl` links to the current slot's `k0s`, which acts as kubectl when
+it's run by that name, and `/usr/bin/helm` links to the slot's `helm`, so both follow the slot after
+an apply or a revert. With a product installed the shell starts with
+`KUBECONFIG=/var/lib/k0s/pki/admin.conf`, k0s's admin kubeconfig. It stays where k0s
+wrote it, and nothing copies it. helm keeps its cache and settings under `/tmp/helm` (the root is
+read-only), so they go at a reboot. With no product installed the shell says once at its start "No
+product is installed; kubectl and helm come with it.", and both links dangle. helm is pinned in
+`release.yaml` like k0s (`spec.kubernetes.helm`: the version and each architecture's SHA-256), and the
+box refuses a bundle whose helm doesn't match the pin, or that carries a helm its `release.yaml`
+doesn't pin. Lab builds take `HELM_VERSION` from `build/ci/versions.env`, with the upstream tarball
+checked against its published SHA-256. A production bundle carries helm once sneakers-release's
+`release.yaml` pins it.
 
 For k0s v1.36.4+k0s.1 the components left on need five images: pause, kube-proxy, CoreDNS,
 kube-router and its CNI installer (`cni-node`). A lab build pins them, the hello image and the

@@ -18,6 +18,8 @@
 #   RELEASE_KEY  the release key (cosign.pub) the images are signed with
 #   SIGNATURES   directory of the image signatures, <hex>.sigstore.json
 #   K0S          the k0s binary, checked against release.yaml's pin
+#   HELM         the helm binary, checked against release.yaml's pin;
+#                required when release.yaml pins helm, refused otherwise
 #   RECIPIENT    the channel's update key recipient (update.pub)
 #   STACKS       a directory of stacks, <stack>/*.yaml (optional)
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
@@ -33,12 +35,22 @@ arch="${ARCH:-amd64}"
 want="$(go run "$root/build/tools/k0spin" "$RELEASE" "$arch")"
 got="$(sha256sum "$K0S" | cut -d' ' -f1)"
 [ "$want" = "$got" ] || { echo "product: $K0S has SHA-256 $got; release.yaml pins $want" >&2; exit 1; }
+want_helm="$(go run "$root/build/tools/k0spin" "$RELEASE" "$arch" helm)"
+if [ -n "$want_helm" ]; then
+  [ -n "${HELM:-}" ] || { echo "product: release.yaml pins helm; set HELM" >&2; exit 1; }
+  got="$(sha256sum "$HELM" | cut -d' ' -f1)"
+  [ "$want_helm" = "$got" ] || { echo "product: $HELM has SHA-256 $got; release.yaml pins $want_helm" >&2; exit 1; }
+elif [ -n "${HELM:-}" ]; then
+  echo "product: HELM is set, but release.yaml pins no helm" >&2
+  exit 1
+fi
 
 tree="$OUT/tree"
 rm -rf "$tree" "$OUT/bin"
 mkdir -p "$tree"
 install -m 0644 "$RELEASE" "$tree/release.yaml"
 install -m 0755 "$K0S" "$tree/k0s"
+if [ -n "$want_helm" ]; then install -m 0755 "$HELM" "$tree/helm"; fi
 
 echo "product: images ($arch)"
 RELEASE="$RELEASE" RELEASE_KEY="$RELEASE_KEY" SIGNATURES="$SIGNATURES" ARCH="$arch" OUT="$tree/images" PLAIN_HTTP="${PLAIN_HTTP:-}" \

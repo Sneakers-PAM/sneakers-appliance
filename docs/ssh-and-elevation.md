@@ -153,5 +153,9 @@ host name ([network.md](network.md#dns-ntp-and-the-host-name): the configured na
 name, else the box's own `sneakers-<8 hex>`), the minutes left and the working directory; busybox is
 built with the shell arithmetic and prompt escapes it needs (`build/busybox/busybox.config`).
 
+With a product installed, `kubectl` and `helm` work in the root shell against its k0s with no setup:
+`KUBECONFIG` is k0s's admin kubeconfig ([k0s.md](k0s.md#kubectl-and-helm-in-the-root-shell)).
+Without one, the shell says so once at its start.
+
 Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
 Removing an admin's key ends a root shell it opened.

@@ -216,3 +216,36 @@ func TestNoShellWithoutAccessd(t *testing.T) {
 		t.Fatal("a refused session left a recording")
 	}
 }
+
+// With a product installed the shell starts with KUBECONFIG on k0s's admin
+// kubeconfig; without one it says so once instead.
+func TestTheShellPointsAtTheInstalledK0s(t *testing.T) {
+	_, _, out, o := setup(t, time.Minute)
+	o.Product = t.TempDir()
+	if err := os.WriteFile(o.Product+"/bundle.json", []byte(`{"version":"0.1.0"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o.Kubeconfig = "/var/lib/k0s/pki/admin.conf"
+	o.Shell = []string{"/bin/sh", "-c", `echo "kc=[$KUBECONFIG] helm=[$HELM_CACHE_HOME]"`}
+	if _, err := elevated.Run(context.Background(), context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "kc=[/var/lib/k0s/pki/admin.conf] helm=[/tmp/helm/cache]") {
+		t.Fatalf("out %q", out.String())
+	}
+	if strings.Contains(out.String(), "No product is installed") {
+		t.Fatalf("said no product with one installed: %q", out.String())
+	}
+}
+
+func TestWithNoProductTheShellSaysSo(t *testing.T) {
+	_, _, out, o := setup(t, time.Minute)
+	o.Product = t.TempDir()
+	o.Shell = []string{"/bin/sh", "-c", `echo "kc=[$KUBECONFIG]"`}
+	if _, err := elevated.Run(context.Background(), context.Background(), o); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "kc=[]") || strings.Count(out.String(), "No product is installed; kubectl and helm come with it.") != 1 {
+		t.Fatalf("out %q", out.String())
+	}
+}

@@ -50,6 +50,7 @@ const (
 const (
 	ProductRelease   = "release.yaml"
 	ProductK0s       = "k0s"
+	ProductHelm      = "helm"
 	ProductImages    = "images"
 	ProductManifests = "manifests"
 )
@@ -72,6 +73,12 @@ type Release struct {
 				SHA256  map[string]string `yaml:"sha256"`
 				Images  []Image           `yaml:"images"`
 			} `yaml:"k0s"`
+			// Helm is the helm binary the bundle carries for the root
+			// shell; a release.yaml without it ships none.
+			Helm struct {
+				Version string            `yaml:"version"`
+				SHA256  map[string]string `yaml:"sha256"`
+			} `yaml:"helm"`
 		} `yaml:"kubernetes"`
 	} `yaml:"spec"`
 }
@@ -130,6 +137,20 @@ func (r *Release) K0sSHA256(arch string) (string, error) {
 	s := r.Spec.Kubernetes.K0s.SHA256[arch]
 	if len(s) != 64 {
 		return "", codes.New(codes.KitBundleMismatch, "release.yaml pins no k0s binary for %s", arch)
+	}
+	return s, nil
+}
+
+// HelmSHA256 is the pinned helm binary's digest for arch, or "" when the
+// release ships no helm.
+func (r *Release) HelmSHA256(arch string) (string, error) {
+	h := r.Spec.Kubernetes.Helm
+	if h.Version == "" && len(h.SHA256) == 0 {
+		return "", nil
+	}
+	s := h.SHA256[arch]
+	if len(s) != 64 {
+		return "", codes.New(codes.KitBundleMismatch, "release.yaml pins helm %s but no helm binary for %s", h.Version, arch)
 	}
 	return s, nil
 }
@@ -261,7 +282,8 @@ func CheckRoot(fsys fs.FS, relYAML []byte) error {
 }
 
 // CheckProduct checks an unpacked product bundle: only the bundle's own
-// entries at the top, k0s is the binary its release.yaml pins for arch,
+// entries at the top, k0s (and helm, when release.yaml pins it) is the
+// binary its release.yaml pins for arch,
 // the images are exactly the pinned ones, each signed with key, and the
 // stacks are YAML files only. It returns the bundle's release.
 func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, error) {
@@ -271,7 +293,7 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	}
 	for _, e := range top {
 		switch e.Name() {
-		case ProductRelease, ProductK0s, ProductImages, ProductManifests:
+		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests:
 		default:
 			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
 		}
@@ -288,18 +310,19 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	if err != nil {
 		return nil, err
 	}
-	f, err := fsys.Open(ProductK0s)
-	if err != nil {
-		return nil, codes.New(codes.KitBundleMismatch, "the product bundle has no k0s binary")
+	if err := checkBinary(fsys, ProductK0s, want); err != nil {
+		return nil, err
 	}
-	h := sha256.New()
-	_, err = io.Copy(h, f)
-	_ = f.Close()
+	wantHelm, err := rel.HelmSHA256(arch)
 	if err != nil {
-		return nil, codes.New(codes.KitBundleMismatch, "the product bundle's k0s can't be read: %v", err)
+		return nil, err
 	}
-	if got := hex.EncodeToString(h.Sum(nil)); got != want {
-		return nil, codes.New(codes.KitBundleMismatch, "the product bundle's k0s has SHA-256 %s; its release.yaml pins %s", got, want)
+	if wantHelm != "" {
+		if err := checkBinary(fsys, ProductHelm, wantHelm); err != nil {
+			return nil, err
+		}
+	} else if _, err := fs.Stat(fsys, ProductHelm); err == nil {
+		return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds helm, which its release.yaml doesn't pin")
 	}
 	if err := CheckImages(fsys, ProductImages, rel, key); err != nil {
 		return nil, err
@@ -308,6 +331,24 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 		return nil, err
 	}
 	return rel, nil
+}
+
+// checkBinary checks that the bundle's binary name has the SHA-256 want.
+func checkBinary(fsys fs.FS, name, want string) error {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "the product bundle has no %s binary", name)
+	}
+	h := sha256.New()
+	_, err = io.Copy(h, f)
+	_ = f.Close()
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "the product bundle's %s can't be read: %v", name, err)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+		return codes.New(codes.KitBundleMismatch, "the product bundle's %s has SHA-256 %s; its release.yaml pins %s", name, got, want)
+	}
+	return nil
 }
 
 // checkStacks allows manifests/<stack>/<file>.yaml and nothing else.

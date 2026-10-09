@@ -57,6 +57,16 @@ k0s_version="$(awk '/^ *k0s:/ { k = 1; next } k && /^ *version:/ { print $2; exi
 [ -n "$k0s_version" ] || { echo "release: release.yaml names no k0s version" >&2; exit 1; }
 echo "release: k0s $k0s_version"
 curl -fsSL --retry 3 -o "$work/k0s" "https://github.com/k0sproject/k0s/releases/download/$k0s_version/k0s-$k0s_version-$arch"
+# helm ships when release.yaml pins it; the product build checks the binary
+# against that pin.
+helm_version="$(awk '/^ *helm:/ { h = 1; next } h && /^ *version:/ { print $2; exit }' "$OUT/release.yaml")"
+helm_env=()
+if [ -n "$helm_version" ]; then
+  echo "release: helm $helm_version"
+  curl -fsSL --retry 3 -o "$work/helm.tar.gz" "https://get.helm.sh/helm-$helm_version-linux-$arch.tar.gz"
+  tar -xzOf "$work/helm.tar.gz" "linux-$arch/helm" > "$work/helm"
+  helm_env=(HELM="$work/helm")
+fi
 
 pkg=github.com/Sneakers-PAM/sneakers-appliance/internal/release
 b64() { base64 -w0 < "$1"; }
@@ -67,7 +77,7 @@ pins="-X $pkg.Channel=production -X $pkg.Version=$VERSION \
 echo "release: product bundle"
 # It fits the base built here. Encrypting needs only the public update key;
 # the sign job signs the header and seals the .bin.
-VERSION="$VERSION" ARCH="$arch" CHANNEL=production BASES="$VERSION" RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" \
+env "${helm_env[@]}" VERSION="$VERSION" ARCH="$arch" CHANNEL=production BASES="$VERSION" RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" \
   SIGNATURES="$SIGNATURES" K0S="$work/k0s" RECIPIENT="$keys/update.pub" OUT="$work/product" bash "$root/build/product/build.sh"
 cp "$work/product/bin/header.json" "$OUT/product-header.json"
 cp "$work/product/bin/payload.age" "$OUT/product-payload.age"

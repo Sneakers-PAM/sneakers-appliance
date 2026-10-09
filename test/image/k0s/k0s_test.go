@@ -110,6 +110,8 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	next.Expect(`lab-hook: node ready`, 15*time.Minute)
 	next.Expect(`lab-hook: hello pod ready`, 15*time.Minute)
 	next.Expect(`lab-hook: edge pod ready`, 10*time.Minute)
+	next.Expect(`lab-hook: root shell kubectl works`, 2*time.Minute)
+	next.Expect(`lab-hook: root shell helm works`, 2*time.Minute)
 	if strings.Contains(next.Console(), "ErrImageNeverPull") {
 		t.Fatal("a pod needed an image the bundle doesn't hold")
 	}

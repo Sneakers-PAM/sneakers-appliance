@@ -69,11 +69,13 @@ same release key and encrypted to the same update key, with these header fields:
 | `kind` | `product` |
 | `bases` | the base versions it fits; the box refuses it on any other (`UPGRADE_PRODUCT_BASE`), before it decrypts anything |
 
-The payload is the unpacked bundle as a tar: `release.yaml`, the `k0s` binary, `images/` (the
+The payload is the unpacked bundle as a tar: `release.yaml`, the `k0s` binary, the `helm` binary
+when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
 airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
 and `manifests/<stack>/*.yaml`, the stacks k0s applies (the lab bundle's hello stack and interim
 edge, [k0s.md](k0s.md)). After it decrypts and unpacks one, the box checks it like the kit checks a
-root: only those entries, `k0s` with the SHA-256 its `release.yaml` pins, exactly the pinned images,
+root: only those entries, `k0s` (and `helm`, which it carries if and only if `release.yaml` pins it)
+with the SHA-256 its `release.yaml` pins, exactly the pinned images,
 each signed by the release key, and YAML stacks only (`KIT_BUNDLE_MISMATCH`, `KIT_IMAGE_UNSIGNED`).
 How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundle).
 
@@ -143,7 +145,7 @@ any certificate or key that isn't the recorded production one.
 
 The release `release.yaml` and its signature come from the pinned `sneakers-release` GitHub
 Release; the k0s binary from its upstream release, checked against the pin in `release.yaml`, goes
-into the product bundle with the images. The charts and the platform add-ons join the product
+into the product bundle with the images, and so does helm's when `release.yaml` pins it. The charts and the platform add-ons join the product
 bundle as their builds land; every
 image in it is signed with the release key, third-party ones included. amd64 only for now; arm64
 follows its kernel build.

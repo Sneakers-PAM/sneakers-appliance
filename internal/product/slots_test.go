@@ -86,9 +86,11 @@ func TestTheFirstInstallIsAStageAndAnApplyWithNoPrevious(t *testing.T) {
 	if st := e.slots.Status(); st != (product.Status{Installed: "0.2.0"}) {
 		t.Fatalf("installed status %+v", st)
 	}
-	fi, err := os.Stat(filepath.Join(e.slots.Current(), "k0s"))
-	if err != nil || fi.Mode().Perm() != 0o755 {
-		t.Fatalf("k0s in the current slot: %v %v", fi, err)
+	for _, bin := range []string{"k0s", "helm"} {
+		fi, err := os.Stat(filepath.Join(e.slots.Current(), bin))
+		if err != nil || fi.Mode().Perm() != 0o755 {
+			t.Fatalf("%s in the current slot: %v %v", bin, fi, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(e.slots.Current(), product.BundleFile)); err != nil {
 		t.Fatal(err)

@@ -57,3 +57,8 @@ wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l
 wait_for "edge pod ready" k -n sneakers-edge wait --for=condition=Ready pod -l app=edge --timeout=10s
 k get nodes -o wide
 k get pods -A -o wide
+# The root shell's kubectl and helm: the root's links into the product
+# slot, with the KUBECONFIG the root shell sets (internal/elevated).
+export KUBECONFIG=/var/lib/k0s/pki/admin.conf HELM_CACHE_HOME=/tmp/helm/cache HELM_CONFIG_HOME=/tmp/helm/config HELM_DATA_HOME=/tmp/helm/data
+if /usr/bin/kubectl get nodes; then say "root shell kubectl works"; else say "root shell kubectl failed"; fi
+if /usr/bin/helm list -A; then say "root shell helm works"; else say "root shell helm failed"; fi

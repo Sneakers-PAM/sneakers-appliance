@@ -23,6 +23,7 @@ owner.
 | `/usr/libexec/sneakers-elevated` | the root shell, started by accessd for an opened challenge; root's |
 | `/usr/sbin/sshd`, `/usr/libexec/openssh/{sshd-session,sshd-auth}`, `/usr/bin/ssh-keygen` | static OpenSSH ([static-tools.md](static-tools.md)) |
 | `/bin/busybox`, `/bin/sh -> busybox` | the elevated session's shell (`ASH_EXPAND_PRMT` for the minutes-left prompt) |
+| `/usr/bin/kubectl`, `/usr/bin/helm` | links to the installed product's `k0s` and `helm` for the root shell, dangling until a product is installed ([k0s.md](k0s.md#kubectl-and-helm-in-the-root-shell)) |
 | `/etc/k0s/{k0s.yaml.tmpl,containerd.toml,containerd.d/}`, `/usr/libexec/sneakers/k0s-interim` | k0s's config, containerd's config and the interim script that prepares the box and starts k0s from the installed product bundle ([k0s.md](k0s.md)) |
 | `/etc/cni -> /var/lib/cni-conf`, `/opt -> /var/lib/opt`, `/var/run -> /run`, `/var/log -> /var/lib/log`, `/etc/machine-id`, `/etc/hosts`, `/bin/{mount,umount}`, `/lib/modules`, `/usr/libexec/k0s/kubelet-plugins/volume/exec` | what k0s, containerd and the kubelet expect on the host ([k0s.md](k0s.md)) |
 | `/usr/lib/sneakers/services.d/` | the service table, from `os/rootfs/services.d/` |
