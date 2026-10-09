@@ -205,8 +205,9 @@ volume, so it outlives a reboot, an update and a revert) or else the default; th
 progress after an apply doesn't wait for a stack that's off. The MCP page (`McpService`) drives the
 switch named `mcp` (and `machine-api` when the product declares one; without it the machine API
 stays on): `SetMcp` keeps the setting, puts the switch's stacks in front of k0s or takes them away
-(k0s removes their objects), and restarts the workloads it names with the installed bundle's k0s,
-audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
+(k0s removes their objects), waits up to 90 s until k0s has applied every object in them (or
+removed them all), and only then restarts the workloads it names with the installed bundle's k0s,
+so a restarted workload reads the change; audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
 installed`.
 
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
