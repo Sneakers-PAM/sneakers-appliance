@@ -243,7 +243,10 @@ The first admin is an owner and the first root operator; the last owner can't be
 
 Sensitive actions need a sign-in or a fresh TOTP code (`SignInService.StepUp`) from the last 5
 minutes (`ACCESS_STEPUP_REQUIRED`). Issuing an SSH key, applying an update and reverting one take
-their own fresh code on every call instead. [osadmin-api.md](osadmin-api.md) lists the role, step-up and
+their own fresh code on every call instead. Codes stay on the actions that change who can get in,
+what the box serves or runs, or destroy data; staging an update, the certificate store's edits
+that don't change what :8443 serves, setup's Finish, the update and backup policies, and ending a
+session ask for none. [osadmin-api.md](osadmin-api.md) lists the role, step-up and
 audit action of every method.
 
 ## Status, Network, Logs and Power

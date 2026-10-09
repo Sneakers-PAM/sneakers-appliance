@@ -132,7 +132,6 @@ service SetupService {
   rpc Finish(FinishRequest) returns (FinishResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "setup.finish"
       setup_only: true
     };

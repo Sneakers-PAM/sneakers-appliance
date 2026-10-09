@@ -20,7 +20,6 @@ service BackupService {
   rpc SetBackupPolicy(SetBackupPolicyRequest) returns (SetBackupPolicyResponse) {
     option (rule) = {
       role: ROLE_ADMIN
-      step_up: true
       audit: "backup.policy.set"
     };
   }

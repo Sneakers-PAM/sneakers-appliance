@@ -101,7 +101,7 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    name carries; production builds only). With no mirror and `direct` off the box is air-gapped: it
    never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload is the only path. The mirror is an
    `https://` URL; the environment's proxy applies.
-2. **Stage** (owner, step-up). The signature, the channel and the payload's SHA-256 are verified
+2. **Stage** (owner, no code: it only writes the inactive slot, and nothing runs until Apply). The signature, the channel and the payload's SHA-256 are verified
    before anything is decrypted or unpacked; a patch must name the running version as a base.
    While the call runs, Updates asks `GetUpgrades` each second and shows the steps, with the bytes
    written into the slot.
@@ -144,7 +144,7 @@ override the refusal stays. The update window never overrides.
 
 The product (k0s, its images and the product's stacks) isn't in the base image. It ships as its own
 signed, encrypted `.bin`, `sneakers-product-<version>-<arch>.bin` ([release.md](release.md#the-product-bundle)),
-and goes through the same Updates flow as a base update, with the same checks, roles, step-up,
+and goes through the same Updates flow as a base update, with the same checks, roles, codes,
 audit, history, update window and maintenance gate. What differs is the slots and what an apply
 does:
 
@@ -168,7 +168,7 @@ and for an installed bundle (`start-when`, [init.md](init.md#the-service-table))
 product bundle runs no k0s and opens no product port. `GetUpgrades.product` shows the installed,
 staged and previous versions and whether k0s is running.
 
-**The policy** (owner, step-up): `automatic` applies a staged release once inside the daily window
+**The policy** (owner, no code): `automatic` applies a staged release once inside the daily window
 (default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. The
 window applies a staged product bundle first, then a staged base release. `direct` (off by
 default) lets the box fetch from the release source when no mirror is set or the mirror fails. It's

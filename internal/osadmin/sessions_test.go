@@ -212,7 +212,7 @@ func TestAnOwnerEndsAnElevatedShell(t *testing.T) {
 	}
 }
 
-func TestEndSessionNeedsAnOwnerAndAFreshSignIn(t *testing.T) {
+func TestEndSessionNeedsAnOwnerButNoCode(t *testing.T) {
 	b := newBox(t, true)
 	alice := b.browser()
 	alice.signIn("alice")
@@ -224,10 +224,14 @@ func TestEndSessionNeedsAnOwnerAndAFreshSignIn(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("an admin ended a session: %v", err)
 	}
-	b.clk.Advance(6 * time.Minute)
-	_, err = alice.power().EndSession(ctx, connect.NewRequest(&osadminv1.EndSessionRequest{Id: s.ID}))
-	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_STEPUP_REQUIRED")
 	if len(b.shells.ended) != 0 {
+		t.Fatalf("ended %v", b.shells.ended)
+	}
+	b.clk.Advance(6 * time.Minute)
+	if _, err := alice.power().EndSession(ctx, connect.NewRequest(&osadminv1.EndSessionRequest{Id: s.ID})); err != nil {
+		t.Fatalf("an owner ends a session outside the step-up window: %v", err)
+	}
+	if len(b.shells.ended) != 1 {
 		t.Fatalf("ended %v", b.shells.ended)
 	}
 }

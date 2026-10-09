@@ -26,7 +26,6 @@ service TlsService {
   rpc UploadCertificate(UploadCertificateRequest) returns (UploadCertificateResponse) {
     option (rule) = {
       role: ROLE_ADMIN
-      step_up: true
       audit: "tls.certificate.upload"
     };
   }
@@ -55,7 +54,6 @@ service TlsService {
   rpc GenerateCsr(GenerateCsrRequest) returns (GenerateCsrResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.csr.generate"
     };
   }
@@ -64,7 +62,6 @@ service TlsService {
   rpc CompleteCsr(CompleteCsrRequest) returns (CompleteCsrResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.csr.complete"
     };
   }
@@ -72,7 +69,6 @@ service TlsService {
   rpc DiscardCsr(DiscardCsrRequest) returns (DiscardCsrResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.csr.discard"
     };
   }
@@ -81,7 +77,6 @@ service TlsService {
   rpc ImportCertificate(ImportCertificateRequest) returns (ImportCertificateResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.certificate.import"
     };
   }
@@ -89,7 +84,6 @@ service TlsService {
   rpc DeleteCertificate(DeleteCertificateRequest) returns (DeleteCertificateResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.certificate.delete"
     };
   }
@@ -118,7 +112,6 @@ service TlsService {
   rpc SetAcme(SetAcmeRequest) returns (SetAcmeResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.acme.set"
     };
   }
@@ -127,7 +120,6 @@ service TlsService {
   rpc RenewNow(RenewNowRequest) returns (RenewNowResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "tls.acme.renew"
     };
   }

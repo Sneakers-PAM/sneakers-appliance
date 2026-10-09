@@ -42,7 +42,6 @@ service UpgradeService {
   rpc StageUpdate(StageUpdateRequest) returns (StageUpdateResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "upgrade.stage"
     };
   }
@@ -81,7 +80,6 @@ service UpgradeService {
   rpc SetUpgradePolicy(SetUpgradePolicyRequest) returns (SetUpgradePolicyResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "upgrade.policy.set"
     };
   }

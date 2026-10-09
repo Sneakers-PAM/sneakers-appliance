@@ -90,7 +90,7 @@ about the box.
 | `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |
 | `SetupService.DownloadEscrow` | owner | no | `setup.escrow.download` |
 | `SetupService.AcknowledgeSingleAdmin` | owner | no | `setup.single-admin.acknowledge` |
-| `SetupService.Finish` | owner | yes | `setup.finish` |
+| `SetupService.Finish` | owner | no | `setup.finish` |
 | `AccessService.ListAdmins` | admin | no | |
 | `AccessService.AddAdmin` | owner | yes | `access.admin.add` |
 | `AccessService.RemoveAdmin` | owner | yes | `access.admin.remove` |
@@ -119,29 +119,29 @@ about the box.
 | `PowerService.ApproveFactoryReset` | admin | yes | `power.factory-reset.approve` |
 | `PowerService.CancelFactoryReset` | admin | no | `power.factory-reset.cancel` |
 | `PowerService.ListSessions` | admin | no | |
-| `PowerService.EndSession` | owner | yes | `session.end` |
+| `PowerService.EndSession` | owner | no | `session.end` |
 | `UpgradeService.GetUpgrades` | admin | no | |
 | `UpgradeService.FetchUpdate` | admin | no | `upgrade.fetch` |
-| `UpgradeService.StageUpdate` | owner | yes | `upgrade.stage` |
+| `UpgradeService.StageUpdate` | owner | no | `upgrade.stage` |
 | `UpgradeService.ApplyUpdate` | owner | every call | `upgrade.apply` |
 | `UpgradeService.RevertUpdate` | owner | every call | `upgrade.revert` |
 | `UpgradeService.ListProductVersions` | admin | no | |
-| `UpgradeService.SetUpgradePolicy` | owner | yes | `upgrade.policy.set` |
+| `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |
 | `ElevationService.TerminateElevation` | owner | no | `elevation.terminate` |
 | `ElevationService.GetElevationRecording` | owner | no | `elevation.recording.view` |
 | `TlsService.GetCertificateStore` | admin | no | |
-| `TlsService.GenerateCsr` | owner | yes | `tls.csr.generate` |
-| `TlsService.CompleteCsr` | owner | yes | `tls.csr.complete` |
-| `TlsService.DiscardCsr` | owner | yes | `tls.csr.discard` |
-| `TlsService.ImportCertificate` | owner | yes | `tls.certificate.import` |
-| `TlsService.DeleteCertificate` | owner | yes | `tls.certificate.delete` |
+| `TlsService.GenerateCsr` | owner | no | `tls.csr.generate` |
+| `TlsService.CompleteCsr` | owner | no | `tls.csr.complete` |
+| `TlsService.DiscardCsr` | owner | no | `tls.csr.discard` |
+| `TlsService.ImportCertificate` | owner | no | `tls.certificate.import` |
+| `TlsService.DeleteCertificate` | owner | no | `tls.certificate.delete` |
 | `TlsService.AssignCertificate` | owner | yes | `tls.endpoint.assign` |
 | `TlsService.RevertToSelfSigned` | owner | yes | `tls.endpoint.revert` |
-| `TlsService.SetAcme` | owner | yes | `tls.acme.set` |
-| `TlsService.RenewNow` | owner | yes | `tls.acme.renew` |
+| `TlsService.SetAcme` | owner | no | `tls.acme.set` |
+| `TlsService.RenewNow` | owner | no | `tls.acme.renew` |
 | `RootShellService.IssueRootShellCode` | admin | no | `rootshell.code.issue` |
 
 Sessions: `ListSessions` lists every live session on the box, oldest first, each an
@@ -193,12 +193,12 @@ The pages for these services show "Not available in this release" until their ba
 |---|---|---|---|
 | `TlsService.GetTls` | admin | no | |
 | `TlsService.CreateCsr` | admin | no | `tls.csr.create` |
-| `TlsService.UploadCertificate` | admin | yes | `tls.certificate.upload` |
+| `TlsService.UploadCertificate` | admin | no | `tls.certificate.upload` |
 | `TlsService.SetAdminCertificate` | owner | yes | `tls.admin-certificate.set` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `BackupService.GetBackups` | admin | no | |
-| `BackupService.SetBackupPolicy` | admin | yes | `backup.policy.set` |
+| `BackupService.SetBackupPolicy` | admin | no | `backup.policy.set` |
 | `BackupService.RunBackup` | admin | no | `backup.run` |
 | `BackupService.Restore` | owner | yes | `backup.restore` |
 | `ModulesService.ListModules` | admin | no | |

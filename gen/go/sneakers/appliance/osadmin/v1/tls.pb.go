@@ -2619,24 +2619,24 @@ const file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc = "" +
 	"\rAcmeChallenge\x12\x1e\n" +
 	"\x1aACME_CHALLENGE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ACME_CHALLENGE_HTTP01\x10\x01\x12\x18\n" +
-	"\x14ACME_CHALLENGE_DNS01\x10\x022\xe9\x10\n" +
+	"\x14ACME_CHALLENGE_DNS01\x10\x022\xd8\x10\n" +
 	"\n" +
 	"TlsService\x12p\n" +
 	"\x06GetTls\x12,.sneakers.appliance.osadmin.v1.GetTlsRequest\x1a-.sneakers.appliance.osadmin.v1.GetTlsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x86\x01\n" +
-	"\tCreateCsr\x12/.sneakers.appliance.osadmin.v1.CreateCsrRequest\x1a0.sneakers.appliance.osadmin.v1.CreateCsrResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0etls.csr.create\x12\xa8\x01\n" +
-	"\x11UploadCertificate\x127.sneakers.appliance.osadmin.v1.UploadCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.UploadCertificateResponse\" \xc2\xf3\x18\x1c\x10\x01\x18\x01\"\x16tls.certificate.upload\x12\xb1\x01\n" +
+	"\tCreateCsr\x12/.sneakers.appliance.osadmin.v1.CreateCsrRequest\x1a0.sneakers.appliance.osadmin.v1.CreateCsrResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0etls.csr.create\x12\xa6\x01\n" +
+	"\x11UploadCertificate\x127.sneakers.appliance.osadmin.v1.UploadCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.UploadCertificateResponse\"\x1e\xc2\xf3\x18\x1a\x10\x01\"\x16tls.certificate.upload\x12\xb1\x01\n" +
 	"\x13SetAdminCertificate\x129.sneakers.appliance.osadmin.v1.SetAdminCertificateRequest\x1a:.sneakers.appliance.osadmin.v1.SetAdminCertificateResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19tls.admin-certificate.set\x12\x97\x01\n" +
-	"\x13GetCertificateStore\x129.sneakers.appliance.osadmin.v1.GetCertificateStoreRequest\x1a:.sneakers.appliance.osadmin.v1.GetCertificateStoreResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x90\x01\n" +
-	"\vGenerateCsr\x121.sneakers.appliance.osadmin.v1.GenerateCsrRequest\x1a2.sneakers.appliance.osadmin.v1.GenerateCsrResponse\"\x1a\xc2\xf3\x18\x16\x10\x02\x18\x01\"\x10tls.csr.generate\x12\x90\x01\n" +
-	"\vCompleteCsr\x121.sneakers.appliance.osadmin.v1.CompleteCsrRequest\x1a2.sneakers.appliance.osadmin.v1.CompleteCsrResponse\"\x1a\xc2\xf3\x18\x16\x10\x02\x18\x01\"\x10tls.csr.complete\x12\x8c\x01\n" +
+	"\x13GetCertificateStore\x129.sneakers.appliance.osadmin.v1.GetCertificateStoreRequest\x1a:.sneakers.appliance.osadmin.v1.GetCertificateStoreResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x8e\x01\n" +
+	"\vGenerateCsr\x121.sneakers.appliance.osadmin.v1.GenerateCsrRequest\x1a2.sneakers.appliance.osadmin.v1.GenerateCsrResponse\"\x18\xc2\xf3\x18\x14\x10\x02\"\x10tls.csr.generate\x12\x8e\x01\n" +
+	"\vCompleteCsr\x121.sneakers.appliance.osadmin.v1.CompleteCsrRequest\x1a2.sneakers.appliance.osadmin.v1.CompleteCsrResponse\"\x18\xc2\xf3\x18\x14\x10\x02\"\x10tls.csr.complete\x12\x8a\x01\n" +
 	"\n" +
-	"DiscardCsr\x120.sneakers.appliance.osadmin.v1.DiscardCsrRequest\x1a1.sneakers.appliance.osadmin.v1.DiscardCsrResponse\"\x19\xc2\xf3\x18\x15\x10\x02\x18\x01\"\x0ftls.csr.discard\x12\xa8\x01\n" +
-	"\x11ImportCertificate\x127.sneakers.appliance.osadmin.v1.ImportCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.ImportCertificateResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16tls.certificate.import\x12\xa8\x01\n" +
-	"\x11DeleteCertificate\x127.sneakers.appliance.osadmin.v1.DeleteCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.DeleteCertificateResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16tls.certificate.delete\x12\xa5\x01\n" +
+	"DiscardCsr\x120.sneakers.appliance.osadmin.v1.DiscardCsrRequest\x1a1.sneakers.appliance.osadmin.v1.DiscardCsrResponse\"\x17\xc2\xf3\x18\x13\x10\x02\"\x0ftls.csr.discard\x12\xa6\x01\n" +
+	"\x11ImportCertificate\x127.sneakers.appliance.osadmin.v1.ImportCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.ImportCertificateResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x16tls.certificate.import\x12\xa6\x01\n" +
+	"\x11DeleteCertificate\x127.sneakers.appliance.osadmin.v1.DeleteCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.DeleteCertificateResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x16tls.certificate.delete\x12\xa5\x01\n" +
 	"\x11AssignCertificate\x127.sneakers.appliance.osadmin.v1.AssignCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.AssignCertificateResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13tls.endpoint.assign\x12\xa8\x01\n" +
-	"\x12RevertToSelfSigned\x128.sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest\x1a9.sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13tls.endpoint.revert\x12\x80\x01\n" +
-	"\aSetAcme\x12-.sneakers.appliance.osadmin.v1.SetAcmeRequest\x1a..sneakers.appliance.osadmin.v1.SetAcmeResponse\"\x16\xc2\xf3\x18\x12\x10\x02\x18\x01\"\ftls.acme.set\x12\x85\x01\n" +
-	"\bRenewNow\x12..sneakers.appliance.osadmin.v1.RenewNowRequest\x1a/.sneakers.appliance.osadmin.v1.RenewNowResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0etls.acme.renewB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\x12RevertToSelfSigned\x128.sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest\x1a9.sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13tls.endpoint.revert\x12~\n" +
+	"\aSetAcme\x12-.sneakers.appliance.osadmin.v1.SetAcmeRequest\x1a..sneakers.appliance.osadmin.v1.SetAcmeResponse\"\x14\xc2\xf3\x18\x10\x10\x02\"\ftls.acme.set\x12\x83\x01\n" +
+	"\bRenewNow\x12..sneakers.appliance.osadmin.v1.RenewNowRequest\x1a/.sneakers.appliance.osadmin.v1.RenewNowResponse\"\x16\xc2\xf3\x18\x12\x10\x02\"\x0etls.acme.renewB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_tls_proto_rawDescOnce sync.Once

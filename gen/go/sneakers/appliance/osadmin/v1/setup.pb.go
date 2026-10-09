@@ -1809,7 +1809,7 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x15CODE_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fCODE_KIND_SETUP\x10\x01\x12\x14\n" +
 	"\x10CODE_KIND_INVITE\x10\x02\x12\x15\n" +
-	"\x11CODE_KIND_RECOVER\x10\x032\x88\x0f\n" +
+	"\x11CODE_KIND_RECOVER\x10\x032\x86\x0f\n" +
 	"\fSetupService\x12x\n" +
 	"\bGetSetup\x12..sneakers.appliance.osadmin.v1.GetSetupRequest\x1a/.sneakers.appliance.osadmin.v1.GetSetupResponse\"\v\xc2\xf3\x18\x04\x10\x01(\x01\x90\x02\x01\x12\x8c\x01\n" +
 	"\n" +
@@ -1822,8 +1822,8 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x13GenerateRecoveryKey\x129.sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest\x1a:.sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse\"%\xc2\xf3\x18!\x10\x02\x18\x01\"\x1bsetup.recovery-key.generate\x12\xab\x01\n" +
 	"\x11RemoveRecoveryKey\x127.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest\x1a8.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19setup.recovery-key.remove\x12\x9c\x01\n" +
 	"\x0eDownloadEscrow\x124.sneakers.appliance.osadmin.v1.DownloadEscrowRequest\x1a5.sneakers.appliance.osadmin.v1.DownloadEscrowResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\"\x15setup.escrow.download\x12\xbf\x01\n" +
-	"\x16AcknowledgeSingleAdmin\x12<.sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest\x1a=.sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse\"(\xc2\xf3\x18$\x10\x02\"\x1esetup.single-admin.acknowledge0\x01\x12\x7f\n" +
-	"\x06Finish\x12,.sneakers.appliance.osadmin.v1.FinishRequest\x1a-.sneakers.appliance.osadmin.v1.FinishResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\fsetup.finish0\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\x16AcknowledgeSingleAdmin\x12<.sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest\x1a=.sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse\"(\xc2\xf3\x18$\x10\x02\"\x1esetup.single-admin.acknowledge0\x01\x12}\n" +
+	"\x06Finish\x12,.sneakers.appliance.osadmin.v1.FinishRequest\x1a-.sneakers.appliance.osadmin.v1.FinishResponse\"\x16\xc2\xf3\x18\x12\x10\x02\"\fsetup.finish0\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_setup_proto_rawDescOnce sync.Once
