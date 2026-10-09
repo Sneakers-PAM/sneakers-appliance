@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 )
 
 // Interactive runs the line CLI on a terminal until exit, quit or end of
@@ -21,7 +23,7 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 		if key != '\t' {
 			return "", 0, false
 		}
-		done := Complete(e.Origin, line[:pos])
+		done := CompleteFor(e.Origin, e.Product, line[:pos])
 		if done == line[:pos] {
 			return "", 0, false
 		}
@@ -72,9 +74,12 @@ func (r *termLines) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-// Complete extends the typed words to the longest unambiguous command path
-// for origin o.
-func Complete(o Origin, typed string) string {
+// Complete extends the typed words to the longest unambiguous base command
+// path for origin o.
+func Complete(o Origin, typed string) string { return CompleteFor(o, productinfo.Info{}, typed) }
+
+// CompleteFor is Complete with product p's commands too.
+func CompleteFor(o Origin, p productinfo.Info, typed string) string {
 	words := strings.Fields(typed)
 	trailing := strings.HasSuffix(typed, " ") || typed == ""
 	if !trailing && len(words) > 0 {
@@ -87,7 +92,7 @@ func Complete(o Origin, typed string) string {
 	}
 	seen := map[string]bool{}
 	var next []string
-	for _, name := range append(Names(o), "help", "exit") {
+	for _, name := range append(NamesFor(o, p), "help", "exit") {
 		p := strings.Fields(name)
 		if len(p) <= len(words) || !hasPrefixWords(p, words) {
 			continue

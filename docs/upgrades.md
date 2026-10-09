@@ -174,7 +174,10 @@ On an air-gapped box the admin uploads the bundle instead.
 **Nothing starts without it.** k0s's service entry waits for `setup/done` (the first admin exists)
 and for an installed bundle (`start-when`, [init.md](init.md#the-service-table)), so a box with no
 product bundle runs no k0s and opens no product port. `GetUpgrades.product` shows the installed,
-staged and previous versions and whether k0s is running.
+staged and previous versions, whether k0s is running, and `name`, the installed product's name for
+people ("Sneakers", from the current slot's `<name>-product` header name; empty with no product).
+The :8443 nav shows the product's own section under that name, and only while it is set; the closed
+shell's product group follows the same header ([ssh-and-elevation.md](ssh-and-elevation.md#product-commands)).
 
 **The policy** (owner, no code): `automatic` applies a staged release once inside the daily window
 (default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. The

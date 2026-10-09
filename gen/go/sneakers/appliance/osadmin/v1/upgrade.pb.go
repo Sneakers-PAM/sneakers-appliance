@@ -244,7 +244,12 @@ type ProductSlots struct {
 	// is none.
 	PreviousVersion string `protobuf:"bytes,3,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
 	// running is true while the product services (k0s) run.
-	Running       bool `protobuf:"varint,4,opt,name=running,proto3" json:"running,omitempty"`
+	Running bool `protobuf:"varint,4,opt,name=running,proto3" json:"running,omitempty"`
+	// name is the installed product's name for people, such as "Sneakers",
+	// from the current slot's header; empty before the first install. The
+	// :8443 nav shows the product's own section under it, and only while it
+	// is set.
+	Name          string `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -305,6 +310,13 @@ func (x *ProductSlots) GetRunning() bool {
 		return x.Running
 	}
 	return false
+}
+
+func (x *ProductSlots) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
 }
 
 // ProductVersion is one product bundle a source offers.
@@ -1682,12 +1694,13 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x0ewindow_minutes\x18\x03 \x01(\x05R\rwindowMinutes\x12\x1d\n" +
 	"\n" +
 	"mirror_url\x18\x04 \x01(\tR\tmirrorUrl\x12\x16\n" +
-	"\x06direct\x18\x05 \x01(\bR\x06direct\"\xa7\x01\n" +
+	"\x06direct\x18\x05 \x01(\bR\x06direct\"\xbb\x01\n" +
 	"\fProductSlots\x12+\n" +
 	"\x11installed_version\x18\x01 \x01(\tR\x10installedVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12)\n" +
 	"\x10previous_version\x18\x03 \x01(\tR\x0fpreviousVersion\x12\x18\n" +
-	"\arunning\x18\x04 \x01(\bR\arunning\"\xb7\x01\n" +
+	"\arunning\x18\x04 \x01(\bR\arunning\x12\x12\n" +
+	"\x04name\x18\x05 \x01(\tR\x04name\"\xb7\x01\n" +
 	"\x0eProductVersion\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x18\n" +

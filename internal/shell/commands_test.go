@@ -92,7 +92,7 @@ func TestEveryCommandParses(t *testing.T) {
 		shell.OriginSSH: {
 			"status", "status -o json", "network show", "network confirm abc", "keys list", "keys list --admin bob",
 			"admins list", "tls show", "backup list",
-			"restore", "upgrade status", "mcp off", "resources", "logs export", "support-bundle",
+			"restore", "upgrade status", "resources", "logs export", "support-bundle",
 		},
 		shell.OriginConsole: {"status", "network show", "keys list", "admins list", "tls show"},
 	}

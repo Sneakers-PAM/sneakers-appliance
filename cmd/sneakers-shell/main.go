@@ -31,6 +31,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/shell"
 )
 
@@ -80,7 +81,8 @@ func run() int {
 		return 1
 	}
 	defer b.EndLogin(context.WithoutCancel(ctx), login)
-	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: stdin, Out: os.Stdout, Err: os.Stderr}
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: stdin, Out: os.Stdout, Err: os.Stderr,
+		Product: productinfo.Installed(productinfo.Dir)}
 	if tty {
 		e.RootShell = rootShell(fd)
 	}
