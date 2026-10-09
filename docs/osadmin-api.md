@@ -142,6 +142,8 @@ about the box.
 | `TlsService.RevertToSelfSigned` | owner | yes | `tls.endpoint.revert` |
 | `TlsService.SetAcme` | owner | no | `tls.acme.set` |
 | `TlsService.RenewNow` | owner | no | `tls.acme.renew` |
+| `TlsService.SetUpdateTrust` | owner | no | `tls.update-trust.set` |
+| `TlsService.ClearUpdateTrust` | owner | no | `tls.update-trust.clear` |
 | `RootShellService.IssueRootShellCode` | admin | no | `rootshell.code.issue` |
 
 Sessions: `ListSessions` lists every live session on the box, oldest first, each an

@@ -1386,11 +1386,13 @@ func (*GetCertificateStoreRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetCertificateStoreResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Certificates  []*StoredCertificate   `protobuf:"bytes,1,rep,name=certificates,proto3" json:"certificates,omitempty"`
-	Csrs          []*PendingCsr          `protobuf:"bytes,2,rep,name=csrs,proto3" json:"csrs,omitempty"`
-	Endpoints     []*Endpoint            `protobuf:"bytes,3,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
-	Acme          *AcmeState             `protobuf:"bytes,4,opt,name=acme,proto3" json:"acme,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Certificates []*StoredCertificate   `protobuf:"bytes,1,rep,name=certificates,proto3" json:"certificates,omitempty"`
+	Csrs         []*PendingCsr          `protobuf:"bytes,2,rep,name=csrs,proto3" json:"csrs,omitempty"`
+	Endpoints    []*Endpoint            `protobuf:"bytes,3,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
+	Acme         *AcmeState             `protobuf:"bytes,4,opt,name=acme,proto3" json:"acme,omitempty"`
+	// update_trust is the update mirror's trust; unset when none is set.
+	UpdateTrust   *UpdateTrust `protobuf:"bytes,5,opt,name=update_trust,json=updateTrust,proto3" json:"update_trust,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1453,6 +1455,328 @@ func (x *GetCertificateStoreResponse) GetAcme() *AcmeState {
 	return nil
 }
 
+func (x *GetCertificateStoreResponse) GetUpdateTrust() *UpdateTrust {
+	if x != nil {
+		return x.UpdateTrust
+	}
+	return nil
+}
+
+// UpdateTrust is what an https:// update mirror is checked against beyond
+// the system roots. It's trusted for the mirror's fetches and nothing else.
+type UpdateTrust struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Cas   []*TrustedCa           `protobuf:"bytes,1,rep,name=cas,proto3" json:"cas,omitempty"`
+	// pin_sha256 is the pinned server certificate fingerprint, colon hex in
+	// capitals; empty when there's no pin.
+	PinSha256     string                 `protobuf:"bytes,2,opt,name=pin_sha256,json=pinSha256,proto3" json:"pin_sha256,omitempty"`
+	SetBy         string                 `protobuf:"bytes,3,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
+	SetAt         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=set_at,json=setAt,proto3" json:"set_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTrust) Reset() {
+	*x = UpdateTrust{}
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTrust) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTrust) ProtoMessage() {}
+
+func (x *UpdateTrust) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTrust.ProtoReflect.Descriptor instead.
+func (*UpdateTrust) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *UpdateTrust) GetCas() []*TrustedCa {
+	if x != nil {
+		return x.Cas
+	}
+	return nil
+}
+
+func (x *UpdateTrust) GetPinSha256() string {
+	if x != nil {
+		return x.PinSha256
+	}
+	return ""
+}
+
+func (x *UpdateTrust) GetSetBy() string {
+	if x != nil {
+		return x.SetBy
+	}
+	return ""
+}
+
+func (x *UpdateTrust) GetSetAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SetAt
+	}
+	return nil
+}
+
+// TrustedCa is one CA certificate in the update trust.
+type TrustedCa struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Subject  string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Issuer   string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	NotAfter *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// sha256 is the certificate's fingerprint, colon hex.
+	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrustedCa) Reset() {
+	*x = TrustedCa{}
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrustedCa) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrustedCa) ProtoMessage() {}
+
+func (x *TrustedCa) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrustedCa.ProtoReflect.Descriptor instead.
+func (*TrustedCa) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *TrustedCa) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *TrustedCa) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *TrustedCa) GetNotAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotAfter
+	}
+	return nil
+}
+
+func (x *TrustedCa) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+type SetUpdateTrustRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ca_pem is one or more PEM CA certificates (basic constraints CA:TRUE,
+	// valid now), at most 8; empty keeps the system roots alone, for a pin
+	// on a mirror with a public certificate.
+	CaPem string `protobuf:"bytes,1,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
+	// pin_sha256 is an optional SHA-256 of the mirror's server certificate:
+	// 64 hex digits, colons and spaces allowed, any case.
+	PinSha256     string `protobuf:"bytes,2,opt,name=pin_sha256,json=pinSha256,proto3" json:"pin_sha256,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUpdateTrustRequest) Reset() {
+	*x = SetUpdateTrustRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUpdateTrustRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUpdateTrustRequest) ProtoMessage() {}
+
+func (x *SetUpdateTrustRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUpdateTrustRequest.ProtoReflect.Descriptor instead.
+func (*SetUpdateTrustRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *SetUpdateTrustRequest) GetCaPem() string {
+	if x != nil {
+		return x.CaPem
+	}
+	return ""
+}
+
+func (x *SetUpdateTrustRequest) GetPinSha256() string {
+	if x != nil {
+		return x.PinSha256
+	}
+	return ""
+}
+
+type SetUpdateTrustResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UpdateTrust   *UpdateTrust           `protobuf:"bytes,1,opt,name=update_trust,json=updateTrust,proto3" json:"update_trust,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetUpdateTrustResponse) Reset() {
+	*x = SetUpdateTrustResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetUpdateTrustResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetUpdateTrustResponse) ProtoMessage() {}
+
+func (x *SetUpdateTrustResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetUpdateTrustResponse.ProtoReflect.Descriptor instead.
+func (*SetUpdateTrustResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SetUpdateTrustResponse) GetUpdateTrust() *UpdateTrust {
+	if x != nil {
+		return x.UpdateTrust
+	}
+	return nil
+}
+
+type ClearUpdateTrustRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearUpdateTrustRequest) Reset() {
+	*x = ClearUpdateTrustRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearUpdateTrustRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearUpdateTrustRequest) ProtoMessage() {}
+
+func (x *ClearUpdateTrustRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearUpdateTrustRequest.ProtoReflect.Descriptor instead.
+func (*ClearUpdateTrustRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{21}
+}
+
+type ClearUpdateTrustResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearUpdateTrustResponse) Reset() {
+	*x = ClearUpdateTrustResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearUpdateTrustResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearUpdateTrustResponse) ProtoMessage() {}
+
+func (x *ClearUpdateTrustResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearUpdateTrustResponse.ProtoReflect.Descriptor instead.
+func (*ClearUpdateTrustResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{22}
+}
+
 type GenerateCsrRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// names is at most one extra name, a DNS name or an IP address: a CSR is
@@ -1475,7 +1799,7 @@ type GenerateCsrRequest struct {
 
 func (x *GenerateCsrRequest) Reset() {
 	*x = GenerateCsrRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1487,7 +1811,7 @@ func (x *GenerateCsrRequest) String() string {
 func (*GenerateCsrRequest) ProtoMessage() {}
 
 func (x *GenerateCsrRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1500,7 +1824,7 @@ func (x *GenerateCsrRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateCsrRequest.ProtoReflect.Descriptor instead.
 func (*GenerateCsrRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{17}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GenerateCsrRequest) GetNames() []string {
@@ -1568,7 +1892,7 @@ type GenerateCsrResponse struct {
 
 func (x *GenerateCsrResponse) Reset() {
 	*x = GenerateCsrResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1580,7 +1904,7 @@ func (x *GenerateCsrResponse) String() string {
 func (*GenerateCsrResponse) ProtoMessage() {}
 
 func (x *GenerateCsrResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1593,7 +1917,7 @@ func (x *GenerateCsrResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateCsrResponse.ProtoReflect.Descriptor instead.
 func (*GenerateCsrResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{18}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GenerateCsrResponse) GetCsr() *PendingCsr {
@@ -1617,7 +1941,7 @@ type CompleteCsrRequest struct {
 
 func (x *CompleteCsrRequest) Reset() {
 	*x = CompleteCsrRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1629,7 +1953,7 @@ func (x *CompleteCsrRequest) String() string {
 func (*CompleteCsrRequest) ProtoMessage() {}
 
 func (x *CompleteCsrRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1642,7 +1966,7 @@ func (x *CompleteCsrRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteCsrRequest.ProtoReflect.Descriptor instead.
 func (*CompleteCsrRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{19}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CompleteCsrRequest) GetCsrId() string {
@@ -1683,7 +2007,7 @@ type CompleteCsrResponse struct {
 
 func (x *CompleteCsrResponse) Reset() {
 	*x = CompleteCsrResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1695,7 +2019,7 @@ func (x *CompleteCsrResponse) String() string {
 func (*CompleteCsrResponse) ProtoMessage() {}
 
 func (x *CompleteCsrResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1708,7 +2032,7 @@ func (x *CompleteCsrResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteCsrResponse.ProtoReflect.Descriptor instead.
 func (*CompleteCsrResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{20}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *CompleteCsrResponse) GetCertificate() *StoredCertificate {
@@ -1734,7 +2058,7 @@ type DiscardCsrRequest struct {
 
 func (x *DiscardCsrRequest) Reset() {
 	*x = DiscardCsrRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1746,7 +2070,7 @@ func (x *DiscardCsrRequest) String() string {
 func (*DiscardCsrRequest) ProtoMessage() {}
 
 func (x *DiscardCsrRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1759,7 +2083,7 @@ func (x *DiscardCsrRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardCsrRequest.ProtoReflect.Descriptor instead.
 func (*DiscardCsrRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{21}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *DiscardCsrRequest) GetCsrId() string {
@@ -1777,7 +2101,7 @@ type DiscardCsrResponse struct {
 
 func (x *DiscardCsrResponse) Reset() {
 	*x = DiscardCsrResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1789,7 +2113,7 @@ func (x *DiscardCsrResponse) String() string {
 func (*DiscardCsrResponse) ProtoMessage() {}
 
 func (x *DiscardCsrResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1802,7 +2126,7 @@ func (x *DiscardCsrResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardCsrResponse.ProtoReflect.Descriptor instead.
 func (*DiscardCsrResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{22}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{28}
 }
 
 type ImportCertificateRequest struct {
@@ -1824,7 +2148,7 @@ type ImportCertificateRequest struct {
 
 func (x *ImportCertificateRequest) Reset() {
 	*x = ImportCertificateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1836,7 +2160,7 @@ func (x *ImportCertificateRequest) String() string {
 func (*ImportCertificateRequest) ProtoMessage() {}
 
 func (x *ImportCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1849,7 +2173,7 @@ func (x *ImportCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportCertificateRequest.ProtoReflect.Descriptor instead.
 func (*ImportCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{23}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ImportCertificateRequest) GetCertificatePem() string {
@@ -1904,7 +2228,7 @@ type ImportCertificateResponse struct {
 
 func (x *ImportCertificateResponse) Reset() {
 	*x = ImportCertificateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1916,7 +2240,7 @@ func (x *ImportCertificateResponse) String() string {
 func (*ImportCertificateResponse) ProtoMessage() {}
 
 func (x *ImportCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1929,7 +2253,7 @@ func (x *ImportCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportCertificateResponse.ProtoReflect.Descriptor instead.
 func (*ImportCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{24}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *ImportCertificateResponse) GetCertificate() *StoredCertificate {
@@ -1955,7 +2279,7 @@ type DeleteCertificateRequest struct {
 
 func (x *DeleteCertificateRequest) Reset() {
 	*x = DeleteCertificateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2291,7 @@ func (x *DeleteCertificateRequest) String() string {
 func (*DeleteCertificateRequest) ProtoMessage() {}
 
 func (x *DeleteCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2304,7 @@ func (x *DeleteCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCertificateRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{25}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *DeleteCertificateRequest) GetCertificateId() string {
@@ -1998,7 +2322,7 @@ type DeleteCertificateResponse struct {
 
 func (x *DeleteCertificateResponse) Reset() {
 	*x = DeleteCertificateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2010,7 +2334,7 @@ func (x *DeleteCertificateResponse) String() string {
 func (*DeleteCertificateResponse) ProtoMessage() {}
 
 func (x *DeleteCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2023,7 +2347,7 @@ func (x *DeleteCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCertificateResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{26}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{32}
 }
 
 type AssignCertificateRequest struct {
@@ -2036,7 +2360,7 @@ type AssignCertificateRequest struct {
 
 func (x *AssignCertificateRequest) Reset() {
 	*x = AssignCertificateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2048,7 +2372,7 @@ func (x *AssignCertificateRequest) String() string {
 func (*AssignCertificateRequest) ProtoMessage() {}
 
 func (x *AssignCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2061,7 +2385,7 @@ func (x *AssignCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignCertificateRequest.ProtoReflect.Descriptor instead.
 func (*AssignCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{27}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *AssignCertificateRequest) GetEndpointId() string {
@@ -2087,7 +2411,7 @@ type AssignCertificateResponse struct {
 
 func (x *AssignCertificateResponse) Reset() {
 	*x = AssignCertificateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2099,7 +2423,7 @@ func (x *AssignCertificateResponse) String() string {
 func (*AssignCertificateResponse) ProtoMessage() {}
 
 func (x *AssignCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2112,7 +2436,7 @@ func (x *AssignCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignCertificateResponse.ProtoReflect.Descriptor instead.
 func (*AssignCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{28}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *AssignCertificateResponse) GetEndpoint() *Endpoint {
@@ -2131,7 +2455,7 @@ type RevertToSelfSignedRequest struct {
 
 func (x *RevertToSelfSignedRequest) Reset() {
 	*x = RevertToSelfSignedRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[29]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2143,7 +2467,7 @@ func (x *RevertToSelfSignedRequest) String() string {
 func (*RevertToSelfSignedRequest) ProtoMessage() {}
 
 func (x *RevertToSelfSignedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[29]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2156,7 +2480,7 @@ func (x *RevertToSelfSignedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertToSelfSignedRequest.ProtoReflect.Descriptor instead.
 func (*RevertToSelfSignedRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{29}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *RevertToSelfSignedRequest) GetEndpointId() string {
@@ -2175,7 +2499,7 @@ type RevertToSelfSignedResponse struct {
 
 func (x *RevertToSelfSignedResponse) Reset() {
 	*x = RevertToSelfSignedResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[30]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2187,7 +2511,7 @@ func (x *RevertToSelfSignedResponse) String() string {
 func (*RevertToSelfSignedResponse) ProtoMessage() {}
 
 func (x *RevertToSelfSignedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[30]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2200,7 +2524,7 @@ func (x *RevertToSelfSignedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertToSelfSignedResponse.ProtoReflect.Descriptor instead.
 func (*RevertToSelfSignedResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{30}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *RevertToSelfSignedResponse) GetEndpoint() *Endpoint {
@@ -2232,7 +2556,7 @@ type SetAcmeRequest struct {
 
 func (x *SetAcmeRequest) Reset() {
 	*x = SetAcmeRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[31]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2244,7 +2568,7 @@ func (x *SetAcmeRequest) String() string {
 func (*SetAcmeRequest) ProtoMessage() {}
 
 func (x *SetAcmeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[31]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2257,7 +2581,7 @@ func (x *SetAcmeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAcmeRequest.ProtoReflect.Descriptor instead.
 func (*SetAcmeRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{31}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SetAcmeRequest) GetIssuer() AcmeIssuer {
@@ -2331,7 +2655,7 @@ type SetAcmeResponse struct {
 
 func (x *SetAcmeResponse) Reset() {
 	*x = SetAcmeResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[32]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2343,7 +2667,7 @@ func (x *SetAcmeResponse) String() string {
 func (*SetAcmeResponse) ProtoMessage() {}
 
 func (x *SetAcmeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[32]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2356,7 +2680,7 @@ func (x *SetAcmeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetAcmeResponse.ProtoReflect.Descriptor instead.
 func (*SetAcmeResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{32}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{38}
 }
 
 type RenewNowRequest struct {
@@ -2368,7 +2692,7 @@ type RenewNowRequest struct {
 
 func (x *RenewNowRequest) Reset() {
 	*x = RenewNowRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[33]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2380,7 +2704,7 @@ func (x *RenewNowRequest) String() string {
 func (*RenewNowRequest) ProtoMessage() {}
 
 func (x *RenewNowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[33]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2393,7 +2717,7 @@ func (x *RenewNowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewNowRequest.ProtoReflect.Descriptor instead.
 func (*RenewNowRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{33}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RenewNowRequest) GetEndpointId() string {
@@ -2411,7 +2735,7 @@ type RenewNowResponse struct {
 
 func (x *RenewNowResponse) Reset() {
 	*x = RenewNowResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[34]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2423,7 +2747,7 @@ func (x *RenewNowResponse) String() string {
 func (*RenewNowResponse) ProtoMessage() {}
 
 func (x *RenewNowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[34]
+	mi := &file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2436,7 +2760,7 @@ func (x *RenewNowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewNowResponse.ProtoReflect.Descriptor instead.
 func (*RenewNowResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{34}
+	return file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP(), []int{40}
 }
 
 var File_sneakers_appliance_osadmin_v1_tls_proto protoreflect.FileDescriptor
@@ -2515,12 +2839,32 @@ const file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc = "" +
 	"\x06detail\x18\x03 \x01(\tR\x06detail\"Z\n" +
 	"\x10ValidationReport\x12F\n" +
 	"\x06checks\x18\x01 \x03(\v2..sneakers.appliance.osadmin.v1.ValidationCheckR\x06checks\"\x1c\n" +
-	"\x1aGetCertificateStoreRequest\"\xb7\x02\n" +
+	"\x1aGetCertificateStoreRequest\"\x86\x03\n" +
 	"\x1bGetCertificateStoreResponse\x12T\n" +
 	"\fcertificates\x18\x01 \x03(\v20.sneakers.appliance.osadmin.v1.StoredCertificateR\fcertificates\x12=\n" +
 	"\x04csrs\x18\x02 \x03(\v2).sneakers.appliance.osadmin.v1.PendingCsrR\x04csrs\x12E\n" +
 	"\tendpoints\x18\x03 \x03(\v2'.sneakers.appliance.osadmin.v1.EndpointR\tendpoints\x12<\n" +
-	"\x04acme\x18\x04 \x01(\v2(.sneakers.appliance.osadmin.v1.AcmeStateR\x04acme\"\xb5\x02\n" +
+	"\x04acme\x18\x04 \x01(\v2(.sneakers.appliance.osadmin.v1.AcmeStateR\x04acme\x12M\n" +
+	"\fupdate_trust\x18\x05 \x01(\v2*.sneakers.appliance.osadmin.v1.UpdateTrustR\vupdateTrust\"\xb2\x01\n" +
+	"\vUpdateTrust\x12:\n" +
+	"\x03cas\x18\x01 \x03(\v2(.sneakers.appliance.osadmin.v1.TrustedCaR\x03cas\x12\x1d\n" +
+	"\n" +
+	"pin_sha256\x18\x02 \x01(\tR\tpinSha256\x12\x15\n" +
+	"\x06set_by\x18\x03 \x01(\tR\x05setBy\x121\n" +
+	"\x06set_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05setAt\"\x8e\x01\n" +
+	"\tTrustedCa\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x127\n" +
+	"\tnot_after\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"M\n" +
+	"\x15SetUpdateTrustRequest\x12\x15\n" +
+	"\x06ca_pem\x18\x01 \x01(\tR\x05caPem\x12\x1d\n" +
+	"\n" +
+	"pin_sha256\x18\x02 \x01(\tR\tpinSha256\"g\n" +
+	"\x16SetUpdateTrustResponse\x12M\n" +
+	"\fupdate_trust\x18\x01 \x01(\v2*.sneakers.appliance.osadmin.v1.UpdateTrustR\vupdateTrust\"\x19\n" +
+	"\x17ClearUpdateTrustRequest\"\x1a\n" +
+	"\x18ClearUpdateTrustResponse\"\xb5\x02\n" +
 	"\x12GenerateCsrRequest\x12\x14\n" +
 	"\x05names\x18\x01 \x03(\tR\x05names\x12\x1f\n" +
 	"\vcommon_name\x18\x02 \x01(\tR\n" +
@@ -2619,7 +2963,7 @@ const file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc = "" +
 	"\rAcmeChallenge\x12\x1e\n" +
 	"\x1aACME_CHALLENGE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15ACME_CHALLENGE_HTTP01\x10\x01\x12\x18\n" +
-	"\x14ACME_CHALLENGE_DNS01\x10\x022\xd8\x10\n" +
+	"\x14ACME_CHALLENGE_DNS01\x10\x022\x9c\x13\n" +
 	"\n" +
 	"TlsService\x12p\n" +
 	"\x06GetTls\x12,.sneakers.appliance.osadmin.v1.GetTlsRequest\x1a-.sneakers.appliance.osadmin.v1.GetTlsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x86\x01\n" +
@@ -2636,7 +2980,9 @@ const file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc = "" +
 	"\x11AssignCertificate\x127.sneakers.appliance.osadmin.v1.AssignCertificateRequest\x1a8.sneakers.appliance.osadmin.v1.AssignCertificateResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13tls.endpoint.assign\x12\xa8\x01\n" +
 	"\x12RevertToSelfSigned\x128.sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest\x1a9.sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\x18\x01\"\x13tls.endpoint.revert\x12~\n" +
 	"\aSetAcme\x12-.sneakers.appliance.osadmin.v1.SetAcmeRequest\x1a..sneakers.appliance.osadmin.v1.SetAcmeResponse\"\x14\xc2\xf3\x18\x10\x10\x02\"\ftls.acme.set\x12\x83\x01\n" +
-	"\bRenewNow\x12..sneakers.appliance.osadmin.v1.RenewNowRequest\x1a/.sneakers.appliance.osadmin.v1.RenewNowResponse\"\x16\xc2\xf3\x18\x12\x10\x02\"\x0etls.acme.renewB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\bRenewNow\x12..sneakers.appliance.osadmin.v1.RenewNowRequest\x1a/.sneakers.appliance.osadmin.v1.RenewNowResponse\"\x16\xc2\xf3\x18\x12\x10\x02\"\x0etls.acme.renew\x12\x9b\x01\n" +
+	"\x0eSetUpdateTrust\x124.sneakers.appliance.osadmin.v1.SetUpdateTrustRequest\x1a5.sneakers.appliance.osadmin.v1.SetUpdateTrustResponse\"\x1c\xc2\xf3\x18\x18\x10\x02\"\x14tls.update-trust.set\x12\xa3\x01\n" +
+	"\x10ClearUpdateTrust\x126.sneakers.appliance.osadmin.v1.ClearUpdateTrustRequest\x1a7.sneakers.appliance.osadmin.v1.ClearUpdateTrustResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x16tls.update-trust.clearB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_tls_proto_rawDescOnce sync.Once
@@ -2651,7 +2997,7 @@ func file_sneakers_appliance_osadmin_v1_tls_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_tls_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_sneakers_appliance_osadmin_v1_tls_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_sneakers_appliance_osadmin_v1_tls_proto_goTypes = []any{
 	(CertificateSource)(0),              // 0: sneakers.appliance.osadmin.v1.CertificateSource
 	(KeyType)(0),                        // 1: sneakers.appliance.osadmin.v1.KeyType
@@ -2676,86 +3022,101 @@ var file_sneakers_appliance_osadmin_v1_tls_proto_goTypes = []any{
 	(*ValidationReport)(nil),            // 20: sneakers.appliance.osadmin.v1.ValidationReport
 	(*GetCertificateStoreRequest)(nil),  // 21: sneakers.appliance.osadmin.v1.GetCertificateStoreRequest
 	(*GetCertificateStoreResponse)(nil), // 22: sneakers.appliance.osadmin.v1.GetCertificateStoreResponse
-	(*GenerateCsrRequest)(nil),          // 23: sneakers.appliance.osadmin.v1.GenerateCsrRequest
-	(*GenerateCsrResponse)(nil),         // 24: sneakers.appliance.osadmin.v1.GenerateCsrResponse
-	(*CompleteCsrRequest)(nil),          // 25: sneakers.appliance.osadmin.v1.CompleteCsrRequest
-	(*CompleteCsrResponse)(nil),         // 26: sneakers.appliance.osadmin.v1.CompleteCsrResponse
-	(*DiscardCsrRequest)(nil),           // 27: sneakers.appliance.osadmin.v1.DiscardCsrRequest
-	(*DiscardCsrResponse)(nil),          // 28: sneakers.appliance.osadmin.v1.DiscardCsrResponse
-	(*ImportCertificateRequest)(nil),    // 29: sneakers.appliance.osadmin.v1.ImportCertificateRequest
-	(*ImportCertificateResponse)(nil),   // 30: sneakers.appliance.osadmin.v1.ImportCertificateResponse
-	(*DeleteCertificateRequest)(nil),    // 31: sneakers.appliance.osadmin.v1.DeleteCertificateRequest
-	(*DeleteCertificateResponse)(nil),   // 32: sneakers.appliance.osadmin.v1.DeleteCertificateResponse
-	(*AssignCertificateRequest)(nil),    // 33: sneakers.appliance.osadmin.v1.AssignCertificateRequest
-	(*AssignCertificateResponse)(nil),   // 34: sneakers.appliance.osadmin.v1.AssignCertificateResponse
-	(*RevertToSelfSignedRequest)(nil),   // 35: sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest
-	(*RevertToSelfSignedResponse)(nil),  // 36: sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse
-	(*SetAcmeRequest)(nil),              // 37: sneakers.appliance.osadmin.v1.SetAcmeRequest
-	(*SetAcmeResponse)(nil),             // 38: sneakers.appliance.osadmin.v1.SetAcmeResponse
-	(*RenewNowRequest)(nil),             // 39: sneakers.appliance.osadmin.v1.RenewNowRequest
-	(*RenewNowResponse)(nil),            // 40: sneakers.appliance.osadmin.v1.RenewNowResponse
-	(*timestamppb.Timestamp)(nil),       // 41: google.protobuf.Timestamp
+	(*UpdateTrust)(nil),                 // 23: sneakers.appliance.osadmin.v1.UpdateTrust
+	(*TrustedCa)(nil),                   // 24: sneakers.appliance.osadmin.v1.TrustedCa
+	(*SetUpdateTrustRequest)(nil),       // 25: sneakers.appliance.osadmin.v1.SetUpdateTrustRequest
+	(*SetUpdateTrustResponse)(nil),      // 26: sneakers.appliance.osadmin.v1.SetUpdateTrustResponse
+	(*ClearUpdateTrustRequest)(nil),     // 27: sneakers.appliance.osadmin.v1.ClearUpdateTrustRequest
+	(*ClearUpdateTrustResponse)(nil),    // 28: sneakers.appliance.osadmin.v1.ClearUpdateTrustResponse
+	(*GenerateCsrRequest)(nil),          // 29: sneakers.appliance.osadmin.v1.GenerateCsrRequest
+	(*GenerateCsrResponse)(nil),         // 30: sneakers.appliance.osadmin.v1.GenerateCsrResponse
+	(*CompleteCsrRequest)(nil),          // 31: sneakers.appliance.osadmin.v1.CompleteCsrRequest
+	(*CompleteCsrResponse)(nil),         // 32: sneakers.appliance.osadmin.v1.CompleteCsrResponse
+	(*DiscardCsrRequest)(nil),           // 33: sneakers.appliance.osadmin.v1.DiscardCsrRequest
+	(*DiscardCsrResponse)(nil),          // 34: sneakers.appliance.osadmin.v1.DiscardCsrResponse
+	(*ImportCertificateRequest)(nil),    // 35: sneakers.appliance.osadmin.v1.ImportCertificateRequest
+	(*ImportCertificateResponse)(nil),   // 36: sneakers.appliance.osadmin.v1.ImportCertificateResponse
+	(*DeleteCertificateRequest)(nil),    // 37: sneakers.appliance.osadmin.v1.DeleteCertificateRequest
+	(*DeleteCertificateResponse)(nil),   // 38: sneakers.appliance.osadmin.v1.DeleteCertificateResponse
+	(*AssignCertificateRequest)(nil),    // 39: sneakers.appliance.osadmin.v1.AssignCertificateRequest
+	(*AssignCertificateResponse)(nil),   // 40: sneakers.appliance.osadmin.v1.AssignCertificateResponse
+	(*RevertToSelfSignedRequest)(nil),   // 41: sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest
+	(*RevertToSelfSignedResponse)(nil),  // 42: sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse
+	(*SetAcmeRequest)(nil),              // 43: sneakers.appliance.osadmin.v1.SetAcmeRequest
+	(*SetAcmeResponse)(nil),             // 44: sneakers.appliance.osadmin.v1.SetAcmeResponse
+	(*RenewNowRequest)(nil),             // 45: sneakers.appliance.osadmin.v1.RenewNowRequest
+	(*RenewNowResponse)(nil),            // 46: sneakers.appliance.osadmin.v1.RenewNowResponse
+	(*timestamppb.Timestamp)(nil),       // 47: google.protobuf.Timestamp
 }
 var file_sneakers_appliance_osadmin_v1_tls_proto_depIdxs = []int32{
-	41, // 0: sneakers.appliance.osadmin.v1.Certificate.expires:type_name -> google.protobuf.Timestamp
+	47, // 0: sneakers.appliance.osadmin.v1.Certificate.expires:type_name -> google.protobuf.Timestamp
 	6,  // 1: sneakers.appliance.osadmin.v1.GetTlsResponse.product:type_name -> sneakers.appliance.osadmin.v1.Certificate
 	6,  // 2: sneakers.appliance.osadmin.v1.GetTlsResponse.ca_bundle:type_name -> sneakers.appliance.osadmin.v1.Certificate
 	0,  // 3: sneakers.appliance.osadmin.v1.StoredCertificate.source:type_name -> sneakers.appliance.osadmin.v1.CertificateSource
-	41, // 4: sneakers.appliance.osadmin.v1.StoredCertificate.not_before:type_name -> google.protobuf.Timestamp
-	41, // 5: sneakers.appliance.osadmin.v1.StoredCertificate.not_after:type_name -> google.protobuf.Timestamp
-	41, // 6: sneakers.appliance.osadmin.v1.StoredCertificate.added:type_name -> google.protobuf.Timestamp
-	41, // 7: sneakers.appliance.osadmin.v1.PendingCsr.created:type_name -> google.protobuf.Timestamp
+	47, // 4: sneakers.appliance.osadmin.v1.StoredCertificate.not_before:type_name -> google.protobuf.Timestamp
+	47, // 5: sneakers.appliance.osadmin.v1.StoredCertificate.not_after:type_name -> google.protobuf.Timestamp
+	47, // 6: sneakers.appliance.osadmin.v1.StoredCertificate.added:type_name -> google.protobuf.Timestamp
+	47, // 7: sneakers.appliance.osadmin.v1.PendingCsr.created:type_name -> google.protobuf.Timestamp
 	2,  // 8: sneakers.appliance.osadmin.v1.Endpoint.source:type_name -> sneakers.appliance.osadmin.v1.EndpointSource
 	3,  // 9: sneakers.appliance.osadmin.v1.Endpoint.state:type_name -> sneakers.appliance.osadmin.v1.EndpointState
-	41, // 10: sneakers.appliance.osadmin.v1.Endpoint.expires:type_name -> google.protobuf.Timestamp
+	47, // 10: sneakers.appliance.osadmin.v1.Endpoint.expires:type_name -> google.protobuf.Timestamp
 	19, // 11: sneakers.appliance.osadmin.v1.ValidationReport.checks:type_name -> sneakers.appliance.osadmin.v1.ValidationCheck
 	15, // 12: sneakers.appliance.osadmin.v1.GetCertificateStoreResponse.certificates:type_name -> sneakers.appliance.osadmin.v1.StoredCertificate
 	16, // 13: sneakers.appliance.osadmin.v1.GetCertificateStoreResponse.csrs:type_name -> sneakers.appliance.osadmin.v1.PendingCsr
 	17, // 14: sneakers.appliance.osadmin.v1.GetCertificateStoreResponse.endpoints:type_name -> sneakers.appliance.osadmin.v1.Endpoint
 	18, // 15: sneakers.appliance.osadmin.v1.GetCertificateStoreResponse.acme:type_name -> sneakers.appliance.osadmin.v1.AcmeState
-	1,  // 16: sneakers.appliance.osadmin.v1.GenerateCsrRequest.key_type:type_name -> sneakers.appliance.osadmin.v1.KeyType
-	16, // 17: sneakers.appliance.osadmin.v1.GenerateCsrResponse.csr:type_name -> sneakers.appliance.osadmin.v1.PendingCsr
-	15, // 18: sneakers.appliance.osadmin.v1.CompleteCsrResponse.certificate:type_name -> sneakers.appliance.osadmin.v1.StoredCertificate
-	19, // 19: sneakers.appliance.osadmin.v1.CompleteCsrResponse.checks:type_name -> sneakers.appliance.osadmin.v1.ValidationCheck
-	15, // 20: sneakers.appliance.osadmin.v1.ImportCertificateResponse.certificate:type_name -> sneakers.appliance.osadmin.v1.StoredCertificate
-	19, // 21: sneakers.appliance.osadmin.v1.ImportCertificateResponse.checks:type_name -> sneakers.appliance.osadmin.v1.ValidationCheck
-	17, // 22: sneakers.appliance.osadmin.v1.AssignCertificateResponse.endpoint:type_name -> sneakers.appliance.osadmin.v1.Endpoint
-	17, // 23: sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse.endpoint:type_name -> sneakers.appliance.osadmin.v1.Endpoint
-	4,  // 24: sneakers.appliance.osadmin.v1.SetAcmeRequest.issuer:type_name -> sneakers.appliance.osadmin.v1.AcmeIssuer
-	5,  // 25: sneakers.appliance.osadmin.v1.SetAcmeRequest.challenge:type_name -> sneakers.appliance.osadmin.v1.AcmeChallenge
-	7,  // 26: sneakers.appliance.osadmin.v1.TlsService.GetTls:input_type -> sneakers.appliance.osadmin.v1.GetTlsRequest
-	9,  // 27: sneakers.appliance.osadmin.v1.TlsService.CreateCsr:input_type -> sneakers.appliance.osadmin.v1.CreateCsrRequest
-	11, // 28: sneakers.appliance.osadmin.v1.TlsService.UploadCertificate:input_type -> sneakers.appliance.osadmin.v1.UploadCertificateRequest
-	13, // 29: sneakers.appliance.osadmin.v1.TlsService.SetAdminCertificate:input_type -> sneakers.appliance.osadmin.v1.SetAdminCertificateRequest
-	21, // 30: sneakers.appliance.osadmin.v1.TlsService.GetCertificateStore:input_type -> sneakers.appliance.osadmin.v1.GetCertificateStoreRequest
-	23, // 31: sneakers.appliance.osadmin.v1.TlsService.GenerateCsr:input_type -> sneakers.appliance.osadmin.v1.GenerateCsrRequest
-	25, // 32: sneakers.appliance.osadmin.v1.TlsService.CompleteCsr:input_type -> sneakers.appliance.osadmin.v1.CompleteCsrRequest
-	27, // 33: sneakers.appliance.osadmin.v1.TlsService.DiscardCsr:input_type -> sneakers.appliance.osadmin.v1.DiscardCsrRequest
-	29, // 34: sneakers.appliance.osadmin.v1.TlsService.ImportCertificate:input_type -> sneakers.appliance.osadmin.v1.ImportCertificateRequest
-	31, // 35: sneakers.appliance.osadmin.v1.TlsService.DeleteCertificate:input_type -> sneakers.appliance.osadmin.v1.DeleteCertificateRequest
-	33, // 36: sneakers.appliance.osadmin.v1.TlsService.AssignCertificate:input_type -> sneakers.appliance.osadmin.v1.AssignCertificateRequest
-	35, // 37: sneakers.appliance.osadmin.v1.TlsService.RevertToSelfSigned:input_type -> sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest
-	37, // 38: sneakers.appliance.osadmin.v1.TlsService.SetAcme:input_type -> sneakers.appliance.osadmin.v1.SetAcmeRequest
-	39, // 39: sneakers.appliance.osadmin.v1.TlsService.RenewNow:input_type -> sneakers.appliance.osadmin.v1.RenewNowRequest
-	8,  // 40: sneakers.appliance.osadmin.v1.TlsService.GetTls:output_type -> sneakers.appliance.osadmin.v1.GetTlsResponse
-	10, // 41: sneakers.appliance.osadmin.v1.TlsService.CreateCsr:output_type -> sneakers.appliance.osadmin.v1.CreateCsrResponse
-	12, // 42: sneakers.appliance.osadmin.v1.TlsService.UploadCertificate:output_type -> sneakers.appliance.osadmin.v1.UploadCertificateResponse
-	14, // 43: sneakers.appliance.osadmin.v1.TlsService.SetAdminCertificate:output_type -> sneakers.appliance.osadmin.v1.SetAdminCertificateResponse
-	22, // 44: sneakers.appliance.osadmin.v1.TlsService.GetCertificateStore:output_type -> sneakers.appliance.osadmin.v1.GetCertificateStoreResponse
-	24, // 45: sneakers.appliance.osadmin.v1.TlsService.GenerateCsr:output_type -> sneakers.appliance.osadmin.v1.GenerateCsrResponse
-	26, // 46: sneakers.appliance.osadmin.v1.TlsService.CompleteCsr:output_type -> sneakers.appliance.osadmin.v1.CompleteCsrResponse
-	28, // 47: sneakers.appliance.osadmin.v1.TlsService.DiscardCsr:output_type -> sneakers.appliance.osadmin.v1.DiscardCsrResponse
-	30, // 48: sneakers.appliance.osadmin.v1.TlsService.ImportCertificate:output_type -> sneakers.appliance.osadmin.v1.ImportCertificateResponse
-	32, // 49: sneakers.appliance.osadmin.v1.TlsService.DeleteCertificate:output_type -> sneakers.appliance.osadmin.v1.DeleteCertificateResponse
-	34, // 50: sneakers.appliance.osadmin.v1.TlsService.AssignCertificate:output_type -> sneakers.appliance.osadmin.v1.AssignCertificateResponse
-	36, // 51: sneakers.appliance.osadmin.v1.TlsService.RevertToSelfSigned:output_type -> sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse
-	38, // 52: sneakers.appliance.osadmin.v1.TlsService.SetAcme:output_type -> sneakers.appliance.osadmin.v1.SetAcmeResponse
-	40, // 53: sneakers.appliance.osadmin.v1.TlsService.RenewNow:output_type -> sneakers.appliance.osadmin.v1.RenewNowResponse
-	40, // [40:54] is the sub-list for method output_type
-	26, // [26:40] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	23, // 16: sneakers.appliance.osadmin.v1.GetCertificateStoreResponse.update_trust:type_name -> sneakers.appliance.osadmin.v1.UpdateTrust
+	24, // 17: sneakers.appliance.osadmin.v1.UpdateTrust.cas:type_name -> sneakers.appliance.osadmin.v1.TrustedCa
+	47, // 18: sneakers.appliance.osadmin.v1.UpdateTrust.set_at:type_name -> google.protobuf.Timestamp
+	47, // 19: sneakers.appliance.osadmin.v1.TrustedCa.not_after:type_name -> google.protobuf.Timestamp
+	23, // 20: sneakers.appliance.osadmin.v1.SetUpdateTrustResponse.update_trust:type_name -> sneakers.appliance.osadmin.v1.UpdateTrust
+	1,  // 21: sneakers.appliance.osadmin.v1.GenerateCsrRequest.key_type:type_name -> sneakers.appliance.osadmin.v1.KeyType
+	16, // 22: sneakers.appliance.osadmin.v1.GenerateCsrResponse.csr:type_name -> sneakers.appliance.osadmin.v1.PendingCsr
+	15, // 23: sneakers.appliance.osadmin.v1.CompleteCsrResponse.certificate:type_name -> sneakers.appliance.osadmin.v1.StoredCertificate
+	19, // 24: sneakers.appliance.osadmin.v1.CompleteCsrResponse.checks:type_name -> sneakers.appliance.osadmin.v1.ValidationCheck
+	15, // 25: sneakers.appliance.osadmin.v1.ImportCertificateResponse.certificate:type_name -> sneakers.appliance.osadmin.v1.StoredCertificate
+	19, // 26: sneakers.appliance.osadmin.v1.ImportCertificateResponse.checks:type_name -> sneakers.appliance.osadmin.v1.ValidationCheck
+	17, // 27: sneakers.appliance.osadmin.v1.AssignCertificateResponse.endpoint:type_name -> sneakers.appliance.osadmin.v1.Endpoint
+	17, // 28: sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse.endpoint:type_name -> sneakers.appliance.osadmin.v1.Endpoint
+	4,  // 29: sneakers.appliance.osadmin.v1.SetAcmeRequest.issuer:type_name -> sneakers.appliance.osadmin.v1.AcmeIssuer
+	5,  // 30: sneakers.appliance.osadmin.v1.SetAcmeRequest.challenge:type_name -> sneakers.appliance.osadmin.v1.AcmeChallenge
+	7,  // 31: sneakers.appliance.osadmin.v1.TlsService.GetTls:input_type -> sneakers.appliance.osadmin.v1.GetTlsRequest
+	9,  // 32: sneakers.appliance.osadmin.v1.TlsService.CreateCsr:input_type -> sneakers.appliance.osadmin.v1.CreateCsrRequest
+	11, // 33: sneakers.appliance.osadmin.v1.TlsService.UploadCertificate:input_type -> sneakers.appliance.osadmin.v1.UploadCertificateRequest
+	13, // 34: sneakers.appliance.osadmin.v1.TlsService.SetAdminCertificate:input_type -> sneakers.appliance.osadmin.v1.SetAdminCertificateRequest
+	21, // 35: sneakers.appliance.osadmin.v1.TlsService.GetCertificateStore:input_type -> sneakers.appliance.osadmin.v1.GetCertificateStoreRequest
+	29, // 36: sneakers.appliance.osadmin.v1.TlsService.GenerateCsr:input_type -> sneakers.appliance.osadmin.v1.GenerateCsrRequest
+	31, // 37: sneakers.appliance.osadmin.v1.TlsService.CompleteCsr:input_type -> sneakers.appliance.osadmin.v1.CompleteCsrRequest
+	33, // 38: sneakers.appliance.osadmin.v1.TlsService.DiscardCsr:input_type -> sneakers.appliance.osadmin.v1.DiscardCsrRequest
+	35, // 39: sneakers.appliance.osadmin.v1.TlsService.ImportCertificate:input_type -> sneakers.appliance.osadmin.v1.ImportCertificateRequest
+	37, // 40: sneakers.appliance.osadmin.v1.TlsService.DeleteCertificate:input_type -> sneakers.appliance.osadmin.v1.DeleteCertificateRequest
+	39, // 41: sneakers.appliance.osadmin.v1.TlsService.AssignCertificate:input_type -> sneakers.appliance.osadmin.v1.AssignCertificateRequest
+	41, // 42: sneakers.appliance.osadmin.v1.TlsService.RevertToSelfSigned:input_type -> sneakers.appliance.osadmin.v1.RevertToSelfSignedRequest
+	43, // 43: sneakers.appliance.osadmin.v1.TlsService.SetAcme:input_type -> sneakers.appliance.osadmin.v1.SetAcmeRequest
+	45, // 44: sneakers.appliance.osadmin.v1.TlsService.RenewNow:input_type -> sneakers.appliance.osadmin.v1.RenewNowRequest
+	25, // 45: sneakers.appliance.osadmin.v1.TlsService.SetUpdateTrust:input_type -> sneakers.appliance.osadmin.v1.SetUpdateTrustRequest
+	27, // 46: sneakers.appliance.osadmin.v1.TlsService.ClearUpdateTrust:input_type -> sneakers.appliance.osadmin.v1.ClearUpdateTrustRequest
+	8,  // 47: sneakers.appliance.osadmin.v1.TlsService.GetTls:output_type -> sneakers.appliance.osadmin.v1.GetTlsResponse
+	10, // 48: sneakers.appliance.osadmin.v1.TlsService.CreateCsr:output_type -> sneakers.appliance.osadmin.v1.CreateCsrResponse
+	12, // 49: sneakers.appliance.osadmin.v1.TlsService.UploadCertificate:output_type -> sneakers.appliance.osadmin.v1.UploadCertificateResponse
+	14, // 50: sneakers.appliance.osadmin.v1.TlsService.SetAdminCertificate:output_type -> sneakers.appliance.osadmin.v1.SetAdminCertificateResponse
+	22, // 51: sneakers.appliance.osadmin.v1.TlsService.GetCertificateStore:output_type -> sneakers.appliance.osadmin.v1.GetCertificateStoreResponse
+	30, // 52: sneakers.appliance.osadmin.v1.TlsService.GenerateCsr:output_type -> sneakers.appliance.osadmin.v1.GenerateCsrResponse
+	32, // 53: sneakers.appliance.osadmin.v1.TlsService.CompleteCsr:output_type -> sneakers.appliance.osadmin.v1.CompleteCsrResponse
+	34, // 54: sneakers.appliance.osadmin.v1.TlsService.DiscardCsr:output_type -> sneakers.appliance.osadmin.v1.DiscardCsrResponse
+	36, // 55: sneakers.appliance.osadmin.v1.TlsService.ImportCertificate:output_type -> sneakers.appliance.osadmin.v1.ImportCertificateResponse
+	38, // 56: sneakers.appliance.osadmin.v1.TlsService.DeleteCertificate:output_type -> sneakers.appliance.osadmin.v1.DeleteCertificateResponse
+	40, // 57: sneakers.appliance.osadmin.v1.TlsService.AssignCertificate:output_type -> sneakers.appliance.osadmin.v1.AssignCertificateResponse
+	42, // 58: sneakers.appliance.osadmin.v1.TlsService.RevertToSelfSigned:output_type -> sneakers.appliance.osadmin.v1.RevertToSelfSignedResponse
+	44, // 59: sneakers.appliance.osadmin.v1.TlsService.SetAcme:output_type -> sneakers.appliance.osadmin.v1.SetAcmeResponse
+	46, // 60: sneakers.appliance.osadmin.v1.TlsService.RenewNow:output_type -> sneakers.appliance.osadmin.v1.RenewNowResponse
+	26, // 61: sneakers.appliance.osadmin.v1.TlsService.SetUpdateTrust:output_type -> sneakers.appliance.osadmin.v1.SetUpdateTrustResponse
+	28, // 62: sneakers.appliance.osadmin.v1.TlsService.ClearUpdateTrust:output_type -> sneakers.appliance.osadmin.v1.ClearUpdateTrustResponse
+	47, // [47:63] is the sub-list for method output_type
+	31, // [31:47] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_tls_proto_init() }
@@ -2770,7 +3131,7 @@ func file_sneakers_appliance_osadmin_v1_tls_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_tls_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   35,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

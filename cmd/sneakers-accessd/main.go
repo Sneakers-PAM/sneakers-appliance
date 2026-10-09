@@ -30,6 +30,10 @@ import (
 	"connectrpc.com/connect"
 	"filippo.io/age"
 	log "github.com/Bugs5382/go-log"
+	// The root image carries no CA bundle, so the update fetches (an
+	// https:// mirror with a public certificate, the release source) check
+	// against Go's embedded copy of the Mozilla roots.
+	_ "golang.org/x/crypto/x509roots/fallback"
 
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"

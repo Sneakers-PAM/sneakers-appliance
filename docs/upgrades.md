@@ -108,7 +108,8 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    when the policy's `direct` is on, from the release source (the GitHub Release of the version the
    name carries; production builds only). With no mirror and `direct` off the box is air-gapped: it
    never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload is the only path. The mirror is an
-   `https://` URL; the environment's proxy applies.
+   `http://` or `https://` URL ([an internal mirror](#an-internal-mirror)); the environment's proxy
+   applies.
 2. **Stage** (owner, no code: it only writes the inactive slot, and nothing runs until Apply). The signature, the channel and the payload's SHA-256 are verified
    before anything is decrypted or unpacked; a patch must name the running version as a base.
    While the call runs, Updates asks `GetUpgrades` each second and shows the steps, with the bytes
@@ -147,6 +148,34 @@ entry in the OS audit log with the reason, the admin it belonged to and `for: up
 reports the end; a session that hasn't ended by then refuses with `UPGRADE_ELEVATED` and nothing
 is applied. The apply's own audit entry and history line name the session it ended. Without an
 override the refusal stays. The update window never overrides.
+
+## An internal mirror
+
+An air-gapped site can serve the release files from a web server of its own and set it as the
+policy's mirror (the design is in [update-mirror.md](update-mirror.md)).
+
+- **What it serves:** the `.bin` files and the product index side by side under one base URL,
+  the names exactly as released: `<base>/sneakers-appliance-<version>-<arch>.bin`,
+  `<base>/sneakers-product-<version>-<arch>.bin` and `<base>/sneakers-product-index.json`. Any
+  static web server will do.
+- **`http://` or `https://`.** The URL has a host and no user name, password or query. Over plain
+  HTTP the box's only protection is the signature check, which every `.bin` gets anyway before
+  anything is decrypted or unpacked: a changed file is refused (`UPGRADE_SIGNATURE`) and deleted.
+  Updates says "plain HTTP: integrity from the signature only".
+- **A private CA.** An `https://` mirror with a public certificate needs nothing more. For an
+  internal CA, an owner adds it on Certificates under Update trust (`TlsService.SetUpdateTrust`,
+  one or more PEM CA certificates), optionally with the SHA-256 fingerprint of the mirror's server
+  certificate as a pin (`openssl x509 -in server.pem -noout -fingerprint -sha256` gives it; any
+  case, colons or not). The CA is added to the system roots for the mirror's fetches only, never
+  for the release source, :8443 or the product. There's no way to turn verification off: an
+  untrusted certificate is refused (`UPGRADE_MIRROR_UNTRUSTED`) and so is a pin that doesn't match
+  (`UPGRADE_MIRROR_PIN`), both naming the presented certificate's fingerprint and issuer.
+  `ClearUpdateTrust` removes the trust.
+- **Status:** `GetUpgrades.mirror_status` shows the scheme and the last mirror fetch: its result,
+  and for HTTPS the server certificate's subject, issuer, expiry, fingerprint and whether the pin
+  matched. It's in memory: after a restart it's empty until the next fetch.
+- **Logging:** every fetch attempt, from the mirror or the release source, is logged with its URL,
+  result and duration and audited as `upgrade.source.fetch`.
 
 ## The product bundle
 
