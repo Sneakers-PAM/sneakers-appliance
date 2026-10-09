@@ -80,6 +80,13 @@ func (s *Server) consumed(product string, v productspec.ExposedValue) bool {
 	if !v.OneTime {
 		return false
 	}
+	// An imported box skips the product's own setup: its setup value is
+	// done with.
+	if _, imported := s.Imported(); imported {
+		if _, spec := s.installedSpec(); spec.Import != nil && spec.Import.Setup == v.Name {
+			return true
+		}
+	}
 	_, err := os.Stat(s.consumedMarker(product, v.Name))
 	return err == nil
 }

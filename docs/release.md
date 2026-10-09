@@ -122,7 +122,8 @@ same release key and encrypted to the same update key, with these header fields:
 The payload is the unpacked bundle as a tar: `release.yaml`, the `k0s` binary, the `helm` binary
 when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
 airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
-and `manifests/<stack>/*.yaml`, the stacks k0s applies (the lab bundle's hello stack and interim
+and `manifests/<stack>/*.yaml`, the stacks k0s applies, `import/job.yaml` when `product.yaml`
+declares an import, (the lab bundle's hello stack and interim
 edge, [k0s.md](k0s.md)), and optionally `brand/`, the product's logo and colours for the box-state
 pages ([artifact.md](artifact.md#the-brand)), and optionally `product.yaml` (below). After it
 decrypts and unpacks one, the box checks it like the kit checks a root: only those entries, `k0s` (and `helm`, which it carries if and only if
@@ -210,12 +211,34 @@ removed them all), and only then restarts the workloads it names with the instal
 so a restarted workload reads the change; audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
 installed`.
 
+It may also declare an **import**: the product takes an export of an earlier install from the
+Import page before its own first-run setup ([import.md](import.md)):
+
+```yaml
+import:
+  label: Import from an earlier Sneakers
+  switch: import          # a declared switch; its stack (the migrate service account) exists only while an import is open
+  job: import/job.yaml    # the Job template in the bundle; the box fills ${JOB_NAME}, ${ARGS} and ${HOST_DIR}
+  uid: 65532              # the Job's user, who owns the import directory
+  setup: setup-token      # the one-time exposed value the product's own setup consumes
+  restart: [sneakers/deployment/sneakers-vault]   # restarted after an import passes
+```
+
+The box refuses an import whose switch isn't declared, whose job isn't a `.yaml` path inside the
+slot, whose uid is root, or whose setup isn't a `one_time` exposed value; the bundle check refuses a
+bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@`. `build/product/build.sh`
+takes the template as `IMPORT_JOB` and the pinned migrate image as `MIGRATE_IMAGE` (by digest, and
+pinned in `release.yaml`), and writes `import/job.yaml` into the bundle.
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,
 off by default, which gates the `sneakers-mcp` stack. That stack holds the MCP server, Hydra and the
 ConfigMap that gives the gateway and the staff web app their MCP settings, so none of it runs, and
-neither app offers the MCP, until an admin turns it on.
+neither app offers the MCP, until an admin turns it on. It also declares the `import` switch, off by
+default, whose `sneakers-import` stack (`build/product/sneakers/import-stack.yaml`) holds the
+migrate service account, and the import, with its Job template in
+`build/product/sneakers/import-job.yaml`.
 
 - **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it

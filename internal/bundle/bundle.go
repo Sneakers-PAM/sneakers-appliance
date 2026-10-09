@@ -60,6 +60,9 @@ const (
 	// ProductSpec is product.yaml, what the product declares to the
 	// appliance (package productspec); optional.
 	ProductSpec = productspec.File
+	// ProductImport holds the import Job template a product.yaml's import
+	// names (docs/import.md).
+	ProductImport = "import"
 )
 
 // Release is the part of release.yaml the bundle check reads. The file is
@@ -301,7 +304,7 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	}
 	for _, e := range top {
 		switch e.Name() {
-		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec:
+		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec, ProductImport:
 		default:
 			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
 		}
@@ -383,6 +386,15 @@ func checkSpec(fsys fs.FS, rel *Release) error {
 			if fi, err := fs.Stat(fsys, path.Join(ProductManifests, st)); err != nil || !fi.IsDir() {
 				return codes.New(codes.KitBundleMismatch, "the product bundle has no stack %s, which the switch %s turns on", st, w.Name)
 			}
+		}
+	}
+	if im := spec.Import; im != nil {
+		job, err := fs.ReadFile(fsys, im.Job)
+		if err != nil {
+			return codes.New(codes.KitBundleMismatch, "the product bundle has no import Job template %s", im.Job)
+		}
+		if bytes.Contains(job, []byte("@MIGRATE_IMAGE@")) {
+			return codes.New(codes.KitBundleMismatch, "the product bundle's import Job template %s doesn't name the migrate image (the build fills @MIGRATE_IMAGE@)", im.Job)
 		}
 	}
 	return nil

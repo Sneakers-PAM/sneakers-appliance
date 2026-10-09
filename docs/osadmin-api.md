@@ -34,6 +34,7 @@ answers Connect `unavailable` ("the appliance services are unavailable").
 |---|---|
 | `GET /export/audit-log` | the whole OS audit log as written (JSON lines, oldest first), so the chain verifies off the box; needs a session, audited as `audit.export` |
 | `POST /upload` | an update `.bin` as the request body (at most 8 GiB), with the session cookie and `X-CSRF-Token`, and the file's name in `X-File-Name` (optional, URL-encoded; shown on the held upload only); answers `{"uploadId": "..."}` for `UpgradeService.StageUpdate`; audited as `upgrade.upload`. Nothing is verified or unpacked until it's staged. One file at a time: while another is coming in or held, or a stage runs, it answers `409` with `UPGRADE_BUSY`. A transfer the browser aborts leaves no file |
+| `POST /import/upload?kind=<bundle\|mapping\|sheet\|types>` | one file of the open import ([import.md](import.md)) as the request body (at most 2 GiB), with the session cookie and `X-CSRF-Token`; it replaces an earlier file of that kind; answers `{"kind": "...", "bytes": n}`; audited as `import.upload`. Refused with no import open |
 | `GET /` and anything else | the admin pages, with the page routes falling back to `index.html`. Until setup is done (`StatusService.GetPhase` answers `firstboot`), every page path but `/setup`, `/` included, answers `302` to `/setup`; the files the pages load are served in both phases |
 
 Every response carries `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri
@@ -134,6 +135,11 @@ about the box.
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
+| `ImportService.GetImport` | admin | no | |
+| `ImportService.OpenImport` | admin | yes | `import.open` |
+| `ImportService.RunImportStep` | admin | yes | `import.run` |
+| `ImportService.TakeOwnerPassword` | admin | yes | `import.owner-password` |
+| `ImportService.CloseImport` | admin | yes | `import.close` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |

@@ -32,6 +32,11 @@
 #   PRODUCT_YAML the product's product.yaml (bundle format v2, optional;
 #                docs/release.md#productyaml), such as
 #                build/product/sneakers/product.yaml
+#   IMPORT_JOB   the product's import Job template (optional;
+#                docs/import.md), such as build/product/sneakers/import-job.yaml,
+#                put at import/job.yaml with @MIGRATE_IMAGE@ filled
+#   MIGRATE_IMAGE the sneakers-migrate image by digest, which release.yaml
+#                pins (required with IMPORT_JOB)
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
 #   OUT          the output directory: tree/ (the unpacked bundle) and
 #                bin/header.json, bin/payload.age
@@ -79,6 +84,16 @@ fi
 if [ -n "${PRODUCT_YAML:-}" ]; then
   install -m 0644 "$PRODUCT_YAML" "$tree/product.yaml"
   echo "product: product.yaml from $PRODUCT_YAML"
+fi
+
+if [ -n "${IMPORT_JOB:-}" ]; then
+  : "${MIGRATE_IMAGE:?IMPORT_JOB needs MIGRATE_IMAGE, the sneakers-migrate image by digest}"
+  case "$MIGRATE_IMAGE" in *@sha256:*) ;; *) echo "product: MIGRATE_IMAGE $MIGRATE_IMAGE isn't pinned by digest" >&2; exit 1 ;; esac
+  grep -qF "${MIGRATE_IMAGE#*@}" "$RELEASE" || { echo "product: release.yaml doesn't pin $MIGRATE_IMAGE" >&2; exit 1; }
+  mkdir -p "$tree/import"
+  sed "s|@MIGRATE_IMAGE@|$MIGRATE_IMAGE|g" "$IMPORT_JOB" > "$tree/import/job.yaml"
+  chmod 0644 "$tree/import/job.yaml"
+  echo "product: import Job from $IMPORT_JOB ($MIGRATE_IMAGE)"
 fi
 
 if [ -n "${BRAND:-}" ]; then

@@ -126,7 +126,7 @@ func TestTheAPIGoesToAccessdWithTheBrowsersAddress(t *testing.T) {
 	if len(got) != 1 || got[0] != "127.0.0.1" {
 		t.Fatalf("forwarded %v", got)
 	}
-	for _, p := range []string{"/upload", "/export/audit-log"} {
+	for _, p := range []string{"/upload", "/import/upload", "/export/audit-log"} {
 		res, err := r.ts.Client().Post(r.ts.URL+p, "application/octet-stream", strings.NewReader("x"))
 		if err != nil {
 			t.Fatal(err)

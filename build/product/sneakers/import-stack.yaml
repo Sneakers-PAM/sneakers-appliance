@@ -1,0 +1,15 @@
+# The Sneakers bundle's sneakers-import stack: what exists only while an
+# import is open (the import switch, docs/import.md). The bundle build puts
+# it in manifests/sneakers-import/. The product's vault and audit list the
+# migrate caller (<namespace>/sneakers-migrate) and its NetworkPolicies
+# admit the migrate component, but with this service account gone no pod
+# can run as it.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sneakers-migrate
+  namespace: sneakers
+  labels:
+    app.kubernetes.io/part-of: sneakers
+    app.kubernetes.io/name: sneakers-migrate
+automountServiceAccountToken: false
