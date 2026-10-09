@@ -72,8 +72,11 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: bash build/kernel/build.sh amd64
-      - name: Build the static cryptsetup
-        run: bash build/static/cryptsetup.sh amd64
+      - name: Build the static cryptsetup, mke2fs and sgdisk
+        run: |
+          bash build/static/cryptsetup.sh amd64
+          bash build/static/e2fsprogs.sh amd64
+          bash build/static/gptfdisk.sh amd64
       - name: Build the static OpenSSH and busybox
         run: |
           bash build/busybox/build.sh out/static
@@ -85,7 +88,7 @@ jobs:
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
-          OPENSSH=out/static BUSYBOX=out/static/busybox \
+          OPENSSH=out/static BUSYBOX=out/static/busybox STATIC=build/out \
           OUT="$RUNNER_TEMP/unsigned" bash build/release/build.sh
           {
             echo "### Unsigned build ${VERSION} (amd64)"
@@ -325,8 +328,11 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: bash build/kernel/build.sh amd64
-      - name: Build the static cryptsetup
-        run: bash build/static/cryptsetup.sh amd64
+      - name: Build the static cryptsetup, mke2fs and sgdisk
+        run: |
+          bash build/static/cryptsetup.sh amd64
+          bash build/static/e2fsprogs.sh amd64
+          bash build/static/gptfdisk.sh amd64
       - name: Build the static OpenSSH and busybox
         run: |
           bash build/busybox/build.sh out/static
@@ -344,7 +350,7 @@ jobs:
           KIT_MIN="$KIT_MIN" KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
-          OPENSSH=out/static BUSYBOX=out/static/busybox \
+          OPENSSH=out/static BUSYBOX=out/static/busybox STATIC=build/out \
           KEYS="$keys" OUT="$lab" bash build/lab/build.sh
           # The lab build appends the build number (g<short commit>).
           VERSION="$(cat "$lab/version")"

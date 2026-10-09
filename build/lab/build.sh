@@ -14,18 +14,19 @@
 #                ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX      the static busybox (build/busybox/build.sh)
 #   STATIC       directory with cryptsetup-amd64, veritysetup-amd64,
-#                mke2fs-amd64 and sgdisk-amd64 (build/static), which go into
-#                the root; first boot needs cryptsetup and mkfs.ext4 to make
-#                the state volumes
+#                mke2fs-amd64 and sgdisk-amd64 and their stamps
+#                (build/static), which go into the root; first boot needs
+#                cryptsetup and mkfs.ext4 to make the state volumes. Required
 #   KEYS         a directory for the lab keys (CI passes a fresh tmpfs one
 #                every run). An existing key set there is refused, to
 #                protect a shared on-disk one; REUSE_KEYS=1 keeps it as is
 #                and NEW_KEYS=1 replaces it on purpose
 #                (build/keys/lab-keys.sh)
 #   OUT          the output directory
-#   VERSION      the lab version (default 0.0.1); the build number,
-#                g<the short commit>, is appended to it, git-describe style,
-#                unless it already ends with it
+#   VERSION      the lab version (default 0.0.1); the build's own stamp
+#                (r<UTC time>, or BUILD_STAMP) and g<the short commit> are
+#                appended to it, git-describe style, unless it already ends
+#                with the commit
 #   K0S          the k0s binary for the product bundle (default: the K0S_VERSION
 #                release from build/ci/versions.env, downloaded and checked
 #                against K0S_SHA256_AMD64)
@@ -67,13 +68,17 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${KEYS:?}" "${OUT:?}"
+: "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${STATIC:?}" "${KEYS:?}" "${OUT:?}"
 version="${VERSION:-0.0.1}"
-# Every lab artifact's name carries the commit it was built from.
+# Every lab artifact's name carries when it was built and the commit it was
+# built from, so a rebuild of the same commit never shares a version (and a
+# cached or stale artifact of the first build can't pass for the second).
+# BUILD_STAMP sets the build's own part (default r<UTC time>).
 build="g$(git -C "$root" rev-parse --short=7 HEAD)"
 case "$version" in
   *-"$build") ;;
-  *) version="$version-$build" ;;
+  *-*) version="$version.${BUILD_STAMP:-r$(date -u +%Y%m%d%H%M%S)}-$build" ;;
+  *) version="$version-${BUILD_STAMP:-r$(date -u +%Y%m%d%H%M%S)}-$build" ;;
 esac
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH COSIGN_PASSWORD=""
@@ -202,7 +207,7 @@ if [ -n "${WEB:-}" ]; then
 fi
 
 echo "lab: root"
-env -u K0S -u IMAGES STATIC="${STATIC:-}" PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
+env -u K0S -u IMAGES STATIC="$STATIC" PINS_LDFLAGS="$pins" VERSION="$version" RELEASE="$work/release.yaml" OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" \
   LAB_OVERLAY="$here/overlay" OUT="$work/root" bash "$root/build/root/build.sh"
 
 echo "lab: UKI"

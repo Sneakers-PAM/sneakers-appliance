@@ -65,7 +65,8 @@ jobs:
           path: |
             build/out/cryptsetup-amd64
             build/out/veritysetup-amd64
-          key: static-crypt-amd64-${{ hashFiles('build/static/cryptsetup.sh', 'build/ci/versions.env') }}
+            build/out/cryptsetup-amd64.stamp
+          key: static-crypt-amd64-${{ hashFiles('build/static/cryptsetup.sh', 'build/ci/versions.env', 'build/lib/**') }}
       - name: Build the static cryptsetup
         if: steps.static.outputs.cache-hit != 'true'
         run: bash build/static/cryptsetup.sh amd64
@@ -79,7 +80,9 @@ jobs:
           path: |
             build/out/mke2fs-amd64
             build/out/sgdisk-amd64
-          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/ci/versions.env') }}
+            build/out/e2fsprogs-amd64.stamp
+            build/out/gptfdisk-amd64.stamp
+          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/ci/versions.env', 'build/lib/**') }}
       - name: Build the static e2fsprogs and gptfdisk
         if: steps.fstools.outputs.cache-hit != 'true'
         run: |
@@ -92,7 +95,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: out/static
-          key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**') }}
+          key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
       - name: Build the static OpenSSH and busybox
         if: steps.sshtools.outputs.cache-hit != 'true'
         run: |

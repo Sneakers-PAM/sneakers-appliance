@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: out/static
-          key: static-tools-${{ matrix.arch }}-${{ hashFiles('build/openssh/**', 'build/busybox/**') }}
+          key: static-tools-${{ matrix.arch }}-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
       - name: Build busybox
         if: steps.cache.outputs.cache-hit != 'true'
         run: bash build/busybox/build.sh out/static

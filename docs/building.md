@@ -34,3 +34,27 @@ and records each digest in the job summary.
 
 The static tools build inside Docker (pinned Alpine and Debian images), so a build host needs
 Docker. Each script fails if its output has a dynamic loader.
+
+## Prebuilt inputs
+
+The root build takes OpenSSH, busybox and the static tools as prebuilt inputs, and all of them are
+required (`STATIC` too: first boot can't make the state volumes without cryptsetup and
+mkfs.ext4). Each build script writes a stamp next to its output (`busybox.stamp`,
+`openssh.stamp`, `<cryptsetup|e2fsprogs|gptfdisk>-<arch>.stamp`): the tool, its pinned version and
+the SHA-256 of everything that decides the build, the pins, the busybox config and the build script
+itself (`build/lib/stamp.sh`). The root build works the same stamp out from the tree it runs in and
+refuses an input whose stamp is missing or different ("stale or unstamped busybox: ... build it
+again"), so a binary left from an older pin or config in a holding folder never ships. It logs
+every input's SHA-256 (`root: input <file> sha256 <hex>`), so a build can be traced to exactly what
+went in.
+
+Before it packs the tree, the root build checks that every program the box runs is in it
+(`build/tools/rootexecs`): each absolute `/bin`, `/sbin`, `/usr/bin`, `/usr/sbin` and `/usr/libexec`
+path in `cmd/` and `internal/` (tests left out) and each `exec`, `pre-start` and leading `args`
+path in the service tables, the lab overlay's included, must be an executable file in the tree,
+through links. A missing one fails the build. A lab build's version carries its own stamp,
+`r<UTC time>` (or `BUILD_STAMP`), before `g<commit>`, so two builds of one commit never share a
+version.
+
+The first boot of a fresh OVA is proved on the lab ESXi proof VM before it ships; the build itself
+runs no VM.

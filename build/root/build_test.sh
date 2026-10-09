@@ -6,9 +6,11 @@
 # SOURCE_DATE_EPOCH, byte for byte; the image holds exactly the declared tree
 # in tree.txt, with its owners and modes; and a k0s binary or images (they
 # ship in the product bundle), a missing OpenSSH or busybox, or a lab
-# overlay outside a lab build or over a file the tree has, is refused. The
-# OpenSSH and busybox inputs are stand-ins: only their place in the tree
-# is checked.
+# overlay outside a lab build or over a file the tree has, is refused, and
+# so are a prebuilt input with a stale stamp and a service table that runs
+# a program the root doesn't have. The OpenSSH, busybox and static tool
+# inputs are stand-ins, stamped as their builds would: only their place in
+# the tree is checked.
 # Needs go, mksquashfs, unsquashfs and veritysetup.
 #
 # UPDATE=1 rewrites tree.txt from the build instead of checking it.
@@ -21,6 +23,13 @@ export SOURCE_DATE_EPOCH=1700000000 VERSION=0.0.1-test ARCH=amd64
 mkdir -p "$work/openssh"
 for b in sshd sshd-session sshd-auth ssh-keygen; do printf '#!/bin/false\n# %s\n' "$b" > "$work/openssh/$b"; done
 printf '#!/bin/false\n# busybox\n' > "$work/busybox"
+mkdir -p "$work/static"
+for b in cryptsetup veritysetup mke2fs sgdisk; do printf '#!/bin/false\n# %s\n' "$b" > "$work/static/$b-amd64"; done
+# shellcheck source=build/lib/stamp.sh
+source "$here/../lib/stamp.sh"
+busybox_stamp > "$work/busybox.stamp"
+openssh_stamp > "$work/openssh/openssh.stamp"
+for t in cryptsetup e2fsprogs gptfdisk; do static_stamp "$t" amd64 > "$work/static/$t-amd64.stamp"; done
 printf '#!/bin/false\n# k0s\n' > "$work/k0s"
 cat > "$work/release.yaml" <<YAML
 apiVersion: sneakers-pam/v1alpha1
@@ -35,7 +44,7 @@ YAML
 
 build() { # out [env...]
   local out="$1"; shift
-  env RELEASE="$work/release.yaml" OPENSSH="$work/openssh" BUSYBOX="$work/busybox" \
+  env RELEASE="$work/release.yaml" OPENSSH="$work/openssh" BUSYBOX="$work/busybox" STATIC="$work/static" \
     OUT="$out" "$@" bash "$here/build.sh"
 }
 build "$work/a" >/dev/null
@@ -68,8 +77,19 @@ refused "k0s and the images ship in the product bundle" IMAGES="$work"
 refused "sshd is missing (build/openssh" OPENSSH="$work/nothing"
 refused "is missing (build/busybox" BUSYBOX="$work/nothing"
 refused "no service table" SERVICES="$work/openssh"
+refused "cryptsetup-amd64 is missing (build/static)" STATIC="$work/nothing"
+mkdir -p "$work/stale"
+cp "$work/busybox" "$work/stale/busybox"
+printf 'busybox 1.0.0 0000\n' > "$work/stale/busybox.stamp"
+refused "stale or unstamped busybox" BUSYBOX="$work/stale/busybox"
+mkdir -p "$work/unstamped" && cp "$work/busybox" "$work/unstamped/busybox"
+refused "stale or unstamped busybox" BUSYBOX="$work/unstamped/busybox"
+mkdir -p "$work/services"
+cp "$here/../../os/rootfs/services.d/"*.yaml "$work/services/"
+printf 'exec: /usr/bin/not-in-the-root\nphases: [normal]\n' > "$work/services/extra.yaml"
+refused "missing or not executable in the root: /usr/bin/not-in-the-root" SERVICES="$work/services"
 mkdir -p "$work/overlay/etc/k0s"
 printf 'x\n' > "$work/overlay/etc/k0s/k0s.yaml.tmpl"
 refused "LAB_OVERLAY is for lab builds only" LAB_OVERLAY="$work/overlay"
 refused "LAB_OVERLAY would replace /etc/k0s/k0s.yaml.tmpl" PINS_LDFLAGS="-X example.org/pins.Channel=lab" LAB_OVERLAY="$work/overlay"
-echo "ok: k0s or images, missing OpenSSH or busybox, an empty service table and a misused lab overlay are refused"
+echo "ok: k0s or images, missing OpenSSH, busybox or static tools, a stale stamp, a program the root lacks, an empty service table and a misused lab overlay are refused"

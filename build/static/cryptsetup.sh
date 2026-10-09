@@ -83,4 +83,7 @@ docker run --rm --platform "$platform" \
       "/out/${tool}-${ARCH}" --version
     done
   '
+# shellcheck source=build/lib/stamp.sh
+source "$root/build/lib/stamp.sh"
+static_stamp cryptsetup "$arch" > "$out/cryptsetup-$arch.stamp"
 echo "cryptsetup: wrote $out/cryptsetup-$arch and $out/veritysetup-$arch"

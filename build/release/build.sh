@@ -13,6 +13,9 @@
 #   VERITYSETUP    the static veritysetup (build/static/cryptsetup.sh)
 #   OPENSSH        directory with the static OpenSSH (build/openssh/build.sh)
 #   BUSYBOX        the static busybox (build/busybox/build.sh)
+#   STATIC         directory with the static cryptsetup, veritysetup, mke2fs
+#                  and sgdisk and their stamps (build/static), which the root
+#                  carries for first boot
 #   SIGNATURES     the org signatures of the pinned images, <hex>.sigstore.json
 #                  each (the sneakers-release countersignatures)
 #   OUT            the output directory
@@ -34,7 +37,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
-: "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${OUT:?}"
+: "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${STATIC:?}" "${OUT:?}"
 : "${SIGNATURES:?sneakers-release publishes no image countersignatures yet; the bundle cannot be built without them}"
 keys="${KEYS:-$root/keys/production}"
 arch=amd64
@@ -85,7 +88,7 @@ cp "$work/product/bin/payload.age" "$OUT/product-payload.age"
 
 echo "release: root"
 PINS_LDFLAGS="$pins" VERSION="$VERSION" ARCH="$arch" RELEASE="$OUT/release.yaml" OPENSSH="$OPENSSH" \
-  BUSYBOX="$BUSYBOX" OUT="$work/root" bash "$root/build/root/build.sh"
+  BUSYBOX="$BUSYBOX" STATIC="$STATIC" OUT="$work/root" bash "$root/build/root/build.sh"
 cp "$work/root/root-$VERSION.img" "$work/root/verity.json" "$OUT/"
 
 echo "release: UKI (unsigned)"
