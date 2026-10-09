@@ -94,6 +94,45 @@ directory. The images pinned are those under `spec.services`, `spec.thirdParty`,
 and `spec.kubernetes.k0s.images` of `release.yaml`; `spec.tools` (the helm test pod) isn't
 bundled. A placeholder digest (`sha256:TBD-at-release`) is refused.
 
+## The brand
+
+A product bundle may carry the product's brand in `brand/`, which the box-state pages use while the
+product is away ([edge-fallback.md](edge-fallback.md#the-products-brand)). It's optional, and a
+bundle without one keeps the base look. It sits in the payload with everything else, so the
+header's signature covers it through the payload digest.
+
+`brand/brand.yaml` declares it:
+
+```yaml
+apiVersion: sneakers-pam/v1alpha1
+kind: Brand
+logo: logo.svg          # or logo.png; optional
+colours:                # optional; all three or none
+  background: "#0b1f33"
+  text: "#ffffff"
+  accent: "#ffb000"
+```
+
+At least one of `logo` and `colours` is set. `brand/` holds `brand.yaml` and the one logo it names,
+nothing else. `sneakers-artifact product-check` (so `build/product/build.sh`, with `BRAND=<folder>`)
+and the box's install check it the same way, and refuse a malformed brand (`KIT_BUNDLE_MISMATCH`):
+
+- **The manifest:** at most 4 KiB, known fields only.
+- **The colours:** `#rrggbb` hex each, nothing else (they go into the page's stylesheet).
+- **The logo:** `logo.svg` or `logo.png`, at most 64 KiB. A PNG must decode and be at most 2048
+  pixels a side. An SVG must be well-formed XML with one `svg` root in the SVG namespace, at most
+  32 deep and 4096 elements, made only of shapes, text, gradients, clip paths, masks, `use` and
+  `symbol`, with presentation attributes only. There is no sanitising: an SVG with a script,
+  `style`, animation, link, image, `foreignObject`, an event attribute, a DOCTYPE or a processing
+  instruction, or any reference outside the file (`href` and `url()` may only name `#id`) is
+  refused.
+- **Contrast:** text on background must reach 4.5:1 and accent on background 3:1 (WCAG AA). A
+  pair that doesn't isn't refused: the base colours stay, the logo still shows, and the check
+  prints a warning.
+
+The same check runs again on the box whenever edgefall loads the brand; one that fails there is
+ignored and the base look stays.
+
 ## Lab keys
 
 `build/keys/lab-keys.sh <outdir>` makes a throwaway key set for one CI run: PK, KEK, db and a

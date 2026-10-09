@@ -75,13 +75,15 @@ The payload is the unpacked bundle as a tar: `release.yaml`, the `k0s` binary, t
 when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
 airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
 and `manifests/<stack>/*.yaml`, the stacks k0s applies (the lab bundle's hello stack and interim
-edge, [k0s.md](k0s.md)). After it decrypts and unpacks one, the box checks it like the kit checks a
-root: only those entries, `k0s` (and `helm`, which it carries if and only if `release.yaml` pins it)
-with the SHA-256 its `release.yaml` pins, exactly the pinned images,
-each signed by the release key, and YAML stacks only (`KIT_BUNDLE_MISMATCH`, `KIT_IMAGE_UNSIGNED`).
+edge, [k0s.md](k0s.md)), and optionally `brand/`, the product's logo and colours for the box-state
+pages ([artifact.md](artifact.md#the-brand)). After it decrypts and unpacks one, the box checks it
+like the kit checks a root: only those entries, `k0s` (and `helm`, which it carries if and only if
+`release.yaml` pins it) with the SHA-256 its `release.yaml` pins, exactly the pinned images, each
+signed by the release key, YAML stacks only, and a well-formed brand (`KIT_BUNDLE_MISMATCH`,
+`KIT_IMAGE_UNSIGNED`).
 How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundle).
 
-`build/product/build.sh` lays the bundle out, runs that check (`sneakers-artifact product-check`)
+`build/product/build.sh` lays the bundle out (with `BRAND=<folder>` for a brand), runs that check (`sneakers-artifact product-check`)
 and packs it for a base range (`MIN_BASE` and the optional `MAX_BASE`, `bin-pack --kind product --min-base ... --max-base ...`; `BASES`, `--base`, still adds exact bases for older boxes); the caller signs the
 header and seals it with `bin-seal`. `sneakers-artifact product-index` writes the index a mirror
 serves next to the bundles: version, architecture, channel, the base range and bases, file name and size per bundle,
