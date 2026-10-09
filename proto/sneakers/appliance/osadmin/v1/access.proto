@@ -373,12 +373,26 @@ message IssueSshKeyResponse {
   // private_key is the OpenSSH private key, shown once.
   string private_key = 2;
   // certificate is the OpenSSH certificate line, to save next to the key
-  // as <file_name>-cert.pub.
+  // as certificate_file_name.
   string certificate = 3;
   // public_key is the OpenSSH public key line.
   string public_key = 4;
-  // file_name is a suggested name for the private key file.
+  // file_name is the name for the private key file, unique to this key
+  // (it carries the serial), so a browser never renames a repeated
+  // download and the pair always matches.
   string file_name = 5;
+  // certificate_file_name is <file_name>-cert.pub: OpenSSH loads the
+  // certificate on its own only from this name next to the key.
+  string certificate_file_name = 6;
+  // ppk is the same key as a PuTTY private key file (format 3, PuTTY 0.78
+  // or later) with the certificate embedded, for PuTTY and MobaXterm.
+  // Shown once, like private_key.
+  string ppk = 7;
+  // ppk_file_name is <file_name>.ppk.
+  string ppk_file_name = 8;
+  // ssh_command is the OpenSSH command for this key and box:
+  // ssh -i <file_name> -o CertificateFile=<certificate_file_name> <admin>@<box>.
+  string ssh_command = 9;
 }
 
 message ChangePasswordRequest {

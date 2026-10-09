@@ -7,19 +7,36 @@ code from :8443. There are no SSH password logins, no admin-supplied login keys,
 
 ### The first SSH login
 
-SSH needs a key from :8443 first; a client without one is refused with
-`No supported authentication methods available (server sent: publickey)`, after the banner below.
+SSH needs a key from :8443 first, and sshd takes it only with its certificate. A client without
+one is refused with `No supported authentication methods available (server sent: publickey)`,
+after the banner below.
 
 1. Sign in to :8443 (name, password and TOTP code), open **Access** and choose **Get an SSH key**
-   (it asks for a fresh TOTP code). The private key and its certificate download once; the box
-   keeps neither.
-2. Keep the certificate file next to the key and log in with your own name:
-   `ssh -i <key file> <name>@192.0.2.10`.
+   (it asks for a fresh TOTP code). The box keeps neither the private key nor any of the files.
+   Each key has three downloads, all named after the key's serial so they always pair and a
+   browser never adds " (1)": `id_ed25519_<name>_sneakers_<serial>` (the OpenSSH private key),
+   `<that>-cert.pub` (its certificate) and `<that>.ppk` (the same key for PuTTY and MobaXterm,
+   with the certificate in it).
+2. Log in with your own name, sending the certificate with the key:
+   - **OpenSSH:** `ssh -i <key> -o CertificateFile=<key>-cert.pub <name>@192.0.2.10`. OpenSSH
+     also finds the certificate on its own when it sits next to the key under exactly
+     `<key>-cert.pub`; the `CertificateFile` option makes it explicit.
+   - **PuTTY 0.78 or later:** use the `.ppk` download (Connection > SSH > Auth > Credentials,
+     "Private key file for authentication"). To build one yourself from the OpenSSH pair: in
+     PuTTYgen, Conversions > Import key, then Key > Add certificate to key, then Save private key;
+     or keep the key and set Connection > SSH > Auth > Credentials > "Certificate to use".
+     Earlier PuTTY releases can't read a certificate and are refused.
+   - **MobaXterm:** Session (or User sessions > New session), then SSH; Remote host: the box's
+     address; Username: your admin name; Port: 22. Under Advanced SSH settings tick "Use private
+     key" and browse to the box's `.ppk`. Connect. MobaXterm reads PPK format 3 since v21.5 and
+     has its own certificate field (expert settings) since v25.1; use v25.1 or later.
 3. The closed shell asks for a TOTP code, under the same lockout as :8443, then shows the menu for
    your role.
 
 There is no way to skip the TOTP code on SSH and no SSH password login: the key is one factor and
-the code the other.
+the code the other. A bare box-issued key, sent without its certificate, is never accepted: sshd
+refuses it, and `sneakers-sshd-run` audits the refusal (below), so :8443's audit log shows why the
+login failed.
 
 ## sshd's configuration
 
@@ -27,7 +44,9 @@ accessd and `sneakers-sshd-run` render sshd's files from the access store into a
 check them with the pinned `sshd -t` and swap them into `/run/sneakers/ssh/` only when sshd accepts
 them (`sshconfig.Install`, under an flock on `/run/sneakers/ssh.lock`). Beside `sshd_config` it
 writes `banner`, which sshd sends before authentication (`Banner`): SSH takes only keys the box
-issued, then a TOTP code, and a key comes from :8443, Access, "Get an SSH key". A config that fails the check
+issued, each with its certificate, then a TOTP code; a key comes from :8443, Access, "Get an SSH
+key"; and it gives the OpenSSH command with `-o CertificateFile=<key>-cert.pub` and the PuTTY and
+MobaXterm way (the `.ppk`). A config that fails the check
 is never used, and the previous one stays.
 
 - `AuthenticationMethods publickey`, `AuthorizedKeysFile none` and `TrustedUserCAKeys
@@ -46,8 +65,20 @@ is never used, and the previous one stays.
 
 The tests run the pinned static sshd's `sshd -t` on the rendered config, and
 `TestRealSshdTakesOnlyTheRootKeysCertificates` logs in against it: a certificate from the root key
-works, a plain key or another CA's certificate doesn't, and a revoked serial is refused. The Static
-tools workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary it built.
+works, a plain key or another CA's certificate doesn't, and a revoked serial is refused.
+`TestRealSshdAuditsABareIssuedKey` sends an issued key without its certificate and checks the
+audit entry. The Static tools workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary
+it built.
+
+### A key without its certificate
+
+sshd's log (`LogLevel VERBOSE`, on `sneakers-sshd-run`'s stderr) passes through a watch on its way
+out. For each `Failed publickey for <user> from <address> ... ssh2: ED25519 SHA256:<fingerprint>`
+line whose fingerprint is a box-issued key in the access store, it writes an OS audit entry:
+action `ssh.login`, outcome `refused`, code `ACCESS_KEY_NO_CERTIFICATE`, the login name as the
+actor, the source address, the key's fingerprint, the key's owner as the target and its serial.
+A certificate that's refused (expired, revoked, for another name) logs as `ED25519-CERT` and isn't
+counted here, and neither is a key the box never issued. The log itself is passed on unchanged.
 
 ## sneakers-sshd-run
 

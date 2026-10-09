@@ -29,6 +29,7 @@ const (
 	AccessNoAdmin          = 3020
 	AccessPolicy           = 3021
 	AccessQuorum           = 3022
+	AccessKeyNoCertificate = 3023
 	ElevExpired            = 3303
 	ElevUsed               = 3304
 	ElevMaintenance        = 3305
@@ -81,6 +82,7 @@ var accessEntries = []apperr.Entry{
 	{Code: AccessNoAdmin, Symbol: "ACCESS_NO_ADMIN", Title: "access", Cause: "sshd was asked to start while no admin has a password and a TOTP secret"},
 	{Code: AccessPolicy, Symbol: "ACCESS_POLICY", Title: "access", Cause: "an access setting is out of its bounds"},
 	{Code: AccessQuorum, Symbol: "ACCESS_QUORUM", Title: "access", Cause: "the root-operator roster would be empty, name someone who isn't an admin, or have a threshold out of range"},
+	{Code: AccessKeyNoCertificate, Symbol: "ACCESS_KEY_NO_CERTIFICATE", Title: "access", Cause: "a box-issued SSH key was sent without its certificate; sshd takes only the certificate (load <key>-cert.pub, or use the .ppk)"},
 	{Code: ElevExpired, Symbol: "ELEV_EXPIRED", Title: "elevation", Cause: "the request or certificate expired"},
 	{Code: ElevUsed, Symbol: "ELEV_USED", Title: "elevation", Cause: "the certificate was already used"},
 	{Code: ElevMaintenance, Symbol: "ELEV_MAINTENANCE", Title: "elevation", Cause: "an upgrade is in progress"},

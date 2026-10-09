@@ -90,13 +90,21 @@ var configTemplate string
 var tmpl = template.Must(template.New("sshd_config").Funcs(template.FuncMap{"join": strings.Join}).Parse(configTemplate))
 
 // banner is what sshd sends before authentication: a client without a
-// box-issued key is refused with only "server sent: publickey", so it says
-// where the key comes from.
+// box-issued key and its certificate is refused with only "server sent:
+// publickey", so it says where the key comes from and how to send the
+// certificate with it.
 const banner = `Sneakers-PAM Appliance
 
-SSH takes only keys this box issued, then a TOTP code. No passwords.
+SSH takes only keys this box issued, each with its certificate, then a
+TOTP code. No passwords. A key sent without its certificate is refused.
 No key yet? Sign in to the admin page on :8443, open Access and choose
-"Get an SSH key". Then: ssh -i <key file> <your name>@<this box>
+"Get an SSH key".
+OpenSSH:
+  ssh -i <key> -o CertificateFile=<key>-cert.pub <your name>@<this box>
+PuTTY 0.78 or later, or MobaXterm: use the .ppk download, which has the
+certificate in it (Connection > SSH > Auth > Credentials in PuTTY; "Use
+private key" under Advanced SSH settings in MobaXterm).
+The TOTP prompt comes next, in the menu.
 `
 
 type view struct {
