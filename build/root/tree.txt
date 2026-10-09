@@ -30,6 +30,8 @@ drwxr-xr-x 0/0 /sys
 drwxr-xr-x 0/0 /tmp
 drwxr-xr-x 0/0 /usr
 drwxr-xr-x 0/0 /usr/bin
+lrwxrwxrwx 0/0 /usr/bin/helm -> /var/lib/sneakers/product/current/helm
+lrwxrwxrwx 0/0 /usr/bin/kubectl -> /var/lib/sneakers/product/current/k0s
 -rwxr-xr-x 0/0 /usr/bin/sneakers-accessd
 -rwxr-xr-x 0/0 /usr/bin/sneakers-console
 -rwxr-xr-x 0/0 /usr/bin/sneakers-edgefall

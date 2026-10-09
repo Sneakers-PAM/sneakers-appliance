@@ -107,6 +107,11 @@ ln -s /var/lib/log "$tree/var/log"
 ln -s busybox "$tree/bin/mount"
 ln -s busybox "$tree/bin/umount"
 ln -s /var/lib/sneakers/machine-id "$tree/etc/machine-id"
+# The root shell's kubectl and helm follow the installed product's current
+# slot (they dangle until one is installed); k0s answers as kubectl when
+# it's run by that name.
+ln -s /var/lib/sneakers/product/current/k0s "$tree/usr/bin/kubectl"
+ln -s /var/lib/sneakers/product/current/helm "$tree/usr/bin/helm"
 
 echo "root: release, service table"
 install -m 0644 "$RELEASE" "$tree/usr/share/sneakers/release/release.yaml"

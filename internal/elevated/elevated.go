@@ -22,6 +22,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"syscall"
@@ -34,6 +35,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 )
 
 // Accessd is the part of access.v1's ElevationService this uses.
@@ -68,10 +70,27 @@ type Options struct {
 	Warnings []time.Duration
 	// Idle ends the session after this long without a key; zero is
 	// DefaultIdle.
-	Idle   time.Duration
-	PID    int
-	Logger log.Logger
+	Idle time.Duration
+	// Product is the installed product's slot; empty is DefaultProduct.
+	// With a product there, the shell's KUBECONFIG is Kubeconfig (empty is
+	// DefaultKubeconfig), and kubectl and helm on the PATH reach its k0s.
+	Product    string
+	Kubeconfig string
+	PID        int
+	Logger     log.Logger
 }
+
+// DefaultProduct is the installed product's current slot, where k0s and
+// helm come from (the root's /usr/bin/kubectl and /usr/bin/helm link there).
+const DefaultProduct = "/var/lib/sneakers/product/current"
+
+// DefaultKubeconfig is the installed k0s's admin kubeconfig, root-only on
+// the state volume.
+const DefaultKubeconfig = "/var/lib/k0s/pki/admin.conf"
+
+// NoProduct is what the shell says at its start when no product is
+// installed.
+const NoProduct = "No product is installed; kubectl and helm come with it."
 
 // Result is how the session ended.
 type Result struct {
@@ -94,6 +113,12 @@ func Run(ctx, terminated context.Context, o Options) (Result, error) {
 	}
 	if o.Idle == 0 {
 		o.Idle = DefaultIdle
+	}
+	if o.Product == "" {
+		o.Product = DefaultProduct
+	}
+	if o.Kubeconfig == "" {
+		o.Kubeconfig = DefaultKubeconfig
 	}
 	if o.Ticket == "" || o.Admin == "" {
 		return Result{}, errors.New("there is no root-shell ticket")
@@ -152,6 +177,15 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		"SNEAKERS_ROOT_SHELL_ENDS=" + strconv.FormatInt(ends.Unix(), 10),
 		"PS1=" + Prompt,
 	}
+	_, err = os.Stat(filepath.Join(o.Product, product.BundleFile))
+	installed := err == nil
+	if installed {
+		// The root is read-only and root has no home there: helm keeps its
+		// cache and settings on the /tmp tmpfs.
+		cmd.Env = append(cmd.Env, "KUBECONFIG="+o.Kubeconfig,
+			"HELM_CACHE_HOME=/tmp/helm/cache", "HELM_CONFIG_HOME=/tmp/helm/config", "HELM_DATA_HOME=/tmp/helm/data")
+	}
+	o.Logger.Debug("elevated: the shell's environment", log.F("product_installed", installed))
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
 	if err := cmd.Start(); err != nil {
@@ -174,6 +208,9 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		_, _ = rec.Write(b)
 	}
 	say(fmt.Sprintf("Root shell for %s, recorded. It ends at %s UTC, or after %s without a key.", admin, ends.UTC().Format("15:04:05"), o.Idle))
+	if !installed {
+		say(NoProduct)
+	}
 	typed := make(chan struct{}, 1)
 	// gone closes when the client's side closes: the session ends as an
 	// exit.
