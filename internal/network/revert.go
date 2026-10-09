@@ -67,7 +67,10 @@ func (p Pending) Left(now time.Time) time.Duration {
 type Outcome struct {
 	ID       string
 	Reverted bool
-	At       time.Time
+	// AtStart: the change was undone when netd started, because the box
+	// restarted inside its window.
+	AtStart bool
+	At      time.Time
 }
 
 // NewReverter returns a reverter on clk.
@@ -113,7 +116,11 @@ func (r *Reverter) Apply(prev, next Settings, apply ApplyFunc) (string, error) {
 // Confirm keeps the pending change. A token that isn't the pending one is
 // NET_INVALID naming "token"; NET_REVERTED when the change was already
 // undone.
-func (r *Reverter) Confirm(token string) error {
+//
+// keep, when given, runs once the token checks out and before the change
+// counts as kept: when it fails (the undo file can't be removed, say) the
+// change stays pending and its error is returned.
+func (r *Reverter) Confirm(token string, keep ...func() error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.pending == nil {
@@ -121,6 +128,12 @@ func (r *Reverter) Confirm(token string) error {
 	}
 	if r.pending.token != token {
 		return invalid("token", "that isn't the pending change")
+	}
+	for _, k := range keep {
+		if err := k(); err != nil {
+			r.o.Logger.Error(err, "network: the change can't be kept; it stays pending", log.F("change", r.pending.id))
+			return err
+		}
 	}
 	r.pending.timer.Stop()
 	r.last = &Outcome{ID: r.pending.id, At: r.clk.Now()}
@@ -137,6 +150,14 @@ func (r *Reverter) PendingChange() (Pending, bool) {
 		return Pending{}, false
 	}
 	return Pending{ID: r.pending.id, Token: r.pending.token, Deadline: r.pending.deadline}, true
+}
+
+// RevertedAtStart records that a change left unconfirmed when the box
+// stopped was undone at start, so Last reports it.
+func (r *Reverter) RevertedAtStart() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.last = &Outcome{ID: "start-" + newToken()[:6], Reverted: true, AtStart: true, At: r.clk.Now()}
 }
 
 // Last returns how the most recent change ended.
@@ -170,7 +191,7 @@ func (r *Reverter) revert(c *change) {
 		r.o.Logger.Error(aerr, "network: revert failed")
 		err = codes.Wrap(codes.NetReverted, aerr)
 	}
-	r.o.Logger.Warn("network: change reverted", log.F("change", c.id), log.F("error", codes.Describe(err)))
+	r.o.Logger.Error(err, "network: the change wasn't confirmed and was reverted", log.F("change", c.id))
 	if r.o.OnRevert != nil {
 		r.o.OnRevert(c.prev, err)
 	}

@@ -788,3 +788,35 @@ func TestANamesRefusalSaysWhichNamesWereCheckedAndWhichTheCertificateCovers(t *t
 	_, _, err := f.s.Import(context.Background(), certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: f.chain(), KeyPEM: string(l.KeyPEM)})
 	wantCode(t, err, codes.TLSNames, "the certificate covers www.example.org, mail.example.org, but none of the names this box checks: "+host+", 192.0.2.10")
 }
+
+// An assigned certificate stays assigned across a reboot, an update and a
+// revert: each opens the store again from the state volume.
+func TestAnAssignmentSurvivesAReopen(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	l := f.ca.Issue(t, testpki.LeafOptions{Names: []string{host}})
+	c, _, err := f.s.Import(ctx, certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: f.chain(), KeyPEM: string(l.KeyPEM)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Assign(ctx, certstore.EndpointAdmin, c.ID); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		s2, err := certstore.Open(certstore.Options{Dir: f.dir, AdminDir: f.admin, Sealer: f.sealer,
+			Names: func(context.Context) (string, []string, error) { return host, addrs, nil }})
+		if err != nil {
+			t.Fatal(err)
+		}
+		snap, err := s2.Snapshot(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ep := snap.Endpoints[0]; ep.Source != certstore.EndpointAssigned || ep.CertificateID != c.ID {
+			t.Fatalf("after a reopen %+v", ep)
+		}
+		if certstore.AssignedID(f.admin) != c.ID {
+			t.Fatal("the admin directory's marker is gone")
+		}
+	}
+}

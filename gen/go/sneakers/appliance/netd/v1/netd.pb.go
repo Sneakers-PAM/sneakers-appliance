@@ -675,8 +675,11 @@ type ChangeOutcome struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
 	// reverted is true when the change was undone for lack of a Confirm.
-	Reverted      bool  `protobuf:"varint,2,opt,name=reverted,proto3" json:"reverted,omitempty"`
-	AtUnix        int64 `protobuf:"varint,3,opt,name=at_unix,json=atUnix,proto3" json:"at_unix,omitempty"`
+	Reverted bool  `protobuf:"varint,2,opt,name=reverted,proto3" json:"reverted,omitempty"`
+	AtUnix   int64 `protobuf:"varint,3,opt,name=at_unix,json=atUnix,proto3" json:"at_unix,omitempty"`
+	// at_start is true when the box stopped or restarted inside the
+	// change's window and netd undid it when it started again.
+	AtStart       bool `protobuf:"varint,4,opt,name=at_start,json=atStart,proto3" json:"at_start,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -732,6 +735,13 @@ func (x *ChangeOutcome) GetAtUnix() int64 {
 	return 0
 }
 
+func (x *ChangeOutcome) GetAtStart() bool {
+	if x != nil {
+		return x.AtStart
+	}
+	return false
+}
+
 type SetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Settings      *Settings              `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
@@ -778,9 +788,13 @@ func (x *SetRequest) GetSettings() *Settings {
 
 type SetResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// token is what Confirm takes.
+	// token is what Confirm takes. Empty when the change was kept at once:
+	// one that leaves the interfaces, addresses, host name, allow-list and
+	// cluster ranges alone (DNS, search domains, NTP, the time zone, the
+	// proxy) can't cut the admin off and has no window.
 	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	// revert_after_seconds is how long the change waits for Confirm.
+	// revert_after_seconds is how long the change waits for Confirm; 0 when
+	// it was kept at once.
 	RevertAfterSeconds int32 `protobuf:"varint,2,opt,name=revert_after_seconds,json=revertAfterSeconds,proto3" json:"revert_after_seconds,omitempty"`
 	// change_id names the change in logs and the audit.
 	ChangeId      string `protobuf:"bytes,3,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
@@ -1728,11 +1742,12 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\x05token\x18\x03 \x01(\tR\x05token\x12\x1b\n" +
 	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12!\n" +
 	"\fseconds_left\x18\x05 \x01(\x05R\vsecondsLeft\x12=\n" +
-	"\x04last\x18\x06 \x01(\v2).sneakers.appliance.netd.v1.ChangeOutcomeR\x04last\"a\n" +
+	"\x04last\x18\x06 \x01(\v2).sneakers.appliance.netd.v1.ChangeOutcomeR\x04last\"|\n" +
 	"\rChangeOutcome\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1a\n" +
 	"\breverted\x18\x02 \x01(\bR\breverted\x12\x17\n" +
-	"\aat_unix\x18\x03 \x01(\x03R\x06atUnix\"N\n" +
+	"\aat_unix\x18\x03 \x01(\x03R\x06atUnix\x12\x19\n" +
+	"\bat_start\x18\x04 \x01(\bR\aatStart\"N\n" +
 	"\n" +
 	"SetRequest\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"r\n" +

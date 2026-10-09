@@ -51,7 +51,7 @@ func TestTheAPIOverConnect(t *testing.T) {
 		t.Fatalf("invalid set: %v", err)
 	}
 	next := network.ToWire(static("eth0"))
-	next.Ntp = []string{"192.0.2.124"}
+	next.AllowList = []string{"192.0.2.0/24"}
 	set, err := c.Set(ctx, connect.NewRequest(&netdv1.SetRequest{Settings: next}))
 	if err != nil || set.Msg.GetToken() == "" || set.Msg.GetRevertAfterSeconds() != 120 {
 		t.Fatalf("set %v %v", set, err)
@@ -104,7 +104,7 @@ func TestGetCarriesThePendingChange(t *testing.T) {
 	c := serve(t, b)
 	ctx := context.Background()
 	next := network.ToWire(static("eth0"))
-	next.Ntp = []string{"192.0.2.124"}
+	next.AllowList = []string{"192.0.2.0/24"}
 	set, err := c.Set(ctx, connect.NewRequest(&netdv1.SetRequest{Settings: next}))
 	if err != nil || set.Msg.GetChangeId() == "" {
 		t.Fatalf("set %v %v", set, err)

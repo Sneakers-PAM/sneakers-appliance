@@ -50,7 +50,7 @@ func (h *handler) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*co
 		out.SecondsLeft = int32(p.Left(h.d.o.Clock.Now()).Seconds())
 	}
 	if l, ok := h.d.LastChange(); ok {
-		out.Last = &netdv1.ChangeOutcome{ChangeId: l.ID, Reverted: l.Reverted, AtUnix: l.At.Unix()}
+		out.Last = &netdv1.ChangeOutcome{ChangeId: l.ID, Reverted: l.Reverted, AtUnix: l.At.Unix(), AtStart: l.AtStart}
 	}
 	return connect.NewResponse(out), nil
 }
@@ -64,7 +64,12 @@ func (h *handler) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) 
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &netdv1.SetResponse{Token: tok, RevertAfterSeconds: int32(network.RevertAfter.Seconds())}
+	out := &netdv1.SetResponse{Token: tok}
+	if tok == "" {
+		// Kept at once: no window, nothing to confirm.
+		return connect.NewResponse(out), nil
+	}
+	out.RevertAfterSeconds = int32(network.RevertAfter.Seconds())
 	if p, ok := h.d.PendingChange(); ok && p.Token == tok {
 		out.ChangeId = p.ID
 	}

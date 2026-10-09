@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -348,4 +349,18 @@ func validateCluster(s Settings) error {
 		}
 	}
 	return nil
+}
+
+// KeepsReach reports whether going from prev to next leaves everything
+// that decides how the admin reaches the box alone: the interfaces, their
+// addresses, the host name (the :8443 certificate follows it), the
+// allow-list and the cluster ranges. Such a change (DNS, search domains,
+// NTP, the time zone, the proxy) can't cut anyone off, so it needs no
+// confirmation window.
+func KeepsReach(prev, next Settings) bool {
+	a, b := prev, next
+	for _, s := range []*Settings{&a, &b} {
+		s.DNS, s.Search, s.NTP, s.TimeZone, s.HTTPSProxy = nil, nil, nil, "", ""
+	}
+	return reflect.DeepEqual(a, b)
 }

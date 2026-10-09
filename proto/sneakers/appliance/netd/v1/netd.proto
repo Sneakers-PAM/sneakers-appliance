@@ -120,6 +120,9 @@ message ChangeOutcome {
   // reverted is true when the change was undone for lack of a Confirm.
   bool reverted = 2;
   int64 at_unix = 3;
+  // at_start is true when the box stopped or restarted inside the
+  // change's window and netd undid it when it started again.
+  bool at_start = 4;
 }
 
 message SetRequest {
@@ -127,9 +130,13 @@ message SetRequest {
 }
 
 message SetResponse {
-  // token is what Confirm takes.
+  // token is what Confirm takes. Empty when the change was kept at once:
+  // one that leaves the interfaces, addresses, host name, allow-list and
+  // cluster ranges alone (DNS, search domains, NTP, the time zone, the
+  // proxy) can't cut the admin off and has no window.
   string token = 1;
-  // revert_after_seconds is how long the change waits for Confirm.
+  // revert_after_seconds is how long the change waits for Confirm; 0 when
+  // it was kept at once.
   int32 revert_after_seconds = 2;
   // change_id names the change in logs and the audit.
   string change_id = 3;

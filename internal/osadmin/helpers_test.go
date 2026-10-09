@@ -304,6 +304,9 @@ type fakeNetd struct {
 	servicePorts []uint32
 	// down makes Status fail, as a netd that doesn't answer.
 	down bool
+	// keepAtOnce makes Set keep the change with no window, as netd does
+	// for a DNS or NTP change.
+	keepAtOnce bool
 }
 
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
@@ -328,6 +331,9 @@ func (n *fakeNetd) Set(_ context.Context, r *connect.Request[netdv1.SetRequest])
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.settings = r.Msg.GetSettings()
+	if n.keepAtOnce {
+		return connect.NewResponse(&netdv1.SetResponse{}), nil
+	}
 	n.pending, n.changeID = "tok-1", "chg-1"
 	return connect.NewResponse(&netdv1.SetResponse{Token: n.pending, RevertAfterSeconds: 120, ChangeId: n.changeID}), nil
 }

@@ -58,6 +58,13 @@ message GetNetworkResponse {
   string pending_change_id = 8;
   // revert_seconds_left is how long the pending change still waits.
   int32 revert_seconds_left = 9;
+  // last_change_reverted is true when the most recent change that waited
+  // for a confirmation was undone; last_change_reverted_at_start when that
+  // happened because the box stopped or restarted inside its window.
+  // last_change_id names it in the audit.
+  bool last_change_reverted = 10;
+  bool last_change_reverted_at_start = 11;
+  string last_change_id = 12;
 }
 
 message SetNetworkRequest {
@@ -65,8 +72,12 @@ message SetNetworkRequest {
 }
 
 message SetNetworkResponse {
-  // token is what ConfirmNetwork takes.
+  // token is what ConfirmNetwork takes. Empty when the change was kept at
+  // once, with nothing to confirm: a change of only the DNS servers,
+  // search domains, NTP servers, time zone or proxy can't cut the admin
+  // off, so it has no window.
   string token = 1;
+  // revert_after_seconds is the window; 0 when the change was kept at once.
   int32 revert_after_seconds = 2;
   // moves_management is true when the change moves the management
   // address: the page that applied it loses the box and has to confirm from

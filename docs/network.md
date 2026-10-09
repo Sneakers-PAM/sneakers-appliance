@@ -29,7 +29,12 @@ A setting that fails these rules is refused with `NET_INVALID`; the error names 
 
 ## Auto-revert
 
-A change applies at once and waits 120 seconds for a confirmation from a session that still works
+A change that leaves the interfaces, their addresses, the host name, the allow-list and the cluster
+ranges alone (DNS servers, search domains, NTP servers, the time zone, the proxy) can't cut anyone
+off, so it is applied and kept at once: no window, nothing to confirm, and `SetNetwork` returns an
+empty token with `revert_after_seconds` 0 (the audit's `network.set` has `detail.kept: at-once`).
+
+Any other change applies at once and waits 120 seconds for a confirmation from a session that still works
 (the Network page, or the shell's `network set`, sends it). Without one, the previous settings are
 applied again and the box records `NET_REVERTED`, so a change that cuts the admin off heals itself.
 Only one change waits at a time: a second one is refused naming `pending` until the first is
@@ -50,11 +55,46 @@ confirmed there within the window.
 The audit has `network.set` and `network.confirm` with the change id in `detail.change`. A change
 that reverts is recorded as `network.revert` (actor `netd`, code `NET_REVERTED`): osadmin asks
 netd how the change ended a few seconds after its window, and again on the next `GetNetwork`, and
-writes the entry once.
+writes the entry once. A change undone at start (below) is written by netd itself, with
+`detail.at: start`, since osadmin may not have been running inside its window. Both undo paths log
+at error level, so they reach a production box's log.
+
+Every page can show the window: `StatusService.GetStatus` carries `network_change` (`pending`,
+`revert_seconds_left`, `change_id`, and `last_reverted`, `last_reverted_at_start`,
+`last_change_id`) and a warning, `WARNING_KIND_NETWORK_PENDING` while a change waits and
+`WARNING_KIND_NETWORK_REVERTED` once one was undone, which the console shows too.
+
+The console's network editor changes only what it edits: it starts from the box's current settings
+(`Get`), puts the static address on its family and, when one is typed, the DNS server, and keeps
+NTP, the host name, the search domains, the allow-list, the time zone, the proxy and the cluster
+ranges.
 
 The window survives a restart: while a change waits, netd keeps the previous settings in
 `network.prev.yaml` next to `network.yaml`. If netd stops or the box loses power inside the
-window, the next start applies `network.prev.yaml` again, so an unconfirmed change is undone.
+window, the next start writes `network.prev.yaml` back to `network.yaml` and applies it, so an
+unconfirmed change is undone, and says so: `Get`'s `last` has `reverted` and `at_start`, which
+osadmin's `GetNetwork` passes on as `last_change_reverted` and `last_change_reverted_at_start`.
+A confirmation counts only once `network.prev.yaml` is removed and the removal is synced to disk;
+if it can't be removed, `Confirm` fails and the change stays pending, so the page never says
+"Confirmed" for a change the next start would undo. Every write and removal under `settings/` is
+synced (the file, then its directory).
+
+## What is kept where
+
+Every setting an admin makes lives on the encrypted state volume, `/var/lib/sneakers`, which a
+reboot, a base update (the other root slot), a product update and a revert all leave alone:
+
+| Setting | File |
+|---|---|
+| Network (addresses, host name, DNS, NTP, allow-list, time zone, proxy, cluster ranges) | `settings/network.yaml` (and `settings/network.prev.yaml` while a change waits) |
+| Update mode, window and mirror | `osadmin-api/upgrade-policy.json` |
+| The mirror's CA or pin | `osadmin-api/update-trust.json` |
+| Access policy (lockout, root-shell lifetimes, SSH key validity) | `access/` (the access store) |
+| TLS certificates and endpoint assignments | `osadmin-api/tls/store.json`, the keys sealed in KeyCustody; the :8443 files and their `tls.assigned` marker in `osadmin/` |
+| The clock floor | `netd/clock-floor` |
+
+The 22 and 8443 open/closed state follows the setup steps and is kept in `/run`, so it is
+rebuilt at each boot.
 
 ## sneakers-netd
 

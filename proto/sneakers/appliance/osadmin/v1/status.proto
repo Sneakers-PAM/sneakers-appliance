@@ -95,6 +95,13 @@ enum WarningKind {
   // WARNING_KIND_TLS_NAMES: an endpoint's certificate no longer covers any
   // of the names it answers on.
   WARNING_KIND_TLS_NAMES = 10;
+  // WARNING_KIND_NETWORK_PENDING: a network change waits for its
+  // confirmation and reverts on its own when the window ends.
+  WARNING_KIND_NETWORK_PENDING = 11;
+  // WARNING_KIND_NETWORK_REVERTED: the last network change wasn't
+  // confirmed and was undone (by the window, or at start after a reboot
+  // or an update inside it).
+  WARNING_KIND_NETWORK_REVERTED = 12;
 }
 
 message Warning {
@@ -165,6 +172,25 @@ message GetStatusResponse {
   // product is the product bundle's slots, as GetUpgrades gives them, for
   // the console's status screen.
   ProductSlots product = 26;
+  // network_change is the network change that waits for its
+  // confirmation, and how the last one ended, so every page can show it.
+  NetworkChange network_change = 27;
+}
+
+// NetworkChange is the state of the network change window.
+message NetworkChange {
+  // pending is true while a change waits for ConfirmNetwork;
+  // revert_seconds_left is how long it still waits, and change_id names it
+  // in the audit.
+  bool pending = 1;
+  int32 revert_seconds_left = 2;
+  string change_id = 3;
+  // last_reverted is true when the last change that waited was undone;
+  // last_reverted_at_start when that was because the box restarted inside
+  // its window. last_change_id names it.
+  bool last_reverted = 4;
+  bool last_reverted_at_start = 5;
+  string last_change_id = 6;
 }
 
 message SetSecureBootRequest {
