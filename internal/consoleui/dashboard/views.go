@@ -129,15 +129,17 @@ func product(d Data, now time.Time) tui.Line {
 }
 
 // productSlots is the Product line from Status's product slots: NONE
-// before the first install, FAILED for a day after a product update
-// failed, else whether the installed version runs, with what's staged or
-// kept to go back to.
+// before the first install, FAILED for a day after a product apply or
+// revert failed once it had touched the running product, else whether
+// the installed version runs, with what's staged or kept to go back to. A
+// bundle refused or rejected before that (while it was verified or
+// staged) leaves the line as the product runs.
 func productSlots(st *osadminv1.GetStatusResponse, now time.Time) tui.Line {
 	if st == nil {
 		return status("Product", "UNKNOWN", tui.Warn, "no status yet")
 	}
 	p := st.GetProduct()
-	if u := st.GetUpgradeProgress(); u.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT && u.GetFailed() && now.Sub(u.GetUpdatedAt().AsTime()) < failedStepShown {
+	if u := st.GetUpgradeProgress(); u.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT && u.GetFailed() && touchedProduct(u) && now.Sub(u.GetUpdatedAt().AsTime()) < failedStepShown {
 		return status("Product", "FAILED", tui.Alert, "the update to "+u.GetVersion()+" failed")
 	}
 	v := p.GetInstalledVersion()
@@ -158,6 +160,25 @@ func productSlots(st *osadminv1.GetStatusResponse, now time.Time) tui.Line {
 		detail += "; " + p.GetPreviousVersion() + " to go back"
 	}
 	return status("Product", "OK", tui.OK, detail)
+}
+
+// touchedProduct is whether a failed product action got to the running
+// product: an apply or a revert whose failed step is the switch or after
+// it. A stage, or a step before the switch, leaves it as it was.
+func touchedProduct(p *osadminv1.UpgradeProgress) bool {
+	if p.GetAction() != "apply" && p.GetAction() != "revert" {
+		return false
+	}
+	switched := false
+	for _, s := range p.GetSteps() {
+		if s.GetId() == "switch" {
+			switched = true
+		}
+		if s.GetState() == osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED {
+			return switched
+		}
+	}
+	return false
 }
 
 // countdown is how long until t, as 23h59m or 4m10s.

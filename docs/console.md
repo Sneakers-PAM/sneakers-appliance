@@ -219,7 +219,7 @@ product bundle, from Status's `product` slots until platformd is in the build:
 | `NONE` (dim) | no bundle installed | "installed from the admin page, Updates", or "0.2.0 staged; install it from Updates" |
 | `OK` | the installed version runs | "0.1.0 running", then "; 0.2.0 staged" or "; 0.0.9 to go back" |
 | `STOPPED` | installed, but k0s isn't running | "0.1.0 isn't running" |
-| `FAILED` | a product update failed in the last day | "the update to 0.2.0 failed" (the warning says which step and why) |
+| `FAILED` | a product apply or revert failed in the last day once it had switched slots (a bundle refused or rejected while it was verified or staged never touched the running product and leaves the line as it runs) | "the update to 0.2.0 failed" (the warning says which step and why) |
 | `UNKNOWN` | no status yet | "no status yet" |
 
 During a stage, an apply or a revert (Status's `upgrade_progress` with `in_progress`) the
