@@ -187,6 +187,7 @@ var shellMethods = map[string]bool{
 	accessv1connect.AccessServiceRemoveAdminProcedure:       true,
 	accessv1connect.AccessServiceListKeysProcedure:          true,
 	accessv1connect.AccessServiceRemoveKeyProcedure:         true,
+	accessv1connect.AccessServiceGetExposedValueProcedure:   true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceSetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceConfirmNetworkProcedure:   true,

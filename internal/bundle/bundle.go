@@ -10,7 +10,8 @@
 // <sha256 hex of the pinned digest>.tar, with the org release-key
 // signature of that digest beside it as <hex>.tar.sigstore.json, and the
 // stacks k0s applies under manifests/<stack>/*.yaml, and optionally the
-// product's brand under brand/ (package brand). Nothing else may be in it.
+// product's brand under brand/ (package brand) and its product.yaml
+// (package productspec). Nothing else may be in it.
 package bundle
 
 import (
@@ -34,6 +35,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/brand"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 )
 
@@ -55,6 +57,9 @@ const (
 	ProductImages    = "images"
 	ProductManifests = "manifests"
 	ProductBrand     = brand.Dir
+	// ProductSpec is product.yaml, what the product declares to the
+	// appliance (package productspec); optional.
+	ProductSpec = productspec.File
 )
 
 // Release is the part of release.yaml the bundle check reads. The file is
@@ -296,7 +301,7 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	}
 	for _, e := range top {
 		switch e.Name() {
-		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand:
+		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec:
 		default:
 			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
 		}
@@ -334,6 +339,9 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 		return nil, err
 	}
 	if err := checkBrand(fsys); err != nil {
+		return nil, err
+	}
+	if err := productspec.Check(fsys); err != nil {
 		return nil, err
 	}
 	return rel, nil
@@ -386,6 +394,9 @@ func checkStacks(fsys fs.FS) error {
 	for _, st := range stacks {
 		if !st.IsDir() || !nameRE.MatchString(st.Name()) {
 			return codes.New(codes.KitBundleMismatch, "the product bundle's %s/%s isn't a stack directory", ProductManifests, st.Name())
+		}
+		if st.Name() == productspec.RBACStack {
+			return codes.New(codes.KitBundleMismatch, "the stack name %s is the appliance's own", st.Name())
 		}
 		files, err := fs.ReadDir(fsys, path.Join(ProductManifests, st.Name()))
 		if err != nil {

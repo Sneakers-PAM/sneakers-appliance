@@ -137,3 +137,36 @@ func TestReleaseRefusesPlaceholderDigests(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+const productYAML = `format: 2
+exposed_values:
+  - {name: setup-token, secret: sneakers/sneakers-setup-token, key: SETUP_TOKEN, roles: [owner, admin]}
+`
+
+// A product bundle may carry product.yaml (format v2); a malformed one,
+// or a stack under the appliance's own RBAC stack name, refuses the
+// bundle.
+func TestAProductBundleMayCarryProductYAML(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	tree, _ := fixtures.ProductTree(t, k, "amd64", func(m fstest.MapFS) {
+		m["product.yaml"] = &fstest.MapFile{Data: []byte(productYAML), Mode: 0o644}
+	})
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatal(err)
+	}
+	for name, edit := range map[string]func(fstest.MapFS){
+		"a bad role": func(m fstest.MapFS) {
+			m["product.yaml"] = &fstest.MapFile{Data: []byte("format: 2\nexposed_values:\n  - {name: a, secret: ns/s, key: K, roles: [root]}\n")}
+		},
+		"format 1": func(m fstest.MapFS) { m["product.yaml"] = &fstest.MapFile{Data: []byte("format: 1\n")} },
+		"the appliance's stack name": func(m fstest.MapFS) {
+			m[bundle.ProductManifests+"/sneakers-appliance-exposed/x.yaml"] = &fstest.MapFile{Data: []byte("kind: Role\n")}
+		},
+	} {
+		tree, _ := fixtures.ProductTree(t, k, "amd64", edit)
+		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: want KIT_BUNDLE_MISMATCH, got %v", name, err)
+		}
+	}
+}

@@ -23,7 +23,7 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 		if key != '\t' {
 			return "", 0, false
 		}
-		done := CompleteFor(e.Origin, e.Product, line[:pos])
+		done := CompleteFor(e.Origin, e.Product, line[:pos], e.Values...)
 		if done == line[:pos] {
 			return "", 0, false
 		}
@@ -79,7 +79,7 @@ func (r *termLines) Read(p []byte) (int, error) {
 func Complete(o Origin, typed string) string { return CompleteFor(o, productinfo.Info{}, typed) }
 
 // CompleteFor is Complete with product p's commands too.
-func CompleteFor(o Origin, p productinfo.Info, typed string) string {
+func CompleteFor(o Origin, p productinfo.Info, typed string, values ...Value) string {
 	words := strings.Fields(typed)
 	trailing := strings.HasSuffix(typed, " ") || typed == ""
 	if !trailing && len(words) > 0 {
@@ -92,7 +92,7 @@ func CompleteFor(o Origin, p productinfo.Info, typed string) string {
 	}
 	seen := map[string]bool{}
 	var next []string
-	for _, name := range append(NamesFor(o, p), "help", "exit") {
+	for _, name := range append(NamesFor(o, p, values...), "help", "exit") {
 		p := strings.Fields(name)
 		if len(p) <= len(words) || !hasPrefixWords(p, words) {
 			continue

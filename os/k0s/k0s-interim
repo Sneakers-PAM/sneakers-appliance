@@ -43,6 +43,23 @@ kubelet_resolv() {
   mv "$2.new" "$2"
 }
 
+# exposed_rbac <slot> <stack dir>: the RBAC the appliance rendered for the
+# values the bundle's product.yaml exposes (internal/productspec) as its
+# own stack, so the appliance's service account may get exactly those
+# Secrets. A bundle that exposes none leaves no stack; k0s deletes what a
+# removed stack held.
+exposed_rbac() {
+  if [ -s "$1/exposed-rbac.yaml" ]; then
+    mkdir -p "$2"
+    cp "$1/exposed-rbac.yaml" "$2/exposed-rbac.yaml.new"
+    mv "$2/exposed-rbac.yaml.new" "$2/exposed-rbac.yaml"
+    say "the product's exposed values RBAC is in place"
+  elif [ -d "$2" ]; then
+    rm -rf "$2"
+    say "the product exposes no values; their RBAC goes"
+  fi
+}
+
 prepare() {
   if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
     say "no product bundle is installed; k0s comes with it (Updates)"
@@ -123,6 +140,7 @@ prepare() {
     cp "$d"*.yaml "$data/manifests/$stack/"
     say "stack $stack in place"
   done
+  exposed_rbac "$slot" "$data/manifests/sneakers-appliance-exposed"
 
   # INTERIM, until Traefik comes with the platform (#102): the box's own
   # :8443 certificate as the box-tls Secret for the edge, refreshed on

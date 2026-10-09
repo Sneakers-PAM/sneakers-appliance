@@ -84,6 +84,9 @@ const (
 	// AccessServiceAddRecoveryKeyProcedure is the fully-qualified name of the AccessService's
 	// AddRecoveryKey RPC.
 	AccessServiceAddRecoveryKeyProcedure = "/sneakers.appliance.access.v1.AccessService/AddRecoveryKey"
+	// AccessServiceGetExposedValueProcedure is the fully-qualified name of the AccessService's
+	// GetExposedValue RPC.
+	AccessServiceGetExposedValueProcedure = "/sneakers.appliance.access.v1.AccessService/GetExposedValue"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -209,6 +212,10 @@ type AccessServiceClient interface {
 	RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error)
 	// AddRecoveryKey is the console's (root only).
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// GetExposedValue is the closed shell's "<product> <name>": osadmin's
+	// ProductService.GetExposedValue run as the login's admin, so the shell
+	// reads exactly what :8443 would, under the same allow-list and audit.
+	GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -273,19 +280,26 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("AddRecoveryKey")),
 			connect.WithClientOptions(opts...),
 		),
+		getExposedValue: connect.NewClient[v1.GetExposedValueRequest, v1.GetExposedValueResponse](
+			httpClient,
+			baseURL+AccessServiceGetExposedValueProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("GetExposedValue")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accessServiceClient implements AccessServiceClient.
 type accessServiceClient struct {
-	getStatus      *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
-	listAdmins     *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
-	addAdmin       *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
-	removeAdmin    *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
-	listKeys       *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
-	addKey         *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
-	removeKey      *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
-	addRecoveryKey *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getStatus       *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	listAdmins      *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
+	addAdmin        *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
+	removeAdmin     *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
+	listKeys        *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
+	addKey          *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
+	removeKey       *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
+	addRecoveryKey  *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getExposedValue *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -330,6 +344,11 @@ func (c *accessServiceClient) AddRecoveryKey(ctx context.Context, req *connect.R
 	return c.addRecoveryKey.CallUnary(ctx, req)
 }
 
+// GetExposedValue calls sneakers.appliance.access.v1.AccessService.GetExposedValue.
+func (c *accessServiceClient) GetExposedValue(ctx context.Context, req *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error) {
+	return c.getExposedValue.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -351,6 +370,10 @@ type AccessServiceHandler interface {
 	RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error)
 	// AddRecoveryKey is the console's (root only).
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// GetExposedValue is the closed shell's "<product> <name>": osadmin's
+	// ProductService.GetExposedValue run as the login's admin, so the shell
+	// reads exactly what :8443 would, under the same allow-list and audit.
+	GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -411,6 +434,12 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("AddRecoveryKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceGetExposedValueHandler := connect.NewUnaryHandler(
+		AccessServiceGetExposedValueProcedure,
+		svc.GetExposedValue,
+		connect.WithSchema(accessServiceMethods.ByName("GetExposedValue")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -429,6 +458,8 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceRemoveKeyHandler.ServeHTTP(w, r)
 		case AccessServiceAddRecoveryKeyProcedure:
 			accessServiceAddRecoveryKeyHandler.ServeHTTP(w, r)
+		case AccessServiceGetExposedValueProcedure:
+			accessServiceGetExposedValueHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -468,6 +499,10 @@ func (UnimplementedAccessServiceHandler) RemoveKey(context.Context, *connect.Req
 
 func (UnimplementedAccessServiceHandler) AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.AddRecoveryKey is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.GetExposedValue is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

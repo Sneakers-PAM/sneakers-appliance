@@ -47,12 +47,15 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/kubeapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
@@ -247,7 +250,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		OnFirstAdmin:    func() { go startSSHD() },
 		OnConsoleChange: d.ConsoleChanged,
 		Shells:          &sshsession.Proc{},
-		Logger:          lg,
+		// The installed product's exposed values, read as the appliance's
+		// own service account (the admin kubeconfig only mints its token).
+		Exposed: &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount},
+		Logger:  lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and

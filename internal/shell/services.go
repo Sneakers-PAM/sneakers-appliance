@@ -43,6 +43,8 @@ type Services struct {
 	SSHLogin  accessv1connect.SshLoginServiceClient
 	// StatusFile is accessd's status cache (accessapi.StatusFile).
 	StatusFile string
+	// Role is the login's role once VerifyTotp passed: owner or admin.
+	Role string
 }
 
 // ErrNotInRelease is the answer of a command whose backend isn't on the box.
@@ -78,6 +80,7 @@ func (s *Services) VerifyTotp(ctx context.Context, code string) (string, error) 
 	if err != nil {
 		return "", fromAccessd(err)
 	}
+	s.Role = roleWord(out.Msg.GetRole())
 	return out.Msg.GetLoginId(), nil
 }
 

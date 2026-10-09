@@ -1,0 +1,71 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The installed product's exposed values: the Secret keys its bundle's
+// product.yaml lets owners and admins read without the root shell, such as
+// a one-time setup token.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// ProductService reads what the installed product exposes. It is a strict
+// allow-list: only the values the bundle's product.yaml declares, only to
+// the roles it lists, and there is no way to list or read any other Secret.
+service ProductService {
+  // ListExposedValues lists the values the caller's role may read (never
+  // the values themselves).
+  rpc ListExposedValues(ListExposedValuesRequest) returns (ListExposedValuesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // GetExposedValue reads one declared value. A name the product doesn't
+  // declare, or a role it doesn't list, is refused (ACCESS_FORBIDDEN, owners
+  // included); a one-time value whose consumed_when holds is consumed and
+  // never shown again. Every call is audited with the name and the outcome,
+  // never the value.
+  rpc GetExposedValue(GetExposedValueRequest) returns (GetExposedValueResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "product.value.read"
+    };
+  }
+}
+
+// ExposedValue describes one declared value.
+message ExposedValue {
+  // name is the command word: "<product> <name>" in the closed shell.
+  string name = 1;
+  string label = 2;
+  bool one_time = 3;
+  // consumed is true once a one-time value was used; it isn't shown again.
+  bool consumed = 4;
+  repeated Role roles = 5;
+  // link is the product page that takes the value, with the box's host in
+  // it; empty when the product names none.
+  string link = 6;
+}
+
+message ListExposedValuesRequest {}
+
+message ListExposedValuesResponse {
+  // product is the installed product's command word and product_title its
+  // name for people; both empty with no product installed.
+  string product = 1;
+  string product_title = 2;
+  repeated ExposedValue values = 3;
+}
+
+message GetExposedValueRequest {
+  string name = 1;
+}
+
+message GetExposedValueResponse {
+  string product_title = 1;
+  ExposedValue entry = 2;
+  // value is empty once a one-time value was consumed.
+  string value = 3;
+}

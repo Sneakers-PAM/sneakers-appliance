@@ -76,10 +76,11 @@ when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
 airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
 and `manifests/<stack>/*.yaml`, the stacks k0s applies (the lab bundle's hello stack and interim
 edge, [k0s.md](k0s.md)), and optionally `brand/`, the product's logo and colours for the box-state
-pages ([artifact.md](artifact.md#the-brand)). After it decrypts and unpacks one, the box checks it
-like the kit checks a root: only those entries, `k0s` (and `helm`, which it carries if and only if
+pages ([artifact.md](artifact.md#the-brand)), and optionally `product.yaml` (below). After it
+decrypts and unpacks one, the box checks it like the kit checks a root: only those entries, `k0s` (and `helm`, which it carries if and only if
 `release.yaml` pins it) with the SHA-256 its `release.yaml` pins, exactly the pinned images, each
-signed by the release key, YAML stacks only, and a well-formed brand (`KIT_BUNDLE_MISMATCH`,
+signed by the release key, YAML stacks only (none named `sneakers-appliance-exposed`, the
+appliance's own), a well-formed brand and a well-formed `product.yaml` (`KIT_BUNDLE_MISMATCH`,
 `KIT_IMAGE_UNSIGNED`).
 How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundle).
 
@@ -92,6 +93,47 @@ bases, file name and size per product bundle under `products`, and the same per 
 index to offer a choice, and verifies each `.bin` when it's staged. An index with no `base`
 section (from before it existed) still reads: it offers products only. `bin-verify --extract` on a product bundle also runs the
 box's check.
+
+### product.yaml
+
+`product.yaml` (bundle format v2, `internal/productspec`) is what a product declares to the
+appliance. The appliance holds no product's names in its code; everything product-specific is here.
+Today it declares the product's **exposed values**: Secret keys owners and admins may read from the
+closed shell (`<product> <name>`, [ssh-and-elevation.md](ssh-and-elevation.md#product-values)) and
+`ProductService` on :8443, without the root shell.
+
+```yaml
+format: 2
+exposed_values:
+  - name: setup-token              # the command word: "sneakers setup-token"
+    secret: sneakers/sneakers-setup-token   # <namespace>/<name>
+    key: SETUP_TOKEN               # the one key read
+    roles: [owner, admin]          # who may read it
+    one_time: true                 # never shown again once consumed_when holds
+    consumed_when:                 # a GET through the API server's service proxy
+      service: sneakers/sneakers-gateway:http
+      path: /setup/state
+      field: needsSetup
+      equals: false
+    label: Sneakers setup token
+    link: https://{host}/admin/setup   # {host} is the box's host name
+```
+
+It's a strict allow-list. The box refuses a `product.yaml` with an unknown field, a role other than
+`owner` or `admin`, a secret that isn't `<namespace>/<name>`, a name that isn't a lower-case word
+(or is `mcp` or `help`), a name twice, a `one_time` value without `consumed_when`, or a link that
+isn't `https://`. Once a bundle checks out, the box renders the RBAC for it into the slot
+(`exposed-rbac.yaml`), which k0s applies as the stack `sneakers-appliance-exposed`: the namespace
+`sneakers-appliance` with the service account `exposed-values` and, in each namespace the values
+live in, a Role that may only `get` the declared Secrets by name (`resourceNames`) and the declared
+signals' service proxies, never `list` or `watch`, and no ClusterRole. accessd reads as that service
+account: the admin kubeconfig only mints its short token (a TokenRequest), and every read goes with
+that token alone, for the declared key only. A name the bundle doesn't declare is refused for
+everyone, owners included, and nothing is asked of the cluster for it. A bundle without
+`product.yaml` exposes nothing.
+
+`build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
+`build/product/sneakers/product.yaml`.
 
 - **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it

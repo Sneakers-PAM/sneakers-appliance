@@ -95,6 +95,11 @@ names its image `<image>@sha256:<digest>`, which is the name the kubelet asks fo
 image is `<image>:<tag>@sha256:<digest>`. With the pull policy `Never`, a pod whose image isn't
 bundled fails with `ErrImageNeverPull` instead of reaching for a registry.
 
+Each `manifests/<stack>/` goes to `/var/lib/k0s/manifests/<stack>/`, which k0s applies. When the
+bundle exposes values ([release.md](release.md#productyaml)), the slot also holds the RBAC the box
+rendered for them, `exposed-rbac.yaml`, and `prepare` puts it in the stack
+`sneakers-appliance-exposed`; with none, that stack goes and k0s deletes what it held.
+
 ### kubectl and helm in the root shell
 
 The root shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-root-shell)) reaches the installed

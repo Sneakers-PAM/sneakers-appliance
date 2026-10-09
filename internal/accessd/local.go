@@ -66,6 +66,15 @@ func (h *accessH) ListAdmins(ctx context.Context, r *connect.Request[accessv1.Li
 	return connect.NewResponse(&accessv1.ListAdminsResponse{Admins: out.GetAdmins()}), nil
 }
 
+func (h *accessH) GetExposedValue(ctx context.Context, r *connect.Request[accessv1.GetExposedValueRequest]) (*connect.Response[accessv1.GetExposedValueResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceGetExposedValueProcedure, osadminv1connect.ProductServiceGetExposedValueProcedure, h.s.h.Product.GetExposedValue,
+		&osadminv1.GetExposedValueRequest{Name: r.Msg.GetName()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.GetExposedValueResponse{Value: out}), nil
+}
+
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
 	m := r.Msg
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceAddAdminProcedure, osadminv1connect.AccessServiceAddAdminProcedure, h.s.h.Access.AddAdmin,

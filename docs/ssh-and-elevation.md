@@ -160,7 +160,32 @@ product's name from the current product slot's header (`/var/lib/sneakers/produc
 the `<name>-product` header name without `-product`) when the login starts. With no product
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
 `sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, which answers
-`NOT_AVAILABLE` until the product's MCP switch lands.
+`NOT_AVAILABLE` until the product's MCP switch lands, and the product's exposed values.
+
+### Product values
+
+A product's bundle may expose Secret values to owners and admins
+([release.md](release.md#productyaml)), such as Sneakers' one-time setup token. Each is a command
+in the product's group, `<product> <name>` (`sneakers setup-token`), over SSH only, offered only to
+the roles the bundle lists for it (the shell reads the slot's `product.yaml` and the login's role).
+It asks accessd, which runs `ProductService.GetExposedValue` as the login's admin, so the role is
+checked again there, and prints the value with its label and link:
+
+```text
+Sneakers setup token:
+
+    stp_...
+
+Use it at https://box1.sneakers.example.org/admin/setup
+It works once; after that it's removed.
+```
+
+A one-time value is consumed once the product's signal says so (for Sneakers, the gateway's
+`/setup/state` answering `needsSetup: false`), and from then on the command only says it was used.
+If the signal can't be read yet the value is still shown. There is no command that reads or lists any
+other Secret. Each read is audited as `product.value.read` with the name and the outcome (`shown`
+or `consumed`), never the value; a value that can't be read yet (k0s or the product isn't up) is
+`PRODUCT_VALUE_UNAVAILABLE`.
 
 ## The root shell
 

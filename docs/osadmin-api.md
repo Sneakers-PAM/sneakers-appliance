@@ -129,6 +129,8 @@ about the box.
 | `UpgradeService.ListProductVersions` | admin | no | |
 | `UpgradeService.ListBaseVersions` | admin | no | |
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
+| `ProductService.ListExposedValues` | admin | no | |
+| `ProductService.GetExposedValue` | admin | no | `product.value.read` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |
 | `ElevationService.DenyElevation` | owner | no | `elevation.deny` |

@@ -27,6 +27,9 @@
 #   STACKS       a directory of stacks, <stack>/*.yaml (optional)
 #   BRAND        the product's brand folder: brand.yaml and its logo
 #                (optional; docs/artifact.md#the-brand)
+#   PRODUCT_YAML the product's product.yaml (bundle format v2, optional;
+#                docs/release.md#productyaml), such as
+#                build/product/sneakers/product.yaml
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
 #   OUT          the output directory: tree/ (the unpacked bundle) and
 #                bin/header.json, bin/payload.age
@@ -69,6 +72,11 @@ if [ -n "${STACKS:-}" ]; then
     install -m 0644 "$d"*.yaml "$tree/manifests/$stack/"
     echo "product: stack $stack"
   done
+fi
+
+if [ -n "${PRODUCT_YAML:-}" ]; then
+  install -m 0644 "$PRODUCT_YAML" "$tree/product.yaml"
+  echo "product: product.yaml from $PRODUCT_YAML"
 fi
 
 if [ -n "${BRAND:-}" ]; then

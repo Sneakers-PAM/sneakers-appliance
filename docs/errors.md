@@ -132,5 +132,6 @@ shell, the console and :8443 show the same sentence.
 | 2514 | `UPGRADE_NO_REBOOT` | an apply or revert was accepted, but the box didn't reboot within the bound |
 | 2515 | `UPGRADE_BUSY` | a file is already coming in or waiting, or a stage is under way; verify or cancel it first |
 | 2516 | `UPGRADE_PRODUCT_START` | a product apply or revert restarted the product, but it didn't come up and answer on 443 within the bound |
+| 2517 | `PRODUCT_VALUE_UNAVAILABLE` | the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there ([ssh-and-elevation.md](ssh-and-elevation.md#product-values)) |
 | 2520 | `UPGRADE_MIRROR_UNTRUSTED` | the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host; the refusal names the presented certificate's issuer and SHA-256 ([update-mirror.md](update-mirror.md)) |
 | 2521 | `UPGRADE_MIRROR_PIN` | the HTTPS mirror's certificate isn't the one the update trust pins; the refusal names the presented SHA-256 |

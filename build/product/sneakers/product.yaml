@@ -1,0 +1,21 @@
+# The Sneakers product bundle's product.yaml (bundle format v2): what the
+# Sneakers bundle declares to the appliance. Pass it to
+# build/product/build.sh as PRODUCT_YAML. docs/release.md#productyaml has
+# the format.
+format: 2
+exposed_values:
+  # The gateway's one-time setup token for the first product admin
+  # (/admin/setup), until the gateway says it has one. The bundle's values
+  # point gateway.secretEnv.SETUP_TOKEN at this Secret.
+  - name: setup-token
+    secret: sneakers/sneakers-setup-token
+    key: SETUP_TOKEN
+    roles: [owner, admin]
+    one_time: true
+    consumed_when:
+      service: sneakers/sneakers-gateway:http
+      path: /setup/state
+      field: needsSetup
+      equals: false
+    label: Sneakers setup token
+    link: https://{host}/admin/setup
