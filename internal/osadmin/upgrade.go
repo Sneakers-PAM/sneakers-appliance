@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -126,6 +127,11 @@ type upgrades struct {
 	lastWindow, lastProductWindow string
 	// maintUntil is when the maintenance an apply or revert set ends.
 	maintUntil time.Time
+	// receiving counts the uploads and fetches coming in; staging is set
+	// while a stage runs. Either, or a held upload, refuses a new upload
+	// or fetch (UPGRADE_BUSY).
+	receiving int
+	staging   bool
 }
 
 // Maintenance reports an update being applied or reverted: the elevation
@@ -317,10 +323,111 @@ func (s *Server) uploadPath(id string) (string, error) {
 	return p, nil
 }
 
-// saveUpload copies r (at most MaxUpload bytes) into a new upload and
-// returns its id.
-func (s *Server) saveUpload(r io.Reader) (string, int64, error) {
-	dir := filepath.Join(s.o.Paths.APIDir(), uploadsDir)
+// uploadMeta is what's known of a held upload, kept next to its .bin.
+type uploadMeta struct {
+	Name   string    `json:"name,omitempty"`
+	Size   int64     `json:"size"`
+	At     time.Time `json:"at"`
+	Source string    `json:"source"`
+}
+
+func (s *Server) uploadsDir() string { return filepath.Join(s.o.Paths.APIDir(), uploadsDir) }
+
+// heldUpload is the newest upload or fetched file not yet staged or
+// discarded, or nil when there's none.
+func (s *Server) heldUpload() *osadminv1.HeldUpload {
+	bins, _ := filepath.Glob(filepath.Join(s.uploadsDir(), "*.bin"))
+	var out *osadminv1.HeldUpload
+	var newest time.Time
+	for _, b := range bins {
+		id := strings.TrimSuffix(filepath.Base(b), ".bin")
+		if !uploadIDRE.MatchString(id) {
+			continue
+		}
+		var m uploadMeta
+		if raw, err := os.ReadFile(strings.TrimSuffix(b, ".bin") + ".json"); err == nil { // #nosec G304 -- an upload this box made
+			_ = json.Unmarshal(raw, &m)
+		}
+		if m.At.IsZero() {
+			if fi, err := os.Stat(b); err == nil {
+				m.At, m.Size = fi.ModTime(), fi.Size()
+			}
+		}
+		if out == nil || m.At.After(newest) {
+			newest = m.At
+			out = &osadminv1.HeldUpload{UploadId: id, FileName: m.Name, Size: m.Size, ReceivedAt: timestamppb.New(m.At), Source: m.Source}
+		}
+	}
+	return out
+}
+
+// reserveReceive takes the one place for a file coming in, or refuses
+// with UPGRADE_BUSY while another is coming in or held or a stage runs.
+// A partial file left by a crash is removed here, since nothing is coming
+// in. The caller calls releaseReceive when the file is in.
+func (s *Server) reserveReceive() error {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	switch {
+	case s.upgrades.receiving > 0:
+		return codes.New(codes.UpgradeBusy, "a file is already coming in; wait for it, or cancel it, first")
+	case s.upgrades.staging:
+		return codes.New(codes.UpgradeBusy, "a stage is under way; wait for it to finish first")
+	}
+	if h := s.heldUpload(); h != nil {
+		name := h.GetFileName()
+		if name == "" {
+			name = "upload " + h.GetUploadId()
+		}
+		return codes.New(codes.UpgradeBusy, "a file is already waiting (%s); verify it or cancel it first", name)
+	}
+	tmps, _ := filepath.Glob(filepath.Join(s.uploadsDir(), "*.tmp"))
+	for _, t := range tmps {
+		s.o.Logger.Warn("osadmin: removing a partial upload left behind", log.F("file", filepath.Base(t)))
+		_ = os.Remove(t)
+	}
+	s.upgrades.receiving++
+	return nil
+}
+
+func (s *Server) releaseReceive() {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	s.upgrades.receiving--
+}
+
+// beginStaging marks a stage under way, or refuses with UPGRADE_BUSY when
+// one already is or a file is still coming in.
+func (s *Server) beginStaging() error {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	if s.upgrades.staging {
+		return codes.New(codes.UpgradeBusy, "a stage is already under way")
+	}
+	if s.upgrades.receiving > 0 {
+		return codes.New(codes.UpgradeBusy, "a file is still coming in; wait for it first")
+	}
+	s.upgrades.staging = true
+	return nil
+}
+
+func (s *Server) endStaging() {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	s.upgrades.staging = false
+}
+
+func (s *Server) isStaging() bool {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	return s.upgrades.staging
+}
+
+// saveUpload copies r (at most MaxUpload bytes) into a new upload, with
+// what's known of it beside, and returns its id. A copy cut off (the
+// browser aborted, the mirror stopped) removes its partial file.
+func (s *Server) saveUpload(r io.Reader, meta uploadMeta) (string, int64, error) {
+	dir := s.uploadsDir()
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", 0, fmt.Errorf("upload: %w", err)
 	}
@@ -341,10 +448,17 @@ func (s *Server) saveUpload(r io.Reader) (string, int64, error) {
 	}
 	if err != nil {
 		_ = os.Remove(final + ".tmp")
+		s.o.Logger.Info("osadmin: a partial upload was removed", log.F("upload", id), log.F("bytes", n))
 		if _, coded := codes.Of(err); coded {
 			return "", 0, err
 		}
 		return "", 0, codes.Wrap(codes.UpgradeUpload, err)
+	}
+	meta.Size, meta.At = n, s.o.Clock.Now().UTC()
+	if mb, merr := json.Marshal(meta); merr == nil {
+		if werr := os.WriteFile(filepath.Join(dir, id+".json"), mb, 0o600); werr != nil {
+			s.o.Logger.Warn("osadmin: an upload's details weren't written", log.F("upload", id), log.F("error", werr.Error()))
+		}
 	}
 	if err := os.Rename(final+".tmp", final); err != nil {
 		return "", 0, fmt.Errorf("upload: %w", err)
@@ -352,8 +466,49 @@ func (s *Server) saveUpload(r io.Reader) (string, int64, error) {
 	return id, n, nil
 }
 
+// dropUpload removes everything an upload left: its .bin, a partial
+// .tmp, an unpacked layout and its details. It reports whether there was
+// anything.
+func (s *Server) dropUpload(id string) bool {
+	base := filepath.Join(s.uploadsDir(), id)
+	found := false
+	for _, p := range []string{base + ".bin", base + ".bin.tmp", base + ".d", base + ".json"} {
+		if _, err := os.Lstat(p); err != nil {
+			continue
+		}
+		found = true
+		s.removeUpload(p)
+	}
+	return found
+}
+
+// uploadName is the file name the page sends with an upload, for the
+// held upload's card only: its last path element, printable, at most 200
+// bytes.
+func uploadName(h string) string {
+	if v, err := url.PathUnescape(h); err == nil {
+		h = v
+	}
+	h = filepath.Base(strings.ReplaceAll(h, "\\", "/"))
+	h = strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, h)
+	if h == "." || h == "/" {
+		return ""
+	}
+	if len(h) > 200 {
+		h = h[:200]
+	}
+	return h
+}
+
 // handleUpload is POST /upload: the .bin as the body, the session cookie
-// and the CSRF header.
+// and the CSRF header, and the file's name in X-File-Name. While another
+// file is coming in or held, or a stage runs, it answers 409 with
+// UPGRADE_BUSY.
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 	entry := osaudit.Entry{Source: hostOf(r.RemoteAddr), Action: "upgrade.upload"}
 	sess, err := s.session(r.Header)
@@ -369,9 +524,21 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, codes.Describe(err), http.StatusForbidden)
 		return
 	}
-	id, n, err := s.saveUpload(http.MaxBytesReader(w, r.Body, MaxUpload+1))
+	if err := s.reserveReceive(); err != nil {
+		entry.Target = "uploaded file"
+		s.write(entry, err)
+		s.o.Logger.Info("osadmin: upload refused while another is in hand", log.F("by", sess.Admin), log.F("error", describe(err)))
+		http.Error(w, describe(err), http.StatusConflict)
+		return
+	}
+	defer s.releaseReceive()
+	name := uploadName(r.Header.Get("X-File-Name"))
+	id, n, err := s.saveUpload(http.MaxBytesReader(w, r.Body, MaxUpload+1), uploadMeta{Name: name, Source: "upload"})
 	entry.Target = "uploaded file"
 	entry.Detail = map[string]string{"upload": id, "bytes": strconv.FormatInt(n, 10)}
+	if name != "" {
+		entry.Detail["name"] = name
+	}
 	s.write(entry, err)
 	if err != nil {
 		s.o.Logger.Warn("osadmin: upload failed", log.F("error", describe(err)))
@@ -396,7 +563,10 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 	p := h.s.policy()
 	direct := h.s.o.Upgrade.DirectURL != ""
 	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && (!p.Direct || !direct), History: h.s.readHistory(100),
-		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p)}
+		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p), HeldUpload: h.s.heldUpload()}
+	h.s.upgrades.mu.Lock()
+	out.Receiving = h.s.upgrades.receiving > 0
+	h.s.upgrades.mu.Unlock()
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
@@ -461,17 +631,21 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	if !binNameRE.MatchString(name) {
 		return nil, codes.New(codes.UpgradeUpload, "%q isn't a sneakers-appliance or sneakers-product .bin name", name)
 	}
+	if err := h.s.reserveReceive(); err != nil {
+		return nil, err
+	}
 	var (
 		id, from string
 		n        int64
 		err      error
 	)
 	for _, src := range srcs {
-		if id, n, err = h.s.fetch(ctx, src); err == nil {
+		if id, n, err = h.s.fetch(ctx, src, uploadMeta{Name: name, Source: src.name}); err == nil {
 			from = src.name
 			break
 		}
 	}
+	h.s.releaseReceive()
 	h.s.history("fetch", "", c.session.Admin, err, name)
 	if err != nil {
 		return nil, err
@@ -482,11 +656,11 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 
 // fetch downloads a .bin from src into a new upload. It isn't trusted
 // until StageUpdate verifies it, whichever way it came.
-func (s *Server) fetch(ctx context.Context, src source) (id string, n int64, err error) {
+func (s *Server) fetch(ctx context.Context, src source, meta uploadMeta) (id string, n int64, err error) {
 	started := time.Now()
 	resp, peer, err := s.open(ctx, src, ".bin")
 	if err == nil {
-		id, n, err = s.saveUpload(resp.Body)
+		id, n, err = s.saveUpload(resp.Body, meta)
 		_ = resp.Body.Close()
 	}
 	s.fetched(ctx, src, ".bin", peer, started, n, err)
@@ -499,7 +673,11 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	c := callFrom(ctx)
 	id := r.Msg.GetUploadId()
 	c.noteID("uploaded file", "upload", id)
-	pkg, removed, err := h.s.stage(ctx, id)
+	override := r.Msg.GetOverrideProductRange()
+	if override {
+		c.noteID("uploaded file", "upload", id, "override", "product-range")
+	}
+	pkg, removed, err := h.s.stage(ctx, id, override)
 	version := ""
 	if pkg != nil {
 		version = pkg.GetVersion()
@@ -556,11 +734,15 @@ func (s *Server) previous(st *initv1.ImageServiceStatusResponse) (version, slot 
 // stage stages an upload and returns the older releases init removed to
 // make room for it. The upload and its unpacked layout are removed once
 // init has staged it.
-func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage, []string, error) {
+func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
 	path, err := s.uploadPath(id)
 	if err != nil {
 		return nil, nil, err
 	}
+	if err := s.beginStaging(); err != nil {
+		return nil, nil, err
+	}
+	defer s.endStaging()
 	// What's staged isn't known until the header is read, so the record
 	// starts with the verify step alone.
 	s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED, "", "")
@@ -591,7 +773,7 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	}
 	h := p.Header
 	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
-		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE}
+		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, MinBase: h.MinBase, MaxBase: h.MaxBase}
 	s.setVersion(h.Version)
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
@@ -603,6 +785,9 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	}
 	if err := h.AppliesTo(img.Msg.GetRunningVersion()); err != nil {
 		s.reject(path, err)
+		return pkg, nil, err
+	}
+	if err := s.fitsInstalledProduct(h.Version, overrideRange); err != nil {
 		return pkg, nil, err
 	}
 	s.o.Logger.Info("osadmin: update verified; unpacking", log.F("upload", id), log.F("version", h.Version), log.F("kind", string(h.Kind)))
@@ -631,6 +816,30 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	return pkg, res.Msg.GetRemovedVersions(), nil
 }
 
+// fitsInstalledProduct refuses a base release outside the installed
+// product bundle's base range, unless the owner overrides it. The upload
+// is kept, so it can be staged again with the override. A product sealed
+// before the range existed isn't checked, with a note in the log.
+func (s *Server) fitsInstalledProduct(version string, override bool) error {
+	inst, ok := s.slots().Installed()
+	if !ok {
+		return nil
+	}
+	if !inst.HasRange() {
+		s.o.Logger.Info("osadmin: the installed product names no base range; the base release isn't checked against it", log.F("product", inst.Version), log.F("base", version))
+		return nil
+	}
+	if inst.InRange(version) {
+		return nil
+	}
+	if override {
+		s.o.Logger.Warn("osadmin: a base release outside the installed product's range stages under an owner's override", log.F("product", inst.Version), log.F("range", inst.RangeText()), log.F("base", version))
+		return nil
+	}
+	s.o.Logger.Warn("osadmin: a base release is outside the installed product's range", log.F("product", inst.Version), log.F("range", inst.RangeText()), log.F("base", version))
+	return codes.New(codes.UpgradeProductBase, "the installed product %s needs base %s; %s is outside it. Install a product bundle that fits %s first, or stage it with the override", inst.Version, inst.RangeText(), version, version)
+}
+
 // slotName is a base slot as a sentence says it.
 func slotName(slot string) string {
 	if slot == "" {
@@ -639,9 +848,12 @@ func slotName(slot string) string {
 	return "slot " + slot
 }
 
-// removeUpload removes an upload's .bin or its unpacked layout once it's
-// no longer needed.
+// removeUpload removes an upload's .bin (with its details) or its
+// unpacked layout once it's no longer needed.
 func (s *Server) removeUpload(p string) {
+	if strings.HasSuffix(p, ".bin") {
+		_ = os.Remove(strings.TrimSuffix(p, ".bin") + ".json")
+	}
 	if err := os.RemoveAll(p); err != nil {
 		s.o.Logger.Error(err, "osadmin: a staged upload wasn't removed", log.F("file", filepath.Base(p)))
 		return
@@ -674,11 +886,62 @@ func (s *Server) reject(path string, err error) {
 	if rerr := os.Remove(path); rerr != nil && !errors.Is(rerr, os.ErrNotExist) {
 		s.o.Logger.Error(rerr, "osadmin: refused upload not removed")
 	}
+	_ = os.Remove(strings.TrimSuffix(path, ".bin") + ".json")
 }
 
 // by is who an update action is for, as the start of an audit entry.
 func (c *call) by(action string) osaudit.Entry {
 	return osaudit.Entry{Actor: c.session.Admin, Source: c.source, Action: action, Detail: c.detail}
+}
+
+// DiscardUpdate drops a held upload by id, or unstages the staged base
+// release or product bundle. Nothing is dropped while a stage runs.
+func (h *upgradeSvc) DiscardUpdate(ctx context.Context, r *connect.Request[osadminv1.DiscardUpdateRequest]) (*connect.Response[osadminv1.DiscardUpdateResponse], error) {
+	c := callFrom(ctx)
+	id, target := r.Msg.GetUploadId(), r.Msg.GetTarget()
+	if id != "" {
+		c.noteID("uploaded file", "upload", id)
+	} else {
+		c.note(targetName(target))
+	}
+	if h.s.isStaging() {
+		return nil, codes.New(codes.UpgradeBusy, "a stage is under way; wait for it to finish, then cancel")
+	}
+	if id != "" {
+		if !uploadIDRE.MatchString(id) {
+			return nil, codes.New(codes.UpgradeUpload, "%q isn't an upload this box made", id)
+		}
+		if !h.s.dropUpload(id) {
+			return nil, codes.New(codes.UpgradeUpload, "there is no upload %s", id)
+		}
+		h.s.history("discard", "", c.session.Admin, nil, "upload "+id)
+		h.s.o.Logger.Info("osadmin: upload discarded", log.F("upload", id), log.F("by", c.session.Admin))
+		return connect.NewResponse(&osadminv1.DiscardUpdateResponse{}), nil
+	}
+	var (
+		v   string
+		err error
+	)
+	switch target {
+	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
+		v, err = h.s.slots().Unstage()
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE:
+		var res *connect.Response[initv1.UnstageResponse]
+		if res, err = h.s.o.Image.Unstage(ctx, connect.NewRequest(&initv1.UnstageRequest{})); err == nil {
+			v = res.Msg.GetVersion()
+		}
+	default:
+		return nil, codes.New(codes.AccessConfirm, "name the upload to drop, or the target (base or product) to unstage")
+	}
+	if v != "" {
+		c.note("release "+v, "version", v, "target", targetName(target))
+	}
+	if err != nil {
+		return nil, err
+	}
+	h.s.historyFor(target, "discard", v, c.session.Admin, nil, "unstaged")
+	h.s.o.Logger.Info("osadmin: staged release discarded", log.F("target", targetName(target)), log.F("version", v), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.DiscardUpdateResponse{Version: v}), nil
 }
 
 func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {

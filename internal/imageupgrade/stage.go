@@ -180,6 +180,32 @@ func (s *Stager) Stage(ctx context.Context, src verify.Source, arch string) (str
 	return ver, nil
 }
 
+// Unstage removes the staged release's ESP entry, so it never boots, and
+// prunes the sealed copy made for its UKI. The slot's contents stay for
+// the next Stage to overwrite. With nothing staged it's
+// UPGRADE_NOT_STAGED.
+func (s *Stager) Unstage(ctx context.Context) (string, error) {
+	entries, err := s.entries()
+	if err != nil {
+		return "", err
+	}
+	for _, e := range entries {
+		if e.Version == s.Running || e.Bad() || !e.Counted || semver.Compare("v"+e.Version, "v"+s.Running) <= 0 {
+			continue
+		}
+		if err := s.removeEntries([]Entry{e}); err != nil {
+			return "", err
+		}
+		s.logger().Info("imageupgrade: unstaged", log.F("version", e.Version), log.F("entry", e.Name))
+		keep, err := s.Kept()
+		if err != nil {
+			return e.Version, err
+		}
+		return e.Version, s.Sealer.Prune(ctx, keep)
+	}
+	return "", codes.New(codes.UpgradeNotStaged, "no release is staged")
+}
+
 // MarkGood makes the running release's entry known good (no counter) and
 // prunes sealed copies for UKIs no longer on the ESP.
 func (s *Stager) MarkGood(ctx context.Context, keep []string) error {

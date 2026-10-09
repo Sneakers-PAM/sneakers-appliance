@@ -40,6 +40,9 @@
 #                go into the root. Without it, OSADMIN_ASSETS may name pages
 #                built elsewhere (unstamped unless that build set APP_VERSION
 #                and APP_COMMIT), or the root ships with none.
+#   PRODUCT_MIN_BASE, PRODUCT_MAX_BASE
+#                the product bundle's base range (default: this build's
+#                version, no maximum)
 #
 # Output: $OUT/version (the version with the build number, which every
 # file name below carries), $OUT/keys.txt (the SHA-256 fingerprint of each
@@ -178,8 +181,10 @@ for line in "${images[@]}"; do
   "$work/bundle-tool" manifest --image "$image" --digest "$dgst" --out "$work/manifests/$hexd"
   sign_blob "$work/manifests/$hexd" "$work/image-sigs/$hexd.sigstore.json"
 done
-# The bundle fits the base built here, and nothing else.
-VERSION="$version" CHANNEL=lab BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
+# The bundle fits the base built here and newer, unless PRODUCT_MIN_BASE and
+# PRODUCT_MAX_BASE say otherwise; BASES keeps it installable on boxes that
+# predate the range.
+VERSION="$version" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
   SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
   bash "$root/build/product/build.sh"
 sign_blob "$work/product/bin/header.json" "$work/product/bin/header.sigstore.json"

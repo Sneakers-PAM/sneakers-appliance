@@ -151,6 +151,22 @@ reports the end; a session that hasn't ended by then refuses with `UPGRADE_ELEVA
 is applied. The apply's own audit entry and history line name the session it ended. Without an
 override the refusal stays. The update window never overrides.
 
+**One file at a time, and Cancel.** The box holds one file at a time. While an upload or a fetch is
+coming in (`GetUpgrades.receiving`), a file is held (received or fetched, not yet staged or
+discarded: `GetUpgrades.held_upload`, with its id, the name the browser sent in `X-File-Name` or the
+fetched file's, its size, when it came and from where), or a stage runs, a new upload answers `409`
+and a fetch is refused, both with `UPGRADE_BUSY`. A transfer the browser aborts removes its partial
+file, and a partial file a crash left is removed before the next one comes in.
+`UpgradeService.DiscardUpdate` (owner, no code, audited as `upgrade.discard`, with a `discard` line
+in the history) drops a held file by its id, with its partial `.tmp`, unpacked layout and details
+(`UPGRADE_UPLOAD` when there's no such upload), or, with no id, unstages the staged release of its
+`target`: for the base, init's `Image.Unstage` removes the release's ESP entry (so it never boots)
+and its sealed copy of the state key, and the slot is left for the next stage to overwrite; for the
+product, the `staged` link and its slot's files go, and the installed and previous slots stay.
+Nothing is dropped while a stage runs (`UPGRADE_BUSY`), and with nothing staged it's
+`UPGRADE_NOT_STAGED`. A base stage removes the previous release to make room (above), so after
+unstaging one there's no previous release to revert to until the next apply.
+
 ## An internal mirror
 
 An air-gapped site can serve the release files from a web server of its own and set it as the
@@ -190,9 +206,19 @@ does:
 | | Base update | Product bundle |
 |---|---|---|
 | Slots | the two root partitions and the ESP entries | `/var/lib/sneakers/product/a` and `b` on the state volume, with the links `current`, `staged` and `previous` |
-| Stage | `Image.Stage` writes the inactive root | the bundle must fit the running base (`UPGRADE_PRODUCT_BASE`, refused before it's decrypted) and be newer than the installed product (`UPGRADE_DOWNGRADE`); it's unpacked into the slot `current` doesn't name, checked (k0s, the images and their signatures against its `release.yaml`, `KIT_BUNDLE_MISMATCH` or `KIT_IMAGE_UNSIGNED`), and only then linked as `staged`; the upload is removed |
+| Stage | `Image.Stage` writes the inactive root, unless the installed product's base range doesn't include it (below) | the bundle must fit the running base, inside its `min_base` to `max_base` range (`UPGRADE_PRODUCT_BASE`, refused before it's decrypted, naming the range and the running base) and be newer than the installed product (`UPGRADE_DOWNGRADE`); it's unpacked into the slot `current` doesn't name, checked (k0s, the images and their signatures against its `release.yaml`, `KIT_BUNDLE_MISMATCH` or `KIT_IMAGE_UNSIGNED`), and only then linked as `staged`; the upload is removed |
 | Apply | activates the release and reboots | `ApplyUpdate` with `target: UPDATE_TARGET_PRODUCT` moves `current` to the staged slot (the old one becomes `previous`), restarts k0s through init's Services API and opens 80 and 443 on the service interface; no reboot |
 | Revert | `Image.Rollback` and a reboot | `RevertUpdate` with `target: UPDATE_TARGET_PRODUCT` moves `current` back to `previous` and restarts k0s (`UPGRADE_NO_PREVIOUS` when there is none) |
+
+**The base range.** A product bundle names the base versions it fits as `min_base` and an optional
+`max_base` ([release.md](release.md#the-product-bundle)). Staging one checks the running base against
+it, and `ListProductVersions` offers only those whose range includes the running base. A base update
+checks the installed product the other way: a base release outside the installed product's range is
+refused at stage (`UPGRADE_PRODUCT_BASE`, naming the product, its range and the release) and the
+upload is kept; `StageUpdate` with `override_product_range` stages it anyway, audited with
+`override: product-range`, for an owner who installs a product that fits next. A bundle sealed
+before the range existed names exact `bases` only: it still installs on one of them, the installed
+one isn't checked against a base update, and osadmin's log notes both.
 
 **The first install** is the same flow with no previous slot. After setup the Updates page lists
 the versions to choose from (`ListProductVersions`): the index `sneakers-product-index.json` from

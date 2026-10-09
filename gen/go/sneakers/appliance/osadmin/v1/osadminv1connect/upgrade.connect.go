@@ -62,6 +62,9 @@ const (
 	// UpgradeServiceRevertUpdateProcedure is the fully-qualified name of the UpgradeService's
 	// RevertUpdate RPC.
 	UpgradeServiceRevertUpdateProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/RevertUpdate"
+	// UpgradeServiceDiscardUpdateProcedure is the fully-qualified name of the UpgradeService's
+	// DiscardUpdate RPC.
+	UpgradeServiceDiscardUpdateProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/DiscardUpdate"
 	// UpgradeServiceListProductVersionsProcedure is the fully-qualified name of the UpgradeService's
 	// ListProductVersions RPC.
 	UpgradeServiceListProductVersionsProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/ListProductVersions"
@@ -92,6 +95,12 @@ type UpgradeServiceClient interface {
 	// to the previous product slot. Like ApplyUpdate it takes a fresh TOTP
 	// code every time, and an open elevated shell holds it back the same way.
 	RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error)
+	// DiscardUpdate drops a held upload or fetched file by id (its .bin,
+	// any partial .tmp and unpacked layout), or, with no id, unstages the
+	// staged release of target: the base release's boot entry, or the
+	// product's staged slot. It is refused with UPGRADE_BUSY while a stage
+	// is under way, and audited.
+	DiscardUpdate(context.Context, *connect.Request[v1.DiscardUpdateRequest]) (*connect.Response[v1.DiscardUpdateResponse], error)
 	// ListProductVersions lists the product bundles this box may install:
 	// stable versions for its architecture and channel that fit the running
 	// base, newer than the installed product. It reads the index from the
@@ -143,6 +152,12 @@ func NewUpgradeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(upgradeServiceMethods.ByName("RevertUpdate")),
 			connect.WithClientOptions(opts...),
 		),
+		discardUpdate: connect.NewClient[v1.DiscardUpdateRequest, v1.DiscardUpdateResponse](
+			httpClient,
+			baseURL+UpgradeServiceDiscardUpdateProcedure,
+			connect.WithSchema(upgradeServiceMethods.ByName("DiscardUpdate")),
+			connect.WithClientOptions(opts...),
+		),
 		listProductVersions: connect.NewClient[v1.ListProductVersionsRequest, v1.ListProductVersionsResponse](
 			httpClient,
 			baseURL+UpgradeServiceListProductVersionsProcedure,
@@ -166,6 +181,7 @@ type upgradeServiceClient struct {
 	stageUpdate         *connect.Client[v1.StageUpdateRequest, v1.StageUpdateResponse]
 	applyUpdate         *connect.Client[v1.ApplyUpdateRequest, v1.ApplyUpdateResponse]
 	revertUpdate        *connect.Client[v1.RevertUpdateRequest, v1.RevertUpdateResponse]
+	discardUpdate       *connect.Client[v1.DiscardUpdateRequest, v1.DiscardUpdateResponse]
 	listProductVersions *connect.Client[v1.ListProductVersionsRequest, v1.ListProductVersionsResponse]
 	setUpgradePolicy    *connect.Client[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse]
 }
@@ -193,6 +209,11 @@ func (c *upgradeServiceClient) ApplyUpdate(ctx context.Context, req *connect.Req
 // RevertUpdate calls sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate.
 func (c *upgradeServiceClient) RevertUpdate(ctx context.Context, req *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error) {
 	return c.revertUpdate.CallUnary(ctx, req)
+}
+
+// DiscardUpdate calls sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate.
+func (c *upgradeServiceClient) DiscardUpdate(ctx context.Context, req *connect.Request[v1.DiscardUpdateRequest]) (*connect.Response[v1.DiscardUpdateResponse], error) {
+	return c.discardUpdate.CallUnary(ctx, req)
 }
 
 // ListProductVersions calls sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions.
@@ -228,6 +249,12 @@ type UpgradeServiceHandler interface {
 	// to the previous product slot. Like ApplyUpdate it takes a fresh TOTP
 	// code every time, and an open elevated shell holds it back the same way.
 	RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error)
+	// DiscardUpdate drops a held upload or fetched file by id (its .bin,
+	// any partial .tmp and unpacked layout), or, with no id, unstages the
+	// staged release of target: the base release's boot entry, or the
+	// product's staged slot. It is refused with UPGRADE_BUSY while a stage
+	// is under way, and audited.
+	DiscardUpdate(context.Context, *connect.Request[v1.DiscardUpdateRequest]) (*connect.Response[v1.DiscardUpdateResponse], error)
 	// ListProductVersions lists the product bundles this box may install:
 	// stable versions for its architecture and channel that fit the running
 	// base, newer than the installed product. It reads the index from the
@@ -275,6 +302,12 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 		connect.WithSchema(upgradeServiceMethods.ByName("RevertUpdate")),
 		connect.WithHandlerOptions(opts...),
 	)
+	upgradeServiceDiscardUpdateHandler := connect.NewUnaryHandler(
+		UpgradeServiceDiscardUpdateProcedure,
+		svc.DiscardUpdate,
+		connect.WithSchema(upgradeServiceMethods.ByName("DiscardUpdate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	upgradeServiceListProductVersionsHandler := connect.NewUnaryHandler(
 		UpgradeServiceListProductVersionsProcedure,
 		svc.ListProductVersions,
@@ -300,6 +333,8 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 			upgradeServiceApplyUpdateHandler.ServeHTTP(w, r)
 		case UpgradeServiceRevertUpdateProcedure:
 			upgradeServiceRevertUpdateHandler.ServeHTTP(w, r)
+		case UpgradeServiceDiscardUpdateProcedure:
+			upgradeServiceDiscardUpdateHandler.ServeHTTP(w, r)
 		case UpgradeServiceListProductVersionsProcedure:
 			upgradeServiceListProductVersionsHandler.ServeHTTP(w, r)
 		case UpgradeServiceSetUpgradePolicyProcedure:
@@ -331,6 +366,10 @@ func (UnimplementedUpgradeServiceHandler) ApplyUpdate(context.Context, *connect.
 
 func (UnimplementedUpgradeServiceHandler) RevertUpdate(context.Context, *connect.Request[v1.RevertUpdateRequest]) (*connect.Response[v1.RevertUpdateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate is not implemented"))
+}
+
+func (UnimplementedUpgradeServiceHandler) DiscardUpdate(context.Context, *connect.Request[v1.DiscardUpdateRequest]) (*connect.Response[v1.DiscardUpdateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate is not implemented"))
 }
 
 func (UnimplementedUpgradeServiceHandler) ListProductVersions(context.Context, *connect.Request[v1.ListProductVersionsRequest]) (*connect.Response[v1.ListProductVersionsResponse], error) {

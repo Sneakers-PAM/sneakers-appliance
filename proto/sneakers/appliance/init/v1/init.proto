@@ -126,6 +126,17 @@ service ImageService {
   rpc MarkGood(MarkGoodRequest) returns (MarkGoodResponse);
   rpc Rollback(RollbackRequest) returns (RollbackResponse);
   rpc Status(ImageServiceStatusRequest) returns (ImageServiceStatusResponse);
+  // Unstage removes the staged release's ESP entry (UPGRADE_NOT_STAGED when
+  // none is staged), so it never boots; the slot's contents are left for
+  // the next Stage to overwrite.
+  rpc Unstage(UnstageRequest) returns (UnstageResponse);
+}
+
+message UnstageRequest {}
+
+message UnstageResponse {
+  // version is the release unstaged.
+  string version = 1;
 }
 
 message StageRequest {

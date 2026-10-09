@@ -33,7 +33,7 @@ answers Connect `unavailable` ("the appliance services are unavailable").
 | Endpoint | What it does |
 |---|---|
 | `GET /export/audit-log` | the whole OS audit log as written (JSON lines, oldest first), so the chain verifies off the box; needs a session, audited as `audit.export` |
-| `POST /upload` | an update `.bin` as the request body (at most 8 GiB), with the session cookie and `X-CSRF-Token`; answers `{"uploadId": "..."}` for `UpgradeService.StageUpdate`; audited as `upgrade.upload`. Nothing is verified or unpacked until it's staged |
+| `POST /upload` | an update `.bin` as the request body (at most 8 GiB), with the session cookie and `X-CSRF-Token`, and the file's name in `X-File-Name` (optional, URL-encoded; shown on the held upload only); answers `{"uploadId": "..."}` for `UpgradeService.StageUpdate`; audited as `upgrade.upload`. Nothing is verified or unpacked until it's staged. One file at a time: while another is coming in or held, or a stage runs, it answers `409` with `UPGRADE_BUSY`. A transfer the browser aborts leaves no file |
 | `GET /` and anything else | the admin pages, with the page routes falling back to `index.html`. Until setup is done (`StatusService.GetPhase` answers `firstboot`), every page path but `/setup`, `/` included, answers `302` to `/setup`; the files the pages load are served in both phases |
 
 Every response carries `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; base-uri
@@ -125,6 +125,7 @@ about the box.
 | `UpgradeService.StageUpdate` | owner | no | `upgrade.stage` |
 | `UpgradeService.ApplyUpdate` | owner | every call | `upgrade.apply` |
 | `UpgradeService.RevertUpdate` | owner | every call | `upgrade.revert` |
+| `UpgradeService.DiscardUpdate` | owner | no | `upgrade.discard` |
 | `UpgradeService.ListProductVersions` | admin | no | |
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ElevationService.ListElevations` | admin | no | |

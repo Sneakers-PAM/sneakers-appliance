@@ -30,6 +30,12 @@ const product = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
 // way the release build does: the fixture bundle, packed and signed.
 func productBin(t *testing.T, sign testpki.ECKey, enc *age.X25519Identity, version string, bases ...string) []byte {
 	t.Helper()
+	return productBinH(t, sign, enc, updatepkg.Header{Version: version, Arch: "amd64", Kind: updatepkg.KindProduct, Bases: bases, Channel: release.ChannelProduction})
+}
+
+// productBinH is productBin for a header of the test's own.
+func productBinH(t *testing.T, sign testpki.ECKey, enc *age.X25519Identity, want updatepkg.Header) []byte {
+	t.Helper()
 	tree, _ := fixtures.ProductTree(t, fixtures.LabKeys(t), "amd64", nil)
 	dir := t.TempDir()
 	for name, f := range tree {
@@ -45,7 +51,7 @@ func productBin(t *testing.T, sign testpki.ECKey, enc *age.X25519Identity, versi
 	if err := updatepkg.TarDir(dir, &payload); err != nil {
 		t.Fatal(err)
 	}
-	h, err := updatepkg.Encrypt(&payload, updatepkg.Header{Version: version, Arch: "amd64", Kind: updatepkg.KindProduct, Bases: bases, Channel: release.ChannelProduction}, enc.Recipient(), &ct)
+	h, err := updatepkg.Encrypt(&payload, want, enc.Recipient(), &ct)
 	if err != nil {
 		t.Fatal(err)
 	}

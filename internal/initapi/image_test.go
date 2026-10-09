@@ -259,3 +259,29 @@ func TestImageStatusReportsAStageWriting(t *testing.T) {
 		t.Fatalf("after the stage: %v %v", st, err)
 	}
 }
+
+func TestImageServiceUnstagesThroughInit(t *testing.T) {
+	dir, pins := fixtures.Build(t, fixtures.Options{})
+	const running = "0.0.0-lab.20261007e-gabc1234"
+	esp := espDir(t.TempDir())
+	if err := esp.WriteFile(filepath.Join(imageupgrade.UKIDir, imageupgrade.GoodName(running)), strings.NewReader("running")); err != nil {
+		t.Fatal(err)
+	}
+	s := &imageupgrade.Stager{ESP: esp, Slots: discardSlots{}, Sealer: noSeal{}, Pins: pins, Running: running, InitVersion: running, WorkDir: t.TempDir()}
+	c := serveImages(t, s)
+	ctx := context.Background()
+	if _, err := c.Unstage(ctx, connect.NewRequest(&initv1.UnstageRequest{})); err == nil || !strings.Contains(err.Error(), "UPGRADE_NOT_STAGED") {
+		t.Fatalf("unstage with nothing staged: %v", err)
+	}
+	if _, err := c.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir})); err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.Unstage(ctx, connect.NewRequest(&initv1.UnstageRequest{}))
+	if err != nil || got.Msg.GetVersion() != fixtures.Version {
+		t.Fatalf("unstage: %v %v", got, err)
+	}
+	st, err := c.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
+	if err != nil || st.Msg.GetStagedVersion() != "" {
+		t.Fatalf("status after unstaging: %v %v", st, err)
+	}
+}

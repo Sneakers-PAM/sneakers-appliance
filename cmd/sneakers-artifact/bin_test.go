@@ -192,3 +192,26 @@ func writeTree(t *testing.T, dir string, k fixtures.Keys) {
 		writeFile(t, p, f.Data)
 	}
 }
+
+func TestBinPackWritesAProductBundlesBaseRange(t *testing.T) {
+	tmp := t.TempDir()
+	keys, tree, work := filepath.Join(tmp, "keys"), filepath.Join(tmp, "tree"), filepath.Join(tmp, "work")
+	if _, err := runCmd(t, "lab-update-key", "--out", keys); err != nil {
+		t.Fatal(err)
+	}
+	writeTree(t, tree, fixtures.LabKeys(t))
+	header, err := runCmd(t, "bin-pack", "--layout", tree, "--recipient", filepath.Join(keys, "update.pub"),
+		"--version", "0.4.0", "--channel", "lab", "--kind", "product", "--min-base", "0.2.0", "--max-base", "0.3.0", "--out", work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(header) // #nosec G304 -- the test's own output
+	var h updatepkg.Header
+	if err := json.Unmarshal(b, &h); err != nil || h.MinBase != "0.2.0" || h.MaxBase != "0.3.0" || len(h.Bases) != 0 {
+		t.Fatalf("header %s: %v", b, err)
+	}
+	if _, err := runCmd(t, "bin-pack", "--layout", tree, "--recipient", filepath.Join(keys, "update.pub"),
+		"--version", "0.4.0", "--channel", "lab", "--kind", "product", "--min-base", "0.3.0", "--max-base", "0.2.0", "--out", filepath.Join(tmp, "w2")); !codes.Is(err, codes.UpgradeFormat) {
+		t.Fatalf("a range that ends before it starts: want UPGRADE_FORMAT, got %v", err)
+	}
+}

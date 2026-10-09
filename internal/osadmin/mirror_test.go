@@ -220,11 +220,16 @@ func TestAnHTTPSMirrorWithAPrivateCA(t *testing.T) {
 	if e := lastEntry(t, mb.log, "tls.update-trust.set"); e.Outcome != "ok" || e.Actor != "alice" {
 		t.Fatalf("%+v", e)
 	}
-	if _, err := fetchBin(alice); err != nil {
+	f, err := fetchBin(alice)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if st := mirrorStatus(t, alice); !st.GetOk() || !st.GetCustomCa() {
 		t.Fatalf("%+v", st)
+	}
+	// One file at a time: the fetched file goes before the next fetch.
+	if _, err := alice.discard(f.Msg.GetUploadId(), 0); err != nil {
+		t.Fatal(err)
 	}
 
 	// The private CA is the mirror's only: the release source isn't
