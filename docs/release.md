@@ -271,7 +271,35 @@ any certificate or key that isn't the recorded production one.
 | `build` | nothing | builds the kernel, the root image, the unsigned UKI and systemd-boot, the production kit, the product bundle packed for signing, and `SHA256SUMS` over all of it (`build/release/build.sh`) |
 | `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; adds the update key to the UKI; signs the UKI and systemd-boot with the db key, then the artifact, the `.bin` header and the product bundle's header with the release key; checks both `.bin` files decrypt with the key in the signed UKI, and the product bundle's contents; each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
 | `publish` | `packages: write`, `contents: write` | verifies the artifact with the production kit and the `.bin` with the production key, pushes `sneakers-os` to GHCR, verifies what it pushed, and attaches the `.bin` and its `.sha256` to the tag's GitHub Release |
-| `lab` | lab keys only | the whole path with a lab key set: builds (the lab update key in the UKI), packs, verifies, decrypts with the key in the signed UKI, unpacks, runs the lab kit on the result, opens and checks the lab product bundle, and checks a production verify of either lab `.bin` is refused; nothing leaves the run |
+| `lab` | the `lab` environment, lab keys only | the whole path with a lab key set: builds (the lab update key in the UKI), packs, verifies, decrypts with the key in the signed UKI, unpacks, runs the lab kit on the result, opens and checks the lab product bundle, and checks a production verify of either lab `.bin` is refused; nothing leaves the run |
+
+## The environments
+
+Each job that can touch a key names its environment; no other job names one, and no key is ever a
+repository or organization secret.
+
+| Environment | Used by | Protection | Secrets |
+|---|---|---|---|
+| `production` | the `sign` job of a `v*` tag run | required reviewer Bugs5382; deployments from `v*` tags only (a custom tag policy); no admin bypass | `SB_DB_KEY`, `RELEASE_COSIGN_KEY`, `RELEASE_COSIGN_PASSWORD`, `UPDATE_AGE_KEY` |
+| `lab` | the `lab` job (the lab dry run, by hand) | none | none: the job makes a fresh lab key set for each run |
+
+- The owner sets the four production values from the production keys runbook
+  ([runbooks/production-keys.md](runbooks/production-keys.md)); nothing in CI writes, reads back or
+  copies them. The PK and KEK private keys are never GitHub secrets.
+- Self-review stays allowed on `production`: the owner both pushes the tag and approves the
+  deployment, and is its only reviewer, so blocking self-review would leave a release no one can
+  approve. Admins can't bypass the review.
+- A lab secret, if a lab job ever needs one, goes into `lab`, never `production` and never the
+  repository.
+
+The settings applied are in `build/ci/environment-production.json` and
+`build/ci/environment-lab.json`:
+
+```bash
+gh api -X PUT repos/Sneakers-PAM/sneakers-appliance/environments/production --input build/ci/environment-production.json
+gh api -X POST repos/Sneakers-PAM/sneakers-appliance/environments/production/deployment-branch-policies -f name='v*' -f type=tag
+gh api -X PUT repos/Sneakers-PAM/sneakers-appliance/environments/lab --input build/ci/environment-lab.json
+```
 
 The release `release.yaml` and its signature come from the pinned `sneakers-release` GitHub
 Release; the k0s binary from its upstream release, checked against the pin in `release.yaml`, goes
