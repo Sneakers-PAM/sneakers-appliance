@@ -88,22 +88,24 @@ func productCheckCmd() *cobra.Command {
 }
 
 // productIndexCmd writes the index a mirror or a release serves next to
-// its product bundles. It reads only their headers: the box verifies each
-// bundle when it's staged.
+// its .bin files: product bundles in its products section, base releases
+// in its base section. It reads only their headers: the box verifies each
+// .bin when it's staged.
 func productIndexCmd() *cobra.Command {
 	var out string
 	cmd := &cobra.Command{
-		Use:   "product-index <file.bin>...",
-		Short: "Write sneakers-product-index.json for product bundles",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     "product-index <file.bin>...",
+		Aliases: []string{"index"},
+		Short:   "Write sneakers-product-index.json for product bundles and base releases",
+		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var idx updatepkg.Index
 			for _, a := range args {
-				e, err := indexEntry(a)
+				h, size, err := indexHeader(a)
 				if err != nil {
 					return err
 				}
-				idx.Products = append(idx.Products, e)
+				idx.Add(h, size)
 			}
 			b, err := json.MarshalIndent(idx, "", "  ")
 			if err != nil {
@@ -121,24 +123,21 @@ func productIndexCmd() *cobra.Command {
 	return cmd
 }
 
-func indexEntry(p string) (updatepkg.IndexEntry, error) {
+func indexHeader(p string) (updatepkg.Header, int64, error) {
 	f, err := os.Open(p) // #nosec G304 -- a build output
 	if err != nil {
-		return updatepkg.IndexEntry{}, err
+		return updatepkg.Header{}, 0, err
 	}
 	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil {
-		return updatepkg.IndexEntry{}, err
+		return updatepkg.Header{}, 0, err
 	}
 	pkg, err := updatepkg.Read(f, fi.Size())
 	if err != nil {
-		return updatepkg.IndexEntry{}, err
+		return updatepkg.Header{}, 0, err
 	}
-	if !pkg.Header.IsProduct() {
-		return updatepkg.IndexEntry{}, fmt.Errorf("%s isn't a product bundle", p)
-	}
-	return updatepkg.EntryOf(pkg.Header, fi.Size()), nil
+	return pkg.Header, fi.Size(), nil
 }
 
 func releaseKey(p string) (*ecdsa.PublicKey, error) {

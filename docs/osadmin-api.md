@@ -127,6 +127,7 @@ about the box.
 | `UpgradeService.RevertUpdate` | owner | every call | `upgrade.revert` |
 | `UpgradeService.DiscardUpdate` | owner | no | `upgrade.discard` |
 | `UpgradeService.ListProductVersions` | admin | no | |
+| `UpgradeService.ListBaseVersions` | admin | no | |
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |

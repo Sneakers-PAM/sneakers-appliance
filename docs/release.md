@@ -85,9 +85,12 @@ How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundl
 
 `build/product/build.sh` lays the bundle out (with `BRAND=<folder>` for a brand), runs that check (`sneakers-artifact product-check`)
 and packs it for a base range (`MIN_BASE` and the optional `MAX_BASE`, `bin-pack --kind product --min-base ... --max-base ...`; `BASES`, `--base`, still adds exact bases for older boxes); the caller signs the
-header and seals it with `bin-seal`. `sneakers-artifact product-index` writes the index a mirror
-serves next to the bundles: version, architecture, channel, the base range and bases, file name and size per bundle,
-which the box only uses to offer a choice. `bin-verify --extract` on a product bundle also runs the
+header and seals it with `bin-seal`. `sneakers-artifact product-index` (also `index`) writes the
+index a mirror serves next to the `.bin` files: version, architecture, channel, the base range and
+bases, file name and size per product bundle under `products`, and the same per base release (with
+`kind`, full or patch) under `base`. Give it every `.bin` the mirror serves; the box only uses the
+index to offer a choice, and verifies each `.bin` when it's staged. An index with no `base`
+section (from before it existed) still reads: it offers products only. `bin-verify --extract` on a product bundle also runs the
 box's check.
 
 - **A release:** the build job packs the bundle for the release's own version and newer
