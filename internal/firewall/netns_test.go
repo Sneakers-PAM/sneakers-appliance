@@ -113,11 +113,17 @@ func (f *fwLab) startBox(t *testing.T, tbl firewall.Table) {
 
 func (f *fwLab) expect(t *testing.T, from, to string, want map[string]string) {
 	t.Helper()
+	f.expectIn(t, f.rtr, from, to, want)
+}
+
+// expectIn dials from inside ns, so the box namespace can dial itself.
+func (f *fwLab) expectIn(t *testing.T, ns, from, to string, want map[string]string) {
+	t.Helper()
 	var ports []string
 	for p := range want {
 		ports = append(ports, p)
 	}
-	out, err := f.lab.Run(f.rtr, "dial", "DIAL_FROM="+from, "DIAL_TO="+to, "DIAL_PORTS="+strings.Join(ports, ","))
+	out, err := f.lab.Run(ns, "dial", "DIAL_FROM="+from, "DIAL_TO="+to, "DIAL_PORTS="+strings.Join(ports, ","))
 	if err != nil {
 		t.Fatalf("dial: %v\n%s", err, out)
 	}
@@ -151,4 +157,23 @@ func TestFirewallRewriteIsWhole(t *testing.T) {
 	f.startBox(t, firewall.Table{MgmtIf: "mgmt0", Open22: true, Open8443: true, AllowV6: prefixes("2001:db8::/64", "2001:db8::50/128")})
 	f.expect(t, "2001:db8::50", "2001:db8::10", map[string]string{"22": "ok", "8443": "ok"})
 	f.expect(t, "192.0.2.50", "192.0.2.10", map[string]string{"22": "closed", "8443": "closed"})
+}
+
+// The box dialling its own management address (the certificate swap's
+// self-test) arrives on lo, not on the management interface, so it must get
+// through even when the allow-list doesn't hold the box's own address.
+func TestFirewallTheBoxReachesItsOwnManagementAddress(t *testing.T) {
+	f := newFwLab(t)
+	f.startBox(t, firewall.Table{MgmtIf: "mgmt0", AllowV4: prefixes("192.0.2.50/32"), Open22: true, Open8443: true})
+	f.expectIn(t, f.box, "192.0.2.10", "192.0.2.10", map[string]string{"22": "ok", "8443": "ok"})
+	f.expectIn(t, f.box, "2001:db8::10", "2001:db8::10", map[string]string{"22": "ok", "8443": "ok"})
+	// The network still can't reach them from outside the allow-list.
+	f.expect(t, "192.0.2.60", "192.0.2.10", map[string]string{"22": "closed", "8443": "closed"})
+}
+
+// Loopback follows the same opening as the management interface.
+func TestFirewallTheBoxCantReachAPortNotYetOpened(t *testing.T) {
+	f := newFwLab(t)
+	f.startBox(t, firewall.Table{MgmtIf: "mgmt0", Open22: true})
+	f.expectIn(t, f.box, "192.0.2.10", "192.0.2.10", map[string]string{"22": "ok", "8443": "closed"})
 }

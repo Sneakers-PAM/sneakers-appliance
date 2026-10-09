@@ -5,7 +5,7 @@
 // table, inet sneakers_mgmt, whose input chain runs at priority -10, before
 // the k0s network stack's filter chains (spec 2, Section 3.5). It accepts
 // established and related traffic, accepts 22 and 8443 only on the
-// management interface, only once the first-boot step that opens them has
+// management interface (and on lo, so the box can reach itself), only once the first-boot step that opens them has
 // run, and only from the allow-list, and drops every other packet to 22 and
 // 8443. Other ports are left alone, apart from the service interface's
 // rules spec 3 hands in. The whole table is rewritten in one netlink batch
@@ -27,6 +27,10 @@ const (
 	// Priority runs the chain before the standard filter priority (0).
 	Priority = -10
 )
+
+// LoopbackIf is the loopback interface: a connection from the box to one of
+// its own addresses comes in on it, whichever NIC holds the address.
+const LoopbackIf = "lo"
 
 // The management ports.
 const (
@@ -144,6 +148,9 @@ func Plan(t Table) Ruleset {
 		if !p.open || t.MgmtIf == "" {
 			continue
 		}
+		// The box dialling its own address (the certificate swap's self-test
+		// on :8443) arrives on lo, which only the box itself can send on.
+		rs.Rules = append(rs.Rules, Rule{Iif: LoopbackIf, Protocol: "tcp", Port: p.port, Accept: true})
 		base := Rule{Iif: t.MgmtIf, Protocol: "tcp", Port: p.port, Accept: true}
 		if any {
 			rs.Rules = append(rs.Rules, base)

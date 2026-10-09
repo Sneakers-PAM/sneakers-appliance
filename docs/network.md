@@ -157,6 +157,10 @@ change:
    that opens them has called `SetManagementPorts` (22 at the SSH step, 8443 at the recovery-key
    step). Once `/var/lib/sneakers/setup/done` exists both stay open. The choice is kept in
    `/run/sneakers/netd/ports.json`, so it lasts until the next boot;
+   once open, each is also accepted on `lo`. A connection from the box to one of its own
+   addresses arrives on `lo`, not on the NIC holding the address, and only the box can send on
+   `lo`, so this opens nothing to the network. The certificate swap's self-test needs it: it dials
+   the box's own management addresses on 8443 ([certificates.md](certificates.md));
 3. with an empty allow-list (first boot's default) any source on the management interface is
    accepted; otherwise only the allow-list's prefixes (IPv4 and IPv6 interval sets, `allow4` and
    `allow6`), and a family with no prefix has no way in;
@@ -176,5 +180,6 @@ The unit tests run netd against a fake kernel. The network-namespace tests run t
 namespace that serves DHCPv4, DHCPv6, router advertisements with RDNSS, DNS and SNTP from the same
 libraries: DHCPv4, SLAAC with RDNSS on an IPv6-only network, stateful DHCPv6, dual stack, static,
 and an address change reaching `Watch`. The firewall's tests connect from a second namespace: 22 and
-8443 answer only from the allow-list, only on the management interface, and only once opened. They
+8443 answer only from the allow-list, only on the management interface, and only once opened. The
+box namespace also dials its own management addresses, which must connect once the port is open. They
 need root and skip without it; CI runs them as root (`SNEAKERS_REQUIRE_NETNS=1`).

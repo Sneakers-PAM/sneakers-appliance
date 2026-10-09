@@ -68,7 +68,9 @@ Assigning a certificate to `admin` writes `tls.crt` (the chain), `tls.key` and t
 re-reads the files on the next handshake, so there's no restart, and keeps an assigned certificate
 as it is when the host name or addresses change (Status then warns). accessd then connects to :8443
 on each management address and compares the served certificate's fingerprint; if the new one isn't
-served within 15 seconds, the previous files are put back (`TLS_NOT_SERVED`). Status, the console
+served within 15 seconds, the previous files are put back (`TLS_NOT_SERVED`). The box's connection
+to its own address comes in on `lo`, which the management firewall accepts for 22 and 8443 once
+they're open ([network.md](network.md#the-management-firewall)). Status, the console
 and the `Endpoint` read the live file, so the fingerprint they show follows the swap. The store
 takes one change at a time but keeps answering reads during that check, so Status and the console
 stay live while a certificate is being applied; the endpoint shows its old assignment until the
