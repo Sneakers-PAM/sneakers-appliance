@@ -116,6 +116,8 @@ jobs:
           sudo apt-get install -y -q efitools sbsigntool squashfs-tools cryptsetup-bin cpio systemd-ukify systemd-boot-efi python3-pefile
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Release environments keep the keys apart
+        run: bash build/release/environments_test.sh
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/
       - name: Lab keys never silently regenerate an existing set
