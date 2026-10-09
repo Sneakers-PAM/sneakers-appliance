@@ -50,7 +50,11 @@ type PullOptions struct {
 	ModTime time.Time
 	// PlainHTTP talks to registries without TLS (a lab registry only).
 	PlainHTTP bool
-	Logger    log.Logger
+	// Layouts is a directory of images the release built, an OCI layout
+	// per service (build/release/images.sh); a pinned digest found there
+	// is taken from it instead of a registry. Optional.
+	Layouts string
+	Logger  log.Logger
 }
 
 // Pull builds the airgap bundle: for every image release.yaml pins, it
@@ -149,13 +153,9 @@ func repository(image string, plainHTTP bool) (*remote.Repository, error) {
 }
 
 func pullOne(ctx context.Context, o PullOptions, image, dgst string) error {
-	repo, err := repository(image, o.PlainHTTP)
+	repo, root, err := source(ctx, o, image, dgst)
 	if err != nil {
 		return err
-	}
-	root, err := repo.Resolve(ctx, dgst)
-	if err != nil {
-		return codes.New(codes.KitBundleMismatch, "%s@%s can't be resolved: %v", image, dgst, err)
 	}
 	if root.Digest.String() != dgst {
 		return codes.New(codes.KitBundleMismatch, "%s@%s resolved to %s", image, dgst, root.Digest)
@@ -207,6 +207,24 @@ func pullOne(ctx context.Context, o PullOptions, image, dgst string) error {
 	top := ocispec.Descriptor{MediaType: root.MediaType, Digest: root.Digest, Size: root.Size,
 		Annotations: map[string]string{ocispec.AnnotationRefName: image + "@" + dgst}}
 	return writeArchive(dir, top, filepath.Join(o.Out, strings.TrimPrefix(dgst, "sha256:")+".tar"), o.ModTime)
+}
+
+// source is where image@dgst comes from: the layout the release built it
+// in, else its registry.
+func source(ctx context.Context, o PullOptions, image, dgst string) (oras.ReadOnlyTarget, ocispec.Descriptor, error) {
+	local, desc, err := localSource(ctx, o.Layouts, dgst)
+	if err != nil || local != nil {
+		return local, desc, err
+	}
+	repo, err := repository(image, o.PlainHTTP)
+	if err != nil {
+		return nil, ocispec.Descriptor{}, err
+	}
+	root, err := repo.Resolve(ctx, dgst)
+	if err != nil {
+		return nil, ocispec.Descriptor{}, codes.New(codes.KitBundleMismatch, "%s@%s can't be resolved: %v", image, dgst, err)
+	}
+	return repo, root, nil
 }
 
 func writeBlob(dir string, d digest.Digest, b []byte) error {

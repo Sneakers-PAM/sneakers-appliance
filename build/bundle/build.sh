@@ -20,6 +20,9 @@
 #   OUT          the bundle directory (empty or missing); pass it to
 #                build/root/build.sh as IMAGES
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
+#   LAYOUTS      the service images a release built, an OCI layout per
+#                service (build/release/images.sh): a pinned digest found
+#                there is taken from it, not a registry (optional)
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -28,12 +31,13 @@ root="$(cd "$here/../.." && pwd)"
 arch="${ARCH:-amd64}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH
-plain=()
-[ "${PLAIN_HTTP:-}" != 1 ] || plain=(--plain-http)
+flags=()
+[ "${PLAIN_HTTP:-}" != 1 ] || flags=(--plain-http)
+[ -z "${LAYOUTS:-}" ] || flags+=(--layouts "$LAYOUTS")
 
 tool="$(mktemp -d)"
 trap 'rm -rf "$tool"' EXIT
 CGO_ENABLED=0 go build -trimpath -o "$tool/bundle" "$root/build/tools/bundle"
-"$tool/bundle" pull --release "$RELEASE" --key "$RELEASE_KEY" --signatures "$SIGNATURES" --arch "$arch" --out "$OUT" "${plain[@]}"
+"$tool/bundle" pull --release "$RELEASE" --key "$RELEASE_KEY" --signatures "$SIGNATURES" --arch "$arch" --out "$OUT" "${flags[@]}"
 "$tool/bundle" check --release "$RELEASE" --key "$RELEASE_KEY" --out "$OUT"
 echo "bundle: $(find "$OUT" -name '*.tar' | wc -l) images for $arch in $OUT ($(du -sb "$OUT" | cut -f1) bytes)"
