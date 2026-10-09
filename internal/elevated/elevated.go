@@ -150,9 +150,7 @@ func session(ctx, terminated context.Context, o Options, rec *osaudit.Recorder, 
 		"TERM=" + termOf(os.Getenv("TERM")),
 		"SNEAKERS_ROOT_SHELL=" + admin,
 		"SNEAKERS_ROOT_SHELL_ENDS=" + strconv.FormatInt(ends.Unix(), 10),
-		// busybox ash expands the prompt (ASH_EXPAND_PRMT), so it shows the
-		// minutes left at each prompt.
-		`PS1=[root $(( (SNEAKERS_ROOT_SHELL_ENDS - $(date +%s)) / 60 )) min left] \w # `,
+		"PS1=" + Prompt,
 	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}

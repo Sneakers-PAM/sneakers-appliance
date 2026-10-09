@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 )
 
 // The shell scripts the root ships run on the box's busybox, which answers
@@ -170,5 +172,34 @@ func TestTheCheckFindsAnOptionThatIsntBuilt(t *testing.T) {
 		if got := missingOptions(line, on); len(got) != want {
 			t.Errorf("%q: got %v, want %d", line, got, want)
 		}
+	}
+}
+
+// promptNeeds maps what a prompt may use to the busybox options ash needs
+// to expand it (busybox 1.38's shell/Config.src and libbb/Config.src).
+var promptNeeds = []struct {
+	use  *regexp.Regexp
+	syms []string
+}{
+	{regexp.MustCompile(`\$\(\(`), []string{"CONFIG_FEATURE_SH_MATH", "CONFIG_FEATURE_SH_MATH_64"}},
+	{regexp.MustCompile(`\$[({]|\$[A-Za-z_]`), []string{"CONFIG_ASH_EXPAND_PRMT"}},
+	{regexp.MustCompile(`\\[wWhHu$]`), []string{"CONFIG_FEATURE_EDITING", "CONFIG_FEATURE_EDITING_FANCY_PROMPT"}},
+	{regexp.MustCompile(`\$\(date `), []string{"CONFIG_DATE"}},
+}
+
+func TestTheRootPromptUsesOnlyWhatBusyboxBuilds(t *testing.T) {
+	on := busyboxConfig(t)
+	for _, n := range promptNeeds {
+		if !n.use.MatchString(elevated.Prompt) {
+			continue
+		}
+		for _, sym := range n.syms {
+			if !on[sym] {
+				t.Errorf("the root shell's PS1 %q needs %s, which busybox.config doesn't build", elevated.Prompt, sym)
+			}
+		}
+	}
+	if !strings.Contains(elevated.Prompt, `\h`) {
+		t.Errorf("the root shell's PS1 %q doesn't show the host name", elevated.Prompt)
 	}
 }
