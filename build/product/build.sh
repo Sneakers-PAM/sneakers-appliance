@@ -25,6 +25,8 @@
 #                required when release.yaml pins helm, refused otherwise
 #   RECIPIENT    the channel's update key recipient (update.pub)
 #   STACKS       a directory of stacks, <stack>/*.yaml (optional)
+#   BRAND        the product's brand folder: brand.yaml and its logo
+#                (optional; docs/artifact.md#the-brand)
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
 #   OUT          the output directory: tree/ (the unpacked bundle) and
 #                bin/header.json, bin/payload.age
@@ -67,6 +69,12 @@ if [ -n "${STACKS:-}" ]; then
     install -m 0644 "$d"*.yaml "$tree/manifests/$stack/"
     echo "product: stack $stack"
   done
+fi
+
+if [ -n "${BRAND:-}" ]; then
+  mkdir -p "$tree/brand"
+  for f in "$BRAND"/*; do install -m 0644 "$f" "$tree/brand/"; done
+  echo "product: brand from $BRAND"
 fi
 
 tool="$(mktemp -d)"

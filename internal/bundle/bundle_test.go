@@ -96,6 +96,38 @@ func TestProductCheckBothDirections(t *testing.T) {
 	}
 }
 
+const brandYAML = "apiVersion: sneakers-pam/v1alpha1\nkind: Brand\nlogo: logo.svg\ncolours: {background: \"#0b1f33\", text: \"#ffffff\", accent: \"#ffb000\"}\n"
+
+const brandSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#ffb000"/></svg>`
+
+func addBrand(svg string) func(fstest.MapFS) {
+	return func(m fstest.MapFS) {
+		m["brand/brand.yaml"] = &fstest.MapFile{Data: []byte(brandYAML), Mode: 0o644}
+		m["brand/logo.svg"] = &fstest.MapFile{Data: []byte(svg), Mode: 0o644}
+	}
+}
+
+// A product bundle may carry its brand; a malformed one refuses the bundle.
+func TestAProductBundleMayCarryItsBrand(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	tree, _ := fixtures.ProductTree(t, k, "amd64", addBrand(brandSVG))
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatal(err)
+	}
+	for name, edit := range map[string]func(fstest.MapFS){
+		"script":  addBrand(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`),
+		"no yaml": func(m fstest.MapFS) { m["brand/logo.svg"] = &fstest.MapFile{Data: []byte(brandSVG)} },
+		"a file":  func(m fstest.MapFS) { m["brand"] = &fstest.MapFile{Data: []byte(brandYAML)} },
+		"stray":   func(m fstest.MapFS) { addBrand(brandSVG)(m); m["brand/run.js"] = &fstest.MapFile{Data: []byte("x")} },
+	} {
+		tree, _ := fixtures.ProductTree(t, k, "amd64", edit)
+		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: want KIT_BUNDLE_MISMATCH, got %v", name, err)
+		}
+	}
+}
+
 func TestReleaseRefusesPlaceholderDigests(t *testing.T) {
 	rel, err := bundle.ParseRelease([]byte("apiVersion: sneakers-pam/v1alpha1\nkind: Release\nspec:\n  services:\n    vault:\n      image: ghcr.io/sneakers-pam/sneakers-vault\n      digest: sha256:TBD-at-release\n"))
 	if err != nil {

@@ -9,7 +9,7 @@
 </head>
 <body>
 <main class="box" role="status" aria-live="polite">
-<p class="mark">Sneakers-PAM</p>
+{{if .Logo}}<img class="logo" src="/_box/logo" alt="Sneakers-PAM">{{else}}<p class="mark">Sneakers-PAM</p>{{end}}
 <div class="spin" aria-hidden="true"></div>
 <h1 id="sneakers-box-title">{{.Title}}</h1>
 <p id="sneakers-box-note">{{.Note}}</p>

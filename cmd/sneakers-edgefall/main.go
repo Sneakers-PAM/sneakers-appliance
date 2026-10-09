@@ -21,6 +21,7 @@ import (
 	"net/netip"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -32,7 +33,9 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/brand"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 )
 
 // pollEvery is how often accessd is asked; the poller asks edgefall every
@@ -43,7 +46,7 @@ const pollEvery = 500 * time.Millisecond
 const askTimeout = time.Second
 
 type config struct {
-	osadminDir, tlsDir, accessSock, boxState, local, https, http string
+	osadminDir, tlsDir, accessSock, boxState, brandDir, local, https, http string
 }
 
 func main() {
@@ -53,6 +56,7 @@ func main() {
 	fs.StringVar(&c.tlsDir, "tls-dir", "/run/sneakers/edgefall", "edgefall's own copy of the certificate")
 	fs.StringVar(&c.accessSock, "access-socket", accessapi.SocketPath, "accessd's socket")
 	fs.StringVar(&c.boxState, "box-state", boxstate.File, "init's announcement of a reboot or a shutdown")
+	fs.StringVar(&c.brandDir, "brand-dir", filepath.Join(product.Dir, "current", brand.Dir), "the installed product bundle's brand, read-only")
 	fs.StringVar(&c.local, "local", edgefall.LocalAddr, "the loopback address Traefik reaches for /_box/ and its error pages")
 	fs.StringVar(&c.https, "https", ":443", "the edge's https address, held while k0s doesn't run")
 	fs.StringVar(&c.http, "http", ":80", "the edge's http address, held with https")
@@ -122,6 +126,7 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 	t := time.NewTicker(pollEvery)
 	defer t.Stop()
 	for {
+		loadBrand(h, c.brandDir, lg)
 		w.Poll(ctx)
 		cl.Want(w.Claim())
 		select {
@@ -130,6 +135,22 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 			return nil
 		case <-t.C:
 		}
+	}
+}
+
+// loadBrand picks up the installed product's brand when the current slot
+// changes; a malformed one leaves the base look.
+func loadBrand(h *edgefall.Server, dir string, lg log.Logger) {
+	changed, warn, err := h.LoadBrand(dir)
+	switch {
+	case !changed:
+	case err != nil:
+		lg.Warn("edgefall: the product's brand isn't used; the base look stays", log.F("dir", dir), log.F("error", err.Error()))
+	default:
+		for _, w := range warn {
+			lg.Warn("edgefall: "+w, log.F("dir", dir))
+		}
+		lg.Info("edgefall: the box-state look loaded", log.F("dir", dir))
 	}
 }
 

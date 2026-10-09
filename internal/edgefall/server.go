@@ -4,7 +4,8 @@
 // Package edgefall is sneakers-edgefall, the product edge's fallback
 // (platform design, Section 3.2; docs/edge-fallback.md). It serves three
 // things and nothing else: the box state at /_box/state, the poller
-// product pages load from /_box/poll.js, and the branded box-state page,
+// product pages load from /_box/poll.js, the installed product's logo at
+// /_box/logo when its bundle carries one, and the branded box-state page,
 // with 503, for every other request. It never serves product content and
 // never proxies. Traefik reaches it on loopback for /_box/ and for its
 // error pages; while k0s doesn't run, edgefall answers 80 and 443 itself.
@@ -20,6 +21,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 )
@@ -28,6 +30,7 @@ import (
 const (
 	StatePath  = "/_box/state"
 	PollerPath = "/_box/poll.js"
+	LogoPath   = "/_box/logo"
 )
 
 // StateHeader carries the state on the page, so the poller tells the page
@@ -75,15 +78,23 @@ var page = template.Must(template.New("page").Parse(pageSource))
 // Server is edgefall's handler.
 type Server struct {
 	state func() boxstate.State
-	csp   string
+	look  atomic.Pointer[look]
+	key   string
 }
 
-// NewServer serves the state state answers.
+// NewServer serves the state state answers, with the base look until
+// LoadBrand finds a brand.
 func NewServer(state func() boxstate.State) *Server {
-	sum := sha256.Sum256([]byte(pageStyle))
-	csp := "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
+	s := &Server{state: state}
+	s.look.Store(newLook(nil))
+	return s
+}
+
+// pageCSP is the page's policy, its one stylesheet allowed by hash.
+func pageCSP(style string) string {
+	sum := sha256.Sum256([]byte(style))
+	return "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) +
 		"'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
-	return &Server{state: state, csp: csp}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -93,27 +104,34 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Referrer-Policy", "no-referrer")
 	h.Set("X-Frame-Options", "DENY")
 	st := s.state()
+	lk := s.look.Load()
 	read := r.Method == http.MethodGet || r.Method == http.MethodHead
 	switch {
 	case read && r.URL.Path == StatePath && r.URL.RawPath == "":
 		h.Set("Content-Type", "application/json")
 		b, _ := json.Marshal(struct {
-			State string `json:"state"`
-		}{string(st)})
+			State string     `json:"state"`
+			Brand *stateLook `json:"brand,omitempty"`
+		}{string(st), lk.state})
 		_, _ = w.Write(b)
 	case read && r.URL.Path == PollerPath && r.URL.RawPath == "":
 		h.Set("Content-Type", "text/javascript; charset=utf-8")
 		_, _ = w.Write(poller)
+	case read && r.URL.Path == LogoPath && r.URL.RawPath == "" && lk.logo != nil:
+		h.Set("Content-Type", lk.logoType)
+		h.Set("Content-Security-Policy", "default-src 'none'; sandbox")
+		h.Set("Cross-Origin-Resource-Policy", "same-origin")
+		_, _ = w.Write(lk.logo)
 	default:
-		s.page(w, st)
+		s.page(w, st, lk)
 	}
 }
 
 // page is the branded page, with 503: every request but the two above.
-func (s *Server) page(w http.ResponseWriter, st boxstate.State) {
+func (s *Server) page(w http.ResponseWriter, st boxstate.State, lk *look) {
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
-	h.Set("Content-Security-Policy", s.csp)
+	h.Set("Content-Security-Policy", lk.csp)
 	h.Set("Retry-After", retryAfter)
 	h.Set(StateHeader, string(st))
 	h.Set("Connection", "close")
@@ -123,7 +141,8 @@ func (s *Server) page(w http.ResponseWriter, st boxstate.State) {
 		State       string
 		Title, Note string
 		Style       template.CSS
-	}{string(st), wd.Title, wd.Note, template.CSS(pageStyle)}) // #nosec G203 -- the embedded stylesheet, pinned by the CSP's hash
+		Logo        bool
+	}{string(st), wd.Title, wd.Note, template.CSS(lk.style), lk.logo != nil}) // #nosec G203 -- the embedded stylesheet and validated #rrggbb colours, pinned by the CSP's hash
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_, _ = w.Write(b.Bytes())
 }
