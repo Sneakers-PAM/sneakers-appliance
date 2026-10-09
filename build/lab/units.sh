@@ -2,8 +2,12 @@
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# units.sh: make a lab build's three update units (spec 7) from the output
-# of build/lab/build.sh, sealed with the same throwaway lab keys:
+# units.sh: make a build's three update units (spec 7) from the output of
+# build/lab/build.sh, sealed with the same throwaway lab keys, or, with
+# CHANNEL=production, from the release workflow's signed build, sealed in
+# its sign job with the production release key (docs/release.md). The
+# names below are the lab ones; a production file has no -LAB, and its
+# Base OS and Base Web versions carry -g<commit> once:
 #
 #   sneakers-appliance-baseOS-<version>-amd64-LAB.bin   the Base OS full release
 #   sneakers-appliance-<version>-amd64-LAB.bin          its bridge copy (BRIDGE=1)
@@ -24,8 +28,20 @@
 #   units.sh inputs <unit>        print a unit's input digest: baseOS, baseWeb or product
 #
 # Inputs (environment):
-#   OUT        a build/lab/build.sh output (the target release)
-#   KEYS       the lab key set that build used
+#   OUT        a build/lab/build.sh output (the target release), or the
+#              same layout made by the release workflow: version, artifact/,
+#              work/sneakers-<version>.efi (the signed UKI), work/osadmin/
+#              (the pages), work/release.yaml and product/
+#   KEYS       the key set that build used: cosign.key (its password in
+#              COSIGN_PASSWORD), cosign.pub and update.pub
+#   CHANNEL    lab (default) or production
+#   COMMIT     the short commit the build is from; required for production
+#              (a lab version ends with it)
+#   BASEOS_INPUTS
+#              the Base OS input digest, when the build job computed it
+#              (the components aren't there when the units are sealed)
+#   STACKS     the product's stacks, for its input digest (default the lab
+#              stacks, build/lab/stacks)
 #   UNITS      the output directory (default $OUT/units)
 #   BRIDGE     1 also writes the Base OS file under its old name and lists it
 #              in the index's legacy base section, for boxes before the units
@@ -89,10 +105,27 @@ fi
 
 : "${OUT:?}" "${KEYS:?}"
 units="${UNITS:-$OUT/units}"
+channel="${CHANNEL:-lab}"
 version="$(cat "$OUT/version")"
-commit="${version##*-g}"
-[[ "$commit" =~ ^[0-9a-f]{7}$ ]] || { echo "units: $version doesn't end with -g<commit>" >&2; exit 1; }
-export COSIGN_PASSWORD=""
+case "$channel" in
+  lab)
+    commit="${version##*-g}"
+    [[ "$commit" =~ ^[0-9a-f]{7}$ ]] || { echo "units: $version doesn't end with -g<commit>" >&2; exit 1; }
+    ;;
+  production)
+    commit="${COMMIT:-}"
+    [[ "$commit" =~ ^[0-9a-f]{7,40}$ ]] || { echo "units: a production build needs COMMIT, its commit in hex (got '$commit')" >&2; exit 1; }
+    commit="${commit:0:7}"
+    # The first production release is full units only; boxes before the
+    # units never ran a production build, so there's nothing to bridge.
+    [ "${BRIDGE:-}" != 1 ] || { echo "units: BRIDGE is for lab builds only" >&2; exit 1; }
+    ;;
+  *) echo "units: CHANNEL is $channel, not lab or production" >&2; exit 1 ;;
+esac
+if [ -n "${BASEOS_INPUTS:-}" ] && ! [[ "$BASEOS_INPUTS" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "units: BASEOS_INPUTS isn't a SHA-256" >&2; exit 1
+fi
+export COSIGN_PASSWORD="${COSIGN_PASSWORD:-}"
 work="$OUT/work/units"
 rm -rf "$work"
 mkdir -p "$work" "$units"
@@ -111,7 +144,7 @@ seal() { # name layout dir inputs [bin-pack args...]
   shift 4
   local w="$work/seal-$name"
   rm -rf "$w"
-  "$tool" bin-pack --layout "$layout" --recipient "$KEYS/update.pub" --arch amd64 --channel lab \
+  "$tool" bin-pack --layout "$layout" --recipient "$KEYS/update.pub" --arch amd64 --channel "$channel" \
     --commit "$commit" --inputs "$inputs" --out "$w" "$@" >/dev/null
   sign_blob "$w/header.json" "$w/header.sigstore.json"
   local seal_args=()
@@ -124,10 +157,10 @@ seal() { # name layout dir inputs [bin-pack args...]
 }
 
 echo "units: $version"
-osin="$(inputs_baseos)"
+osin="${BASEOS_INPUTS:-$(inputs_baseos)}"
 osbin="$(seal baseos "$OUT/artifact" "$units" "$osin" --unit baseOS --version "$version")"
 echo "units: Base OS $(basename "$osbin") ($(stat -c %s "$osbin") bytes, inputs $osin)"
-"$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel lab --identity-uki "$OUT/work/sneakers-$version.efi" "$osbin"
+"$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel "$channel" --identity-uki "$OUT/work/sneakers-$version.efi" "$osbin"
 if [ "${BRIDGE:-}" = 1 ]; then
   legacy="$units/sneakers-appliance-$version-amd64-LAB.bin"
   cmp "$osbin" "$legacy" || { echo "units: the bridge copy isn't the same file" >&2; exit 1; }
@@ -161,7 +194,7 @@ patch() { # base dir
   # Open it as a box on the base does, with the base's own UKI, rebuild the
   # target from the base, and verify the result with the base's kit.
   rm -rf "$w/rebuilt"
-  "$tool" patch-check --base "$base/artifact" --release-key "$KEYS/cosign.pub" --channel lab --identity-uki "$base/work/sneakers-$bv.efi" --extract "$w/rebuilt" "$pbin"
+  "$tool" patch-check --base "$base/artifact" --release-key "$KEYS/cosign.pub" --channel "$channel" --identity-uki "$base/work/sneakers-$bv.efi" --extract "$w/rebuilt" "$pbin"
   "$base/sneakers-kit" verify "$w/rebuilt"
   "$OUT/sneakers-kit" verify "$w/rebuilt"
   local ps fs
@@ -174,7 +207,7 @@ for b in ${CHECK_FROM:-}; do patch "$b" "$units/checked-only"; done
 for p in "$OUT"/product/sneakers-product-*.bin; do
   [ -f "$p" ] || continue
   cp "$p" "$units/"
-  printf '%s\n' "$(inputs_product "$OUT/work/release.yaml" "$here/stacks")" > "$units/$(basename "$p").inputs"
+  printf '%s\n' "$(inputs_product "$OUT/work/release.yaml" "${STACKS:-$here/stacks}")" > "$units/$(basename "$p").inputs"
 done
 
 # The index lists every unit file here and in INDEX_ALSO; a file under the

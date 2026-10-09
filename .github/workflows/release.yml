@@ -1,12 +1,13 @@
 name: Release
 # The production release, on an owner-created v tag only, and a lab dry run
-# by hand. The update package is one signed and encrypted .bin per
-# architecture (docs/release.md).
+# by hand. A release ships three update units per architecture, Base OS,
+# Base Web and Product, each a signed and encrypted .bin, with the index a
+# mirror serves (docs/release.md).
 #
 # Production (push of a v tag): guard -> build (no keys, no environment) ->
 # sign (the production environment, the only job that reads its secrets) ->
-# publish (verify, push sneakers-os to GHCR by digest, attach the .bin to the
-# GitHub Release the owner created).
+# publish (verify, push sneakers-os to GHCR by digest, attach the units, the
+# index and the countersignatures to the tag's GitHub Release).
 #
 # Lab (workflow_dispatch): one job with keys made for that run only, never
 # the production environment, and nothing published or uploaded.
@@ -32,9 +33,13 @@ jobs:
     outputs:
       version: ${{ steps.guard.outputs.version }}
       channel: ${{ steps.guard.outputs.channel }}
+      release_repo: ${{ steps.guard.outputs.release_repo }}
+      release_commit: ${{ steps.guard.outputs.release_commit }}
+      web_repo: ${{ steps.guard.outputs.web_repo }}
+      web_commit: ${{ steps.guard.outputs.web_commit }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0
       - name: Check the tag, its commit and the pins
@@ -56,18 +61,47 @@ jobs:
     needs: guard
     if: needs.guard.outputs.channel == 'production'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0
+      # The release.yaml and the :8443 pages come from these repositories at
+      # the full commits build/release/pins.env pins (git content, not a
+      # release asset).
+      - name: Check out the pinned sneakers-release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          repository: ${{ needs.guard.outputs.release_repo }}
+          ref: ${{ needs.guard.outputs.release_commit }}
+          path: .pinned/sneakers-release
+          persist-credentials: false
+      - name: Check out the pinned sneakers-web
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          repository: ${{ needs.guard.outputs.web_repo }}
+          ref: ${{ needs.guard.outputs.web_commit }}
+          path: .pinned/sneakers-web
+          persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: '24'
+      # Before the long build: every image the pinned release.yaml names is
+      # pinned by a digest, not a placeholder.
+      - name: Check the pinned release.yaml
+        env:
+          RELEASE_COMMIT: ${{ needs.guard.outputs.release_commit }}
+        run: |
+          [ "$(git -C .pinned/sneakers-release rev-parse HEAD)" = "$RELEASE_COMMIT" ]
+          go run ./build/tools/bundle images --release .pinned/sneakers-release/manifest/release.yaml
       - name: Install the build tools
         run: |
           sudo apt-get update -q
@@ -94,6 +128,7 @@ jobs:
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
           OPENSSH=out/static BUSYBOX=out/static/busybox STATIC=build/out \
+          RELEASE=.pinned/sneakers-release/manifest/release.yaml WEB=.pinned/sneakers-web \
           OUT="$RUNNER_TEMP/unsigned" bash build/release/build.sh
           {
             echo "### Unsigned build ${VERSION} (amd64)"
@@ -102,7 +137,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload the unsigned build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: unsigned-amd64
           path: ${{ runner.temp }}/unsigned
@@ -114,15 +149,15 @@ jobs:
     needs: [guard, build]
     if: needs.guard.outputs.channel == 'production'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     environment: production
     permissions:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - name: Download the unsigned build
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           name: unsigned-amd64
           path: ${{ runner.temp }}/unsigned
@@ -133,7 +168,7 @@ jobs:
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
       - name: Check the digests and the production public keys
@@ -142,9 +177,8 @@ jobs:
           bash build/release/check-production-keys.sh keys/production
           bash build/release/check-fingerprints.sh keys/production keys/production/fingerprints.txt
       # The release tool is built here from the tagged commit, not taken from
-      # the build job. The only key it reads is the update key, in the step
-      # that adds it to the UKI. Each key is written to tmpfs only inside the
-      # step that uses it, and removed in that step.
+      # the build job. Each key is written to tmpfs only inside the step that
+      # uses it, and removed in that step.
       - name: Build the release tool and mount the key tmpfs
         run: |
           CGO_ENABLED=0 go build -trimpath -o "$RUNNER_TEMP/sneakers-artifact" ./cmd/sneakers-artifact
@@ -179,16 +213,42 @@ jobs:
           [ "$have" = "$want" ] || { echo "SB_DB_KEY doesn't belong to keys/production/db.crt" >&2; exit 1; }
           sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/sneakers-$VERSION.efi" "$work/sneakers-$VERSION.keyed.efi"
           sbsign --key "$keys/db.key" --cert keys/production/db.crt --output "$work/systemd-bootx64.efi" "$in/systemd-bootx64.efi"
+      # The appliance countersigns what it ships from sneakers-release: the
+      # release.yaml at the pinned commit and the manifest of every image it
+      # pins, only after checking each manifest hashes to its pinned digest.
+      # The bundles go on the Release with the units.
+      - name: Countersign release.yaml and the pinned images (release key)
+        env:
+          RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
+        run: |
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" cs="$RUNNER_TEMP/signed/countersignatures"
+          go run ./build/tools/bundle images --release "$in/release.yaml" | diff - "$in/images.txt"
+          mkdir -p "$cs/image-sigs"
+          umask 077
+          printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
+          trap 'rm -f "$keys/cosign.key"' EXIT
+          have="$(cosign public-key --key "$keys/cosign.key" | openssl pkey -pubin -outform DER | sha256sum | cut -d' ' -f1)"
+          want="$(openssl pkey -pubin -in keys/production/cosign.pub -outform DER | sha256sum | cut -d' ' -f1)"
+          [ "$have" = "$want" ] || { echo "RELEASE_COSIGN_KEY doesn't belong to keys/production/cosign.pub" >&2; exit 1; }
+          sign() { cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$2" --tlog-upload=false --use-signing-config=false "$1" >/dev/null; }
+          while read -r image dgst; do
+            hexd="${dgst#sha256:}"
+            [ "$(sha256sum < "$in/manifests/$hexd" | cut -d' ' -f1)" = "$hexd" ] || { echo "$image: the manifest isn't $dgst" >&2; exit 1; }
+            sign "$in/manifests/$hexd" "$cs/image-sigs/$hexd.sigstore.json"
+          done < "$in/images.txt"
+          sign "$in/release.yaml" "$cs/release.yaml.sigstore.json"
+          echo "countersigned release.yaml and $(wc -l < "$in/images.txt") images"
       - name: Assemble the artifact
         env:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
-          in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work"
+          in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" cs="$RUNNER_TEMP/signed/countersignatures"
           # shellcheck source=build/release/pins.env
           source build/release/pins.env
           "$RUNNER_TEMP/sneakers-artifact" assemble --arch amd64 --version "$VERSION" --channel production \
             --kit-min "$KIT_MIN" --systemd "$(cat "$in/systemd-version")" \
-            --release "$in/release.yaml" --release-sig "$in/release.yaml.sigstore.json" \
+            --release "$in/release.yaml" --release-sig "$cs/release.yaml.sigstore.json" \
             --root "$in/root-$VERSION.img" --verity-json "$in/verity.json" \
             --uki "$work/sneakers-$VERSION.efi" --loader "$work/systemd-bootx64.efi" --keys keys/production \
             --pk-cert keys/production/PK.crt --kek-cert keys/production/KEK.crt --db-cert keys/production/db.crt \
@@ -203,61 +263,90 @@ jobs:
           umask 077
           printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
           trap 'rm -f "$keys/cosign.key"' EXIT
-          have="$(cosign public-key --key "$keys/cosign.key" | openssl pkey -pubin -outform DER | sha256sum | cut -d' ' -f1)"
-          want="$(openssl pkey -pubin -in keys/production/cosign.pub -outform DER | sha256sum | cut -d' ' -f1)"
-          [ "$have" = "$want" ] || { echo "RELEASE_COSIGN_KEY doesn't belong to keys/production/cosign.pub" >&2; exit 1; }
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/artifact.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$(cat "$work/index-blob")" >/dev/null
-      - name: Attach the signature and pack the .bin
+          "$RUNNER_TEMP/sneakers-artifact" attach --layout "$RUNNER_TEMP/signed/artifact" --bundle "$work/artifact.sigstore.json"
+      # The product bundle: k0s, helm and every pinned image, each checked
+      # against its countersignature, for this release's base and newer. It
+      # needs no private key: it's encrypted to the committed update.pub.
+      - name: Build the product bundle
         env:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
-          work="$RUNNER_TEMP/work"
-          "$RUNNER_TEMP/sneakers-artifact" attach --layout "$RUNNER_TEMP/signed/artifact" --bundle "$work/artifact.sigstore.json"
-          "$RUNNER_TEMP/sneakers-artifact" bin-pack --layout "$RUNNER_TEMP/signed/artifact" \
-            --recipient keys/production/update.pub --version "$VERSION" --arch amd64 --channel production --out "$work/bin"
-      - name: Sign the .bin header (release key)
+          in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" cs="$RUNNER_TEMP/signed/countersignatures"
+          mkdir -p "$work/no-stacks"
+          chmod +x "$in/k0s"
+          helm=()
+          if [ -f "$in/helm" ]; then chmod +x "$in/helm"; helm=(HELM="$in/helm"); fi
+          inputs="$(RELEASE="$in/release.yaml" STACKS="$work/no-stacks" bash build/lab/units.sh inputs product)"
+          env "${helm[@]}" VERSION="$VERSION" ARCH=amd64 CHANNEL=production MIN_BASE="$VERSION" BASES="$VERSION" \
+            RELEASE="$in/release.yaml" RELEASE_KEY=keys/production/cosign.pub SIGNATURES="$cs/image-sigs" \
+            K0S="$in/k0s" RECIPIENT=keys/production/update.pub INPUTS="$inputs" OUT="$work/product" \
+            bash build/product/build.sh
+      # The three units, sealed by build/lab/units.sh on the production
+      # channel, from the layout a lab build leaves: the signed artifact, the
+      # signed UKI, the pages, release.yaml and the sealed product bundle.
+      # The first production release is full units only: no bridge, no patch.
+      - name: Seal the units (release key)
         env:
+          VERSION: ${{ needs.guard.outputs.version }}
           RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
           COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
         run: |
-          keys="$RUNNER_TEMP/keys" work="$RUNNER_TEMP/work"
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" rel="$RUNNER_TEMP/work/release"
+          mkdir -p "$rel/work" "$rel/product"
+          printf '%s\n' "$VERSION" > "$rel/version"
+          cp -r "$RUNNER_TEMP/signed/artifact" "$rel/artifact"
+          cp "$work/sneakers-$VERSION.efi" "$rel/work/"
+          cp -r "$in/pages" "$rel/work/osadmin"
+          cp "$in/release.yaml" "$rel/work/release.yaml"
+          cp keys/production/cosign.pub keys/production/update.pub "$keys/"
           umask 077
           printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
           trap 'rm -f "$keys/cosign.key"' EXIT
-          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/bin/header.sigstore.json" \
-            --tlog-upload=false --use-signing-config=false "$work/bin/header.json" >/dev/null
-          # The product bundle's header, packed by the build job.
-          mkdir -p "$work/product"
-          cp "$RUNNER_TEMP/unsigned/product-header.json" "$work/product/header.json"
-          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/product/header.sigstore.json" \
-            --tlog-upload=false --use-signing-config=false "$work/product/header.json" >/dev/null
-      - name: Seal and verify the .bin
+          umask 022
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/product/bin/header.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$work/product/bin/header.json" >/dev/null
+          "$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/product/bin" \
+            --bundle "$work/product/bin/header.sigstore.json" --out "$rel/product" >/dev/null
+          CHANNEL=production COMMIT="$GITHUB_SHA" BASEOS_INPUTS="$(cat "$in/inputs-baseOS")" STACKS="$work/no-stacks" \
+            OUT="$rel" KEYS="$keys" UNITS="$RUNNER_TEMP/signed/units" bash build/lab/units.sh
+      - name: Verify the units
         env:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
-          work="$RUNNER_TEMP/work" out="$RUNNER_TEMP/signed"
-          "$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$out"
-          # The key in the signed UKI must open the .bin, as it will on the box.
-          "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
-            --identity-uki "$work/sneakers-$VERSION.efi" "$out/sneakers-appliance-$VERSION-amd64.bin"
-          # The product bundle: sealed next to it, then opened and checked
-          # the way the box does (k0s and the images against its release.yaml).
-          cp "$RUNNER_TEMP/unsigned/product-payload.age" "$work/product/payload.age"
-          product="$("$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/product" --bundle "$work/product/header.sigstore.json" --out "$out")"
-          "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
-            --identity-uki "$work/sneakers-$VERSION.efi" --extract "$work/product-check" "$product"
-          rm -rf "$work/product-check"
-          # The index lists the product bundle and, in its base section, this base release.
-          "$RUNNER_TEMP/sneakers-artifact" product-index --out "$out/sneakers-product-index.json" \
-            "$out/sneakers-appliance-$VERSION-amd64.bin" "$product"
+          in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" units="$RUNNER_TEMP/signed/units"
+          tool="$RUNNER_TEMP/sneakers-artifact"
+          chmod +x "$in/sneakers-kit"
+          [ "$(find "$units" -maxdepth 1 -name '*.bin' | wc -l)" -eq 3 ] || { ls -l "$units"; echo "want three units" >&2; exit 1; }
+          # The box's path for each: verify, decrypt with the key in the signed
+          # UKI and unpack; the production kit checks the Base OS layout, and
+          # the product bundle gets the box's bundle check.
+          for b in "$units"/*.bin; do
+            check="$work/check/$(basename "$b")"
+            "$tool" bin-verify --release-key keys/production/cosign.pub --channel production \
+              --identity-uki "$work/sneakers-$VERSION.efi" --extract "$check" "$b"
+            case "$(basename "$b")" in
+              sneakers-appliance-baseOS-*) "$in/sneakers-kit" verify "$check" ;;
+            esac
+            if "$tool" bin-verify --release-key keys/production/cosign.pub --channel lab "$b" 2>/dev/null; then
+              echo "$(basename "$b") verified as lab" >&2; exit 1
+            fi
+          done
+          (cd "$units" && sha256sum -c --quiet SHA256SUMS)
+          {
+            echo "### Signed units ${VERSION} (amd64)"
+            echo '```'
+            for b in "$units"/*.bin; do echo "$(basename "$b") $(stat -c %s "$b") bytes, inputs $(cat "$b.inputs")"; done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the keys
         if: always()
         run: |
           sudo umount "$RUNNER_TEMP/keys" || true
           rm -rf "$RUNNER_TEMP/work"
       - name: Upload the signed release
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
         with:
           name: signed-amd64
           path: ${{ runner.temp }}/signed
@@ -275,12 +364,16 @@ jobs:
       packages: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - name: Download the builds
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
           pattern: '*-amd64'
           path: ${{ runner.temp }}
+      - name: Install the pinned cosign
+        run: |
+          bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Verify, push and attach
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -290,21 +383,38 @@ jobs:
           REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: |
           in="$RUNNER_TEMP/unsigned-amd64" signed="$RUNNER_TEMP/signed-amd64"
+          units="$signed/units" cs="$signed/countersignatures"
           (cd "$in" && sha256sum -c --quiet SHA256SUMS)
+          (cd "$units" && sha256sum -c --quiet SHA256SUMS)
           chmod +x "$in/sneakers-artifact" "$in/sneakers-kit"
-          bin="$signed/sneakers-appliance-$VERSION-amd64.bin"
           "$in/sneakers-kit" verify "$signed/artifact"
-          "$in/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production "$bin"
-          digest="$("$in/sneakers-artifact" push --layout "$signed/artifact" --repo ghcr.io/sneakers-pam/sneakers-os --tag "$VERSION")"
-          "$in/sneakers-kit" verify "ghcr.io/sneakers-pam/sneakers-os@$digest"
-          (cd "$signed" && sha256sum "$(basename "$bin")" > "$(basename "$bin").sha256")
-          gh release upload "$TAG" "$bin" "$bin.sha256" --repo "$GITHUB_REPOSITORY"
+          for b in "$units"/*.bin; do
+            "$in/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production "$b"
+          done
+          verify() { cosign verify-blob --key keys/production/cosign.pub --bundle "$2" --insecure-ignore-tlog=true "$1" >/dev/null; }
+          verify "$in/release.yaml" "$cs/release.yaml.sigstore.json"
+          while read -r image dgst; do
+            verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
+          done < "$in/images.txt"
+          repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sneakers-os"
+          digest="$("$in/sneakers-artifact" push --layout "$signed/artifact" --repo "$repo" --tag "$VERSION")"
+          "$in/sneakers-kit" verify "$repo@$digest"
+          # The Release the owner made for the tag (a draft is fine); a draft
+          # is made when there's none. Nothing here publishes it.
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" \
+              --notes "Sneakers appliance $VERSION. Draft made by the release workflow; the owner publishes it."
+          fi
+          cp "$in/release.yaml" "$cs/release.yaml"
+          files=("$units"/*.bin "$units"/*.bin.inputs "$units/sneakers-product-index.json" "$units/SHA256SUMS"
+            "$cs/release.yaml" "$cs/release.yaml.sigstore.json" "$cs"/image-sigs/*.sigstore.json)
+          gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           {
             echo "### Published $VERSION"
-            echo "- sneakers-os: ghcr.io/sneakers-pam/sneakers-os@$digest"
-            echo "- update package: $(basename "$bin") ($(cut -d' ' -f1 < "$bin.sha256"))"
+            echo "- sneakers-os: $repo@$digest"
+            for b in "$units"/*.bin; do echo "- $(basename "$b") ($(sha256sum < "$b" | cut -d' ' -f1))"; done
+            echo "- release.yaml and $(wc -l < "$in/images.txt") image countersignatures"
           } >> "$GITHUB_STEP_SUMMARY"
-
   lab:
     name: 🧪 Lab dry run (never published)
     needs: guard
@@ -318,11 +428,11 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
       - name: Install the build tools

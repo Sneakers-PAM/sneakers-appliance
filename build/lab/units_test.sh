@@ -40,4 +40,22 @@ echo 'image: sha256:2' >> "$work/release.yaml"
 
 if bash "$here/units.sh" inputs nothing >/dev/null 2>&1; then echo "FAIL: an unknown unit passed" >&2; exit 1; fi
 if bash "$here/units.sh" >/dev/null 2>&1; then echo "FAIL: no OUT passed" >&2; exit 1; fi
+
+# The release job seals the production units with the same script: it
+# names the channel and the commit, and brings the Base OS digest its build
+# job computed. Each is refused, before anything is built, when it's wrong.
+mkdir -p "$work/out"
+echo 0.1.0 > "$work/out/version"
+refused() { # message env...
+  local msg="$1"; shift
+  if out="$(env "$@" OUT="$work/out" KEYS="$work/keys" bash "$here/units.sh" 2>&1)"; then echo "FAIL: passed: $*" >&2; exit 1; fi
+  grep -q "$msg" <<<"$out" || { echo "FAIL: $* said: $out" >&2; exit 1; }
+  [ ! -e "$work/out/units" ] && [ ! -e "$work/out/work" ] || { echo "FAIL: $* wrote output before refusing" >&2; exit 1; }
+}
+refused "CHANNEL is staging" CHANNEL=staging
+refused "COMMIT" CHANNEL=production
+refused "COMMIT" CHANNEL=production COMMIT=xyz
+refused "BASEOS_INPUTS" CHANNEL=production COMMIT=1a2b3c4 BASEOS_INPUTS=nothex
+refused "BRIDGE is for lab builds only" CHANNEL=production COMMIT=1a2b3c4 BRIDGE=1
+refused "doesn't end with -g<commit>" CHANNEL=lab
 echo "units: ok"
