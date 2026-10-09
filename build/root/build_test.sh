@@ -52,6 +52,13 @@ build "$work/b" >/dev/null
 cmp "$work/a/root-$VERSION.img" "$work/b/root-$VERSION.img" || { echo "FAIL: two builds differ" >&2; exit 1; }
 cmp "$work/a/verity.json" "$work/b/verity.json" || { echo "FAIL: verity.json differs" >&2; exit 1; }
 echo "ok: two builds are byte-identical ($(stat -c %s "$work/a/root-$VERSION.img") bytes)"
+# The root is uncompressed, so a delta between two releases' roots stays
+# small (a patch .bin); the .bin payload carries it as it is.
+sb="$(unsquashfs -s "$work/a/root-$VERSION.img")"
+for part in "Inodes are uncompressed" "Data is uncompressed" "Fragments are uncompressed" "Uids/Gids (Id table) are uncompressed"; do
+  grep -qF "$part" <<<"$sb" || { echo "FAIL: the root image isn't uncompressed ($part missing)" >&2; exit 1; }
+done
+echo "ok: the root image is uncompressed"
 
 # mode owner path [-> target], one per entry, from the SquashFS listing.
 unsquashfs -lln "$work/a/root-$VERSION.img" |

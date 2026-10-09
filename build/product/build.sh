@@ -25,6 +25,8 @@
 #                required when release.yaml pins helm, refused otherwise
 #   RECIPIENT    the channel's update key recipient (update.pub)
 #   STACKS       a directory of stacks, <stack>/*.yaml (optional)
+#   INPUTS       the SHA-256 of the bundle's build inputs, for its header
+#                (build/lab/units.sh inputs product; optional)
 #   BRAND        the product's brand folder: brand.yaml and its logo
 #                (optional; docs/artifact.md#the-brand)
 #   PRODUCT_YAML the product's product.yaml (bundle format v2, optional;
@@ -94,6 +96,7 @@ base_flags=()
 for b in ${BASES:-}; do base_flags+=(--base "$b"); done
 [ -z "${MIN_BASE:-}" ] || base_flags+=(--min-base "$MIN_BASE")
 [ -z "${MAX_BASE:-}" ] || base_flags+=(--max-base "$MAX_BASE")
+[ -z "${INPUTS:-}" ] || base_flags+=(--inputs "$INPUTS")
 "$tool/sneakers-artifact" bin-pack --layout "$tree" --recipient "$RECIPIENT" --version "$VERSION" --arch "$arch" \
   --channel "$CHANNEL" --kind product "${base_flags[@]}" --out "$OUT/bin" >/dev/null
 echo "product: $VERSION ($arch, $CHANNEL) for bases ${MIN_BASE:-}${MAX_BASE:+ to $MAX_BASE} ${BASES:-}: $(du -sb "$tree" | cut -f1) bytes unpacked, $(stat -c %s "$OUT/bin/payload.age") bytes encrypted"
