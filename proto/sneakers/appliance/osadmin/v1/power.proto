@@ -72,7 +72,6 @@ service PowerService {
   rpc EndSession(EndSessionRequest) returns (EndSessionResponse) {
     option (rule) = {
       role: ROLE_OWNER
-      step_up: true
       audit: "session.end"
     };
   }

@@ -1085,7 +1085,7 @@ const file_sneakers_appliance_osadmin_v1_power_proto_rawDesc = "" +
 	"\x11FactoryResetState\x12#\n" +
 	"\x1fFACTORY_RESET_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bFACTORY_RESET_STATE_PENDING\x10\x01\x12!\n" +
-	"\x1dFACTORY_RESET_STATE_COUNTDOWN\x10\x022\xb1\t\n" +
+	"\x1dFACTORY_RESET_STATE_COUNTDOWN\x10\x022\xaf\t\n" +
 	"\fPowerService\x12v\n" +
 	"\bGetPower\x12..sneakers.appliance.osadmin.v1.GetPowerRequest\x1a/.sneakers.appliance.osadmin.v1.GetPowerResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12}\n" +
 	"\x06Reboot\x12,.sneakers.appliance.osadmin.v1.RebootRequest\x1a-.sneakers.appliance.osadmin.v1.RebootResponse\"\x16\xc2\xf3\x18\x12\x10\x01\x18\x01\"\fpower.reboot\x12\x85\x01\n" +
@@ -1093,9 +1093,9 @@ const file_sneakers_appliance_osadmin_v1_power_proto_rawDesc = "" +
 	"\x11StartFactoryReset\x127.sneakers.appliance.osadmin.v1.StartFactoryResetRequest\x1a8.sneakers.appliance.osadmin.v1.StartFactoryResetResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19power.factory-reset.start\x12\xb3\x01\n" +
 	"\x13ApproveFactoryReset\x129.sneakers.appliance.osadmin.v1.ApproveFactoryResetRequest\x1a:.sneakers.appliance.osadmin.v1.ApproveFactoryResetResponse\"%\xc2\xf3\x18!\x10\x01\x18\x01\"\x1bpower.factory-reset.approve\x12\xad\x01\n" +
 	"\x12CancelFactoryReset\x128.sneakers.appliance.osadmin.v1.CancelFactoryResetRequest\x1a9.sneakers.appliance.osadmin.v1.CancelFactoryResetResponse\"\"\xc2\xf3\x18\x1e\x10\x01\"\x1apower.factory-reset.cancel\x12\x82\x01\n" +
-	"\fListSessions\x122.sneakers.appliance.osadmin.v1.ListSessionsRequest\x1a3.sneakers.appliance.osadmin.v1.ListSessionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x88\x01\n" +
+	"\fListSessions\x122.sneakers.appliance.osadmin.v1.ListSessionsRequest\x1a3.sneakers.appliance.osadmin.v1.ListSessionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x86\x01\n" +
 	"\n" +
-	"EndSession\x120.sneakers.appliance.osadmin.v1.EndSessionRequest\x1a1.sneakers.appliance.osadmin.v1.EndSessionResponse\"\x15\xc2\xf3\x18\x11\x10\x02\x18\x01\"\vsession.endB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"EndSession\x120.sneakers.appliance.osadmin.v1.EndSessionRequest\x1a1.sneakers.appliance.osadmin.v1.EndSessionResponse\"\x13\xc2\xf3\x18\x0f\x10\x02\"\vsession.endB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_power_proto_rawDescOnce sync.Once

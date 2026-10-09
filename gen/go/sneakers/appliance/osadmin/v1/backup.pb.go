@@ -502,11 +502,11 @@ const file_sneakers_appliance_osadmin_v1_backup_proto_rawDesc = "" +
 	"\x11RunBackupResponse\"'\n" +
 	"\x0eRestoreRequest\x12\x15\n" +
 	"\x06set_id\x18\x01 \x01(\tR\x05setId\"\x11\n" +
-	"\x0fRestoreResponse2\xb7\x04\n" +
+	"\x0fRestoreResponse2\xb5\x04\n" +
 	"\rBackupService\x12|\n" +
 	"\n" +
-	"GetBackups\x120.sneakers.appliance.osadmin.v1.GetBackupsRequest\x1a1.sneakers.appliance.osadmin.v1.GetBackupsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9d\x01\n" +
-	"\x0fSetBackupPolicy\x125.sneakers.appliance.osadmin.v1.SetBackupPolicyRequest\x1a6.sneakers.appliance.osadmin.v1.SetBackupPolicyResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11backup.policy.set\x12\x82\x01\n" +
+	"GetBackups\x120.sneakers.appliance.osadmin.v1.GetBackupsRequest\x1a1.sneakers.appliance.osadmin.v1.GetBackupsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9b\x01\n" +
+	"\x0fSetBackupPolicy\x125.sneakers.appliance.osadmin.v1.SetBackupPolicyRequest\x1a6.sneakers.appliance.osadmin.v1.SetBackupPolicyResponse\"\x19\xc2\xf3\x18\x15\x10\x01\"\x11backup.policy.set\x12\x82\x01\n" +
 	"\tRunBackup\x12/.sneakers.appliance.osadmin.v1.RunBackupRequest\x1a0.sneakers.appliance.osadmin.v1.RunBackupResponse\"\x12\xc2\xf3\x18\x0e\x10\x01\"\n" +
 	"backup.run\x12\x82\x01\n" +
 	"\aRestore\x12-.sneakers.appliance.osadmin.v1.RestoreRequest\x1a..sneakers.appliance.osadmin.v1.RestoreResponse\"\x18\xc2\xf3\x18\x14\x10\x02\x18\x01\"\x0ebackup.restoreB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"

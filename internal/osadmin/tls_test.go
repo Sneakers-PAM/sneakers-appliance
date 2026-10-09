@@ -200,7 +200,7 @@ func TestCertificateChangesNeedAnOwnerAndAFreshSignIn(t *testing.T) {
 	alice := cb.browser()
 	alice.signIn("alice")
 	cb.clk.Advance(6 * time.Minute)
-	_, err = alice.tls().ImportCertificate(ctx, connect.NewRequest(&osadminv1.ImportCertificateRequest{}))
+	_, err = alice.tls().AssignCertificate(ctx, connect.NewRequest(&osadminv1.AssignCertificateRequest{}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_STEPUP_REQUIRED")
 }
 

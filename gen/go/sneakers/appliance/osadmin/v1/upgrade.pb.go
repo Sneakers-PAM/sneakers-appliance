@@ -1799,15 +1799,15 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x1aUPGRADE_STEP_STATE_PENDING\x10\x01\x12\x1d\n" +
 	"\x19UPGRADE_STEP_STATE_ACTIVE\x10\x02\x12\x1b\n" +
 	"\x17UPGRADE_STEP_STATE_DONE\x10\x03\x12\x1d\n" +
-	"\x19UPGRADE_STEP_STATE_FAILED\x10\x042\x91\b\n" +
+	"\x19UPGRADE_STEP_STATE_FAILED\x10\x042\x8d\b\n" +
 	"\x0eUpgradeService\x12\x7f\n" +
 	"\vGetUpgrades\x121.sneakers.appliance.osadmin.v1.GetUpgradesRequest\x1a2.sneakers.appliance.osadmin.v1.GetUpgradesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x8b\x01\n" +
-	"\vFetchUpdate\x121.sneakers.appliance.osadmin.v1.FetchUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.FetchUpdateResponse\"\x15\xc2\xf3\x18\x11\x10\x01\"\rupgrade.fetch\x12\x8d\x01\n" +
-	"\vStageUpdate\x121.sneakers.appliance.osadmin.v1.StageUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.StageUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\x18\x01\"\rupgrade.stage\x12\x8d\x01\n" +
+	"\vFetchUpdate\x121.sneakers.appliance.osadmin.v1.FetchUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.FetchUpdateResponse\"\x15\xc2\xf3\x18\x11\x10\x01\"\rupgrade.fetch\x12\x8b\x01\n" +
+	"\vStageUpdate\x121.sneakers.appliance.osadmin.v1.StageUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.StageUpdateResponse\"\x15\xc2\xf3\x18\x11\x10\x02\"\rupgrade.stage\x12\x8d\x01\n" +
 	"\vApplyUpdate\x121.sneakers.appliance.osadmin.v1.ApplyUpdateRequest\x1a2.sneakers.appliance.osadmin.v1.ApplyUpdateResponse\"\x17\xc2\xf3\x18\x13\x10\x02\"\rupgrade.apply8\x01\x12\x91\x01\n" +
 	"\fRevertUpdate\x122.sneakers.appliance.osadmin.v1.RevertUpdateRequest\x1a3.sneakers.appliance.osadmin.v1.RevertUpdateResponse\"\x18\xc2\xf3\x18\x14\x10\x02\"\x0eupgrade.revert8\x01\x12\x97\x01\n" +
-	"\x13ListProductVersions\x129.sneakers.appliance.osadmin.v1.ListProductVersionsRequest\x1a:.sneakers.appliance.osadmin.v1.ListProductVersionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa1\x01\n" +
-	"\x10SetUpgradePolicy\x126.sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest\x1a7.sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse\"\x1c\xc2\xf3\x18\x18\x10\x02\x18\x01\"\x12upgrade.policy.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\x13ListProductVersions\x129.sneakers.appliance.osadmin.v1.ListProductVersionsRequest\x1a:.sneakers.appliance.osadmin.v1.ListProductVersionsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9f\x01\n" +
+	"\x10SetUpgradePolicy\x126.sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest\x1a7.sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse\"\x1a\xc2\xf3\x18\x16\x10\x02\"\x12upgrade.policy.setB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescOnce sync.Once
