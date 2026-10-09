@@ -94,12 +94,11 @@ func (p *Probe) kubectl(ctx context.Context, args ...string) ([]byte, error) {
 	return p.run(ctx, append([]string{"kubectl", "--kubeconfig", filepath.Join(p.DataDir, "pki", "admin.conf")}, args...)...)
 }
 
-// Check answers the first step that isn't done. An edge that answers with
-// the product ends it whatever the earlier checks would say.
+// Check answers the first step that isn't done. The edge answering isn't
+// proof on its own: on an update over a running product the old pods keep
+// answering while they drain, so every stack's workloads must have rolled
+// out and no old pod may still be stopping before it counts.
 func (p *Probe) Check(ctx context.Context) (Result, error) {
-	if p.edgeAnswers(ctx) {
-		return Result{}, nil
-	}
 	if _, err := p.kubectl(ctx, "get", "--raw", "/readyz"); err != nil {
 		return Result{Step: StepK0s, Detail: "The Kubernetes API doesn't answer yet."}, nil
 	}
@@ -113,14 +112,97 @@ func (p *Probe) Check(ctx context.Context) (Result, error) {
 	} else if len(missing) > 0 {
 		return Result{Step: StepManifests, Detail: "Waiting for " + strings.Join(missing, ", ")}, nil
 	}
-	ready, total, err := p.pods(ctx)
+	if waiting, err := p.rollout(ctx); err != nil {
+		return Result{}, err
+	} else if waiting != "" {
+		return Result{Step: StepPods, Detail: waiting}, nil
+	}
+	ready, total, stopping, err := p.pods(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	if total == 0 || ready < total {
 		return Result{Step: StepPods, Detail: fmt.Sprintf("%d of %d pods ready", ready, total)}, nil
 	}
+	if stopping > 0 {
+		return Result{Step: StepPods, Detail: fmt.Sprintf("%d old %s still stopping", stopping, plural(stopping, "pod", "pods"))}, nil
+	}
+	if p.edgeAnswers(ctx) {
+		return Result{}, nil
+	}
 	return Result{Step: StepEdge, Detail: "443 doesn't answer with the product yet."}, nil
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
+
+type workloadList struct {
+	Items []struct {
+		Kind     string `json:"kind"`
+		Metadata struct {
+			Namespace  string `json:"namespace"`
+			Name       string `json:"name"`
+			Generation int64  `json:"generation"`
+		} `json:"metadata"`
+		Spec struct {
+			Replicas *int64 `json:"replicas"`
+		} `json:"spec"`
+		Status struct {
+			ObservedGeneration int64  `json:"observedGeneration"`
+			Replicas           int64  `json:"replicas"`
+			UpdatedReplicas    int64  `json:"updatedReplicas"`
+			AvailableReplicas  int64  `json:"availableReplicas"`
+			ReadyReplicas      int64  `json:"readyReplicas"`
+			CurrentRevision    string `json:"currentRevision"`
+			UpdateRevision     string `json:"updateRevision"`
+			// DaemonSets count by nodes.
+			DesiredNumberScheduled int64 `json:"desiredNumberScheduled"`
+			UpdatedNumberScheduled int64 `json:"updatedNumberScheduled"`
+			NumberAvailable        int64 `json:"numberAvailable"`
+		} `json:"status"`
+	} `json:"items"`
+}
+
+// rollout names the first of the stacks' workloads that hasn't rolled out
+// yet: its controller hasn't seen the latest spec, or not every replica is
+// updated and available (the old ones gone); empty when all have.
+func (p *Probe) rollout(ctx context.Context) (string, error) {
+	out, err := p.kubectl(ctx, "get", "deployments,statefulsets,daemonsets", "--all-namespaces", "-l", StackLabel, "-o", "json")
+	if err != nil {
+		return "", err
+	}
+	var l workloadList
+	if err := json.Unmarshal(out, &l); err != nil {
+		return "", fmt.Errorf("the workload list doesn't parse: %w", err)
+	}
+	for _, w := range l.Items {
+		name := w.Metadata.Namespace + "/" + w.Metadata.Name
+		st := w.Status
+		if st.ObservedGeneration < w.Metadata.Generation {
+			return "Rolling out " + name + ": the new version isn't picked up yet", nil
+		}
+		if w.Kind == "DaemonSet" {
+			if st.UpdatedNumberScheduled < st.DesiredNumberScheduled || st.NumberAvailable < st.DesiredNumberScheduled {
+				return fmt.Sprintf("Rolling out %s: %d of %d updated", name, st.UpdatedNumberScheduled, st.DesiredNumberScheduled), nil
+			}
+			continue
+		}
+		want := int64(1)
+		if w.Spec.Replicas != nil {
+			want = *w.Spec.Replicas
+		}
+		if st.UpdatedReplicas < want || st.Replicas > want || st.AvailableReplicas < want && st.ReadyReplicas < want {
+			return fmt.Sprintf("Rolling out %s: %d of %d updated, %d running", name, st.UpdatedReplicas, want, st.Replicas), nil
+		}
+		if w.Kind == "StatefulSet" && st.UpdateRevision != "" && st.CurrentRevision != st.UpdateRevision {
+			return "Rolling out " + name + ": the new revision isn't current yet", nil
+		}
+	}
+	return "", nil
 }
 
 // images counts the bundle's images that containerd has: each archive is
@@ -164,6 +246,9 @@ func (p *Probe) stacks(ctx context.Context) ([]string, error) {
 
 type podList struct {
 	Items []struct {
+		Metadata struct {
+			DeletionTimestamp *string `json:"deletionTimestamp"`
+		} `json:"metadata"`
 		Status struct {
 			Phase      string `json:"phase"`
 			Conditions []struct {
@@ -174,19 +259,24 @@ type podList struct {
 	} `json:"items"`
 }
 
-// pods counts the pods that should run and how many of them are ready; a
-// finished pod (a Job's) counts as neither.
-func (p *Probe) pods(ctx context.Context) (ready, total int, err error) {
+// pods counts the pods that should run and how many of them are ready,
+// and the old ones still stopping (Terminating); a finished pod (a Job's)
+// counts as none of them.
+func (p *Probe) pods(ctx context.Context) (ready, total, stopping int, err error) {
 	out, err := p.kubectl(ctx, "get", "pods", "--all-namespaces", "-o", "json")
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	var l podList
 	if err := json.Unmarshal(out, &l); err != nil {
-		return 0, 0, fmt.Errorf("the pod list doesn't parse: %w", err)
+		return 0, 0, 0, fmt.Errorf("the pod list doesn't parse: %w", err)
 	}
 	for _, it := range l.Items {
 		if it.Status.Phase == "Succeeded" {
+			continue
+		}
+		if it.Metadata.DeletionTimestamp != nil {
+			stopping++
 			continue
 		}
 		total++
@@ -196,7 +286,7 @@ func (p *Probe) pods(ctx context.Context) (ready, total int, err error) {
 			}
 		}
 	}
-	return ready, total, nil
+	return ready, total, stopping, nil
 }
 
 // edgeAnswers is whether 443 answers with something other than edgefall's
