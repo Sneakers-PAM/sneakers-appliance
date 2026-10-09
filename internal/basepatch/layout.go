@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -154,25 +156,26 @@ func checkFiles(delta, base, target string) error {
 // copyLayout copies the layout at src to dst, leaving out the blobs in
 // skip.
 func copyLayout(src, dst string, skip map[string]bool) error {
-	return filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
+	root, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		to := filepath.Join(dst, rel)
+		to := filepath.Join(dst, filepath.FromSlash(rel))
 		if d.IsDir() {
 			return os.MkdirAll(to, 0o755) // #nosec G301 -- a public payload
 		}
 		if !d.Type().IsRegular() {
 			return fmt.Errorf("basepatch: %s in the layout isn't a regular file", rel)
 		}
-		if filepath.Dir(rel) == filepath.Join("blobs", "sha256") && skip[filepath.Base(rel)] {
+		if path.Dir(rel) == "blobs/sha256" && skip[path.Base(rel)] {
 			return nil
 		}
-		in, err := os.Open(p) // #nosec G304 -- a build input
+		in, err := root.Open(rel)
 		if err != nil {
 			return err
 		}

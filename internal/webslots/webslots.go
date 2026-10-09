@@ -110,7 +110,12 @@ func WriteManifest(pages, version, commit string, need *updatepkg.Range) ([]byte
 	if need != nil {
 		m.Requires = map[updatepkg.Unit]updatepkg.Range{updatepkg.UnitBaseOS: *need}
 	}
-	err := filepath.WalkDir(pages, func(p string, d fs.DirEntry, err error) error {
+	root, err := os.OpenRoot(pages)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -118,13 +123,9 @@ func WriteManifest(pages, version, commit string, need *updatepkg.Range) ([]byte
 			return nil
 		}
 		if !d.Type().IsRegular() {
-			return fmt.Errorf("webslots: %s isn't a regular file", p)
+			return fmt.Errorf("webslots: %s isn't a regular file", rel)
 		}
-		b, err := os.ReadFile(p) // #nosec G304 -- a build input
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(pages, p)
+		b, err := fs.ReadFile(root.FS(), rel)
 		if err != nil {
 			return err
 		}
@@ -187,21 +188,21 @@ func Load(dir string, key *ecdsa.PublicKey) (*Pages, error) {
 		}
 		listed[f.Path] = f
 	}
-	root := filepath.Join(dir, PagesDir)
-	if st, err := os.Lstat(root); err != nil || !st.IsDir() {
+	if st, err := os.Lstat(filepath.Join(dir, PagesDir)); err != nil || !st.IsDir() {
 		return nil, loadErr("the slot has no %s/ directory", PagesDir)
 	}
+	// Every read goes through the slot's pages root: a path can't leave it.
+	root, err := os.OpenRoot(filepath.Join(dir, PagesDir))
+	if err != nil {
+		return nil, loadErr("the pages can't be opened: %v", err)
+	}
+	defer func() { _ = root.Close() }()
 	out := fstest.MapFS{}
 	var total int64
-	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, rerr := filepath.Rel(root, p)
-		if rerr != nil {
-			return rerr
-		}
-		rel = filepath.ToSlash(rel)
 		switch {
 		case d.IsDir():
 			return nil
@@ -215,7 +216,7 @@ func Load(dir string, key *ecdsa.PublicKey) (*Pages, error) {
 		if total += f.Size; total > maxTotal {
 			return loadErr("the pages are over %d bytes", maxTotal)
 		}
-		b, err := readCapped(p, f.Size)
+		b, err := readRootCapped(root, rel, f.Size)
 		if err != nil {
 			return loadErr("%s can't be read: %v", rel, err)
 		}
@@ -237,6 +238,27 @@ func Load(dir string, key *ecdsa.PublicKey) (*Pages, error) {
 		return nil, loadErr("%s is listed in %s but missing", missing, ManifestFile)
 	}
 	return &Pages{Manifest: m, FS: out}, nil
+}
+
+// readRootCapped reads at most limit bytes of name under root, refusing a
+// link; a longer file is an error.
+func readRootCapped(root *os.Root, name string, limit int64) ([]byte, error) {
+	if st, err := root.Lstat(name); err != nil || !st.Mode().IsRegular() {
+		return nil, fmt.Errorf("not a regular file")
+	}
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	var b bytes.Buffer
+	if _, err := b.ReadFrom(io.LimitReader(f, limit+1)); err != nil {
+		return nil, err
+	}
+	if int64(b.Len()) > limit {
+		return nil, fmt.Errorf("over %d bytes", limit)
+	}
+	return b.Bytes(), nil
 }
 
 // readCapped reads at most limit bytes of p; a longer file is an error.

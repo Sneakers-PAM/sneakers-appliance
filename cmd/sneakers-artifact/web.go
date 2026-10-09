@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -85,22 +86,23 @@ func webCheckCmd() *cobra.Command {
 
 // copyTree copies the regular files under src to dst.
 func copyTree(src, dst string) error {
-	return filepath.WalkDir(src, func(p string, d os.DirEntry, err error) error {
+	root, err := os.OpenRoot(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = root.Close() }()
+	return fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, p)
-		if err != nil {
-			return err
-		}
-		to := filepath.Join(dst, rel)
+		to := filepath.Join(dst, filepath.FromSlash(rel))
 		if d.IsDir() {
 			return os.MkdirAll(to, 0o755) // #nosec G301 -- public pages
 		}
 		if !d.Type().IsRegular() {
-			return fmt.Errorf("%s isn't a regular file", p)
+			return fmt.Errorf("%s isn't a regular file", rel)
 		}
-		in, err := os.Open(p) // #nosec G304 -- a build input
+		in, err := root.Open(rel)
 		if err != nil {
 			return err
 		}
