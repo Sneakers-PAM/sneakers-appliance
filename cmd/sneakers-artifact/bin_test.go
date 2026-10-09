@@ -247,3 +247,48 @@ func TestProductCheckReportsTheBrand(t *testing.T) {
 		t.Fatal("a logo with a script passed the check")
 	}
 }
+
+// The index lists base releases too, in its base section, next to the
+// product bundles; a product-only index reads as before.
+func TestTheIndexListsBaseReleases(t *testing.T) {
+	tmp := t.TempDir()
+	keys, layout, work, out := filepath.Join(tmp, "keys"), filepath.Join(tmp, "layout"), filepath.Join(tmp, "work"), filepath.Join(tmp, "out")
+	if _, err := runCmd(t, "lab-update-key", "--out", keys); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(layout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(layout, "oci-layout"), []byte(`{"imageLayoutVersion":"1.0.0"}`))
+	header, err := runCmd(t, "bin-pack", "--layout", layout, "--recipient", filepath.Join(keys, "update.pub"),
+		"--version", "0.3.0", "--arch", "amd64", "--channel", "lab", "--out", work)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := os.ReadFile(header) // #nosec G304 -- the test's own output
+	if err != nil {
+		t.Fatal(err)
+	}
+	sign := testpki.ECDSA(t)
+	writeFile(t, filepath.Join(work, "header.sigstore.json"), sign.BlobBundle(t, hdr))
+	bin, err := runCmd(t, "bin-seal", "--work", work, "--bundle", filepath.Join(work, "header.sigstore.json"), "--out", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := filepath.Join(out, updatepkg.IndexName)
+	if _, err := runCmd(t, "product-index", "--out", idx, bin); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(idx) // #nosec G304 -- the test's own output
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index updatepkg.Index
+	if err := json.Unmarshal(b, &index); err != nil || len(index.Products) != 0 || len(index.Base) != 1 {
+		t.Fatalf("index %s: %v", b, err)
+	}
+	e := index.Base[0]
+	if e.Version != "0.3.0" || e.Kind != "full" || e.File != "sneakers-appliance-0.3.0-amd64-LAB.bin" || e.Channel != "lab" || e.Size == 0 {
+		t.Fatalf("entry %+v", e)
+	}
+}

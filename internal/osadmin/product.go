@@ -134,6 +134,41 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 	return nil, lastErr
 }
 
+// ListBaseVersions reads the same index, from the mirror, then the
+// release source, and offers the base releases in its base section that
+// fit this box, marking those outside the installed product's base range.
+func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[osadminv1.ListBaseVersionsRequest]) (*connect.Response[osadminv1.ListBaseVersionsResponse], error) {
+	s := h.s
+	srcs := s.sources(updatepkg.IndexName, "latest/download/"+updatepkg.IndexName)
+	if len(srcs) == 0 {
+		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the base release instead")
+	}
+	base, err := s.baseVersion(ctx)
+	if err != nil {
+		return nil, err
+	}
+	inst, hasProduct := s.slots().Installed()
+	var lastErr error
+	for _, src := range srcs {
+		idx, err := s.fetchIndex(ctx, src)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		out := &osadminv1.ListBaseVersionsResponse{BaseVersion: base}
+		for _, e := range idx.OfferBase(s.arch(), s.o.Upgrade.Channel, base) {
+			v := &osadminv1.BaseVersion{Version: e.Version, Arch: e.Arch, Channel: e.Channel, Kind: e.Kind, Bases: e.Bases, FileName: e.File, Size: e.Size, Source: src.name}
+			if hasProduct && inst.HasRange() && !inst.InRange(e.Version) {
+				v.OutsideProductRange, v.ProductRange = true, inst.RangeText()
+			}
+			out.Versions = append(out.Versions, v)
+		}
+		s.o.Logger.Info("osadmin: base versions listed", log.F("source", src.name), log.F("base", base), log.F("offered", len(out.Versions)))
+		return connect.NewResponse(out), nil
+	}
+	return nil, lastErr
+}
+
 func (s *Server) fetchIndex(ctx context.Context, src source) (idx updatepkg.Index, err error) {
 	started := time.Now()
 	resp, peer, err := s.open(ctx, src, "product index")

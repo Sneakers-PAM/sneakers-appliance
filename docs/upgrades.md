@@ -172,7 +172,7 @@ unstaging one there's no previous release to revert to until the next apply.
 An air-gapped site can serve the release files from a web server of its own and set it as the
 policy's mirror (the design is in [update-mirror.md](update-mirror.md)).
 
-- **What it serves:** the `.bin` files and the product index side by side under one base URL,
+- **What it serves:** the `.bin` files and the index side by side under one base URL,
   the names exactly as released: `<base>/sneakers-appliance-<version>-<arch>.bin`,
   `<base>/sneakers-product-<version>-<arch>.bin` and `<base>/sneakers-product-index.json`. Any
   static web server will do.
@@ -192,6 +192,16 @@ policy's mirror (the design is in [update-mirror.md](update-mirror.md)).
 - **Status:** `GetUpgrades.mirror_status` shows the scheme and the last mirror fetch: its result,
   and for HTTPS the server certificate's subject, issuer, expiry, fingerprint and whether the pin
   matched. It's in memory: after a restart it's empty until the next fetch.
+- **Base updates from the index:** the index (`sneakers-artifact product-index`,
+  [release.md](release.md#the-product-bundle)) has a `base` section next to `products`.
+  `ListBaseVersions` reads it from the mirror, then the release source when `direct` allows, and
+  offers the base releases this box may stage: full or patch for its architecture and channel,
+  stable versions on a production box (every lab build on a lab box), newer than the running base,
+  and a patch only for the base it names. A release outside the installed product's base range is
+  still listed, marked `outside_product_range` with the range, since staging it needs the owner's
+  override. The index is a menu only and isn't signed: the chosen `.bin` is fetched by name
+  (`FetchUpdate`) and verified at stage like an uploaded one. An index without a `base` section
+  offers no base update.
 - **Logging:** every fetch attempt, from the mirror or the release source, is logged with its URL,
   result and duration and audited as `upgrade.source.fetch`.
 
