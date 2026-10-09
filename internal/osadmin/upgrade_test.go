@@ -7,9 +7,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,9 +191,79 @@ func TestAPatchForTheRunningVersionStages(t *testing.T) {
 	b := newBox(t, false)
 	alice := b.browser()
 	alice.signIn("alice")
-	id, _ := alice.upload(t, bin(t, b.sign, b.enc, updatepkg.Header{Version: "0.1.1", Arch: "amd64", Kind: updatepkg.KindPatch, Bases: []string{"0.1.0"}, Channel: release.ChannelProduction}))
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, patchHeader("0.1.1", "0.1.0")))
 	if err := stage(alice, id); err != nil {
 		t.Fatal(err)
+	}
+	if len(b.init.patches) != 1 || b.init.patches[0].GetBaseVersion() != "0.1.0" || b.init.patches[0].GetRootSha256() != strings.Repeat("c", 64) || b.init.patches[0].GetBaseRootSize() != 4096 {
+		t.Fatalf("init was given %v", b.init.patches)
+	}
+	// A patch without its base and target hashes can't be rebuilt.
+	id, _ = alice.upload(t, bin(t, b.sign, b.enc, updatepkg.Header{Version: "0.1.1", Arch: "amd64", Kind: updatepkg.KindPatch, Bases: []string{"0.1.0"}, Channel: release.ChannelProduction}))
+	symbolIn(t, stage(alice, id), connect.CodeFailedPrecondition, "UPGRADE_FORMAT")
+}
+
+// patchHeader is a Base OS patch from base to target, with the full
+// release it falls back to.
+func patchHeader(target, base string) updatepkg.Header {
+	return updatepkg.Header{Unit: updatepkg.UnitBaseOS, Version: target, Arch: "amd64", Kind: updatepkg.KindPatch, Bases: []string{base}, Channel: release.ChannelProduction,
+		Method: updatepkg.MethodZstdPatch, Base: &updatepkg.PatchBase{Version: base, RootSHA256: strings.Repeat("a", 64), RootSize: 4096, UKISHA256: strings.Repeat("b", 64)},
+		Target: &updatepkg.PatchTarget{Version: target, RootSHA256: strings.Repeat("c", 64), UKISHA256: strings.Repeat("d", 64), FullBin: "sneakers-appliance-baseOS-" + target + "-amd64.bin"}}
+}
+
+// A fetched patch that init refuses (another base, or a rebuild that isn't
+// the target) is followed by the full release from the same mirror, with
+// an audit entry saying so; nothing is asked of the owner.
+func TestAPatchThatDoesntApplyFallsBackToTheFullRelease(t *testing.T) {
+	for _, refusal := range []string{"UPGRADE_PATCH_BASE (2508): the running root image isn't the one the patch was made from", "UPGRADE_PATCH_RESULT (2533): root.delta rebuilds to another SHA-256"} {
+		b := newBox(t, false)
+		alice := b.browser()
+		alice.signIn("alice")
+		ctx := context.Background()
+		p := patchHeader("0.1.1", "0.1.0")
+		patchName := updatepkg.FileName(p)
+		b.mirrorFiles[patchName] = bin(t, b.sign, b.enc, p)
+		f := updatepkg.Header{Unit: updatepkg.UnitBaseOS, Version: "0.1.1", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction}
+		b.mirrorFiles[p.Target.FullBin] = bin(t, b.sign, b.enc, f)
+		pol := &osadminv1.UpgradePolicy{Mode: "manual", WindowStart: "02:00", WindowMinutes: 120, MirrorUrl: b.mirror.URL}
+		if _, err := alice.upgrade().SetUpgradePolicy(ctx, connect.NewRequest(&osadminv1.SetUpgradePolicyRequest{Policy: pol})); err != nil {
+			t.Fatal(err)
+		}
+		b.init.patchErr = connect.NewError(connect.CodeFailedPrecondition, errors.New(refusal))
+		got, err := alice.upgrade().FetchUpdate(ctx, connect.NewRequest(&osadminv1.FetchUpdateRequest{FileName: patchName}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := alice.upgrade().StageUpdate(ctx, connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: got.Msg.GetUploadId()}))
+		if err != nil {
+			t.Fatalf("%s: %v", refusal[:20], err)
+		}
+		if res.Msg.GetPackage().GetKind() != "full" || len(b.init.patches) != 1 || len(b.init.staged) != 1 {
+			t.Fatalf("staged %v, patches %d", res.Msg.GetPackage(), len(b.init.patches))
+		}
+		e := lastEntry(t, b.log, "upgrade.patch-fallback")
+		if e.Outcome != "ok" || e.Actor != "alice" || e.Detail["full"] != p.Target.FullBin || !strings.HasPrefix(refusal, e.Detail["reason"]) {
+			t.Fatalf("the fallback entry %+v", e)
+		}
+		if left, _ := filepath.Glob(filepath.Join(b.state, "osadmin-api", "uploads", "*.bin")); len(left) != 0 {
+			t.Fatalf("left %v", left)
+		}
+	}
+}
+
+// An uploaded patch that doesn't apply isn't followed by a fetch: the
+// refusal names the full release to upload.
+func TestAnUploadedPatchThatDoesntApplyNamesTheFullRelease(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.init.patchErr = connect.NewError(connect.CodeFailedPrecondition, errors.New("UPGRADE_PATCH_BASE (2508): the running UKI isn't the one the patch was made from"))
+	p := patchHeader("0.1.1", "0.1.0")
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, p))
+	err := stage(alice, id)
+	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_PATCH_BASE")
+	if !strings.Contains(err.Error(), p.Target.FullBin) || b.mirrorHit != 0 {
+		t.Fatalf("%v (mirror hits %d)", err, b.mirrorHit)
 	}
 }
 

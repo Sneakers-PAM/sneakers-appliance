@@ -35,6 +35,16 @@ From build m a box updates three units on their own, each its own signed `.bin`:
 - A header with no `unit` is a Base OS from before the units and keeps its old name,
   `sneakers-appliance-<version>-<arch>.bin`.
 
+**Patches.** `sneakers-artifact patch-make --base <layout> --target <layout> --out <dir>` writes a
+Base OS patch's payload (the target layout less its root image and UKI, plus `zstd -19
+--long=30 --patch-from` deltas) and `patch-spec.json`, after checking that each delta rebuilds its
+blob exactly with the box's own decoder. `bin-pack --unit baseOS --patch-spec <dir>/patch-spec.json`
+puts the base, the target and the full file's name in the header. After the header is signed and
+sealed, `patch-check --base <layout> <patch.bin>` opens it the way the box does (verify, decrypt)
+and rebuilds the target from the base layout; with `--extract` the rebuilt layout is left for
+`sneakers-kit verify`. A patch that doesn't rebuild is never published. How the box applies one is
+in [upgrades.md](upgrades.md#base-os-patches).
+
 **The bridge.** A box on build l fetches only the old names and can't apply a patch or a Base Web.
 The m release publishes its Base OS full file a second time under the old name (the same bytes;
 the name isn't signed: `bin-seal --bridge`), and lists it in the index's legacy `base` section

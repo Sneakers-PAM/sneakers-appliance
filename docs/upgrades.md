@@ -195,6 +195,33 @@ Nothing is dropped while a stage runs (`UPGRADE_BUSY`), and with nothing staged 
 `UPGRADE_NOT_STAGED`. A base stage removes the previous release to make room (above), so after
 unstaging one there's no previous release to revert to until the next apply.
 
+## Base OS patches
+
+A patch is a smaller way to deliver exactly the same Base OS release (spec 5, Section 2.10). Its
+`.bin` (`sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin`) carries the target's
+signed OCI layout without its two large blobs, the root image and the UKI, plus a `zstd
+--patch-from` delta of each against the base's. Its signed header names the base (version, the root
+image's size and SHA-256, the UKI's SHA-256), the target (the root image's and UKI's SHA-256) and
+the full `.bin` of the same release.
+
+1. **Verify** as every `.bin`; the header must name the running version as its base
+   (`UPGRADE_PATCH_BASE`) and carry the hashes (`UPGRADE_FORMAT` otherwise).
+2. **Decrypt and unpack** the payload, then `Image.Stage` with the patch's spec. init reads the
+   first `root_size` bytes of the running root slot and the running UKI from the ESP and checks
+   both against the base's SHA-256 before anything is written (`UPGRADE_PATCH_BASE`).
+3. **Rebuild** both blobs from the base and the deltas, and check each against the target's
+   SHA-256, which is also the blob's digest in the signed artifact (`UPGRADE_PATCH_RESULT`, nothing
+   staged). The layout is then the one the full `.bin` unpacks, and the usual Stage runs on it, the
+   whole verify chain included.
+4. **Fallback:** when a fetched patch is refused at step 2 or 3, osadmin fetches the full `.bin`
+   the header names from the same sources and stages it instead, with an `upgrade.patch-fallback`
+   audit entry (the version, the reason and the full file) and a `fallback` line in the history.
+   An uploaded patch isn't followed by a fetch: the refusal names the full file to upload.
+
+Apply, Revert, boot counting and retention are unchanged: a patched box is byte for byte the box
+the full `.bin` makes. The rebuild needs about the root image's size in memory (some 200 MB) and
+the same again on the state volume while it runs.
+
 ## An internal mirror
 
 An air-gapped site can serve the release files from a web server of its own and set it as the

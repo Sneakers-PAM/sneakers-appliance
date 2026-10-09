@@ -62,6 +62,7 @@ func binPackCmd() *cobra.Command {
 		h                      updatepkg.Header
 		kind, unit             string
 		needMin, needBefore    string
+		patchSpecPath          string
 		layout, recipient, out string
 	)
 	cmd := &cobra.Command{
@@ -84,6 +85,11 @@ func binPackCmd() *cobra.Command {
 				return err
 			}
 			h.Kind, h.Unit = updatepkg.Kind(kind), updatepkg.Unit(unit)
+			if patchSpecPath != "" {
+				if err := readPatchSpec(patchSpecPath, &h); err != nil {
+					return err
+				}
+			}
 			if needMin != "" || needBefore != "" {
 				h.Requires = map[updatepkg.Unit]updatepkg.Range{updatepkg.UnitBaseOS: {Min: needMin, Before: needBefore}}
 			}
@@ -122,6 +128,7 @@ func binPackCmd() *cobra.Command {
 	f.StringVar(&h.Inputs, "inputs", "", "the SHA-256 of the unit's build inputs (units.sh inputs)")
 	f.StringVar(&needMin, "requires-baseos-min", "", "a Base Web package: the oldest Base OS it fits (default: its own major.minor)")
 	f.StringVar(&needBefore, "requires-baseos-before", "", "a Base Web package: the first Base OS it no longer fits")
+	f.StringVar(&patchSpecPath, "patch-spec", "", "a Base OS patch: the "+patchSpecFile+" patch-make wrote (sets --kind patch and the base)")
 	f.StringVar(&out, "out", "", "the work directory for header.json and payload.age")
 	for _, req := range []string{"layout", "recipient", "version", "out"} {
 		_ = cmd.MarkFlagRequired(req)
@@ -323,6 +330,15 @@ func readRecipient(p string) (*age.X25519Recipient, error) {
 		return nil, fmt.Errorf("%s isn't an age X25519 recipient", p)
 	}
 	return x, nil
+}
+
+// identityOf reads the update key from a key file, or from a UKI as the
+// box does.
+func identityOf(keyFile, uki string) (age.Identity, error) {
+	if keyFile != "" {
+		return readIdentity(keyFile)
+	}
+	return ukiIdentity(uki)
 }
 
 func readIdentity(p string) (age.Identity, error) {

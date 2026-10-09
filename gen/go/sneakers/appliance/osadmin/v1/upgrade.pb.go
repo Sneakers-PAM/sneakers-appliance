@@ -455,8 +455,13 @@ type UpdatePackage struct {
 	Target  UpdateTarget `protobuf:"varint,9,opt,name=target,proto3,enum=sneakers.appliance.osadmin.v1.UpdateTarget" json:"target,omitempty"`
 	// min_base and max_base are a product bundle's base range, as in
 	// ProductVersion.
-	MinBase       string `protobuf:"bytes,10,opt,name=min_base,json=minBase,proto3" json:"min_base,omitempty"`
-	MaxBase       string `protobuf:"bytes,11,opt,name=max_base,json=maxBase,proto3" json:"max_base,omitempty"`
+	MinBase string `protobuf:"bytes,10,opt,name=min_base,json=minBase,proto3" json:"min_base,omitempty"`
+	MaxBase string `protobuf:"bytes,11,opt,name=max_base,json=maxBase,proto3" json:"max_base,omitempty"`
+	// full_bin is a Base OS patch's full release: the file the box takes
+	// instead when the patch doesn't fit or doesn't rebuild.
+	FullBin string `protobuf:"bytes,12,opt,name=full_bin,json=fullBin,proto3" json:"full_bin,omitempty"`
+	// source is where the file came from: upload, mirror or direct.
+	Source        string `protobuf:"bytes,13,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -564,6 +569,20 @@ func (x *UpdatePackage) GetMinBase() string {
 func (x *UpdatePackage) GetMaxBase() string {
 	if x != nil {
 		return x.MaxBase
+	}
+	return ""
+}
+
+func (x *UpdatePackage) GetFullBin() string {
+	if x != nil {
+		return x.FullBin
+	}
+	return ""
+}
+
+func (x *UpdatePackage) GetSource() string {
+	if x != nil {
+		return x.Source
 	}
 	return ""
 }
@@ -2361,7 +2380,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x04size\x18\x06 \x01(\x03R\x04size\x12\x16\n" +
 	"\x06source\x18\a \x01(\tR\x06source\x12\x19\n" +
 	"\bmin_base\x18\b \x01(\tR\aminBase\x12\x19\n" +
-	"\bmax_base\x18\t \x01(\tR\amaxBase\"\xc5\x02\n" +
+	"\bmax_base\x18\t \x01(\tR\amaxBase\"\xf8\x02\n" +
 	"\rUpdatePackage\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x12\n" +
@@ -2374,7 +2393,9 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x06target\x18\t \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x19\n" +
 	"\bmin_base\x18\n" +
 	" \x01(\tR\aminBase\x12\x19\n" +
-	"\bmax_base\x18\v \x01(\tR\amaxBase\"\xaf\x01\n" +
+	"\bmax_base\x18\v \x01(\tR\amaxBase\x12\x19\n" +
+	"\bfull_bin\x18\f \x01(\tR\afullBin\x12\x16\n" +
+	"\x06source\x18\r \x01(\tR\x06source\"\xaf\x01\n" +
 	"\n" +
 	"HeldUpload\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1b\n" +

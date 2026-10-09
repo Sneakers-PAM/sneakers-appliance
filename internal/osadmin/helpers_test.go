@@ -110,6 +110,10 @@ type fakeInit struct {
 	written, total int64
 	duringStage    func()
 	stageErr       error
+	// patches are the patch specs Stage was given; patchErr fails a Stage
+	// of a patch only.
+	patches  []*initv1.StagePatch
+	patchErr error
 	// rebootErr fails Reboot; markGoodErr fails MarkGood.
 	rebootErr, markGoodErr error
 }
@@ -217,6 +221,12 @@ func (i fakeImage) Status(context.Context, *connect.Request[initv1.ImageServiceS
 func (i fakeImage) Stage(_ context.Context, r *connect.Request[initv1.StageRequest]) (*connect.Response[initv1.StageResponse], error) {
 	i.f.mu.Lock()
 	during, err := i.f.duringStage, i.f.stageErr
+	if p := r.Msg.GetPatch(); p != nil {
+		i.f.patches = append(i.f.patches, p)
+		if i.f.patchErr != nil {
+			err = i.f.patchErr
+		}
+	}
 	i.f.mu.Unlock()
 	if during != nil {
 		during()

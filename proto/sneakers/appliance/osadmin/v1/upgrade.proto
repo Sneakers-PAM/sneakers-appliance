@@ -191,6 +191,11 @@ message UpdatePackage {
   // ProductVersion.
   string min_base = 10;
   string max_base = 11;
+  // full_bin is a Base OS patch's full release: the file the box takes
+  // instead when the patch doesn't fit or doesn't rebuild.
+  string full_bin = 12;
+  // source is where the file came from: upload, mirror or direct.
+  string source = 13;
 }
 
 // HeldUpload is a received or fetched .bin that hasn't been staged or

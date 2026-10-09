@@ -34,6 +34,7 @@ import (
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/basepatch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
@@ -331,6 +332,15 @@ type uploadMeta struct {
 	Size   int64     `json:"size"`
 	At     time.Time `json:"at"`
 	Source string    `json:"source"`
+}
+
+// uploadSource is where an upload came from: upload, mirror or direct.
+func (s *Server) uploadSource(id string) string {
+	var m uploadMeta
+	if raw, err := os.ReadFile(filepath.Join(s.uploadsDir(), id+".json")); err == nil { // #nosec G304 -- an upload this box made
+		_ = json.Unmarshal(raw, &m)
+	}
+	return m.Source
 }
 
 func (s *Server) uploadsDir() string { return filepath.Join(s.o.Paths.APIDir(), uploadsDir) }
@@ -737,14 +747,68 @@ func (s *Server) previous(st *initv1.ImageServiceStatusResponse) (version, slot 
 // make room for it. The upload and its unpacked layout are removed once
 // init has staged it.
 func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
-	path, err := s.uploadPath(id)
-	if err != nil {
+	if _, err := s.uploadPath(id); err != nil {
 		return nil, nil, err
 	}
 	if err := s.beginStaging(); err != nil {
 		return nil, nil, err
 	}
 	defer s.endStaging()
+	pkg, removed, err := s.stageHeld(ctx, id, overrideRange)
+	if fb := s.patchFallback(ctx, pkg, err); fb != "" {
+		return s.stageHeld(ctx, fb, overrideRange)
+	} else if code, ok := patchRefusal(err); ok && pkg.GetFullBin() != "" {
+		err = codes.New(code, "%s Upload the full release instead: %s.", strings.TrimSuffix(remoteSentence(err), "."), pkg.GetFullBin())
+	}
+	return pkg, removed, err
+}
+
+// patchRefusal is the code of a patch that didn't fit or didn't rebuild,
+// as init or this box refused it.
+func patchRefusal(err error) (int, bool) {
+	for _, c := range []int{codes.UpgradePatchBase, codes.UpgradePatchResult} {
+		if remoteIs(err, c) {
+			return c, true
+		}
+	}
+	return 0, false
+}
+
+// remoteIs reports whether err carries code, here or as init's Connect
+// error, whose message starts with the code's symbol.
+func remoteIs(err error, code int) bool {
+	if err == nil {
+		return false
+	}
+	if codes.Is(err, code) {
+		return true
+	}
+	ce := new(connect.Error)
+	return errors.As(err, &ce) && strings.HasPrefix(ce.Message(), codes.Symbol(code)+" (")
+}
+
+// remoteSentence is err's sentence without its code, here or from init.
+func remoteSentence(err error) string {
+	if ce := new(connect.Error); errors.As(err, &ce) {
+		m := ce.Message()
+		if i := strings.Index(m, "): "); i >= 0 {
+			return m[i+3:]
+		}
+		return m
+	}
+	d := describe(err)
+	if i := strings.Index(d, "): "); i >= 0 {
+		return d[i+3:]
+	}
+	return d
+}
+
+// stageHeld stages the upload id while the stage is held.
+func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
+	path, err := s.uploadPath(id)
+	if err != nil {
+		return nil, nil, err
+	}
 	// What's staged isn't known until the header is read, so the record
 	// starts with the verify step alone.
 	s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED, "", "")
@@ -775,7 +839,10 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 	}
 	h := p.Header
 	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
-		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, MinBase: h.MinBase, MaxBase: h.MaxBase}
+		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, MinBase: h.MinBase, MaxBase: h.MaxBase, Source: s.uploadSource(id)}
+	if h.Target != nil {
+		pkg.FullBin = h.Target.FullBin
+	}
 	s.setVersion(h.Version)
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
@@ -788,6 +855,16 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 	if err := h.AppliesTo(img.Msg.GetRunningVersion()); err != nil {
 		s.reject(path, err)
 		return pkg, nil, err
+	}
+	var patch *initv1.StagePatch
+	if h.Kind == updatepkg.KindPatch {
+		spec, err := basepatch.SpecOf(h)
+		if err != nil {
+			s.reject(path, err)
+			return pkg, nil, err
+		}
+		patch = &initv1.StagePatch{BaseVersion: spec.BaseVersion, BaseRootSha256: spec.BaseRootSHA256, BaseRootSize: spec.BaseRootSize, BaseUkiSha256: spec.BaseUKISHA256,
+			RootSha256: spec.RootSHA256, UkiSha256: spec.UKISHA256}
 	}
 	if err := s.fitsInstalledProduct(h.Version, overrideRange); err != nil {
 		return pkg, nil, err
@@ -809,13 +886,59 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 		return pkg, nil, err
 	}
 	s.setStep(stepStage, "Writing the release into "+slotName(s.otherSlot())+".")
-	res, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir}))
+	if patch != nil {
+		s.setStep(stepStage, "Rebuilding the release from the patch and "+h.Base.Version+", then writing it into "+slotName(s.otherSlot())+".")
+	}
+	res, err := s.o.Image.Stage(ctx, connect.NewRequest(&initv1.StageRequest{Reference: dir, Patch: patch}))
 	if err != nil {
+		if patch != nil {
+			s.removeUpload(path)
+		}
 		return pkg, nil, err
 	}
 	s.removeUpload(path)
 	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version), log.F("removed", strings.Join(res.Msg.GetRemovedVersions(), ",")))
 	return pkg, res.Msg.GetRemovedVersions(), nil
+}
+
+// patchFallback takes the full .bin of a patch's release when the patch
+// didn't fit the running base or didn't rebuild (spec 5, Section 2.10.3):
+// for a patch fetched from a source, it fetches the full file the signed
+// header names from the same sources and returns its upload id, with an
+// audit entry; "" when there's nothing to fall back to. An uploaded patch
+// isn't followed by a fetch: the refusal names the full file instead.
+func (s *Server) patchFallback(ctx context.Context, pkg *osadminv1.UpdatePackage, err error) string {
+	code, ok := patchRefusal(err)
+	if !ok || pkg.GetKind() != string(updatepkg.KindPatch) {
+		return ""
+	}
+	full := pkg.GetFullBin()
+	c := callFrom(ctx)
+	e := c.by("upgrade.patch-fallback")
+	e.Target = "release " + pkg.GetVersion()
+	e.Detail = map[string]string{"version": pkg.GetVersion(), "reason": codes.Symbol(code), "full": full, "source": pkg.GetSource()}
+	if full == "" || pkg.GetSource() == "" || pkg.GetSource() == "upload" {
+		s.o.Logger.Warn("osadmin: a patch didn't apply; upload the full .bin", log.F("version", pkg.GetVersion()), log.F("full", full), log.F("error", describe(err)))
+		return ""
+	}
+	s.o.Logger.Warn("osadmin: a patch didn't apply; fetching the full .bin", log.F("version", pkg.GetVersion()), log.F("full", full), log.F("reason", codes.Symbol(code)))
+	var id string
+	var ferr error
+	for _, src := range s.sources(full, directPath(full)) {
+		if id, _, ferr = s.fetch(ctx, src, uploadMeta{Name: full, Source: src.name}); ferr == nil {
+			break
+		}
+	}
+	if len(s.sources(full, directPath(full))) == 0 {
+		ferr = codes.New(codes.UpgradeAirGapped, "no source to fetch %s from", full)
+	}
+	s.write(e, ferr)
+	s.history("fallback", pkg.GetVersion(), c.session.Admin, ferr, full)
+	if ferr != nil {
+		s.o.Logger.Warn("osadmin: the full .bin wasn't fetched", log.F("full", full), log.F("error", describe(ferr)))
+		return ""
+	}
+	return id
 }
 
 // fitsInstalledProduct refuses a base release outside the installed

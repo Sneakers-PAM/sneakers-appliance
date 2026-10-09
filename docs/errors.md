@@ -123,7 +123,7 @@ shell, the console and :8443 show the same sentence.
 | 2505 | `UPGRADE_SIGNATURE` | the update package isn't signed by this box's release key, or it changed after it was signed |
 | 2506 | `UPGRADE_DECRYPT` | the update package doesn't decrypt with this box's update key, or the booted UKI carries no update key |
 | 2507 | `UPGRADE_CHANNEL` | a lab package never installs on a production box, and a production package never on a lab box |
-| 2508 | `UPGRADE_PATCH_BASE` | the patch is for other base versions than the one this box runs |
+| 2508 | `UPGRADE_PATCH_BASE` | the patch is for another base version, root image or UKI than the ones this box runs; nothing is written, and a fetched patch falls back to the full `.bin` |
 | 2509 | `UPGRADE_AIR_GAPPED` | no mirror is configured, so the box fetches nothing; upload the `.bin` instead |
 | 2510 | `UPGRADE_UPLOAD` | the upload or fetch is unknown, too large, or failed |
 | 2511 | `UPGRADE_NOT_STAGED` | no release is staged to apply |
@@ -137,3 +137,4 @@ shell, the console and :8443 show the same sentence.
 | 2521 | `UPGRADE_MIRROR_PIN` | the HTTPS mirror's certificate isn't the one the update trust pins; the refusal names the presented SHA-256 |
 | 2530 | `UPGRADE_COMPAT` | an update unit doesn't fit the other units this box runs, such as a Base Web built for another Base OS; the refusal says what it needs and what to install first ([release.md](release.md#the-three-update-units)) |
 | 2531 | `UPGRADE_EPOCH` | the update is for another signing-key epoch than this box's; a box takes only units of its own epoch |
+| 2533 | `UPGRADE_PATCH_RESULT` | a patch didn't rebuild the release byte for byte; nothing was staged, and a fetched patch falls back to the full `.bin` ([upgrades.md](upgrades.md#base-os-patches)) |

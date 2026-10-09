@@ -168,6 +168,26 @@ func (s *gptSlots) inactive() (switchroot.Partition, error) {
 	return slots[0], nil
 }
 
+// OpenActive opens the root slot the box runs from, read only: a patch's
+// base.
+func (s *gptSlots) OpenActive(context.Context) (io.ReaderAt, io.Closer, error) {
+	parts, err := s.list()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, p := range parts {
+		if (p.Label == switchroot.LabelRootA || p.Label == switchroot.LabelRootB) && strings.EqualFold(p.PartUUID, s.running) {
+			f, err := os.Open(p.Device) // #nosec G304 -- the running root slot found by its GPT label and PARTUUID
+			if err != nil {
+				return nil, nil, err
+			}
+			s.log.Info("init: reading the running root slot for a patch", log.F("slot", p.Label), log.F("device", p.Device))
+			return f, f, nil
+		}
+	}
+	return nil, nil, fmt.Errorf("init: the running root slot (PARTUUID %s) wasn't found", s.running)
+}
+
 func (s *gptSlots) WriteInactive(_ context.Context, r io.Reader, size int64, partUUID string) error {
 	if s.disk == "" {
 		return errors.New("init: the boot disk wasn't found")
