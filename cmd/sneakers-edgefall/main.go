@@ -112,15 +112,21 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 	if err != nil {
 		return err
 	}
-	local := edgefall.HTTPServer(h)
+	cl := edgefall.NewClaimer(edgefall.ClaimOptions{HTTPS: c.https, HTTP: c.http, Cert: edgefall.LoadCert(c.tlsDir), Handler: h, Logger: lg})
+	defer cl.Close()
+	// The answer waits until 80 and 443 are let go, so Traefik binds them
+	// as soon as the edge's init container returns.
+	local := edgefall.HTTPServer(edgefall.LocalHandler(h, func() bool {
+		ok := w.Handoff()
+		cl.Want(w.Claim())
+		return ok
+	}))
 	go func() {
 		if err := local.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			lg.Error(err, "edgefall: the loopback listener stopped")
 		}
 	}()
 	defer func() { _ = local.Close() }()
-	cl := edgefall.NewClaimer(edgefall.ClaimOptions{HTTPS: c.https, HTTP: c.http, Cert: edgefall.LoadCert(c.tlsDir), Handler: h, Logger: lg})
-	defer cl.Close()
 	lg.Info("edgefall: serving", log.F("local", c.local), log.F("https", c.https), log.F("http", c.http))
 
 	t := time.NewTicker(pollEvery)

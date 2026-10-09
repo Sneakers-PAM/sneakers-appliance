@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	log "github.com/Bugs5382/go-log"
 
@@ -38,6 +39,46 @@ type Watcher struct {
 	// installed: accessd last said a product bundle is installed.
 	installed bool
 	claim     bool
+	// stopped: accessd last said the product doesn't run. startedAt is
+	// when it was then seen running, so the edge stays held until the
+	// edge asks for it (handedOff) or HandoffWait passes.
+	stopped   bool
+	startedAt time.Time
+	handedOff bool
+	now       func() time.Time
+}
+
+// HandoffWait is how long edgefall keeps 80 and 443 after k0s starts when
+// the product's edge doesn't ask for them: today's behaviour for an edge
+// without the handoff, a little later.
+const HandoffWait = 2 * time.Minute
+
+// SetClock replaces time.Now, for tests.
+func (w *Watcher) SetClock(now func() time.Time) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.now = now
+}
+
+// Handoff is the edge asking for 80 and 443, just before Traefik binds
+// them: taken only while k0s runs and edgefall still holds them for it.
+func (w *Watcher) Handoff() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.startedAt.IsZero() || w.handedOff || w.going {
+		w.lg.Debug("edgefall: a handoff that isn't waited for; ignored", log.F("state", string(w.state)))
+		return false
+	}
+	w.handedOff = true
+	w.claim = false
+	w.lg.Info("edgefall: the edge asked for 80 and 443; letting them go", log.F("waited", w.now().Sub(w.startedAt).String()))
+	return true
+}
+
+// holding is whether k0s started after edgefall saw it stopped and the
+// edge hasn't taken 80 and 443 over yet.
+func (w *Watcher) holding() bool {
+	return !w.startedAt.IsZero() && !w.handedOff && w.now().Sub(w.startedAt) < HandoffWait
 }
 
 // NewWatcher watches src and init's announcement in file.
@@ -45,7 +86,7 @@ func NewWatcher(src Source, file string, lg log.Logger) *Watcher {
 	if lg == nil {
 		lg = log.Nop()
 	}
-	return &Watcher{src: src, file: file, lg: lg, state: boxstate.Starting}
+	return &Watcher{src: src, file: file, lg: lg, state: boxstate.Starting, now: time.Now}
 }
 
 // Poll asks once. An answer sets the state and the claim: on a box with a
@@ -72,7 +113,14 @@ func (w *Watcher) Poll(ctx context.Context) {
 		w.state = s
 		w.going = w.going || boxstate.Going(s) || announced != ""
 		w.installed = p.ProductInstalled
-		w.claim = w.installed && (w.going || !p.ProductRunning)
+		switch {
+		case !p.ProductRunning:
+			w.stopped, w.startedAt, w.handedOff = true, time.Time{}, false
+		case w.stopped:
+			w.stopped, w.startedAt = false, w.now()
+			w.lg.Info("edgefall: k0s started; holding the edge until the edge asks for it", log.F("wait", HandoffWait.String()))
+		}
+		w.claim = w.installed && (w.going || !p.ProductRunning || w.holding())
 	case announced != "":
 		w.going = true
 		if prev != boxstate.Updating {

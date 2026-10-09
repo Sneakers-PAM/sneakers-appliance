@@ -574,6 +574,7 @@ func startBox(t *testing.T, mods []func(*box, *osadmin.Options), seed func(*box)
 		m(b, &opts)
 	}
 	b.srv = osadmin.New(opts)
+	t.Cleanup(b.srv.Close)
 	b.ts = httptest.NewTLSServer(b.srv.Handler())
 	t.Cleanup(b.ts.Close)
 	return b

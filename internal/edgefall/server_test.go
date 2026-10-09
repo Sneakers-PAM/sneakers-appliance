@@ -205,3 +205,25 @@ func TestThePagesStyleIsTheOneTheCSPAllows(t *testing.T) {
 		t.Fatalf("CSP %q lacks %q", res.Header.Get("Content-Security-Policy"), want)
 	}
 }
+
+// The handoff is a POST on the loopback listener only; anything else
+// there is edgefall as before.
+func TestTheLocalHandlerTakesTheEdgesHandoff(t *testing.T) {
+	asked := 0
+	h := edgefall.LocalHandler(edgefall.NewServer(func() boxstate.State { return boxstate.Starting }), func() bool { asked++; return true })
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, edgefall.HandoffPath, nil))
+	if rec.Code != http.StatusNoContent || asked != 1 {
+		t.Fatalf("POST: %d, asked %d", rec.Code, asked)
+	}
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, edgefall.HandoffPath, nil))
+	if rec.Code != http.StatusServiceUnavailable || asked != 1 {
+		t.Fatalf("GET: %d, asked %d", rec.Code, asked)
+	}
+	rec = httptest.NewRecorder()
+	edgefall.NewServer(func() boxstate.State { return boxstate.Starting }).ServeHTTP(rec, httptest.NewRequest(http.MethodPost, edgefall.HandoffPath, nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("the 443 handler took a handoff: %d", rec.Code)
+	}
+}

@@ -395,8 +395,13 @@ func size(n int64) string {
 // the current one marked, its progress where it has one, and what the box
 // does if the new release doesn't come up.
 func MaintenancePage(c consoleui.Chrome, p *osadminv1.UpgradeProgress) tui.Page {
+	product := p.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
 	head := "Updating to " + p.GetVersion() + ". Leave it powered on."
 	switch {
+	case product && p.GetAction() == "apply":
+		head = "Installing the product " + p.GetVersion() + ". The box keeps running."
+	case product && p.GetAction() == "revert":
+		head = "Going back to the product " + p.GetVersion() + ". The box keeps running."
 	case p.GetAction() == "revert":
 		head = "Going back to " + p.GetVersion() + ". Leave it powered on."
 	case p.GetAction() == "stage":
@@ -423,7 +428,7 @@ func MaintenancePage(c consoleui.Chrome, p *osadminv1.UpgradeProgress) tui.Page 
 			b = append(b, tui.WrapStyled(tui.Dim, d, width, "        ")...)
 		}
 	}
-	if p.GetAction() == "apply" && p.GetVersion() != c.Version {
+	if !product && p.GetAction() == "apply" && p.GetVersion() != c.Version {
 		b = append(b, tui.Text(""))
 		b = append(b, tui.Wrap("If "+p.GetVersion()+" doesn't come up healthy, the box goes back to "+c.Version+" by itself.", width, "")...)
 	}

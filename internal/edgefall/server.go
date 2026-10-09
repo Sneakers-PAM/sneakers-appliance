@@ -166,5 +166,24 @@ func Redirect() http.Handler {
 	})
 }
 
+// HandoffPath is where the product's edge asks for 80 and 443 (a POST, on
+// the loopback listener only), from an init container that runs just
+// before Traefik starts and binds them.
+const HandoffPath = "/_box/edge-handoff"
+
+// LocalHandler is the loopback listener's handler: the edge's handoff,
+// then h for everything else.
+func LocalHandler(h http.Handler, handoff func() bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == HandoffPath && r.URL.RawPath == "" {
+			handoff()
+			w.Header().Set("Cache-Control", "no-store")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 // LocalAddr is where Traefik reaches edgefall, on loopback only.
 const LocalAddr = "127.0.0.1:9180"

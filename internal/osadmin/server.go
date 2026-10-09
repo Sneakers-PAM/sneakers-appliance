@@ -90,8 +90,13 @@ type Options struct {
 	// Services restarts the product service after a product apply or
 	// revert; nil can't.
 	Services initv1connect.ServicesServiceClient
-	Network  netdv1connect.NetworkServiceClient
-	Paths    Paths
+	// ProductUp tells how far the product has come up after that restart
+	// (productup.Probe on the box). A product apply or revert follows it
+	// as the steps after restarting, until the product answers on 443;
+	// nil ends the apply at the restart.
+	ProductUp ProductProbe
+	Network   netdv1connect.NetworkServiceClient
+	Paths     Paths
 	// BoxStateFile is init's announcement of a reboot or a shutdown
 	// (boxstate.File on the box), which GetPhase's state reports; empty
 	// reads none.

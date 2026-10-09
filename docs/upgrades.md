@@ -85,13 +85,39 @@ and no reboot. Until a stage has read the file's header it doesn't know which of
 its record starts with `verify` alone and no target; the base or product steps replace it once the
 header is read, so a product stage never shows the base's slot, reboot or health steps.
 
+### The product coming up
+
+Restarting the product only starts k0s; the product takes minutes more to answer. So a product
+apply or revert goes on past `restart` with five more steps, and stays `in_progress` until the
+product answers on 443. Updates, the restart page and the console's maintenance screen show them
+like the others:
+
+| Step | Label | Done when |
+|---|---|---|
+| `k0s` | Starting k0s | the Kubernetes API answers (`/readyz`) |
+| `images` | Importing the images | containerd lists every image in the bundle's `images/` (the detail counts them) |
+| `manifests` | Applying the product's stacks | every stack in the bundle's `manifests/` has an object labelled `k0s.k0sproject.io/stack` (the detail names those still missing) |
+| `pods` | Waiting for the pods to be ready | every pod that should run is Ready; a finished Job's pod doesn't count (the detail counts them) |
+| `edge` | Opening the product on 443 | `https://127.0.0.1:443/` answers without `Sneakers-Box-State` and not with 502 to 504: the product, not edgefall's page or an edge error |
+
+accessd (root) asks the installed bundle's own k0s (`k0s kubectl` with
+`/var/lib/k0s/pki/admin.conf`, `k0s ctr` on `/run/k0s/containerd.sock`) every 3 seconds
+(`internal/productup`); the apply has answered by then, and the record follows on its own. An
+edge that answers with the product ends it, whatever the earlier checks say. A step can go back (a
+pod falls over), and the step after it is pending again. A check that fails leaves the step where
+it was. When the product hasn't come up 20 minutes (`ProductUpBound`) after following began, the
+step it's on fails with `UPGRADE_PRODUCT_START`; the root shell's `kubectl` shows what holds it.
+When accessd restarts in the middle, it picks the record up again at start rather than failing it.
+Downloading from the mirror comes before all of this, as `receiving` and `held_upload` on
+`GetUpgrades`; unpacking is the `stage` step.
+
 Each step is pending, active, done or failed, and `in_progress` is set while one is active. A
 failed step carries why in its detail and the failure's code (`UPGRADE_SIGNATURE`, say) in the
 record's `code`; the steps after it stay pending. A release the box doesn't come up on fails at
 `health`, naming both releases ("0.2.0 didn't come up healthy, so the box went back to 0.1.0 by
 itself."): the fallback is boot counting's, unchanged. A step osadmin runs in one call (verifying,
 staging, restarting the product) that's found active when osadmin starts was cut off by a restart,
-and fails as such. A reboot that never comes (init took the request but the box didn't go down)
+and fails as such; the product's coming-up steps aren't, they're followed again. A reboot that never comes (init took the request but the box didn't go down)
 fails at `reboot` with `UPGRADE_NO_REBOOT` once 10 minutes (`RebootBound`) have passed on the boot
 the step started on: accessd checks each minute, comparing the kernel's boot ID with the one the
 step recorded, so osadmin restarting on the same boot isn't mistaken for the reboot. Maintenance

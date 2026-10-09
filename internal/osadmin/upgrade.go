@@ -83,6 +83,9 @@ type UpgradeOptions struct {
 	ProductDir string
 	// Arch is the box's architecture; empty is amd64.
 	Arch string
+	// ProductUpEvery is how often Options.ProductUp is asked while a
+	// product comes up; 0 is DefaultProductUpEvery.
+	ProductUpEvery time.Duration
 }
 
 // DefaultElevationEndWait is how long an override waits for a terminated

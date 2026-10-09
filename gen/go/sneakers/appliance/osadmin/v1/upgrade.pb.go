@@ -756,7 +756,13 @@ func (x *UpgradeEvent) GetTarget() UpdateTarget {
 type UpgradeStep struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// id is verify, stage, switch, reboot, health or mark_good for the base
-	// image; verify, stage, switch or restart for a product bundle.
+	// image; verify, stage, switch or restart for a product bundle, then,
+	// while the product comes up after its restart, k0s (the Kubernetes
+	// API answers), images (the bundle's images are imported), manifests
+	// (its stacks are applied), pods (every pod is ready) and edge (443
+	// answers with the product, not the box-state page). The apply stays
+	// in_progress until edge is done; it fails with UPGRADE_PRODUCT_START at
+	// the step it was on when the product doesn't come up within 20 minutes.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// label is the step as the screens show it, such as "Staging into slot
 	// B".
