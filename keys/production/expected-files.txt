@@ -1,0 +1,17 @@
+# The production public key files the owner commits here
+# (docs/runbooks/production-keys.md). build/release/check-production-keys.sh
+# refuses a set that lacks any of them.
+PK.crt
+KEK.crt
+db.crt
+PK.esl
+KEK.esl
+db.esl
+dbx.esl
+PK.auth
+KEK.auth
+db.auth
+dbx.auth
+cosign.pub
+update.pub
+fingerprints.txt
