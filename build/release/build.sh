@@ -18,18 +18,26 @@
 #                  carries for first boot
 #   RELEASE        the release.yaml: sneakers-release's manifest/release.yaml
 #                  at the commit build/release/pins.env pins
+#   CHARTS         that sneakers-release checkout: the product's stacks are
+#                  rendered from its charts (build/product/sneakers/render.sh)
+#   SERVICE_IMAGES the service images the images job built from release.yaml's
+#                  build blocks, an OCI layout per service (build/release/images.sh)
 #   WEB            a sneakers-web checkout at the commit pins.env pins: the
 #                  :8443 pages are built from it (build/lab/pages.sh)
 #   OUT            the output directory
 #   KEYS           the public key directory (default keys/production)
 #
-# release.yaml isn't trusted here and nothing is signed: the sign job
-# countersigns it and the manifest of every image it pins with the release
-# key, then builds the product bundle from them. A placeholder instead of a
-# digest is refused before anything is fetched.
+# release.yaml isn't trusted here and nothing is signed: the digest of each
+# service image built is put in place of its placeholder (bundle fill), and
+# the sign job countersigns that release.yaml and the manifest of every
+# image it pins with the release key, then builds the product bundle from
+# them. A placeholder with no image built, or any other image not pinned by
+# a digest, is refused before anything is fetched.
 #
 # Output in $OUT: sneakers-<version>.efi (unsigned UKI), systemd-bootx64.efi
-# (unsigned), root-<version>.img, verity.json, release.yaml,
+# (unsigned), root-<version>.img, verity.json, release.yaml (with the built
+# digests), stacks/ (the product's k0s stacks) and product.yaml (the product
+# bundle's), 
 # systemd-version, k0s and helm (checked against release.yaml's pins),
 # images.txt ("<image> <digest>" for every pinned image) with manifests/<hex>
 # (each image's manifest or index bytes, which hash to its digest, for the
@@ -45,6 +53,8 @@ root="$(cd "$here/../.." && pwd)"
 : "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${STATIC:?}" "${OUT:?}"
 : "${RELEASE:?set RELEASE to manifest/release.yaml from sneakers-release at the pinned commit}"
 : "${WEB:?set WEB to the sneakers-web checkout at the pinned commit}"
+: "${CHARTS:?set CHARTS to the sneakers-release checkout at the pinned commit}"
+: "${SERVICE_IMAGES:?set SERVICE_IMAGES to the service images build/release/images.sh built}"
 keys="${KEYS:-$root/keys/production}"
 arch=amd64
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
@@ -52,19 +62,20 @@ export SOURCE_DATE_EPOCH
 tools="$(mktemp -d)"
 trap 'rm -rf "$tools"' EXIT
 CGO_ENABLED=0 go build -trimpath -o "$tools/bundle" "$root/build/tools/bundle"
-"$tools/bundle" images --release "$RELEASE" > "$tools/images.txt"
+"$tools/bundle" fill --release "$RELEASE" --layouts "$SERVICE_IMAGES" > "$tools/release.yaml"
+"$tools/bundle" images --release "$tools/release.yaml" > "$tools/images.txt"
 mkdir -p "$OUT"
 work="$(mktemp -d)"
 trap 'rm -rf "$tools" "$work"' EXIT
 
-echo "release: release.yaml $(sha256sum < "$RELEASE" | cut -d' ' -f1), $(wc -l < "$tools/images.txt") images"
-install -m 0644 "$RELEASE" "$OUT/release.yaml"
+echo "release: release.yaml $(sha256sum < "$RELEASE" | cut -d' ' -f1), with the built digests $(sha256sum < "$tools/release.yaml" | cut -d' ' -f1), $(wc -l < "$tools/images.txt") images"
+install -m 0644 "$tools/release.yaml" "$OUT/release.yaml"
 install -m 0644 "$tools/images.txt" "$OUT/images.txt"
 rm -rf "$OUT/manifests"
 mkdir -p "$OUT/manifests"
 while read -r image dgst; do
   hexd="${dgst#sha256:}"
-  "$tools/bundle" manifest --image "$image" --digest "$dgst" --out "$OUT/manifests/$hexd"
+  "$tools/bundle" manifest --image "$image" --digest "$dgst" --layouts "$SERVICE_IMAGES" --out "$OUT/manifests/$hexd"
   got="$(sha256sum < "$OUT/manifests/$hexd" | cut -d' ' -f1)"
   [ "$got" = "$hexd" ] || { echo "release: $image's manifest hashes to $got, not its pin $dgst" >&2; exit 1; }
 done < "$OUT/images.txt"
@@ -84,6 +95,18 @@ if [ -n "$helm_version" ]; then
   want="$(go run "$root/build/tools/k0spin" "$OUT/release.yaml" "$arch" helm)"
   [ "$(sha256sum < "$OUT/helm" | cut -d' ' -f1)" = "$want" ] || { echo "release: helm $helm_version isn't the binary release.yaml pins ($want)" >&2; exit 1; }
 fi
+
+# The product's stacks, rendered from the pinned charts with the helm
+# build/ci/versions.env pins (the same render a lab bundle uses).
+# shellcheck source=build/ci/versions.env
+source "$root/build/ci/versions.env"
+curl -fsSL --retry 3 -o "$work/render-helm.tar.gz" "https://get.helm.sh/helm-$HELM_VERSION-linux-$arch.tar.gz"
+[ "$(sha256sum < "$work/render-helm.tar.gz" | cut -d' ' -f1)" = "$HELM_TGZ_SHA256_AMD64" ] || { echo "release: helm $HELM_VERSION isn't the tarball versions.env pins" >&2; exit 1; }
+tar -xzOf "$work/render-helm.tar.gz" "linux-$arch/helm" > "$work/render-helm"
+chmod 0755 "$work/render-helm"
+rm -rf "$OUT/stacks"
+CHARTS="$CHARTS" RELEASE="$OUT/release.yaml" HELM="$work/render-helm" OUT="$OUT/stacks" bash "$root/build/product/sneakers/render.sh"
+install -m 0644 "$root/build/product/sneakers/product.yaml" "$OUT/product.yaml"
 
 pkg=github.com/Sneakers-PAM/sneakers-appliance/internal/release
 b64() { base64 -w0 < "$1"; }
