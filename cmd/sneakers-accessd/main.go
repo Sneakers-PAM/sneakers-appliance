@@ -255,7 +255,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// restarts what reads them.
 		Switches: &productswitch.Switches{
 			Dir: filepath.Join(c.state, "platform"), Slot: filepath.Join(product.Dir, "current"), Manifests: "/var/lib/k0s/manifests",
-			Restart: rolloutRestart(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig), Logger: lg,
+			Restart: rolloutRestart(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig),
+			Settled: stackSettled(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig), Logger: lg,
 		},
 		Paths:           paths,
 		BoxStateFile:    boxstate.File,
@@ -356,6 +357,32 @@ func rolloutRestart(k0s, kubeconfig string) func(ctx context.Context, ns, kind, 
 			return fmt.Errorf("rollout restart %s/%s/%s: %w: %s", ns, kind, name, err, strings.TrimSpace(string(out)))
 		}
 		return nil
+	}
+}
+
+// stackSettled waits, up to 90 s, until every object in a stack's files is
+// in the cluster (on) or none is left (off): k0s applies a stack it finds in
+// its manifests directory a moment later, and a workload restarted before
+// then misses the objects it loads.
+func stackSettled(k0s, kubeconfig string) func(ctx context.Context, stack string, on bool) error {
+	return func(ctx context.Context, stack string, on bool) error {
+		ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		for {
+			args := []string{"kubectl", "--kubeconfig", kubeconfig, "get", "-f", stack, "-o", "name"}
+			if !on {
+				args = append(args, "--ignore-not-found")
+			}
+			out, err := exec.CommandContext(ctx, k0s, args...).CombinedOutput() // #nosec G204 -- the installed bundle's k0s on the installed slot's own stack
+			if (on && err == nil) || (!on && err == nil && strings.TrimSpace(string(out)) == "") {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("stack %s not settled (on %v): %s", filepath.Base(stack), on, strings.TrimSpace(string(out)))
+			case <-time.After(time.Second):
+			}
+		}
 	}
 }
 
