@@ -82,6 +82,43 @@ type Spec struct {
 	// Import, when set, lets the product take an export of an earlier
 	// install from the Import page before its own first-run setup.
 	Import *Import `yaml:"import"`
+	// Escrow are the keys the product's data can't be opened without (a
+	// vault's root key, say). The box seals each under KeyCustody, so the
+	// recovery escrow carries them for a restore onto another box.
+	Escrow []EscrowKey `yaml:"escrow"`
+}
+
+// EscrowKey is one Secret key the recovery escrow carries.
+type EscrowKey struct {
+	// Name is the key's name in the escrow, a lower-case word.
+	Name string `yaml:"name"`
+	// Secret is <namespace>/<name>.
+	Secret string `yaml:"secret"`
+	// Key is the key in the Secret's data.
+	Key string `yaml:"key"`
+}
+
+// Namespace is the Secret's namespace.
+func (e EscrowKey) Namespace() string { ns, _, _ := strings.Cut(e.Secret, "/"); return ns }
+
+// SecretName is the Secret's name.
+func (e EscrowKey) SecretName() string { _, n, _ := strings.Cut(e.Secret, "/"); return n }
+
+func (s Spec) checkEscrow() error {
+	seen := map[string]bool{}
+	for i, e := range s.Escrow {
+		ns, name, ok := strings.Cut(e.Secret, "/")
+		switch {
+		case !nameRE.MatchString(e.Name) || seen[e.Name]:
+			return bad("escrow[%d]: %q isn't a lower-case word, or is named twice", i, e.Name)
+		case !ok || !dnsRE.MatchString(ns) || !secretRE.MatchString(name):
+			return bad("escrow[%d]: the secret %q isn't <namespace>/<name>", i, e.Secret)
+		case !keyRE.MatchString(e.Key):
+			return bad("escrow[%d]: the key %q isn't a Secret data key", i, e.Key)
+		}
+		seen[e.Name] = true
+	}
+	return nil
 }
 
 // Import is how the product takes an export of an earlier install
@@ -263,6 +300,9 @@ func Parse(b []byte) (Spec, error) {
 		seen[v.Name] = true
 	}
 	if err := s.checkImport(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkEscrow(); err != nil {
 		return Spec{}, err
 	}
 	return s, nil
@@ -460,6 +500,9 @@ func RBAC(s Spec) []byte {
 			proxies[c.Namespace()] = appendNew(proxies[c.Namespace()], c.ProxyName())
 		}
 	}
+	for _, e := range s.Escrow {
+		secrets[e.Namespace()] = appendNew(secrets[e.Namespace()], e.SecretName())
+	}
 	nss := map[string]bool{}
 	for ns := range secrets {
 		nss[ns] = true
@@ -517,7 +560,7 @@ func WriteRBAC(dir string) error {
 		return err
 	}
 	p := filepath.Join(dir, RBACFile)
-	if len(s.ExposedValues) == 0 {
+	if len(s.ExposedValues) == 0 && len(s.Escrow) == 0 {
 		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("productspec: %w", err)
 		}

@@ -369,3 +369,53 @@ func TestTheSneakersBundleTakesAnImport(t *testing.T) {
 		}
 	}
 }
+
+// A product names the keys its data can't be opened without; the box
+// keeps them in the recovery escrow (docs/key-custody.md).
+func TestTheEscrowKeysParseAndReachTheRBAC(t *testing.T) {
+	doc := good + `escrow:
+  - {name: vault-root-key, secret: sneakers/sneakers-vault-generated, key: VAULT_ROOT_KEK}
+  - {name: totp-key, secret: sneakers/sneakers-identity-generated, key: TOTP_ENC_KEY}
+`
+	s, err := productspec.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Escrow) != 2 || s.Escrow[0].Namespace() != "sneakers" || s.Escrow[0].SecretName() != "sneakers-vault-generated" || s.Escrow[1].Key != "TOTP_ENC_KEY" {
+		t.Fatalf("%+v", s.Escrow)
+	}
+	rbac := string(productspec.RBAC(s))
+	for _, want := range []string{"sneakers-vault-generated", "sneakers-identity-generated", "sneakers-setup-token"} {
+		if !strings.Contains(rbac, want) {
+			t.Errorf("the RBAC doesn't name %s:\n%s", want, rbac)
+		}
+	}
+	for name, bad := range map[string]string{
+		"a bad name":   good + "escrow:\n  - {name: Root, secret: sneakers/s, key: K}\n",
+		"twice":        good + "escrow:\n  - {name: a, secret: sneakers/s, key: K}\n  - {name: a, secret: sneakers/t, key: K}\n",
+		"a bad secret": good + "escrow:\n  - {name: a, secret: s, key: K}\n",
+		"a bad key":    good + "escrow:\n  - {name: a, secret: sneakers/s, key: \"K K\"}\n",
+	} {
+		if _, err := productspec.Parse([]byte(bad)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestTheSneakersBundleEscrowsItsVaultAndTOTPKeys(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, e := range s.Escrow {
+		names[e.Name] = true
+	}
+	if !names["vault-root-key"] || !names["totp-key"] {
+		t.Fatalf("escrow %+v", s.Escrow)
+	}
+}

@@ -116,6 +116,30 @@ type fakeInit struct {
 	patchErr error
 	// rebootErr fails Reboot; markGoodErr fails MarkGood.
 	rebootErr, markGoodErr error
+	// sealed are the items Seal stored, by name; seals counts the calls.
+	sealed map[string][]byte
+	seals  int
+}
+
+func (f *fakeInit) Seal(_ context.Context, r *connect.Request[initv1.SealRequest]) (*connect.Response[initv1.SealResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sealed == nil {
+		f.sealed = map[string][]byte{}
+	}
+	f.sealed[r.Msg.GetName()] = r.Msg.GetSecret()
+	f.seals++
+	return connect.NewResponse(&initv1.SealResponse{}), nil
+}
+
+func (f *fakeInit) Unseal(_ context.Context, r *connect.Request[initv1.UnsealRequest]) (*connect.Response[initv1.UnsealResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	v, ok := f.sealed[r.Msg.GetName()]
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("no such sealed item"))
+	}
+	return connect.NewResponse(&initv1.UnsealResponse{Secret: v}), nil
 }
 
 func (f *fakeInit) Protection(context.Context, *connect.Request[initv1.ProtectionRequest]) (*connect.Response[initv1.ProtectionResponse], error) {

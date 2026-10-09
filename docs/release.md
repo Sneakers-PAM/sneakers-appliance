@@ -230,6 +230,20 @@ bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@`. `build/pro
 takes the template as `IMPORT_JOB` and the pinned migrate image as `MIGRATE_IMAGE` (by digest, and
 pinned in `release.yaml`), and writes `import/job.yaml` into the bundle.
 
+It may also name the product's **escrow** keys, the Secret keys its data can't be opened without,
+which the box keeps in the recovery escrow ([key-custody.md](key-custody.md#product-keys)):
+
+```yaml
+escrow:
+  - name: vault-root-key            # sealed as product-<product>-vault-root-key
+    secret: sneakers/sneakers-vault-generated
+    key: VAULT_ROOT_KEK
+```
+
+The appliance's Role may `get` those Secrets too. The box refuses a name that isn't a lower-case
+word or is named twice, a secret that isn't `<namespace>/<name>` and a key that isn't a Secret data
+key.
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,
