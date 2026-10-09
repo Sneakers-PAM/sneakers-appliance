@@ -1701,12 +1701,35 @@ type IssueSshKeyResponse struct {
 	// private_key is the OpenSSH private key, shown once.
 	PrivateKey string `protobuf:"bytes,2,opt,name=private_key,json=privateKey,proto3" json:"private_key,omitempty"`
 	// certificate is the OpenSSH certificate line, to save next to the key
-	// as <file_name>-cert.pub.
+	// as certificate_file_name.
 	Certificate string `protobuf:"bytes,3,opt,name=certificate,proto3" json:"certificate,omitempty"`
 	// public_key is the OpenSSH public key line.
 	PublicKey string `protobuf:"bytes,4,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	// file_name is a suggested name for the private key file.
-	FileName      string `protobuf:"bytes,5,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	// file_name is the name for the private key file, unique to this key
+	// (it carries the serial), so a browser never renames a repeated
+	// download and the pair always matches.
+	FileName string `protobuf:"bytes,5,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
+	// certificate_file_name is <file_name>-cert.pub: OpenSSH loads the
+	// certificate on its own only from this name next to the key.
+	CertificateFileName string `protobuf:"bytes,6,opt,name=certificate_file_name,json=certificateFileName,proto3" json:"certificate_file_name,omitempty"`
+	// ppk is the same key as a PuTTY private key file (format 3, PuTTY 0.78
+	// or later) with the certificate embedded, for PuTTY and MobaXterm.
+	// Shown once, like private_key.
+	Ppk string `protobuf:"bytes,7,opt,name=ppk,proto3" json:"ppk,omitempty"`
+	// ppk_file_name is <file_name>.ppk.
+	PpkFileName string `protobuf:"bytes,8,opt,name=ppk_file_name,json=ppkFileName,proto3" json:"ppk_file_name,omitempty"`
+	// ssh_command is the OpenSSH command for this key and box:
+	// ssh -i <file_name> -o CertificateFile=<certificate_file_name> <admin>@<box>.
+	SshCommand string `protobuf:"bytes,9,opt,name=ssh_command,json=sshCommand,proto3" json:"ssh_command,omitempty"`
+	// public_key_file_name is <file_name>.pub, for public_key; the same
+	// public key goes with all three forms.
+	PublicKeyFileName string `protobuf:"bytes,10,opt,name=public_key_file_name,json=publicKeyFileName,proto3" json:"public_key_file_name,omitempty"`
+	// pem is the same private key as PEM PKCS#8 ("PRIVATE KEY"), for tools
+	// that take neither the OpenSSH nor the PuTTY form; it carries no
+	// certificate, so it pairs with certificate_file_name. Shown once.
+	Pem string `protobuf:"bytes,11,opt,name=pem,proto3" json:"pem,omitempty"`
+	// pem_file_name is <file_name>.pem.
+	PemFileName   string `protobuf:"bytes,12,opt,name=pem_file_name,json=pemFileName,proto3" json:"pem_file_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1772,6 +1795,55 @@ func (x *IssueSshKeyResponse) GetPublicKey() string {
 func (x *IssueSshKeyResponse) GetFileName() string {
 	if x != nil {
 		return x.FileName
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetCertificateFileName() string {
+	if x != nil {
+		return x.CertificateFileName
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetPpk() string {
+	if x != nil {
+		return x.Ppk
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetPpkFileName() string {
+	if x != nil {
+		return x.PpkFileName
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetSshCommand() string {
+	if x != nil {
+		return x.SshCommand
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetPublicKeyFileName() string {
+	if x != nil {
+		return x.PublicKeyFileName
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetPem() string {
+	if x != nil {
+		return x.Pem
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetPemFileName() string {
+	if x != nil {
+		return x.PemFileName
 	}
 	return ""
 }
@@ -2399,7 +2471,7 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
 	"valid_days\x18\x02 \x01(\x05R\tvalidDays\x12\x1b\n" +
-	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\xca\x01\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\xbc\x03\n" +
 	"\x13IssueSshKeyResponse\x124\n" +
 	"\x03key\x18\x01 \x01(\v2\".sneakers.appliance.osadmin.v1.KeyR\x03key\x12\x1f\n" +
 	"\vprivate_key\x18\x02 \x01(\tR\n" +
@@ -2407,7 +2479,16 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\vcertificate\x18\x03 \x01(\tR\vcertificate\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x04 \x01(\tR\tpublicKey\x12\x1b\n" +
-	"\tfile_name\x18\x05 \x01(\tR\bfileName\"e\n" +
+	"\tfile_name\x18\x05 \x01(\tR\bfileName\x122\n" +
+	"\x15certificate_file_name\x18\x06 \x01(\tR\x13certificateFileName\x12\x10\n" +
+	"\x03ppk\x18\a \x01(\tR\x03ppk\x12\"\n" +
+	"\rppk_file_name\x18\b \x01(\tR\vppkFileName\x12\x1f\n" +
+	"\vssh_command\x18\t \x01(\tR\n" +
+	"sshCommand\x12/\n" +
+	"\x14public_key_file_name\x18\n" +
+	" \x01(\tR\x11publicKeyFileName\x12\x10\n" +
+	"\x03pem\x18\v \x01(\tR\x03pem\x12\"\n" +
+	"\rpem_file_name\x18\f \x01(\tR\vpemFileName\"e\n" +
 	"\x15ChangePasswordRequest\x12)\n" +
 	"\x10current_password\x18\x01 \x01(\tR\x0fcurrentPassword\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x18\n" +

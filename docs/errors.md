@@ -32,6 +32,7 @@ shell, the console and :8443 show the same sentence.
 | 3020 | `ACCESS_NO_ADMIN` | sshd was asked to start while no admin has a password and a TOTP secret |
 | 3021 | `ACCESS_POLICY` | an access setting is out of its bounds |
 | 3022 | `ACCESS_QUORUM` | the root-operator roster would be empty, name someone who isn't an admin, or have a threshold out of range |
+| 3023 | `ACCESS_KEY_NO_CERTIFICATE` | a box-issued SSH key was sent without its certificate; sshd takes only the certificate (load <key>-cert.pub, or use the .ppk) |
 | 3303 | `ELEV_EXPIRED` | the request or certificate expired |
 | 3304 | `ELEV_USED` | the certificate was already used |
 | 3305 | `ELEV_MAINTENANCE` | an upgrade is in progress |

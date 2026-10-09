@@ -318,6 +318,16 @@ func (s *Server) mark(name string) error {
 // productSetupURL is the product's own first-run page, on the box's host
 // name, or its first management address that isn't link-local.
 func (s *Server) productSetupURL(ctx context.Context) string {
+	host := s.boxHost(ctx)
+	if host == "" {
+		return ""
+	}
+	return "https://" + host + "/setup"
+}
+
+// boxHost is the box's host name, or its first management address that
+// isn't link-local (an IPv6 one in brackets); empty when netd doesn't say.
+func (s *Server) boxHost(ctx context.Context) string {
 	st, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
 	if err != nil {
 		return ""
@@ -329,10 +339,7 @@ func (s *Server) productSetupURL(ctx context.Context) string {
 			host = "[" + host + "]"
 		}
 	}
-	if host == "" {
-		return ""
-	}
-	return "https://" + host + "/setup"
+	return host
 }
 
 // writeAtomic writes b through a tmp file, fsyncs it and renames it into

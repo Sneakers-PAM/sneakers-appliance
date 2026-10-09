@@ -241,3 +241,25 @@ func TestTheBannerSaysToGetAKeyFirst(t *testing.T) {
 		}
 	}
 }
+
+// A box-issued key logs in only with its certificate: the banner gives the
+// OpenSSH command that loads it, the PuTTY and MobaXterm way, and says the
+// TOTP prompt comes next.
+func TestTheBannerSaysHowToSendTheCertificate(t *testing.T) {
+	dir := t.TempDir()
+	mustNoErr(t, sshconfig.Render(sshconfig.Input{ListenAddrs: addrs("192.0.2.10"), State: twoAdmins(t)}, dir))
+	b := readFile(t, filepath.Join(dir, "banner"))
+	for _, want := range []string{
+		"ssh -i <key> -o CertificateFile=<key>-cert.pub <your name>@<this box>",
+		".ppk", "PuTTY 0.78", "MobaXterm", "certificate", "TOTP",
+	} {
+		if !strings.Contains(b, want) {
+			t.Errorf("the banner lacks %q:\n%s", want, b)
+		}
+	}
+	for _, l := range strings.Split(b, "\n") {
+		if len(l) > 78 {
+			t.Errorf("a banner line is %d characters: %q", len(l), l)
+		}
+	}
+}

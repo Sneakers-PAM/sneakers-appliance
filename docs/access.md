@@ -89,13 +89,28 @@ certificate for it with the root key: principal the admin's name, valid for the 
 (default 365, 1 to 1825), `permit-pty` only, a serial from `nextSerial`. The private key is
 returned once and never kept. Admins never bring their own login keys.
 
+The response carries the key in three forms, each with the same public key (`public_key`, saved as
+`public_key_file_name`, `<file_name>.pub`), under names unique to the key (its serial):
+`file_name` (`id_ed25519_<admin>_sneakers_<serial>`) with `private_key`, the OpenSSH private key;
+`certificate_file_name` (`<file_name>-cert.pub`) with `certificate`; and `ppk_file_name`
+(`<file_name>.ppk`) with `ppk`, a PuTTY private key file, format 3, with the certificate embedded
+(the key type is the ed25519 certificate type; PuTTY 0.78 or later, and MobaXterm). The `.ppk` is
+unencrypted, like the OpenSSH key, and is written by `internal/ppk`; its test loads it with
+puttygen 0.78 and 0.83 when `SNEAKERS_TEST_PUTTYGEN` points at one. `pem_file_name`
+(`<file_name>.pem`) with `pem` is the same private key as PEM PKCS#8 (`PRIVATE KEY`), for tools that
+take neither form; it carries no certificate, so it pairs with the `-cert.pub`. All three forms have
+one fingerprint. `ssh_command` is the OpenSSH
+login for this key and box: `ssh -i <file_name> -o CertificateFile=<certificate_file_name>
+<admin>@<box>`.
+
 Issuing a key takes its own fresh code from the admin's authenticator (`totp_code`) every time, like
 an update's Apply and Revert: a sign-in or step-up in the last 5 minutes doesn't count, because the
 private key leaves the box. An empty code is `ACCESS_CONFIRM`; a wrong or reused one is
 `ACCESS_CREDENTIALS` and counts toward the sign-in lockout.
 
-So the first SSH login starts on :8443: get the key on Access, then `ssh -i <key file>
-<name>@<box>`, then the TOTP code in the closed shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)).
+So the first SSH login starts on :8443: get the key on Access, then `ssh -i <key> -o
+CertificateFile=<key>-cert.pub <name>@<box>` (or the `.ppk` in PuTTY or MobaXterm), then the TOTP
+code in the closed shell ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)).
 Without the key, sshd answers only "server sent: publickey" after its banner, which says where the
 key comes from. The console's SSH line says the same (`key from :8443 Access, then TOTP`).
 
