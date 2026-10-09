@@ -59,6 +59,10 @@ type progressRecord struct {
 	Code    string         `json:"code,omitempty"`
 	Started time.Time      `json:"started"`
 	Updated time.Time      `json:"updated"`
+	// BootID and RebootAt are the boot the reboot step started on and
+	// when, for the reboot watchdog.
+	BootID   string    `json:"boot_id,omitempty"`
+	RebootAt time.Time `json:"reboot_at,omitzero"`
 }
 
 // progress holds the record in memory, read from its file the first time.
@@ -241,6 +245,9 @@ func (s *Server) setStep(id, detail string) {
 		case i == at:
 			if r.Steps[i].State != stateActive || r.Steps[i].Detail != detail {
 				s.o.Logger.Info("osadmin: update step", log.F("step", id), log.F("detail", detail), log.F("version", r.Version))
+			}
+			if id == stepReboot && r.Steps[i].State != stateActive {
+				r.BootID, r.RebootAt = s.o.BootID, s.o.Clock.Now().UTC()
 			}
 			r.Steps[i].State, r.Steps[i].Detail = stateActive, detail
 		}

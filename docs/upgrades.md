@@ -89,7 +89,15 @@ record's `code`; the steps after it stay pending. A release the box doesn't come
 `health`, naming both releases ("0.2.0 didn't come up healthy, so the box went back to 0.1.0 by
 itself."): the fallback is boot counting's, unchanged. A step osadmin runs in one call (verifying,
 staging, restarting the product) that's found active when osadmin starts was cut off by a restart,
-and fails as such. The next stage, apply or revert replaces the record.
+and fails as such. A reboot that never comes (init took the request but the box didn't go down)
+fails at `reboot` with `UPGRADE_NO_REBOOT` once 10 minutes (`RebootBound`) have passed on the boot
+the step started on: accessd checks each minute, comparing the kernel's boot ID with the one the
+step recorded, so osadmin restarting on the same boot isn't mistaken for the reboot. Maintenance
+ends, Apply is offered again, and the failure gets an `upgrade.reboot-missed` entry in the OS audit
+log (actor `osadmin`, the version and how long it waited) and a failed line in the update history.
+The boot entry the switch made is left as it is, so the next restart still boots that release. A
+reboot init refuses fails the step at once with init's reason. The next stage, apply or revert
+replaces the record.
 
 ## Updating from :8443
 

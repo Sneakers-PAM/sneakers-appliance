@@ -23,6 +23,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -216,6 +217,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{},
 		RootSource: os.Getenv(switchroot.SourceEnv),
+		BootID:     bootID(lg),
 		KeyCustody: custody,
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
@@ -287,6 +289,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		case <-minute.C:
 			d.Tick()
 			api.UpgradeWindowTick(ctx)
+			api.RebootWatchdog()
 			if !portsOpen {
 				portsOpen = api.OpenProductPorts(ctx) == nil
 			}
@@ -296,6 +299,17 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			d.RefreshStatus(ctx)
 		}
 	}
+}
+
+// bootID is the kernel's boot ID, or empty (no reboot watchdog) when it
+// doesn't read.
+func bootID(lg log.Logger) string {
+	b, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		lg.Warn("accessd: the boot ID doesn't read; the reboot watchdog is off", log.F("error", err.Error()))
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // directURL is the release source a build fetches from directly; a lab

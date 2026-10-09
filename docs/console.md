@@ -204,7 +204,9 @@ self-signed certificate), an upgrade staged, reverted by an admin ("Reverted fro
 counting down (with **C** to cancel it), a Recover access code that's out, a service that isn't
 answering, and accessd itself not answering. Without a management address the screen offers **N**,
 the network editor. A failed update step is a warning for a day ("The update to 0.1.1 failed.",
-then the step and why), from Status's `upgrade_progress`.
+then the step and why), from Status's `upgrade_progress`. A reboot that never came is one: after
+10 minutes on the same boot the update fails at Rebooting with `UPGRADE_NO_REBOOT` and the
+maintenance screen gives way to this one.
 
 During a stage, an apply or a revert (Status's `upgrade_progress` with `in_progress`) the
 maintenance screen replaces it. It says what's happening ("Staging 0.1.1. The box keeps running.",

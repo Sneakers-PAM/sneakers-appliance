@@ -77,6 +77,10 @@ type Options struct {
 	// RootSource is where the running root came from (init's
 	// SNEAKERS_ROOT_SOURCE): a root slot's label, or empty when unknown.
 	RootSource string
+	// BootID is the kernel's boot ID (/proc/sys/kernel/random/boot_id).
+	// The reboot watchdog uses it to tell osadmin restarting from the box
+	// rebooting; empty turns the watchdog off.
+	BootID     string
 	Access     *access.Store
 	Audit      *osaudit.Log
 	Clock      clock.Clock

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -84,7 +85,14 @@ func markSetupDone(t *testing.T, b *box) {
 // osadmin on the same state, the box running version.
 func rebootInto(t *testing.T, from *box, version string) *box {
 	t.Helper()
-	after := newBox(t, false)
+	return rebootIntoBoot(t, from, version, "")
+}
+
+// rebootIntoBoot is rebootInto with the new osadmin seeing bootID as the
+// kernel's boot ID: the old one when only osadmin restarted.
+func rebootIntoBoot(t *testing.T, from *box, version, bootID string) *box {
+	t.Helper()
+	after := newBox(t, false, func(_ *box, o *osadmin.Options) { o.BootID = bootID })
 	b, err := os.ReadFile(filepath.Join(from.state, "osadmin-api", "upgrade-progress.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -422,5 +430,124 @@ func TestAProductUpdateReportsItsSteps(t *testing.T) {
 	}
 	if p.GetInProgress() || p.GetFailed() || p.GetAction() != "apply" {
 		t.Fatalf("applied %+v", p)
+	}
+}
+
+// applyWithBootID stages and applies on a box whose boot ID is bootID,
+// leaving the reboot step active.
+func applyWithBootID(t *testing.T, bootID string) (*box, *browser) {
+	t.Helper()
+	b := newBox(t, false, func(_ *box, o *osadmin.Options) { o.BootID = bootID })
+	alice := b.browser()
+	alice.signIn("alice")
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, full(release.ChannelProduction)))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	return b, alice
+}
+
+// An apply whose reboot never comes, the box still on the same boot, fails
+// at rebooting once RebootBound has passed: the console and Updates leave
+// the maintenance state, the failure is audited, and maintenance ends.
+func TestARebootThatNeverComesFails(t *testing.T) {
+	b, alice := applyWithBootID(t, "boot-1")
+	b.clk.Advance(osadmin.RebootBound - time.Minute)
+	b.srv.RebootWatchdog()
+	if got := steps(alice.progress(t)); got != "verify:DONE stage:DONE switch:DONE reboot:ACTIVE health:PENDING mark_good:PENDING" {
+		t.Fatalf("within the bound: %s", got)
+	}
+	if !b.srv.Maintenance() {
+		t.Fatal("maintenance ended within the bound")
+	}
+	b.clk.Advance(2 * time.Minute)
+	b.srv.RebootWatchdog()
+	p := alice.progress(t)
+	if got := steps(p); got != "verify:DONE stage:DONE switch:DONE reboot:FAILED health:PENDING mark_good:PENDING" {
+		t.Fatalf("past the bound: %s", got)
+	}
+	if p.GetInProgress() || !p.GetFailed() || p.GetCode() != "UPGRADE_NO_REBOOT" {
+		t.Fatalf("past the bound %+v", p)
+	}
+	if d := step(t, p, "reboot").GetDetail(); !strings.Contains(d, "didn't reboot into 0.2.0") {
+		t.Fatalf("the reboot step's detail %q", d)
+	}
+	if pub := b.publicProgress(t); pub.GetInProgress() || !pub.GetFailed() {
+		t.Fatalf("GetPhase still says in progress: %+v", pub)
+	}
+	if b.srv.Maintenance() {
+		t.Fatal("maintenance holds after the reboot was given up on")
+	}
+	e := lastEntry(t, b.log, "upgrade.reboot-missed")
+	if e.Code != "UPGRADE_NO_REBOOT" || e.Detail["version"] != "0.2.0" || e.Detail["waited"] == "" {
+		t.Fatalf("audit %+v", e)
+	}
+	// A second tick changes nothing.
+	b.srv.RebootWatchdog()
+	if n := countEntries(t, b, "upgrade.reboot-missed"); n != 1 {
+		t.Fatalf("%d reboot-missed entries", n)
+	}
+	g, err := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := g.Msg.GetHistory()
+	if len(h) == 0 || h[0].GetCode() != "UPGRADE_NO_REBOOT" {
+		t.Fatalf("history %+v", h)
+	}
+}
+
+func countEntries(t *testing.T, b *box, action string) int {
+	t.Helper()
+	es, err := b.log.Entries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range es {
+		if e.Action == action {
+			n++
+		}
+	}
+	return n
+}
+
+// The reboot came (a new boot ID): the watchdog leaves the steps to the
+// booted release, however long the box took.
+func TestTheWatchdogLeavesARebootThatCameAlone(t *testing.T) {
+	b, _ := applyWithBootID(t, "boot-1")
+	after := rebootIntoBoot(t, b, "0.2.0", "boot-2")
+	after.clk.Advance(osadmin.RebootBound + time.Hour)
+	after.srv.RebootWatchdog()
+	if err := after.srv.MarkGood(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	owner := after.browser()
+	owner.signIn("alice")
+	if got := steps(owner.progress(t)); got != "verify:DONE stage:DONE switch:DONE reboot:DONE health:DONE mark_good:DONE" {
+		t.Fatalf("after the reboot: %s", got)
+	}
+}
+
+// osadmin restarting on the same boot isn't the reboot: MarkGood doesn't
+// read the old release as a fallback, and the watchdog still waits.
+func TestAnOsadminRestartIsNotTheReboot(t *testing.T) {
+	b, _ := applyWithBootID(t, "boot-1")
+	again := rebootIntoBoot(t, b, "0.1.0", "boot-1")
+	if err := again.srv.MarkGood(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	owner := again.browser()
+	owner.signIn("alice")
+	if got := steps(owner.progress(t)); got != "verify:DONE stage:DONE switch:DONE reboot:ACTIVE health:PENDING mark_good:PENDING" {
+		t.Fatalf("after osadmin restarted: %s", got)
+	}
+	again.clk.Advance(osadmin.RebootBound + time.Minute)
+	again.srv.RebootWatchdog()
+	if got := steps(owner.progress(t)); got != "verify:DONE stage:DONE switch:DONE reboot:FAILED health:PENDING mark_good:PENDING" {
+		t.Fatalf("past the bound: %s", got)
 	}
 }

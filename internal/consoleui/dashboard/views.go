@@ -279,6 +279,16 @@ func lowerFirst(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
+// Screen is the status view's page: the maintenance screen while an update
+// step is active, otherwise the status screen, which warns about a step
+// that failed (a reboot that never came, say).
+func Screen(c consoleui.Chrome, d Data, now time.Time) tui.Page {
+	if p := d.Status.Status.GetUpgradeProgress(); p.GetInProgress() {
+		return MaintenancePage(c, p)
+	}
+	return Page(c, d, now)
+}
+
 // failedStepShown is how long the status view warns about a failed
 // update step; Updates on :8443 keeps it until the next update.
 const failedStepShown = 24 * time.Hour
