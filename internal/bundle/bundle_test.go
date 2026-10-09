@@ -198,3 +198,30 @@ func TestABundleCarriesEveryComponentItsProductNames(t *testing.T) {
 		t.Fatalf("a switch's missing stack: %v", err)
 	}
 }
+
+// A bundle whose product takes an import carries the import Job template
+// its product.yaml names, with the migrate image filled in.
+func TestABundleCarriesItsImportJob(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	const spec = "format: 2\nexposed_values:\n  - {name: setup-token, secret: ns/s, key: K, roles: [admin], one_time: true, consumed_when: {service: ns/gw:http, path: /setup/state, field: needsSetup, equals: false}}\n" +
+		"switches:\n  - {name: import, stacks: [hello]}\nimport: {switch: import, job: import/job.yaml, uid: 65532, setup: setup-token}\n"
+	with := func(job string) func(fstest.MapFS) {
+		return func(m fstest.MapFS) {
+			m["product.yaml"] = &fstest.MapFile{Data: []byte(spec), Mode: 0o644}
+			if job != "" {
+				m["import/job.yaml"] = &fstest.MapFile{Data: []byte(job), Mode: 0o644}
+			}
+		}
+	}
+	tree, _ := fixtures.ProductTree(t, k, "amd64", with("kind: Job\nimage: example.org/sneakers-migrate@sha256:00\nargs: ${ARGS}\n"))
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatal(err)
+	}
+	for name, job := range map[string]string{"no job": "", "the image unfilled": "kind: Job\nimage: \"@MIGRATE_IMAGE@\"\n"} {
+		tree, _ := fixtures.ProductTree(t, k, "amd64", with(job))
+		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "import") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

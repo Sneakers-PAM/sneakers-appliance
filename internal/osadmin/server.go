@@ -133,6 +133,9 @@ type Options struct {
 	// Switches turn the installed product's switches (its MCP) on and
 	// off; nil answers the MCP page with no product.
 	Switches *productswitch.Switches
+	// ImportChown hands the import directory's files to the import Job's
+	// user; nil is os.Chown (tests run unprivileged).
+	ImportChown func(path string, uid, gid int) error
 	// Exposed reads the installed product's exposed values as the
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.
@@ -207,12 +210,14 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewRootShellServiceHandler(&rootShellSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(&tlsSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewImportServiceHandler(&importSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewProductServiceHandler(&productSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewModulesServiceHandler(osadminv1connect.UnimplementedModulesServiceHandler{}, opts))
 	mux.HandleFunc("GET /export/audit-log", s.exportAudit)
 	mux.HandleFunc("POST /upload", s.handleUpload)
+	mux.HandleFunc("POST /import/upload", s.handleImportUpload)
 }
 
 // Handlers are the API's handlers, for accessd's local API to run with

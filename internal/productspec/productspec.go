@@ -79,6 +79,78 @@ type Spec struct {
 	// Switches turn parts of the product on and off from :8443: each
 	// gates its own stacks, which k0s applies only while it's on.
 	Switches []Switch `yaml:"switches"`
+	// Import, when set, lets the product take an export of an earlier
+	// install from the Import page before its own first-run setup.
+	Import *Import `yaml:"import"`
+}
+
+// Import is how the product takes an export of an earlier install
+// (docs/import.md). The box keeps the export, its key and each step's
+// output in a directory of the state volume, and runs each step as a Job
+// from the bundle's template, in the stack of Switch, which is on only
+// while an import is open.
+type Import struct {
+	Label string `yaml:"label"`
+	// Switch gates the import's stack: the migrate service account and the
+	// policies that admit it exist only while an import is open.
+	Switch string `yaml:"switch"`
+	// Job is the Job template, relative to the slot. The box fills
+	// ${JOB_NAME}, ${ARGS} (the command's arguments as a JSON list) and
+	// ${HOST_DIR} (the import directory, which the Job mounts).
+	Job string `yaml:"job"`
+	// UID owns the import directory and its files: the Job's user.
+	UID int `yaml:"uid"`
+	// Setup is the one-time exposed value the product's own first-run
+	// setup consumes: once it's consumed, and the box hasn't imported, no
+	// import opens. An imported box treats it as consumed.
+	Setup string `yaml:"setup"`
+	// Restart are the workloads restarted after an import, so they load
+	// what it wrote.
+	Restart []string `yaml:"restart"`
+}
+
+var jobRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*\.ya?ml$`)
+
+// ImportStack is the stack the import switch gates.
+func (s Spec) ImportStack() (string, bool) {
+	if s.Import == nil {
+		return "", false
+	}
+	w, ok := s.Switch(s.Import.Switch)
+	if !ok || len(w.Stacks) == 0 {
+		return "", false
+	}
+	return w.Stacks[0], true
+}
+
+// RestartRef splits Restart[i].
+func (im Import) RestartRef(i int) (ns, kind, name string, ok bool) {
+	return Switch{Restart: im.Restart}.RestartRef(i)
+}
+
+func (s Spec) checkImport() error {
+	im := s.Import
+	if im == nil {
+		return nil
+	}
+	if _, ok := s.ImportStack(); !ok {
+		return bad("import: the switch %q isn't declared", im.Switch)
+	}
+	if !jobRE.MatchString(im.Job) || strings.Contains(im.Job, "..") {
+		return bad("import: the job %q isn't a .yaml path inside the slot", im.Job)
+	}
+	if im.UID < 1 || im.UID > 65535 {
+		return bad("import: the uid %d isn't a non-root user id", im.UID)
+	}
+	if v, ok := s.Find(im.Setup); !ok || !v.OneTime {
+		return bad("import: setup %q isn't a one_time exposed value", im.Setup)
+	}
+	for j := range im.Restart {
+		if _, _, _, ok := im.RestartRef(j); !ok {
+			return bad("import: %q isn't <namespace>/<deployment|statefulset|daemonset>/<name>", im.Restart[j])
+		}
+	}
+	return nil
 }
 
 // Component is one part of the product the bundle must carry.
@@ -189,6 +261,9 @@ func Parse(b []byte) (Spec, error) {
 			return Spec{}, bad("exposed_values[%d]: %q is declared twice", i, v.Name)
 		}
 		seen[v.Name] = true
+	}
+	if err := s.checkImport(); err != nil {
+		return Spec{}, err
 	}
 	return s, nil
 }

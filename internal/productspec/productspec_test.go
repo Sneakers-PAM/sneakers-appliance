@@ -300,3 +300,72 @@ func TestTheSwitchStacksAreWrittenIntoTheSlot(t *testing.T) {
 		t.Fatalf("%q %v", b, err)
 	}
 }
+
+const withImport = good + `switches:
+  - name: import
+    label: Import from an earlier install
+    default: false
+    stacks: [sneakers-import]
+import:
+  label: Import from an earlier Sneakers
+  switch: import
+  job: import/job.yaml
+  uid: 65532
+  setup: setup-token
+  restart: [sneakers/deployment/sneakers-vault]
+`
+
+// A product can take an export of an earlier install before its own
+// first-run setup (docs/import.md).
+func TestTheImportSectionParses(t *testing.T) {
+	s, err := productspec.Parse([]byte(withImport))
+	if err != nil {
+		t.Fatal(err)
+	}
+	im := s.Import
+	if im == nil || im.Switch != "import" || im.Job != "import/job.yaml" || im.UID != 65532 || im.Setup != "setup-token" || len(im.Restart) != 1 {
+		t.Fatalf("%+v", im)
+	}
+	if st, ok := s.ImportStack(); !ok || st != "sneakers-import" {
+		t.Fatalf("stack %q %v", st, ok)
+	}
+	base := good + "switches:\n  - {name: import, stacks: [sneakers-import]}\n"
+	for name, doc := range map[string]string{
+		"no such switch":     base + "import: {switch: other, job: import/job.yaml, uid: 65532, setup: setup-token}\n",
+		"a job outside":      base + "import: {switch: import, job: ../job.yaml, uid: 65532, setup: setup-token}\n",
+		"a job not yaml":     base + "import: {switch: import, job: import/job.sh, uid: 65532, setup: setup-token}\n",
+		"root":               base + "import: {switch: import, job: import/job.yaml, uid: 0, setup: setup-token}\n",
+		"setup not one-time": base + "import: {switch: import, job: import/job.yaml, uid: 65532, setup: support-id}\n",
+		"a bad restart":      base + "import: {switch: import, job: import/job.yaml, uid: 65532, setup: setup-token, restart: [x]}\n",
+	} {
+		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestTheSneakersBundleTakesAnImport(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Import == nil || s.Import.Setup != "setup-token" {
+		t.Fatalf("import %+v", s.Import)
+	}
+	if w, ok := s.Switch(s.Import.Switch); !ok || w.Default {
+		t.Fatalf("the import switch %+v is off by default", w)
+	}
+	job, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "import-job.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"${JOB_NAME}", "${ARGS}", "${HOST_DIR}", "MIGRATE_OUTPUT_FILE", "MIGRATE_OWNER_PASSWORD_FILE", "serviceAccountName: sneakers-migrate"} {
+		if !strings.Contains(string(job), want) {
+			t.Errorf("the job template lacks %s", want)
+		}
+	}
+}

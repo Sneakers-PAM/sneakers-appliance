@@ -54,3 +54,25 @@ switches:
     restart:
       - sneakers/deployment/sneakers-gateway
       - sneakers/deployment/sneakers-web-staff
+  # The Import page's switch: on only while an import is open. Its stack
+  # holds the migrate service account, so nothing can run as the migrate
+  # caller the vault and audit admit at any other time.
+  - name: import
+    label: Import from an earlier Sneakers
+    default: false
+    stacks: [sneakers-import]
+
+# The Import page (docs/import.md): an export of an earlier Sneakers comes
+# in before the product's own first-run setup. Each step runs as a Job from
+# import/job.yaml (build/product/sneakers/import-job.yaml) as uid 65532,
+# with the export, its key and the step's output in the import directory.
+# Once the setup token is consumed no import opens, unless the box was
+# imported (a re-import). After an import the vault restarts to load it.
+import:
+  label: Import from an earlier Sneakers
+  switch: import
+  job: import/job.yaml
+  uid: 65532
+  setup: setup-token
+  restart:
+    - sneakers/deployment/sneakers-vault

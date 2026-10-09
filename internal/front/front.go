@@ -3,7 +3,7 @@
 
 // Package front is sneakers-osadmin's side of :8443: it runs as the
 // unprivileged osadmin user, serves the static pages with :8443's headers,
-// and forwards the API (osadmin.v1, the upload and the audit export) to
+// and forwards the API (osadmin.v1, the uploads and the audit export) to
 // accessd on access.sock with the browser's address. It holds no session,
 // key or store; accessd checks every call.
 //
@@ -125,7 +125,7 @@ func (f *Front) Handler() http.Handler {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/"+osadminv1connect.LocalServiceName+"/"):
 			http.NotFound(w, r)
-		case strings.HasPrefix(r.URL.Path, apiPrefix), r.URL.Path == "/upload", r.URL.Path == "/export/audit-log":
+		case strings.HasPrefix(r.URL.Path, apiPrefix), r.URL.Path == "/upload", r.URL.Path == "/import/upload", r.URL.Path == "/export/audit-log":
 			f.proxy.ServeHTTP(w, r)
 		default:
 			pages.ServeHTTP(w, r)
