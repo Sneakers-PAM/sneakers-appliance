@@ -116,7 +116,15 @@ Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s
   it). Traefik's ping has its own entry point on `127.0.0.1:9000`, as spec 3 has it, and the
   readiness probe gets `http://127.0.0.1:9000/ping` there. Ping can't share 443: Traefik's ping
   router has no TLS, so over HTTPS the hello route's `PathPrefix(/)` took `/ping` and answered 404.
-- The edge routes `/_box/` (priority 1000, ahead of the hello route) to sneakers-edgefall on
+- The edge also serves the product's Ingresses: Traefik's kubernetesingress provider reads the
+  Ingresses of the class `traefik` (the stack's IngressClass, the cluster default) in the
+  `sneakers` namespace, under its own service account with a read-only cluster role (nodes, services,
+  secrets, EndpointSlices, Ingresses and IngressClasses, plus the Ingress status). Every router on
+  443 terminates TLS, so an Ingress without a `tls` block gets `box-tls` as well. The hello route
+  has priority 1, so a product Ingress for `/` wins over it whenever one exists. Traefik reaches
+  the pods from the host network, from the node address: a product NetworkPolicy must admit it by
+  `ipBlock` (a `namespaceSelector` doesn't match host-network traffic).
+- The edge routes `/_box/` (priority 1000, ahead of the hello route and the Ingresses) to sneakers-edgefall on
   `127.0.0.1:9180`, and the hello route's `box-page` middleware serves edgefall's box-state page for
   `502` to `504`. The hello page loads `/_box/poll.js`, so an open tab shows "Sneakers-PAM is
   rebooting" and the like through a reboot, a shutdown or an update, and comes back by itself; while

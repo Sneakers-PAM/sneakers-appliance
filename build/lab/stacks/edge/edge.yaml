@@ -15,10 +15,64 @@
 # Traefik is on the host network), and when the hello pod doesn't answer
 # (502 to 504) the edge serves edgefall's box-state page instead of its
 # own error (docs/edge-fallback.md).
+# The product's charts publish their routes as Ingresses of the class
+# traefik in the sneakers namespace, which Traefik reads with the
+# kubernetesingress provider. Its role is cluster-wide (the product's
+# namespace belongs to the product stack, which may not exist yet) and
+# read-only but for the Ingress status; the provider watches the sneakers
+# namespace only. Every router on 443 terminates TLS, so an Ingress without
+# a tls block gets box-tls too; the hello route has the lowest priority, so
+# a product Ingress for / wins.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: sneakers-edge
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+spec:
+  controller: traefik.io/ingress-controller # scrub:allow=fqdn
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: edge
+  namespace: sneakers-edge
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: sneakers-edge
+rules:
+  - apiGroups: [""]
+    resources: [nodes, services, secrets]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, ingressclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses/status]
+    verbs: [update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: sneakers-edge
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sneakers-edge
+subjects:
+  - kind: ServiceAccount
+    name: edge
+    namespace: sneakers-edge
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -37,6 +91,7 @@ data:
           tls: {}
         hello:
           rule: PathPrefix(`/`)
+          priority: 1
           entryPoints: [websecure]
           service: hello
           middlewares: [box-page]
@@ -82,7 +137,8 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
-      automountServiceAccountToken: false
+      serviceAccountName: edge
+      automountServiceAccountToken: true
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -95,8 +151,12 @@ spec:
             - --entryPoints.web.http.redirections.entryPoint.to=websecure
             - --entryPoints.web.http.redirections.entryPoint.scheme=https
             - --entryPoints.websecure.address=:443
+            - --entryPoints.websecure.http.tls=true
             - --entryPoints.traefik.address=127.0.0.1:9000
             - --providers.file.filename=/etc/traefik/dynamic.yaml
+            - --providers.kubernetesingress
+            - --providers.kubernetesingress.ingressClass=traefik
+            - --providers.kubernetesingress.namespaces=sneakers
             - --global.checkNewVersion=false
             - --global.sendAnonymousUsage=false
             - --ping=true
