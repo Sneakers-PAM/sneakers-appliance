@@ -68,6 +68,9 @@ const (
 	// UpgradeServiceListProductVersionsProcedure is the fully-qualified name of the UpgradeService's
 	// ListProductVersions RPC.
 	UpgradeServiceListProductVersionsProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/ListProductVersions"
+	// UpgradeServiceListBaseVersionsProcedure is the fully-qualified name of the UpgradeService's
+	// ListBaseVersions RPC.
+	UpgradeServiceListBaseVersionsProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/ListBaseVersions"
 	// UpgradeServiceSetUpgradePolicyProcedure is the fully-qualified name of the UpgradeService's
 	// SetUpgradePolicy RPC.
 	UpgradeServiceSetUpgradePolicyProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/SetUpgradePolicy"
@@ -107,6 +110,13 @@ type UpgradeServiceClient interface {
 	// mirror, then the release source when the policy allows direct
 	// fetches; refused with UPGRADE_AIR_GAPPED when neither is set.
 	ListProductVersions(context.Context, *connect.Request[v1.ListProductVersionsRequest]) (*connect.Response[v1.ListProductVersionsResponse], error)
+	// ListBaseVersions lists the base releases this box may stage from the
+	// index's base section (the mirror, then the release source when the
+	// policy allows direct fetches): full or patch for its architecture and
+	// channel, stable on a production box, newer than the running base, a
+	// patch only for the base it names. The index is only a menu: the chosen
+	// .bin goes through FetchUpdate and is verified when it's staged.
+	ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
 
@@ -165,6 +175,13 @@ func NewUpgradeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listBaseVersions: connect.NewClient[v1.ListBaseVersionsRequest, v1.ListBaseVersionsResponse](
+			httpClient,
+			baseURL+UpgradeServiceListBaseVersionsProcedure,
+			connect.WithSchema(upgradeServiceMethods.ByName("ListBaseVersions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		setUpgradePolicy: connect.NewClient[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse](
 			httpClient,
 			baseURL+UpgradeServiceSetUpgradePolicyProcedure,
@@ -183,6 +200,7 @@ type upgradeServiceClient struct {
 	revertUpdate        *connect.Client[v1.RevertUpdateRequest, v1.RevertUpdateResponse]
 	discardUpdate       *connect.Client[v1.DiscardUpdateRequest, v1.DiscardUpdateResponse]
 	listProductVersions *connect.Client[v1.ListProductVersionsRequest, v1.ListProductVersionsResponse]
+	listBaseVersions    *connect.Client[v1.ListBaseVersionsRequest, v1.ListBaseVersionsResponse]
 	setUpgradePolicy    *connect.Client[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse]
 }
 
@@ -219,6 +237,11 @@ func (c *upgradeServiceClient) DiscardUpdate(ctx context.Context, req *connect.R
 // ListProductVersions calls sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions.
 func (c *upgradeServiceClient) ListProductVersions(ctx context.Context, req *connect.Request[v1.ListProductVersionsRequest]) (*connect.Response[v1.ListProductVersionsResponse], error) {
 	return c.listProductVersions.CallUnary(ctx, req)
+}
+
+// ListBaseVersions calls sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions.
+func (c *upgradeServiceClient) ListBaseVersions(ctx context.Context, req *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error) {
+	return c.listBaseVersions.CallUnary(ctx, req)
 }
 
 // SetUpgradePolicy calls sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy.
@@ -261,6 +284,13 @@ type UpgradeServiceHandler interface {
 	// mirror, then the release source when the policy allows direct
 	// fetches; refused with UPGRADE_AIR_GAPPED when neither is set.
 	ListProductVersions(context.Context, *connect.Request[v1.ListProductVersionsRequest]) (*connect.Response[v1.ListProductVersionsResponse], error)
+	// ListBaseVersions lists the base releases this box may stage from the
+	// index's base section (the mirror, then the release source when the
+	// policy allows direct fetches): full or patch for its architecture and
+	// channel, stable on a production box, newer than the running base, a
+	// patch only for the base it names. The index is only a menu: the chosen
+	// .bin goes through FetchUpdate and is verified when it's staged.
+	ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
 
@@ -315,6 +345,13 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	upgradeServiceListBaseVersionsHandler := connect.NewUnaryHandler(
+		UpgradeServiceListBaseVersionsProcedure,
+		svc.ListBaseVersions,
+		connect.WithSchema(upgradeServiceMethods.ByName("ListBaseVersions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	upgradeServiceSetUpgradePolicyHandler := connect.NewUnaryHandler(
 		UpgradeServiceSetUpgradePolicyProcedure,
 		svc.SetUpgradePolicy,
@@ -337,6 +374,8 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 			upgradeServiceDiscardUpdateHandler.ServeHTTP(w, r)
 		case UpgradeServiceListProductVersionsProcedure:
 			upgradeServiceListProductVersionsHandler.ServeHTTP(w, r)
+		case UpgradeServiceListBaseVersionsProcedure:
+			upgradeServiceListBaseVersionsHandler.ServeHTTP(w, r)
 		case UpgradeServiceSetUpgradePolicyProcedure:
 			upgradeServiceSetUpgradePolicyHandler.ServeHTTP(w, r)
 		default:
@@ -374,6 +413,10 @@ func (UnimplementedUpgradeServiceHandler) DiscardUpdate(context.Context, *connec
 
 func (UnimplementedUpgradeServiceHandler) ListProductVersions(context.Context, *connect.Request[v1.ListProductVersionsRequest]) (*connect.Response[v1.ListProductVersionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions is not implemented"))
+}
+
+func (UnimplementedUpgradeServiceHandler) ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions is not implemented"))
 }
 
 func (UnimplementedUpgradeServiceHandler) SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error) {

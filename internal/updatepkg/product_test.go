@@ -116,3 +116,50 @@ func TestAnIndexOverAMegabyteIsRefused(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+// Base releases are offered from the index's base section: the box's
+// architecture and channel, stable on a production box, newer than the
+// running base, and a patch only for the base it names.
+func TestTheBaseOfferIsStableFittingAndNewer(t *testing.T) {
+	base := func(v, ch string, kind updatepkg.Kind, bases ...string) updatepkg.IndexEntry {
+		return updatepkg.EntryOf(updatepkg.Header{Name: updatepkg.NameFor(kind), Version: v, Arch: "amd64", Kind: kind, Bases: bases, Channel: ch}, 10)
+	}
+	idx := updatepkg.Index{Base: []updatepkg.IndexEntry{
+		base("0.1.0", release.ChannelProduction, updatepkg.KindFull),
+		base("0.2.0", release.ChannelProduction, updatepkg.KindFull),
+		base("0.2.1", release.ChannelProduction, updatepkg.KindPatch, "0.2.0"),
+		base("0.2.2", release.ChannelProduction, updatepkg.KindPatch, "0.1.9"),
+		base("0.3.0-rc.1", release.ChannelProduction, updatepkg.KindFull),
+		base("0.4.0", release.ChannelLab, updatepkg.KindFull),
+		{Version: "0.5.0", Arch: "amd64", Kind: "full", Channel: release.ChannelProduction, File: "../../etc/passwd"},
+		{Version: "0.6.0", Arch: "arm64", Kind: "full", Channel: release.ChannelProduction, File: "sneakers-appliance-0.6.0-arm64.bin"},
+		{Version: "0.7.0", Arch: "amd64", Kind: "product", Channel: release.ChannelProduction, Bases: []string{"0.1.0"}, File: "sneakers-product-0.7.0-amd64.bin"},
+	}}
+	got := idx.OfferBase("amd64", release.ChannelProduction, "0.1.0")
+	if len(got) != 1 || got[0].Version != "0.2.0" || got[0].Kind != "full" || got[0].File != "sneakers-appliance-0.2.0-amd64.bin" {
+		t.Fatalf("offer from 0.1.0 %+v", got)
+	}
+	if got := idx.OfferBase("amd64", release.ChannelProduction, "0.2.0"); len(got) != 1 || got[0].Version != "0.2.1" {
+		t.Fatalf("offer from 0.2.0 %+v", got)
+	}
+	if got := idx.OfferBase("amd64", release.ChannelLab, "0.1.0"); len(got) != 1 || got[0].Version != "0.4.0" {
+		t.Fatalf("lab offer %+v", got)
+	}
+}
+
+// Today's product-only index still reads: it has no base section, so
+// there's nothing to offer as a base update, and its products are offered
+// as before.
+func TestAProductOnlyIndexStillReads(t *testing.T) {
+	old := `{"products":[{"version":"0.2.0","arch":"amd64","channel":"production","bases":["0.1.0"],"file":"sneakers-product-0.2.0-amd64.bin","size":10}]}`
+	idx, err := updatepkg.ReadIndex(bytes.NewReader([]byte(old)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := idx.OfferBase("amd64", release.ChannelProduction, "0.1.0"); len(got) != 0 {
+		t.Fatalf("base offer %+v", got)
+	}
+	if got := idx.Offer("amd64", release.ChannelProduction, "0.1.0", ""); len(got) != 1 {
+		t.Fatalf("product offer %+v", got)
+	}
+}

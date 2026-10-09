@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ppk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
 
@@ -80,16 +82,53 @@ func (h *accessSvc) IssueSshKey(ctx context.Context, r *connect.Request[osadminv
 	if err != nil {
 		return nil, err
 	}
-	block, err := ssh.MarshalPrivateKey(priv, admin+"@sneakers-appliance "+label)
+	comment := admin + "@sneakers-appliance " + label
+	block, err := ssh.MarshalPrivateKey(priv, comment)
 	if err != nil {
 		return nil, fmt.Errorf("ssh key: %w", err)
 	}
+	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(certLine))
+	if err != nil {
+		return nil, fmt.Errorf("ssh key: %w", err)
+	}
+	cert, ok := pk.(*ssh.Certificate)
+	if !ok {
+		return nil, fmt.Errorf("ssh key: the issued certificate isn't a certificate")
+	}
+	putty, err := ppk.Marshal(priv, cert, strings.TrimSpace(comment))
+	if err != nil {
+		return nil, fmt.Errorf("ssh key: %w", err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return nil, fmt.Errorf("ssh key: %w", err)
+	}
+	pkcs8 := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	file := keyFileName(admin, issued.Serial)
 	c.note(admin, "key", issued.Fingerprint, "serial", strconv.FormatUint(issued.Serial, 10), "validBefore", vb.Format(time.RFC3339))
-	h.s.o.Logger.Info("osadmin: SSH key issued", log.F("admin", admin), log.F("key", issued.Fingerprint), log.F("serial", issued.Serial))
+	h.s.o.Logger.Info("osadmin: SSH key issued", log.F("admin", admin), log.F("key", issued.Fingerprint), log.F("serial", issued.Serial), log.F("file", file))
 	return connect.NewResponse(&osadminv1.IssueSshKeyResponse{
 		Key: keyToWire(issued), PrivateKey: string(pem.EncodeToMemory(block)), Certificate: certLine,
-		PublicKey: issued.PublicKey, FileName: "id_ed25519_" + admin + "_sneakers",
+		PublicKey: issued.PublicKey, FileName: file, CertificateFileName: file + "-cert.pub",
+		Ppk: string(putty), PpkFileName: file + ".ppk",
+		PublicKeyFileName: file + ".pub", Pem: string(pkcs8), PemFileName: file + ".pem",
+		SshCommand: sshCommand(file, admin, h.s.boxHost(ctx)),
 	}), nil
+}
+
+// keyFileName names an issued key's files by its admin and serial, so no
+// two keys share a name and a browser never renames a repeated download.
+func keyFileName(admin string, serial uint64) string {
+	return "id_ed25519_" + admin + "_sneakers_" + strconv.FormatUint(serial, 10)
+}
+
+// sshCommand is the OpenSSH login for an issued key; host is the box's
+// name or address, or a placeholder when netd doesn't say.
+func sshCommand(file, admin, host string) string {
+	if host == "" {
+		host = "<this box>"
+	}
+	return "ssh -i " + file + " -o CertificateFile=" + file + "-cert.pub " + admin + "@" + strings.Trim(host, "[]")
 }
 
 func (h *accessSvc) ChangePassword(ctx context.Context, r *connect.Request[osadminv1.ChangePasswordRequest]) (*connect.Response[osadminv1.ChangePasswordResponse], error) {

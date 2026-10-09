@@ -58,6 +58,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `access.lockout`, `access.throttle` | accessd | an account locks after 3 failures, or a source is held off after 10 |
 | `access.admin.unlock` | accessd | an owner unlocks an account |
 | `ssh.login`, `ssh.logout` | accessd | the closed shell's TOTP check, and its end |
+| `ssh.login` (`refused`, `ACCESS_KEY_NO_CERTIFICATE`) | sneakers-sshd-run | a box-issued key sent without its certificate, read from sshd's log ([ssh-and-elevation.md](ssh-and-elevation.md#a-key-without-its-certificate)) |
 | `setup.code.redeem`, `setup.code.reset` | accessd | a browser redeems the setup code (or a wrong one), the console asks for a new code |
 | `recover-access.code`, `recover-access.cancel` | accessd | the console's Recover access code |
 | `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end |

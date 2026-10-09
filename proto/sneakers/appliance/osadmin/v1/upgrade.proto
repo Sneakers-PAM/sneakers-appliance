@@ -88,6 +88,16 @@ service UpgradeService {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {role: ROLE_ADMIN};
   }
+  // ListBaseVersions lists the base releases this box may stage from the
+  // index's base section (the mirror, then the release source when the
+  // policy allows direct fetches): full or patch for its architecture and
+  // channel, stable on a production box, newer than the running base, a
+  // patch only for the base it names. The index is only a menu: the chosen
+  // .bin goes through FetchUpdate and is verified when it's staged.
+  rpc ListBaseVersions(ListBaseVersionsRequest) returns (ListBaseVersionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
   rpc SetUpgradePolicy(SetUpgradePolicyRequest) returns (SetUpgradePolicyResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -408,6 +418,39 @@ message DiscardUpdateRequest {
 message DiscardUpdateResponse {
   // version is the release unstaged; empty when an upload was dropped.
   string version = 1;
+}
+
+message ListBaseVersionsRequest {}
+
+message ListBaseVersionsResponse {
+  // versions are newest first.
+  repeated BaseVersion versions = 1;
+  // base_version is the running base they were matched against.
+  string base_version = 2;
+}
+
+// BaseVersion is one base release a source offers.
+message BaseVersion {
+  string version = 1;
+  string arch = 2;
+  string channel = 3;
+  // kind is full or patch.
+  string kind = 4;
+  // bases are the base versions a patch applies to.
+  repeated string bases = 5;
+  // file_name is what FetchUpdate takes, such as
+  // sneakers-appliance-0.3.0-amd64.bin.
+  string file_name = 6;
+  int64 size = 7;
+  // source is mirror or direct: where the index came from.
+  string source = 8;
+  // outside_product_range is set when the installed product bundle's base
+  // range doesn't include this release: staging it is refused
+  // (UPGRADE_PRODUCT_BASE) unless an owner overrides it
+  // (StageUpdate.override_product_range). product_range is that range,
+  // such as "0.2.0 to 0.3.0".
+  bool outside_product_range = 9;
+  string product_range = 10;
 }
 
 message ListProductVersionsRequest {}

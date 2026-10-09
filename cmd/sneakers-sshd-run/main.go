@@ -89,12 +89,16 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			return netdapi.Bindable(st.Msg.GetManagementAddresses()), nil
 		},
 		Check:  func(dir string) error { return sshconfig.Check(c.sshd, dir) },
-		Start:  sshdrun.Exec(c.sshd, os.Stderr),
 		Logger: lg,
 	}
+	lw := sshdrun.LogWatchOptions{StateDir: c.state, Out: os.Stderr, Logger: lg}
 	if audit != nil {
 		o.Audit = audit
+		lw.Audit = audit
 	}
+	// sshd's log passes through the watch, which audits a box-issued key
+	// sent without its certificate.
+	o.Start = sshdrun.Exec(c.sshd, sshdrun.NewLogWatch(lw))
 	r := sshdrun.New(o)
 	if err := r.Prepare(ctx); err != nil {
 		return err

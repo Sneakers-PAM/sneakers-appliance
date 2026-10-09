@@ -239,7 +239,9 @@ jobs:
           "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
             --identity-uki "$work/sneakers-$VERSION.efi" --extract "$work/product-check" "$product"
           rm -rf "$work/product-check"
-          "$RUNNER_TEMP/sneakers-artifact" product-index --out "$out/sneakers-product-index.json" "$product"
+          # The index lists the product bundle and, in its base section, this base release.
+          "$RUNNER_TEMP/sneakers-artifact" product-index --out "$out/sneakers-product-index.json" \
+            "$out/sneakers-appliance-$VERSION-amd64.bin" "$product"
       - name: Wipe the keys
         if: always()
         run: |
