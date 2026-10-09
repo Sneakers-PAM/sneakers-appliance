@@ -196,8 +196,7 @@ the product its own name.
 - **The 443 certificate** must cover the host name, not only an address: the product endpoint warns
   (`names-not-covered`, and a Status warning on every :8443 page) when its certificate doesn't,
   naming the host name and what the certificate covers. A wildcard for the host name's domain
-  (`*.example.org` for `sneakers.example.org`) covers it. Hydra's issuer is `hydra.<fqdn>`, which
-  such a wildcard doesn't cover.
+  (`*.example.org` for `sneakers.example.org`) covers it.
 
 The clock is kept by SNTP (`internal/timesync`, IPv4 and IPv6 servers, up to
 four): one bounded sync, then polls. The servers are the settings', else
