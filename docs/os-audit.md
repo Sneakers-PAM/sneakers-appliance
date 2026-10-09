@@ -58,6 +58,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `access.lockout`, `access.throttle` | accessd | an account locks after 3 failures, or a source is held off after 10 |
 | `access.admin.unlock` | accessd | an owner unlocks an account |
 | `ssh.login`, `ssh.logout` | accessd | the closed shell's TOTP check, and its end |
+| `product.setup-token.read` | accessd | an admin reads the product's setup token on :8443 or with `sneakers setup-token`; the detail says `not-set-up`, `set-up` or `no-product`, never the token |
 | `ssh.login` (`refused`, `ACCESS_KEY_NO_CERTIFICATE`) | sneakers-sshd-run | a box-issued key sent without its certificate, read from sshd's log ([ssh-and-elevation.md](ssh-and-elevation.md#a-key-without-its-certificate)) |
 | `setup.code.redeem`, `setup.code.reset` | accessd | a browser redeems the setup code (or a wrong one), the console asks for a new code |
 | `recover-access.code`, `recover-access.cancel` | accessd | the console's Recover access code |

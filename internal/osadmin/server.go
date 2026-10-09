@@ -11,6 +11,7 @@
 package osadmin
 
 import (
+	"context"
 	"io/fs"
 	"net/http"
 	"path"
@@ -117,6 +118,10 @@ type Options struct {
 	Lockout *lockout.Book
 	// OnFirstAdmin runs once the first admin exists: accessd starts sshd.
 	OnFirstAdmin func()
+	// ProductNeedsSetup asks the installed product whether it still has no
+	// first admin (the gateway's /setup/state on the box); nil, or an
+	// error, means it can't tell yet, and the setup token is kept.
+	ProductNeedsSetup func(ctx context.Context) (bool, error)
 	// OnConsoleChange runs whenever what the console shows changes.
 	OnConsoleChange func()
 	// Shells is the admins' SSH logins to the closed shell
@@ -157,9 +162,14 @@ func New(o Options) *Server {
 	s.creds.init()
 	if s.FirstAdminDone() {
 		s.codes.ConsumeSetup()
+		s.ensureProductSetupToken()
 	}
 	return s
 }
+
+// ProductSetupDir holds the product's one-time setup token
+// (internal/productsetup); the product's start reads it from there.
+func (p Paths) ProductSetupDir() string { return filepath.Join(p.APIDir(), "product-setup") }
 
 // Handler is the whole :8443 handler in one process: the API, the static
 // pages and the security headers. On the box sneakers-osadmin serves the
@@ -208,13 +218,14 @@ type Handlers struct {
 	Access    osadminv1connect.AccessServiceHandler
 	Network   osadminv1connect.NetworkServiceHandler
 	Elevation osadminv1connect.ElevationServiceHandler
+	Upgrade   osadminv1connect.UpgradeServiceHandler
 }
 
 // Handlers returns the handlers.
 func (s *Server) Handlers() Handlers {
 	return Handlers{
 		Status: &status{s: s}, Setup: &setup{s: s}, Access: &accessSvc{s: s}, Network: &networkSvc{s: s},
-		Elevation: &elevationSvc{s: s},
+		Elevation: &elevationSvc{s: s}, Upgrade: &upgradeSvc{s: s},
 	}
 }
 

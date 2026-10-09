@@ -98,6 +98,20 @@ service UpgradeService {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {role: ROLE_ADMIN};
   }
+  // GetProductSetupToken is the installed product's one-time setup token,
+  // for its first-run page (https://<box>/admin/setup), while the product
+  // has no first admin yet. The box makes the token once, after its own
+  // first admin exists, and puts it in the product's Secret when the
+  // product starts; the closed shell's "sneakers setup-token" reads this
+  // same call. Once the product reports its first admin, the token is
+  // consumed and removed, and set_up comes back with no token. Each call is
+  // audited; the token itself is never logged.
+  rpc GetProductSetupToken(GetProductSetupTokenRequest) returns (GetProductSetupTokenResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "product.setup-token.read"
+    };
+  }
   rpc SetUpgradePolicy(SetUpgradePolicyRequest) returns (SetUpgradePolicyResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -418,6 +432,22 @@ message DiscardUpdateRequest {
 message DiscardUpdateResponse {
   // version is the release unstaged; empty when an upload was dropped.
   string version = 1;
+}
+
+message GetProductSetupTokenRequest {}
+
+message GetProductSetupTokenResponse {
+  // product is the installed product's name for people, such as
+  // "Sneakers"; empty with no product installed (then there's no token
+  // to give yet).
+  string product = 1;
+  // set_up is true once the product's first admin exists: the token is
+  // consumed and gone.
+  bool set_up = 2;
+  // token is the setup token while the product isn't set up.
+  string token = 3;
+  // setup_url is the product's first-run page, https://<box>/admin/setup.
+  string setup_url = 4;
 }
 
 message ListBaseVersionsRequest {}

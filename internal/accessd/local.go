@@ -66,6 +66,14 @@ func (h *accessH) ListAdmins(ctx context.Context, r *connect.Request[accessv1.Li
 	return connect.NewResponse(&accessv1.ListAdminsResponse{Admins: out.GetAdmins()}), nil
 }
 
+func (h *accessH) GetProductSetupToken(ctx context.Context, r *connect.Request[accessv1.GetProductSetupTokenRequest]) (*connect.Response[accessv1.GetProductSetupTokenResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceGetProductSetupTokenProcedure, osadminv1connect.UpgradeServiceGetProductSetupTokenProcedure, h.s.h.Upgrade.GetProductSetupToken, &osadminv1.GetProductSetupTokenRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.GetProductSetupTokenResponse{Setup: out}), nil
+}
+
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
 	m := r.Msg
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceAddAdminProcedure, osadminv1connect.AccessServiceAddAdminProcedure, h.s.h.Access.AddAdmin,

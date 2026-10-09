@@ -84,6 +84,9 @@ const (
 	// AccessServiceAddRecoveryKeyProcedure is the fully-qualified name of the AccessService's
 	// AddRecoveryKey RPC.
 	AccessServiceAddRecoveryKeyProcedure = "/sneakers.appliance.access.v1.AccessService/AddRecoveryKey"
+	// AccessServiceGetProductSetupTokenProcedure is the fully-qualified name of the AccessService's
+	// GetProductSetupToken RPC.
+	AccessServiceGetProductSetupTokenProcedure = "/sneakers.appliance.access.v1.AccessService/GetProductSetupToken"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -209,6 +212,11 @@ type AccessServiceClient interface {
 	RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error)
 	// AddRecoveryKey is the console's (root only).
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// GetProductSetupToken is the closed shell's "<product> setup-token":
+	// osadmin's UpgradeService.GetProductSetupToken, run as the login's
+	// admin, so :8443 and the shell read the one token and each read is
+	// audited the same way.
+	GetProductSetupToken(context.Context, *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -273,19 +281,26 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("AddRecoveryKey")),
 			connect.WithClientOptions(opts...),
 		),
+		getProductSetupToken: connect.NewClient[v1.GetProductSetupTokenRequest, v1.GetProductSetupTokenResponse](
+			httpClient,
+			baseURL+AccessServiceGetProductSetupTokenProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("GetProductSetupToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accessServiceClient implements AccessServiceClient.
 type accessServiceClient struct {
-	getStatus      *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
-	listAdmins     *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
-	addAdmin       *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
-	removeAdmin    *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
-	listKeys       *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
-	addKey         *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
-	removeKey      *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
-	addRecoveryKey *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getStatus            *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	listAdmins           *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
+	addAdmin             *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
+	removeAdmin          *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
+	listKeys             *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
+	addKey               *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
+	removeKey            *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
+	addRecoveryKey       *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getProductSetupToken *connect.Client[v1.GetProductSetupTokenRequest, v1.GetProductSetupTokenResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -330,6 +345,11 @@ func (c *accessServiceClient) AddRecoveryKey(ctx context.Context, req *connect.R
 	return c.addRecoveryKey.CallUnary(ctx, req)
 }
 
+// GetProductSetupToken calls sneakers.appliance.access.v1.AccessService.GetProductSetupToken.
+func (c *accessServiceClient) GetProductSetupToken(ctx context.Context, req *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error) {
+	return c.getProductSetupToken.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -351,6 +371,11 @@ type AccessServiceHandler interface {
 	RemoveKey(context.Context, *connect.Request[v1.RemoveKeyRequest]) (*connect.Response[v1.RemoveKeyResponse], error)
 	// AddRecoveryKey is the console's (root only).
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// GetProductSetupToken is the closed shell's "<product> setup-token":
+	// osadmin's UpgradeService.GetProductSetupToken, run as the login's
+	// admin, so :8443 and the shell read the one token and each read is
+	// audited the same way.
+	GetProductSetupToken(context.Context, *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -411,6 +436,12 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("AddRecoveryKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceGetProductSetupTokenHandler := connect.NewUnaryHandler(
+		AccessServiceGetProductSetupTokenProcedure,
+		svc.GetProductSetupToken,
+		connect.WithSchema(accessServiceMethods.ByName("GetProductSetupToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -429,6 +460,8 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceRemoveKeyHandler.ServeHTTP(w, r)
 		case AccessServiceAddRecoveryKeyProcedure:
 			accessServiceAddRecoveryKeyHandler.ServeHTTP(w, r)
+		case AccessServiceGetProductSetupTokenProcedure:
+			accessServiceGetProductSetupTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -468,6 +501,10 @@ func (UnimplementedAccessServiceHandler) RemoveKey(context.Context, *connect.Req
 
 func (UnimplementedAccessServiceHandler) AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.AddRecoveryKey is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) GetProductSetupToken(context.Context, *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.GetProductSetupToken is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

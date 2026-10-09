@@ -28,6 +28,7 @@ import "sneakers/appliance/osadmin/v1/elevation.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/setup.proto";
 import "sneakers/appliance/osadmin/v1/status.proto";
+import "sneakers/appliance/osadmin/v1/upgrade.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1;accessv1";
 
@@ -58,6 +59,11 @@ service AccessService {
   rpc RemoveKey(RemoveKeyRequest) returns (RemoveKeyResponse);
   // AddRecoveryKey is the console's (root only).
   rpc AddRecoveryKey(AddRecoveryKeyRequest) returns (AddRecoveryKeyResponse);
+  // GetProductSetupToken is the closed shell's "<product> setup-token":
+  // osadmin's UpgradeService.GetProductSetupToken, run as the login's
+  // admin, so :8443 and the shell read the one token and each read is
+  // audited the same way.
+  rpc GetProductSetupToken(GetProductSetupTokenRequest) returns (GetProductSetupTokenResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -710,3 +716,9 @@ message EndSshLoginRequest {
 }
 
 message EndSshLoginResponse {}
+
+message GetProductSetupTokenRequest {}
+
+message GetProductSetupTokenResponse {
+  sneakers.appliance.osadmin.v1.GetProductSetupTokenResponse setup = 1;
+}

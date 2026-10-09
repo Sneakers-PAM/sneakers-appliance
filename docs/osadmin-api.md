@@ -128,6 +128,7 @@ about the box.
 | `UpgradeService.DiscardUpdate` | owner | no | `upgrade.discard` |
 | `UpgradeService.ListProductVersions` | admin | no | |
 | `UpgradeService.ListBaseVersions` | admin | no | |
+| `UpgradeService.GetProductSetupToken` | admin | no | `product.setup-token.read` |
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ElevationService.ListElevations` | admin | no | |
 | `ElevationService.ApproveElevation` | owner | yes | `elevation.approve` |

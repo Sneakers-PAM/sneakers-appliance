@@ -138,6 +138,7 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
+| `<product> setup-token` (`sneakers setup-token`) | no | yes | Only while a product is installed; accessd; see [The product's setup token](#the-products-setup-token) |
 | `<product> mcp ...` (`sneakers mcp ...`) | no | yes | Only while a product is installed; Not available in this release |
 
 A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` and isn't listed by
@@ -158,8 +159,30 @@ product adds its own commands in a group named after it, listed by `help` under 
 product's name from the current product slot's header (`/var/lib/sneakers/product/current/bundle.json`,
 the `<name>-product` header name without `-product`) when the login starts. With no product
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
-`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, which answers
-`NOT_AVAILABLE` until the product's MCP switch lands.
+`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `setup-token` (below) and `mcp`,
+which answers `NOT_AVAILABLE` until the product's MCP switch lands.
+
+### The product's setup token
+
+`sneakers setup-token` gives owners and admins the product's one-time setup token without the root
+shell. While the product has no first admin it prints the token and the product's first-run page,
+`https://<box>/admin/setup`; once that admin exists it prints only "Sneakers is already set up",
+and the token is gone. It's `AccessService.GetProductSetupToken` on accessd, which runs osadmin's
+`UpgradeService.GetProductSetupToken` as the login's admin, so :8443 and the shell read the same
+token from the same place and each read is audited (`product.setup-token.read`, with the state,
+never the token).
+
+- **One token, made once.** osadmin makes it when the box's first admin exists (and at start on a
+  box set up before), in `/var/lib/sneakers/osadmin-api/product-setup/token` (root only),
+  `stp_` and 32 base32 characters.
+- **The product gets it.** `k0s-interim prepare` writes it as the Secret `sneakers-setup-token`
+  (key `SETUP_TOKEN`) in the `sneakers` namespace at each k0s start while it's unused; the product
+  chart points `gateway.secretEnv.SETUP_TOKEN.secretName` at it.
+- **Consumed once used.** Each read asks the product's gateway, with the bundle's k0s as kubectl
+  through the API server's service proxy (`sneakers-gateway`'s `/setup/state`), whether it still
+  needs its first admin. When it says no, the token file is removed, a `consumed` marker is
+  written and stays, and the next k0s start drops the Secret. While the product doesn't answer yet
+  (k0s starting, the gateway not ready) the token is kept and shown.
 
 ## The root shell
 

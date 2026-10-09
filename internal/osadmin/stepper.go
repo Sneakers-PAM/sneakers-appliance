@@ -304,6 +304,7 @@ func (h *setup) CompleteCredentials(ctx context.Context, r *connect.Request[osad
 			h.s.o.Logger.Error(err, "osadmin: the first admin wasn't marked")
 		}
 		h.s.o.Logger.Info("osadmin: the first admin exists", log.F("admin", en.Admin))
+		h.s.ensureProductSetupToken()
 		if h.s.o.OnFirstAdmin != nil {
 			h.s.o.OnFirstAdmin()
 		}

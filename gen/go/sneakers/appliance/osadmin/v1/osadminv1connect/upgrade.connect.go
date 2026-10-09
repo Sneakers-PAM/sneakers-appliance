@@ -71,6 +71,9 @@ const (
 	// UpgradeServiceListBaseVersionsProcedure is the fully-qualified name of the UpgradeService's
 	// ListBaseVersions RPC.
 	UpgradeServiceListBaseVersionsProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/ListBaseVersions"
+	// UpgradeServiceGetProductSetupTokenProcedure is the fully-qualified name of the UpgradeService's
+	// GetProductSetupToken RPC.
+	UpgradeServiceGetProductSetupTokenProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/GetProductSetupToken"
 	// UpgradeServiceSetUpgradePolicyProcedure is the fully-qualified name of the UpgradeService's
 	// SetUpgradePolicy RPC.
 	UpgradeServiceSetUpgradePolicyProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/SetUpgradePolicy"
@@ -117,6 +120,15 @@ type UpgradeServiceClient interface {
 	// patch only for the base it names. The index is only a menu: the chosen
 	// .bin goes through FetchUpdate and is verified when it's staged.
 	ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error)
+	// GetProductSetupToken is the installed product's one-time setup token,
+	// for its first-run page (https://<box>/admin/setup), while the product
+	// has no first admin yet. The box makes the token once, after its own
+	// first admin exists, and puts it in the product's Secret when the
+	// product starts; the closed shell's "sneakers setup-token" reads this
+	// same call. Once the product reports its first admin, the token is
+	// consumed and removed, and set_up comes back with no token. Each call is
+	// audited; the token itself is never logged.
+	GetProductSetupToken(context.Context, *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
 
@@ -182,6 +194,12 @@ func NewUpgradeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getProductSetupToken: connect.NewClient[v1.GetProductSetupTokenRequest, v1.GetProductSetupTokenResponse](
+			httpClient,
+			baseURL+UpgradeServiceGetProductSetupTokenProcedure,
+			connect.WithSchema(upgradeServiceMethods.ByName("GetProductSetupToken")),
+			connect.WithClientOptions(opts...),
+		),
 		setUpgradePolicy: connect.NewClient[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse](
 			httpClient,
 			baseURL+UpgradeServiceSetUpgradePolicyProcedure,
@@ -193,15 +211,16 @@ func NewUpgradeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // upgradeServiceClient implements UpgradeServiceClient.
 type upgradeServiceClient struct {
-	getUpgrades         *connect.Client[v1.GetUpgradesRequest, v1.GetUpgradesResponse]
-	fetchUpdate         *connect.Client[v1.FetchUpdateRequest, v1.FetchUpdateResponse]
-	stageUpdate         *connect.Client[v1.StageUpdateRequest, v1.StageUpdateResponse]
-	applyUpdate         *connect.Client[v1.ApplyUpdateRequest, v1.ApplyUpdateResponse]
-	revertUpdate        *connect.Client[v1.RevertUpdateRequest, v1.RevertUpdateResponse]
-	discardUpdate       *connect.Client[v1.DiscardUpdateRequest, v1.DiscardUpdateResponse]
-	listProductVersions *connect.Client[v1.ListProductVersionsRequest, v1.ListProductVersionsResponse]
-	listBaseVersions    *connect.Client[v1.ListBaseVersionsRequest, v1.ListBaseVersionsResponse]
-	setUpgradePolicy    *connect.Client[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse]
+	getUpgrades          *connect.Client[v1.GetUpgradesRequest, v1.GetUpgradesResponse]
+	fetchUpdate          *connect.Client[v1.FetchUpdateRequest, v1.FetchUpdateResponse]
+	stageUpdate          *connect.Client[v1.StageUpdateRequest, v1.StageUpdateResponse]
+	applyUpdate          *connect.Client[v1.ApplyUpdateRequest, v1.ApplyUpdateResponse]
+	revertUpdate         *connect.Client[v1.RevertUpdateRequest, v1.RevertUpdateResponse]
+	discardUpdate        *connect.Client[v1.DiscardUpdateRequest, v1.DiscardUpdateResponse]
+	listProductVersions  *connect.Client[v1.ListProductVersionsRequest, v1.ListProductVersionsResponse]
+	listBaseVersions     *connect.Client[v1.ListBaseVersionsRequest, v1.ListBaseVersionsResponse]
+	getProductSetupToken *connect.Client[v1.GetProductSetupTokenRequest, v1.GetProductSetupTokenResponse]
+	setUpgradePolicy     *connect.Client[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse]
 }
 
 // GetUpgrades calls sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades.
@@ -242,6 +261,11 @@ func (c *upgradeServiceClient) ListProductVersions(ctx context.Context, req *con
 // ListBaseVersions calls sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions.
 func (c *upgradeServiceClient) ListBaseVersions(ctx context.Context, req *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error) {
 	return c.listBaseVersions.CallUnary(ctx, req)
+}
+
+// GetProductSetupToken calls sneakers.appliance.osadmin.v1.UpgradeService.GetProductSetupToken.
+func (c *upgradeServiceClient) GetProductSetupToken(ctx context.Context, req *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error) {
+	return c.getProductSetupToken.CallUnary(ctx, req)
 }
 
 // SetUpgradePolicy calls sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy.
@@ -291,6 +315,15 @@ type UpgradeServiceHandler interface {
 	// patch only for the base it names. The index is only a menu: the chosen
 	// .bin goes through FetchUpdate and is verified when it's staged.
 	ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error)
+	// GetProductSetupToken is the installed product's one-time setup token,
+	// for its first-run page (https://<box>/admin/setup), while the product
+	// has no first admin yet. The box makes the token once, after its own
+	// first admin exists, and puts it in the product's Secret when the
+	// product starts; the closed shell's "sneakers setup-token" reads this
+	// same call. Once the product reports its first admin, the token is
+	// consumed and removed, and set_up comes back with no token. Each call is
+	// audited; the token itself is never logged.
+	GetProductSetupToken(context.Context, *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
 
@@ -352,6 +385,12 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	upgradeServiceGetProductSetupTokenHandler := connect.NewUnaryHandler(
+		UpgradeServiceGetProductSetupTokenProcedure,
+		svc.GetProductSetupToken,
+		connect.WithSchema(upgradeServiceMethods.ByName("GetProductSetupToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	upgradeServiceSetUpgradePolicyHandler := connect.NewUnaryHandler(
 		UpgradeServiceSetUpgradePolicyProcedure,
 		svc.SetUpgradePolicy,
@@ -376,6 +415,8 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 			upgradeServiceListProductVersionsHandler.ServeHTTP(w, r)
 		case UpgradeServiceListBaseVersionsProcedure:
 			upgradeServiceListBaseVersionsHandler.ServeHTTP(w, r)
+		case UpgradeServiceGetProductSetupTokenProcedure:
+			upgradeServiceGetProductSetupTokenHandler.ServeHTTP(w, r)
 		case UpgradeServiceSetUpgradePolicyProcedure:
 			upgradeServiceSetUpgradePolicyHandler.ServeHTTP(w, r)
 		default:
@@ -417,6 +458,10 @@ func (UnimplementedUpgradeServiceHandler) ListProductVersions(context.Context, *
 
 func (UnimplementedUpgradeServiceHandler) ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions is not implemented"))
+}
+
+func (UnimplementedUpgradeServiceHandler) GetProductSetupToken(context.Context, *connect.Request[v1.GetProductSetupTokenRequest]) (*connect.Response[v1.GetProductSetupTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.GetProductSetupToken is not implemented"))
 }
 
 func (UnimplementedUpgradeServiceHandler) SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error) {

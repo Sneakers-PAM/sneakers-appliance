@@ -43,6 +43,30 @@ kubelet_resolv() {
   mv "$2.new" "$2"
 }
 
+# setup_token_secret <token file> <stack dir>: the product's one-time
+# setup token (osadmin's, internal/productsetup) as the Secret
+# sneakers-setup-token (key SETUP_TOKEN) in the sneakers namespace, for
+# the gateway's first-run setup, while the token is unused. Once osadmin
+# consumes it the file is gone, and so is the stack: k0s deletes what a
+# removed stack held.
+setup_token_secret() {
+  if [ -s "$1" ]; then
+    mkdir -p "$2"
+    umask 077
+    {
+      printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sneakers\n---\n'
+      printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: sneakers-setup-token\n  namespace: sneakers\ntype: Opaque\nstringData:\n'
+      printf '  SETUP_TOKEN: "%s"\n' "$(head -n 1 "$1")"
+    } > "$2/setup-token.yaml.new"
+    mv "$2/setup-token.yaml.new" "$2/setup-token.yaml"
+    umask 022
+    say "the product's setup token is in place"
+  elif [ -d "$2" ]; then
+    rm -rf "$2"
+    say "the product's setup token is used; its Secret goes"
+  fi
+}
+
 prepare() {
   if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
     say "no product bundle is installed; k0s comes with it (Updates)"
@@ -142,6 +166,8 @@ prepare() {
     umask 022
     say "the box's certificate is in place for the edge"
   fi
+
+  setup_token_secret /var/lib/sneakers/osadmin-api/product-setup/token "$data/manifests/product-setup"
 }
 
 run() {

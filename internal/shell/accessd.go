@@ -61,7 +61,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.setup-token":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -105,6 +105,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 	case "rootshell.begin", "rootshell.open":
 		res, err = s.rootShell(ctx, r)
+	case "product.setup-token":
+		res, err = s.productSetupToken(ctx)
 	default:
 		return Result{}, false, nil
 	}
@@ -116,6 +118,29 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		return Result{}, true, fromAccessd(err)
 	}
 	return res, true, nil
+}
+
+// productSetupToken prints the product's setup token and link while the
+// product has no first admin; after that, only that it's set up.
+func (s *Services) productSetupToken(ctx context.Context) (Result, error) {
+	out, err := s.Access.GetProductSetupToken(ctx, connect.NewRequest(&accessv1.GetProductSetupTokenRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	m := out.Msg.GetSetup()
+	name := Printable(m.GetProduct())
+	switch {
+	case name == "":
+		return Result{Text: "No product is installed.", Data: map[string]any{"installed": false}}, nil
+	case m.GetSetUp():
+		return Result{Text: name + " is already set up: its one-time setup token was used and removed.", Data: map[string]any{"product": name, "setUp": true}}, nil
+	}
+	where := Printable(m.GetSetupUrl())
+	if where == "" {
+		where = "https://<this box>/admin/setup"
+	}
+	text := fmt.Sprintf("%s isn't set up yet. Open %s and give this one-time setup token to create its first admin:\n\n    %s\n\nIt stops working once that admin exists.", name, where, Printable(m.GetToken()))
+	return Result{Text: text, Data: map[string]any{"product": name, "setUp": false, "token": m.GetToken(), "setupUrl": m.GetSetupUrl()}}, nil
 }
 
 func (s *Services) rootShell(ctx context.Context, r Request) (Result, error) {

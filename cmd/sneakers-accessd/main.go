@@ -47,11 +47,13 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productsetup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
@@ -226,20 +228,23 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
 		// Stopping k0s may take its whole stop-timeout (2 minutes).
-		Services:        initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
-		Network:         netd,
-		Paths:           paths,
-		BoxStateFile:    boxstate.File,
-		CertDir:         paths.OwnDir(),
-		Certs:           certs,
-		Elevation:       elev,
-		RootKey:         root,
-		CodeSealer:      accessd.CustodySealer{Client: custody},
-		Lockout:         book,
-		OnFirstAdmin:    func() { go startSSHD() },
-		OnConsoleChange: d.ConsoleChanged,
-		Shells:          &sshsession.Proc{},
-		Logger:          lg,
+		Services:     initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
+		Network:      netd,
+		Paths:        paths,
+		BoxStateFile: boxstate.File,
+		CertDir:      paths.OwnDir(),
+		Certs:        certs,
+		Elevation:    elev,
+		RootKey:      root,
+		CodeSealer:   accessd.CustodySealer{Client: custody},
+		Lockout:      book,
+		OnFirstAdmin: func() { go startSSHD() },
+		// The installed bundle's k0s asks the product's gateway whether its
+		// first admin exists, for the setup token.
+		ProductNeedsSetup: productsetup.KubectlProbe(filepath.Join(elevated.DefaultProduct, "k0s"), elevated.DefaultKubeconfig),
+		OnConsoleChange:   d.ConsoleChanged,
+		Shells:            &sshsession.Proc{},
+		Logger:            lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and

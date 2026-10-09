@@ -116,6 +116,7 @@ var specs = []spec{
 	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true},
+	{path: "setup-token", short: "The product's one-time setup token and link, until its first admin exists", action: "product.setup-token", origins: []Origin{OriginSSH}, product: true},
 	{path: "mcp", use: "mcp [...]", short: "The MCP switch", action: "mcp", origins: both, nargs: [2]int{0, -1}, later: true, product: true},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "logs export", short: "Stream the logs as an archive to standard output", action: "logs.export", origins: []Origin{OriginSSH}, later: true},
