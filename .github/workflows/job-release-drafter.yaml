@@ -20,7 +20,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Draft release notes
-        uses: Bugs5382/release-drafter-action@9794698c9fc099feb314f49246ae0e82b1d1acb3  # v1.0.0
+        uses: Bugs5382/release-drafter-action@de0c4559d69039b8b371ef951b62a2532ad3593f  # v1.0.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           first-version: 0.1.0
+          prerelease: true
+          prerelease-identifier: rc
