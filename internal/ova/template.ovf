@@ -19,7 +19,7 @@
     <OperatingSystemSection ovf:id="101" vmw:osType="other5xLinux64Guest">
       <Info>Linux, 64-bit</Info>
     </OperatingSystemSection>
-    <VirtualHardwareSection>
+    <VirtualHardwareSection ovf:transport="iso">
       <Info>Virtual hardware</Info>
       <System>
         <vssd:ElementName>Virtual Hardware Family</vssd:ElementName>
@@ -68,11 +68,42 @@
         <rasd:ResourceSubType>vmxnet3</rasd:ResourceSubType>
         <rasd:ResourceType>10</rasd:ResourceType>
       </Item>
+      <Item>
+        <rasd:Address>0</rasd:Address>
+        <rasd:Description>IDE controller</rasd:Description>
+        <rasd:ElementName>IDE controller 0</rasd:ElementName>
+        <rasd:InstanceID>6</rasd:InstanceID>
+        <rasd:ResourceType>5</rasd:ResourceType>
+      </Item>
+      <Item ovf:required="false">
+        <rasd:AddressOnParent>0</rasd:AddressOnParent>
+        <rasd:AutomaticAllocation>false</rasd:AutomaticAllocation>
+        <rasd:Description>The CD drive vCenter puts the OVF environment in</rasd:Description>
+        <rasd:ElementName>CD/DVD drive 1</rasd:ElementName>
+        <rasd:InstanceID>7</rasd:InstanceID>
+        <rasd:Parent>6</rasd:Parent>
+        <rasd:ResourceSubType>vmware.cdrom.remotepassthrough</rasd:ResourceSubType>
+        <rasd:ResourceType>15</rasd:ResourceType>
+      </Item>
       <vmw:Config ovf:required="false" vmw:key="firmware" vmw:value="efi"/>
       <vmw:ExtraConfig ovf:required="false" vmw:key="uefi.secureBoot.enabled" vmw:value="FALSE"/>
 {{- if .AuthBypass}}
       <vmw:ExtraConfig ovf:required="false" vmw:key="uefi.allowAuthBypass" vmw:value="TRUE"/>
 {{- end}}
     </VirtualHardwareSection>
+    <ProductSection ovf:required="false">
+      <Info>The box's host name, which it takes at first boot</Info>
+      <Product>Sneakers-PAM Appliance</Product>
+      <Version>{{.Version}}</Version>
+      <Category>Network</Category>
+      <Property ovf:key="hostname" ovf:type="string" ovf:userConfigurable="true" ovf:value="">
+        <Label>Host name</Label>
+        <Description>The box's fully qualified host name, such as sneakers.example.org, or a short name joined to the domain below. Left empty, the box names itself sneakers- and 8 hex digits. Change it later on Network (:8443) or the console.</Description>
+      </Property>
+      <Property ovf:key="domain" ovf:type="string" ovf:userConfigurable="true" ovf:value="">
+        <Label>Domain</Label>
+        <Description>Optional: the DNS domain a short host name is joined to, such as example.org.</Description>
+      </Property>
+    </ProductSection>
   </VirtualSystem>
 </Envelope>

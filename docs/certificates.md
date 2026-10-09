@@ -9,7 +9,7 @@ assigns one to each endpoint.
 | Endpoint | Answers on | Its certificate must cover | In this release |
 |---|---|---|---|
 | `admin` | :8443 on each management address | the host name or a management address | live |
-| `product` | 443, every product route on one host | the box's names, as for `admin` | live once a product is installed ("Available when the product is installed" before) |
+| `product` | 443, every product route on one host | the box's names, as for `admin`; it warns unless it covers the host name, which the product's URLs use ([network.md](network.md#the-host-name)) | live once a product is installed ("Available when the product is installed" before) |
 
 ### The box's names
 

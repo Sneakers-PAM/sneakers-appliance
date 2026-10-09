@@ -140,7 +140,11 @@ type Options struct {
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.
 	Exposed ExposedReader
-	Logger  log.Logger
+	// BoxValues are the box's values the product's stacks read
+	// (boxvalues.Box on the box); nil records none, and k0s-interim falls
+	// back to the kernel's host name.
+	BoxValues BoxValues
+	Logger    log.Logger
 }
 
 // Server is the appliance admin.
@@ -159,6 +163,12 @@ type Server struct {
 	// is in the audit, so a timer and a late check don't write it twice.
 	revertMu      sync.Mutex
 	revertAudited string
+	// hostName serialises the host name follower (HostNameChanged) and
+	// holds its next look.
+	hostName struct {
+		mu    sync.Mutex
+		timer clock.Timer
+	}
 }
 
 // New returns a server.

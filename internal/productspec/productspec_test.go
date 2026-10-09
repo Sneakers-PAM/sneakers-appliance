@@ -241,6 +241,11 @@ func TestTheSneakersBundleExposesItsSetupToken(t *testing.T) {
 	if w, ok := s.Switch("mcp"); !ok || w.Default || !slices.Equal(w.Stacks, []string{"sneakers-mcp"}) {
 		t.Errorf("the mcp switch %+v", w)
 	}
+	// The box's own name reaches every host-dependent setting through the
+	// placeholder the bundle's values give global.host.
+	if len(s.BoxValues) != 1 || s.BoxValues[0].Value != productspec.BoxFQDN || s.BoxValues[0].Placeholder != "sneakers.box.invalid" { // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		t.Errorf("box values %+v", s.BoxValues)
+	}
 }
 
 const withSwitches = `format: 2
@@ -417,5 +422,59 @@ func TestTheSneakersBundleEscrowsItsVaultAndTOTPKeys(t *testing.T) {
 	}
 	if !names["vault-root-key"] || !names["totp-key"] {
 		t.Fatalf("escrow %+v", s.Escrow)
+	}
+}
+
+const withBoxValues = `format: 2
+box_values:
+  - {value: box.fqdn, placeholder: sneakers.box.invalid}  # scrub:allow=fqdn -- the reserved .invalid placeholder
+`
+
+// A product names the box values it reads by the placeholder its stacks
+// carry; the slot records them for k0s-interim.
+func TestBoxValuesParseAndAreWrittenIntoTheSlot(t *testing.T) {
+	s, err := productspec.Parse([]byte(withBoxValues))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.BoxValues) != 1 || s.BoxValues[0].Value != productspec.BoxFQDN || s.BoxValues[0].Placeholder != "sneakers.box.invalid" { // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		t.Fatalf("%+v", s.BoxValues)
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, productspec.File), []byte(withBoxValues), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := productspec.WriteRBAC(dir); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, productspec.BoxValuesFile))
+	if err != nil || string(b) != "sneakers.box.invalid box.fqdn\n" { // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		t.Fatalf("%q %v", b, err)
+	}
+	// A bundle that names none leaves no file behind.
+	if err := os.WriteFile(filepath.Join(dir, productspec.File), []byte("format: 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := productspec.WriteRBAC(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, productspec.BoxValuesFile)); !os.IsNotExist(err) {
+		t.Fatalf("the box-values file stayed: %v", err)
+	}
+}
+
+func TestABoxValueIsRefusedWhenItBreaksARule(t *testing.T) {
+	for name, doc := range map[string]string{
+		"an unknown value":       "format: 2\nbox_values:\n  - {value: box.serial, placeholder: serial.box.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"a resolvable name":      "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: sneakers.example.org}\n",
+		"the bare .invalid":      "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: invalid}\n",                                                  // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"an upper-case name":     "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: Sneakers.box.invalid}\n",                                     // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"a value twice":          "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: a.invalid}\n  - {value: box.fqdn, placeholder: b.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"a placeholder with a /": "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: a/b.invalid}\n",                                              // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"no placeholder":         "format: 2\nbox_values:\n  - {value: box.fqdn}\n",
+	} {
+		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
 	}
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/kitout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ova"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ovfenv"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/verify"
 	"github.com/Sneakers-PAM/sneakers-appliance/test/kit/fixtures"
 )
@@ -106,5 +107,68 @@ func TestOVAWriterThroughTheKit(t *testing.T) {
 		if !strings.Contains(mf, "SHA256("+n+")= "+sums[n]) {
 			t.Errorf("the manifest's digest for %s doesn't match", n)
 		}
+	}
+}
+
+// The OVA offers the host name and domain as vApp properties, which the
+// box reads at first boot (internal/ovfenv): vCenter asks for them at
+// deploy and hands them over in an ovf-env.xml on an ISO in the VM's CD
+// drive, so the OVF names the iso transport and has a CD drive.
+func TestTheOVFOffersTheHostNameAsVAppProperties(t *testing.T) {
+	type item struct {
+		InstanceID   string `xml:"InstanceID"`
+		ResourceType string `xml:"ResourceType"`
+		Parent       string `xml:"Parent"`
+	}
+	type property struct {
+		Key              string `xml:"key,attr"`
+		Type             string `xml:"type,attr"`
+		UserConfigurable string `xml:"userConfigurable,attr"`
+		Value            string `xml:"value,attr"`
+		Label            string `xml:"Label"`
+		Description      string `xml:"Description"`
+	}
+	var env struct {
+		System struct {
+			Hardware struct {
+				Transport string `xml:"transport,attr"`
+				Items     []item `xml:"Item"`
+			} `xml:"VirtualHardwareSection"`
+			Product struct {
+				Properties []property `xml:"Property"`
+			} `xml:"ProductSection"`
+		} `xml:"VirtualSystem"`
+	}
+	if err := xml.Unmarshal([]byte(ova.Render(ova.Params{Version: "0.1.0", DiskBytes: 64 << 30})), &env); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(" "+env.System.Hardware.Transport+" ", " iso ") {
+		t.Errorf("transport %q", env.System.Hardware.Transport)
+	}
+	ide := ""
+	for _, it := range env.System.Hardware.Items {
+		if it.ResourceType == "5" {
+			ide = it.InstanceID
+		}
+	}
+	cd := false
+	for _, it := range env.System.Hardware.Items {
+		cd = cd || it.ResourceType == "15" && it.Parent == ide && ide != ""
+	}
+	if !cd {
+		t.Error("no CD drive on an IDE controller")
+	}
+	keys := map[string]property{}
+	for _, p := range env.System.Product.Properties {
+		keys[p.Key] = p
+	}
+	for _, k := range []string{ovfenv.KeyHostname, ovfenv.KeyDomain} {
+		p, ok := keys[k]
+		if !ok || p.Type != "string" || p.UserConfigurable != "true" || p.Value != "" || p.Label == "" || p.Description == "" {
+			t.Errorf("property %s: %+v", k, p)
+		}
+	}
+	if len(keys) != 2 {
+		t.Errorf("properties %v", keys)
 	}
 }

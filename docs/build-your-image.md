@@ -53,7 +53,9 @@ the bytes it verified.
 
 ## 4. Install
 
-- **VMware (OVA):** import the OVA. Before the first power-on, delete the PK in the VM's firmware
-  setup, then follow the console ([secure-boot.md](secure-boot.md)).
+- **VMware (OVA):** import the OVA. Deployed through vCenter, it asks for the box's **Host name**
+  and **Domain** (vApp properties), which the box takes at first boot
+  ([network.md](network.md#the-host-name)). Before the first power-on, delete the PK in the VM's
+  firmware setup, then follow the console ([secure-boot.md](secure-boot.md)).
 - **Proxmox VE (qcow2):** follow the generated `proxmox-vm.md`.
 - **QEMU or another KVM host (raw):** attach the raw disk with OVMF.

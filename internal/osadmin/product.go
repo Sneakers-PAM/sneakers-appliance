@@ -289,6 +289,7 @@ func (s *Server) switchProduct(ctx context.Context, switchSlots func() error) er
 		s.failStep(stepSwitch, err)
 		return err
 	}
+	s.recordBoxValues(ctx)
 	s.setStep(stepRestart, "")
 	if err := s.restartProduct(ctx); err != nil {
 		s.failStep(stepRestart, err)

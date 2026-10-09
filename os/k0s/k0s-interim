@@ -79,6 +79,39 @@ switched_off() {
   return 1
 }
 
+# place_stack <slot stack dir/> <stack dir> <slot box-values> <box values>
+# <kernel host>: the stack's files, with each placeholder the bundle
+# declares (product.yaml box_values) replaced by the box's own value: the
+# one recorded at the last apply or host name change, else, for box.fqdn,
+# the kernel's host name. internal/boxvalues does the same in Go for
+# productswitch. The values are host names and addresses ([a-z0-9.:[]-]),
+# so they need no quoting in sed; the placeholders' dots are escaped.
+place_stack() {
+  expr=""
+  if [ -s "$3" ]; then
+    while read -r ph vname; do
+      v=""
+      if [ -s "$4" ]; then
+        while read -r n val; do
+          if [ "$n" = "$vname" ]; then v="$val"; fi
+        done < "$4"
+      fi
+      if [ -z "$v" ] && [ "$vname" = box.fqdn ]; then v="$5"; fi
+      [ -n "$v" ] || continue
+      expr="$expr;s/$(echo "$ph" | sed 's/[.]/\\./g')/$v/g"
+    done < "$3"
+  fi
+  mkdir -p "$2"
+  for f in "$1"*.yaml; do
+    [ -f "$f" ] || continue
+    if [ -n "$expr" ]; then
+      sed "${expr#;}" "$f" > "$2/$(basename "$f")"
+    else
+      cp "$f" "$2/"
+    fi
+  done
+}
+
 # box_tls <crt> <key> <stack dir>: the box-tls Secret in sneakers-edge
 # with the chain and key, and the Traefik dynamic config that makes them
 # the default certificate (traefik-tls.yaml), which the edge mounts next to
@@ -180,8 +213,7 @@ prepare() {
       say "stack $stack is off (its switch on :8443)"
       continue
     fi
-    mkdir -p "$data/manifests/$stack"
-    cp "$d"*.yaml "$data/manifests/$stack/"
+    place_stack "$d" "$data/manifests/$stack" "$slot/box-values" /var/lib/sneakers/platform/box-values "$(cat /proc/sys/kernel/hostname)"
     say "stack $stack in place"
   done
   exposed_rbac "$slot" "$data/manifests/sneakers-appliance-exposed"
