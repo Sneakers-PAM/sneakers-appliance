@@ -5,6 +5,8 @@ package productswitch_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -25,6 +27,7 @@ switches:
 type box struct {
 	slot, platform, manifests string
 	restarts                  []string
+	events                    []string
 	sw                        *productswitch.Switches
 	spec                      productspec.Spec
 }
@@ -56,6 +59,7 @@ func newBox(t *testing.T) *box {
 	b.sw = &productswitch.Switches{Dir: b.platform, Slot: b.slot, Manifests: b.manifests,
 		Restart: func(_ context.Context, ns, kind, name string) error {
 			b.restarts = append(b.restarts, ns+"/"+kind+"/"+name)
+			b.events = append(b.events, "restart "+name)
 			return nil
 		}}
 	return b
@@ -113,5 +117,48 @@ func TestASwitchSetWhileK0sIsDownIsKept(t *testing.T) {
 	}
 	if off := productswitch.OffStacks(b.slot, b.platform); len(off) != 0 {
 		t.Fatalf("off %v", off)
+	}
+}
+
+// A workload restarted before k0s has applied the stack starts without the
+// stack's objects (a ConfigMap it loads as optional), so Set waits for each
+// stack to settle, applied or taken away, before it restarts anything. The
+// wait gets the slot's copy of the stack, which is still there when the
+// switch goes off.
+func TestASwitchRestartsOnlyOnceItsStacksSettle(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	b.sw.Settled = func(_ context.Context, stack string, on bool) error {
+		if stack != filepath.Join(b.slot, "manifests", "sneakers-mcp") {
+			t.Errorf("settle asked about %s", stack)
+		}
+		if _, err := os.Stat(filepath.Join(b.manifests, "sneakers-mcp")); (err == nil) != on {
+			t.Errorf("settle before the stack was placed (on %v): %v", on, err)
+		}
+		b.events = append(b.events, fmt.Sprintf("settled %v", on))
+		return nil
+	}
+	if err := b.sw.Set(ctx, b.spec, "mcp", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.sw.Set(ctx, b.spec, "mcp", false); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"settled true", "restart sneakers-gateway", "settled false", "restart sneakers-gateway"}
+	if !slices.Equal(b.events, want) {
+		t.Fatalf("events %v, want %v", b.events, want)
+	}
+}
+
+// A stack that doesn't settle in time still gets its restarts: the switch
+// is best effort, and the restarted workload reads what's there.
+func TestASwitchThatDoesntSettleStillRestarts(t *testing.T) {
+	b := newBox(t)
+	b.sw.Settled = func(context.Context, string, bool) error { return errors.New("k0s hasn't applied it yet") }
+	if err := b.sw.Set(context.Background(), b.spec, "mcp", true); err == nil {
+		t.Fatal("an unsettled stack was reported as fine")
+	}
+	if !slices.Equal(b.restarts, []string{"sneakers/deployment/sneakers-gateway"}) {
+		t.Fatalf("restarts %v", b.restarts)
 	}
 }
