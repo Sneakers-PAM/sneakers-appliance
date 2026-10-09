@@ -476,14 +476,30 @@ func readLine(in io.Reader) string {
 	return strings.TrimSpace(line)
 }
 
+// asker is the interactive terminal, which reads a line with a prompt of
+// its own.
+type asker interface {
+	AskLine(prompt string) (string, error)
+}
+
+// ask prints prompt and reads one line: on the interactive terminal as
+// its own prompt, so the answer ends the line and the menu's prompt comes
+// back on the next one.
+func ask(e *Env, prompt string) string {
+	if a, ok := e.In.(asker); ok {
+		line, _ := a.AskLine(prompt)
+		return strings.TrimSpace(line)
+	}
+	_, _ = fmt.Fprint(e.Out, prompt)
+	return readLine(e.In)
+}
+
 func typedConfirm(e *Env, word string) bool {
-	_, _ = fmt.Fprintf(e.Out, "Type %s to confirm: ", word)
-	return readLine(e.In) == word
+	return ask(e, fmt.Sprintf("Type %s to confirm: ", word)) == word
 }
 
 func yes(e *Env, prompt string) bool {
-	_, _ = fmt.Fprintf(e.Out, "%s [y/N] ", prompt)
-	a := strings.ToLower(readLine(e.In))
+	a := strings.ToLower(ask(e, prompt+" [y/N] "))
 	return a == "y" || a == "yes"
 }
 
@@ -519,11 +535,21 @@ func runRootShell(ctx context.Context, e *Env, _ *Command, _ []string, flags map
 	data, _ := res.Data.(map[string]string)
 	challenge := data["challenge"]
 	_, _ = fmt.Fprintln(e.Out, res.Text)
-	lines := bufio.NewReader(e.In)
-	for {
+	var lines *bufio.Reader
+	readCode := func() string {
+		if a, ok := e.In.(asker); ok {
+			line, _ := a.AskLine("Code: ")
+			return strings.TrimSpace(line)
+		}
+		if lines == nil {
+			lines = bufio.NewReader(e.In)
+		}
 		_, _ = fmt.Fprint(e.Out, "Code: ")
 		line, _ := lines.ReadString('\n')
-		code := strings.TrimSpace(line)
+		return strings.TrimSpace(line)
+	}
+	for {
+		code := readCode()
 		if code == "" {
 			return Result{Text: "No code typed; the challenge stays open until it expires."}, nil
 		}
