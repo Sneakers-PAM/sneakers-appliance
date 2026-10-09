@@ -104,9 +104,10 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `recovery-key add` | yes | no | accessd |
 | `setup recovery-key` | no | yes | accessd; first boot only |
 | `shell` | no | yes | accessd; root operators; see [The root shell](#the-root-shell) |
-| `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `mcp ...`, `resources ...` | yes | yes | Not available in this release |
+| `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
+| `<product> mcp ...` (`sneakers mcp ...`) | no | yes | Only while a product is installed; Not available in this release |
 
 A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` and isn't listed by
 `help` or completed. `-o json` prints a command's result, or its error as
@@ -117,6 +118,17 @@ A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` an
 `time-zone` and `https-proxy` on top of the current settings. While accessd is down they answer
 `NOT_AVAILABLE` ("the appliance services are unavailable"), and `status` shows the last status
 accessd kept, with the time it was taken.
+
+### Product commands
+
+The commands above are the base appliance's, and they are the same on every box. An installed
+product adds its own commands in a group named after it, listed by `help` under its own heading
+("Sneakers commands (the installed product)") and completed like the others. The shell reads the
+product's name from the current product slot's header (`/var/lib/sneakers/product/current/bundle.json`,
+the `<name>-product` header name without `-product`) when the login starts. With no product
+installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
+`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, which answers
+`NOT_AVAILABLE` until the product's MCP switch lands.
 
 ## The root shell
 

@@ -122,6 +122,11 @@ message ProductSlots {
   string previous_version = 3;
   // running is true while the product services (k0s) run.
   bool running = 4;
+  // name is the installed product's name for people, such as "Sneakers",
+  // from the current slot's header; empty before the first install. The
+  // :8443 nav shows the product's own section under it, and only while it
+  // is set.
+  string name = 5;
 }
 
 // ProductVersion is one product bundle a source offers.

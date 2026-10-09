@@ -91,7 +91,7 @@ func runWith(t *testing.T, b shell.Backend, line, stdin string) (string, string,
 
 func TestLaterSpecCommandsAreNotAvailable(t *testing.T) {
 	s := &shell.Services{}
-	for _, line := range []string{"tls show", "backup list", "restore", "upgrade status", "mcp off", "resources", "logs export", "support-bundle"} {
+	for _, line := range []string{"tls show", "backup list", "restore", "upgrade status", "resources", "logs export", "support-bundle"} {
 		_, stderr, err := runWith(t, s, line, "")
 		if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "Not available in this release") {
 			t.Errorf("%q: %v %q", line, err, stderr)

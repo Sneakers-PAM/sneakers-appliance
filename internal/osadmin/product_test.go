@@ -293,3 +293,27 @@ func TestListThenFetchFromTheMirrorThenDirect(t *testing.T) {
 		t.Fatalf("direct offer %v %v", l, err)
 	}
 }
+
+// The product slots carry the installed product's name, so the :8443 nav
+// can show the product's own section only once one is installed.
+func TestTheProductSlotsNameTheInstalledProduct(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	if s := alice.productSlots(t); s.GetName() != "" {
+		t.Fatalf("a box with no product names one: %v", s)
+	}
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if s := alice.productSlots(t); s.GetName() != "" {
+		t.Fatalf("a staged product is named before it's installed: %v", s)
+	}
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if s := alice.productSlots(t); s.GetName() != "Sneakers" {
+		t.Fatalf("installed product name %q", s.GetName())
+	}
+}

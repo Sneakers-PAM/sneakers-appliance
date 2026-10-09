@@ -17,6 +17,7 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 )
 
 // Origin is where a command line came from.
@@ -65,6 +66,9 @@ type Env struct {
 	// RootShell relays the terminal to accessd's root-shell socket with a
 	// ticket, until the root shell ends; nil (no terminal) refuses `shell`.
 	RootShell func(ctx context.Context, socket, ticket string) error
+	// Product is the installed product; its commands are offered under its
+	// name only while one is installed.
+	Product productinfo.Info
 }
 
 type flagSpec struct {
@@ -85,7 +89,11 @@ type spec struct {
 	// later marks the commands of specs 3 to 5, whose backends aren't on
 	// the box yet.
 	later bool
-	run   func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
+	// product marks a product's command: offered as "<product> <path>",
+	// and only while a product is installed. The base shell never names
+	// one.
+	product bool
+	run     func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
 }
 
 var both = []Origin{OriginSSH, OriginConsole}
@@ -108,7 +116,7 @@ var specs = []spec{
 	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true},
-	{path: "mcp", use: "mcp [...]", short: "The MCP switch", action: "mcp", origins: both, nargs: [2]int{0, -1}, later: true},
+	{path: "mcp", use: "mcp [...]", short: "The MCP switch", action: "mcp", origins: both, nargs: [2]int{0, -1}, later: true, product: true},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "logs export", short: "Stream the logs as an archive to standard output", action: "logs.export", origins: []Origin{OriginSSH}, later: true},
 	{path: "support-bundle", short: "Stream a support bundle to standard output", action: "support.bundle", origins: []Origin{OriginSSH}, later: true},
@@ -128,10 +136,13 @@ func (c *Command) Action() string { return c.s.action }
 // Allowed reports whether the command exists in origin o.
 func (c *Command) Allowed(o Origin) bool { return slices.Contains(c.s.origins, o) }
 
-// Resolve finds the command words name, longest path first, or nil.
+// Resolve finds the base command words name, longest path first, or nil.
 func Resolve(words []string) *Command {
 	var best *spec
 	for i := range specs {
+		if specs[i].product {
+			continue
+		}
 		p := strings.Fields(specs[i].path)
 		if len(p) <= len(words) && slices.Equal(p, words[:len(p)]) && (best == nil || len(p) > len(strings.Fields(best.path))) {
 			best = &specs[i]
@@ -164,12 +175,23 @@ func laterAction(action string) bool {
 	return false
 }
 
-// Names are the command paths offered in origin o, for help and completion.
-func Names(o Origin) []string {
+// Names are the base command paths offered in origin o, for help and
+// completion.
+func Names(o Origin) []string { return NamesFor(o, productinfo.Info{}) }
+
+// NamesFor are the command paths offered in origin o with product p
+// installed: the base's, then p's own under its name.
+func NamesFor(o Origin, p productinfo.Info) []string {
 	var out []string
 	for _, s := range specs {
-		if slices.Contains(s.origins, o) {
+		if !slices.Contains(s.origins, o) {
+			continue
+		}
+		switch {
+		case !s.product:
 			out = append(out, s.path)
+		case p.Present():
+			out = append(out, p.Name+" "+s.path)
 		}
 	}
 	return out
@@ -189,12 +211,12 @@ type Info struct {
 	Later bool
 }
 
-// Commands describes the commands offered in origin o, in the table's
-// order.
+// Commands describes the base commands offered in origin o, in the
+// table's order.
 func Commands(o Origin) []Info {
 	var out []Info
 	for _, s := range specs {
-		if !slices.Contains(s.origins, o) {
+		if s.product || !slices.Contains(s.origins, o) {
 			continue
 		}
 		i := Info{Path: s.path, Use: s.use, Short: s.short, Args: s.nargs[1] != 0, Stdin: s.stdin, Confirm: s.confirm, Later: s.later}
@@ -260,25 +282,54 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return codes.Wrap(codes.ShellParse, err) })
 	root.PersistentFlags().StringP("output", "o", "text", "output format: text or json")
+	root.AddGroup(&cobra.Group{ID: groupBase, Title: "Appliance commands:"})
+	root.SetHelpCommandGroupID(groupBase)
 	groups := map[string]*cobra.Command{"": root}
+	if e.Product.Present() {
+		root.AddGroup(&cobra.Group{ID: groupProduct, Title: e.Product.Title + " commands (the installed product):"})
+		g := &cobra.Command{Use: e.Product.Name, Short: e.Product.Title + " commands", GroupID: groupProduct}
+		groups[e.Product.Name] = g
+		root.AddCommand(g)
+	}
 	for i := range specs {
 		s := &specs[i]
-		parts := strings.Fields(s.path)
+		path := s.path
+		if s.product {
+			if !e.Product.Present() {
+				continue
+			}
+			path = e.Product.Name + " " + path
+		}
+		parts := strings.Fields(path)
 		parent := root
 		for j := 0; j < len(parts)-1; j++ {
 			key := strings.Join(parts[:j+1], " ")
 			g, ok := groups[key]
 			if !ok {
 				g = &cobra.Command{Use: parts[j], Short: parts[j] + " commands"}
+				if j == 0 {
+					g.GroupID = groupBase
+				}
 				groups[key] = g
 				parent.AddCommand(g)
 			}
 			parent = g
 		}
-		parent.AddCommand(leaf(ctx, e, s, parts[len(parts)-1]))
+		c := leaf(ctx, e, s, parts[len(parts)-1])
+		if parent == root {
+			c.GroupID = groupBase
+		}
+		parent.AddCommand(c)
 	}
 	return root
 }
+
+// The help's sections: the base appliance's commands, then the installed
+// product's.
+const (
+	groupBase    = "base"
+	groupProduct = "product"
+)
 
 func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 	use := s.use

@@ -23,15 +23,16 @@ import (
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/bundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
 // Dir is the slots' directory on the box.
-const Dir = "/var/lib/sneakers/product"
+const Dir = productinfo.Dir
 
 // BundleFile is the verified header, written into a slot once its bundle
 // checks out; a slot without it is never used.
-const BundleFile = "bundle.json"
+const BundleFile = productinfo.BundleFile
 
 // The links in Dir.
 const (

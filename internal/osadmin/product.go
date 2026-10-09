@@ -27,6 +27,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
@@ -99,8 +100,10 @@ func (s *Server) baseVersion(ctx context.Context) (string, error) {
 
 // productSlots is GetUpgrades' view of the product.
 func (s *Server) productSlots(ctx context.Context) *osadminv1.ProductSlots {
-	st := s.slots().Status()
-	out := &osadminv1.ProductSlots{InstalledVersion: st.Installed, StagedVersion: st.Staged, PreviousVersion: st.Previous}
+	sl := s.slots()
+	st := sl.Status()
+	out := &osadminv1.ProductSlots{InstalledVersion: st.Installed, StagedVersion: st.Staged, PreviousVersion: st.Previous,
+		Name: productinfo.Installed(sl.Dir).Title}
 	if s.o.Services != nil {
 		if r, err := s.o.Services.Status(ctx, connect.NewRequest(&initv1.StatusRequest{Name: ProductService})); err == nil {
 			out.Running = r.Msg.GetRunning()
