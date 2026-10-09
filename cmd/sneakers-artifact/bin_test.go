@@ -215,3 +215,35 @@ func TestBinPackWritesAProductBundlesBaseRange(t *testing.T) {
 		t.Fatalf("a range that ends before it starts: want UPGRADE_FORMAT, got %v", err)
 	}
 }
+
+// product-check names the brand it found, and warns when its colours fail
+// the contrast check and the base colours stay.
+func TestProductCheckReportsTheBrand(t *testing.T) {
+	tmp := t.TempDir()
+	tree := filepath.Join(tmp, "tree")
+	k := fixtures.LabKeys(t)
+	writeTree(t, tree, k)
+	writeFile(t, filepath.Join(tmp, "cosign.pub"), k.Cosign.PublicPEM)
+	check := func() (string, error) {
+		return runCmd(t, "product-check", "--dir", tree, "--release-key", filepath.Join(tmp, "cosign.pub"), "--arch", "amd64")
+	}
+	if got, err := check(); err != nil || !strings.HasSuffix(got, "no brand") {
+		t.Fatalf("%q %v", got, err)
+	}
+	if err := os.MkdirAll(filepath.Join(tree, "brand"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(tree, "brand", "logo.svg"), []byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>`))
+	writeFile(t, filepath.Join(tree, "brand", "brand.yaml"), []byte("apiVersion: sneakers-pam/v1alpha1\nkind: Brand\nlogo: logo.svg\ncolours: {background: \"#0b1f33\", text: \"#ffffff\", accent: \"#ffb000\"}\n"))
+	if got, err := check(); err != nil || !strings.HasSuffix(got, "brand: logo.svg (image/svg+xml), colours #0b1f33 #ffffff #ffb000") {
+		t.Fatalf("%q %v", got, err)
+	}
+	writeFile(t, filepath.Join(tree, "brand", "brand.yaml"), []byte("apiVersion: sneakers-pam/v1alpha1\nkind: Brand\nlogo: logo.svg\ncolours: {background: \"#0b1f33\", text: \"#203040\", accent: \"#ffb000\"}\n"))
+	if got, err := check(); err != nil || !strings.Contains(got, "warning: the brand's text on its background has contrast") || !strings.HasSuffix(got, "brand: logo.svg (image/svg+xml), base colours") {
+		t.Fatalf("%q %v", got, err)
+	}
+	writeFile(t, filepath.Join(tree, "brand", "logo.svg"), []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`))
+	if _, err := check(); err == nil {
+		t.Fatal("a logo with a script passed the check")
+	}
+}

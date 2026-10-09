@@ -43,6 +43,8 @@
 #   PRODUCT_MIN_BASE, PRODUCT_MAX_BASE
 #                the product bundle's base range (default: this build's
 #                version, no maximum)
+#   BRAND        a brand folder for the lab product bundle (optional;
+#                build/product/build.sh, docs/artifact.md#the-brand)
 #
 # Output: $OUT/version (the version with the build number, which every
 # file name below carries), $OUT/keys.txt (the SHA-256 fingerprint of each
@@ -186,7 +188,7 @@ done
 # predate the range.
 VERSION="$version" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
   SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
-  bash "$root/build/product/build.sh"
+  BRAND="${BRAND:-}" bash "$root/build/product/build.sh"
 sign_blob "$work/product/bin/header.json" "$work/product/bin/header.sigstore.json"
 rm -rf "$OUT/product"
 product_bin="$(go run "$root/cmd/sneakers-artifact" bin-seal --work "$work/product/bin" --bundle "$work/product/bin/header.sigstore.json" --out "$OUT/product")"

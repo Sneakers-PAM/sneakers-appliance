@@ -34,17 +34,18 @@ from `/var/lib/sneakers/osadmin`, following no links, into `/run/sneakers/edgefa
 files 0600, owned by `edgefall`). Without a whole pair it leaves none, and edgefall never answers
 443.
 
-It serves exactly three things, and nothing else:
+It serves exactly these, and nothing else:
 
 | Request | Answer |
 |---|---|
-| `GET /_box/state` | `{"state":"rebooting"}`, `Cache-Control: no-store` |
+| `GET /_box/state` | `{"state":"rebooting"}`, with `"brand"` when the product has one (below), `Cache-Control: no-store` |
 | `GET /_box/poll.js` | the poller |
+| `GET /_box/logo` | the product's logo for the poller's overlay, only when its brand has one, from edgefall's own copy (`Content-Security-Policy: default-src 'none'; sandbox`, `nosniff`) |
 | anything else, any path, method or host | the branded page, `503`, `Retry-After: 10`, `Sneakers-Box-State: <state>` |
 
 It never serves product content and never proxies. The page has a strict CSP (`default-src
-'none'`, the script from itself, its one inline stylesheet by hash) and loads the poller, so a
-browser that lands on it goes back to the product by itself.
+'none'`, the script from itself, its one inline stylesheet by hash, images from itself) and loads the
+poller, so a browser that lands on it goes back to the product by itself.
 
 - **Loopback, always:** `127.0.0.1:9180`, plain HTTP. A product edge routes `/_box/` there and uses
   it for its error pages (`502` to `504`), so an open tab gets the state from the same origin. The
@@ -65,6 +66,28 @@ browser that lands on it goes back to the product by itself.
 - **Through the drain:** a reboot's or a shutdown's drain leaves edgefall running until the power
   goes ([init.md](init.md#the-service-table)), so once k0s has stopped, 443 still answers with the
   page.
+
+## The product's brand
+
+The page and the overlay carry the installed product's logo and colours when its bundle has a brand
+([artifact.md](artifact.md#the-brand)); with no product, or a bundle without one, they keep the base
+look. Edgefall reads `/var/lib/sneakers/product/current/brand/` (`--brand-dir`): the current
+slot's copy, which only root writes and edgefall only reads. It looks again whenever the slot
+`current` names or the files in it change, so applying or reverting a product switches the brand
+with it. Each load runs the bundle's brand check again; a brand that fails it is ignored (logged as a
+warning) and the base look stays, and colours that fail the contrast check give way to the base
+colours while the logo stays.
+
+- **The page:** the logo replaces the wordmark, carried in the page itself as a `data:` image, so
+  it shows even when edgefall lets 443 go between the page and another request; the colours are
+  added to the page's one stylesheet as the checked `#rrggbb` values. The CSP still pins that
+  stylesheet by its hash, so a brand never loosens it: no `unsafe-inline`, no other origin.
+- **The state:** `/_box/state` adds `"brand":{"background":"#rrggbb","text":"#rrggbb","accent":"#rrggbb","logo":"/_box/logo"}`
+  (each field only when the brand has it).
+- **The overlay:** the poller takes the brand from the first state answer that has one, while the
+  box still answers, and loads the logo then, so the overlay shows it after the box has gone away.
+  It checks the colours itself. A product page's CSP needs `img-src 'self'` for the logo; without
+  it the overlay shows the wordmark.
 
 ## The poller
 

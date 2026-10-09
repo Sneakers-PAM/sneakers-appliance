@@ -9,8 +9,8 @@
 // the images under images/: one OCI image archive per image, named
 // <sha256 hex of the pinned digest>.tar, with the org release-key
 // signature of that digest beside it as <hex>.tar.sigstore.json, and the
-// stacks k0s applies under manifests/<stack>/*.yaml. Nothing else may be
-// in it.
+// stacks k0s applies under manifests/<stack>/*.yaml, and optionally the
+// product's brand under brand/ (package brand). Nothing else may be in it.
 package bundle
 
 import (
@@ -32,6 +32,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/brand"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 )
@@ -53,6 +54,7 @@ const (
 	ProductHelm      = "helm"
 	ProductImages    = "images"
 	ProductManifests = "manifests"
+	ProductBrand     = brand.Dir
 )
 
 // Release is the part of release.yaml the bundle check reads. The file is
@@ -284,8 +286,9 @@ func CheckRoot(fsys fs.FS, relYAML []byte) error {
 // CheckProduct checks an unpacked product bundle: only the bundle's own
 // entries at the top, k0s (and helm, when release.yaml pins it) is the
 // binary its release.yaml pins for arch,
-// the images are exactly the pinned ones, each signed with key, and the
-// stacks are YAML files only. It returns the bundle's release.
+// the images are exactly the pinned ones, each signed with key, the
+// stacks are YAML files only, and a brand, when there is one, passes
+// brand.Load. It returns the bundle's release.
 func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, error) {
 	top, err := fs.ReadDir(fsys, ".")
 	if err != nil {
@@ -293,7 +296,7 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	}
 	for _, e := range top {
 		switch e.Name() {
-		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests:
+		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand:
 		default:
 			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
 		}
@@ -330,6 +333,9 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	if err := checkStacks(fsys); err != nil {
 		return nil, err
 	}
+	if err := checkBrand(fsys); err != nil {
+		return nil, err
+	}
 	return rel, nil
 }
 
@@ -349,6 +355,23 @@ func checkBinary(fsys fs.FS, name, want string) error {
 		return codes.New(codes.KitBundleMismatch, "the product bundle's %s has SHA-256 %s; its release.yaml pins %s", name, got, want)
 	}
 	return nil
+}
+
+// checkBrand checks brand/, when the bundle has one.
+func checkBrand(fsys fs.FS) error {
+	st, err := fs.Stat(fsys, ProductBrand)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil || !st.IsDir() {
+		return codes.New(codes.KitBundleMismatch, "the product bundle's %s isn't a directory", ProductBrand)
+	}
+	sub, err := fs.Sub(fsys, ProductBrand)
+	if err != nil {
+		return codes.New(codes.KitBundleMismatch, "the product bundle's %s can't be read: %v", ProductBrand, err)
+	}
+	_, _, err = brand.Load(sub)
+	return err
 }
 
 // checkStacks allows manifests/<stack>/<file>.yaml and nothing else.
