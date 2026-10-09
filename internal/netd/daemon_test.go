@@ -203,8 +203,12 @@ func TestAnUnchangedInterfaceIsLeftAlone(t *testing.T) {
 	d := b.start()
 	b.workers.report4(t, "eth0", &netd.Lease4{Addr: netip.MustParsePrefix("192.0.2.100/24"), Lease: time.Hour})
 	waitFor(t, func() bool { return slices.Contains(b.sys.prefixes("eth0"), "192.0.2.100/24") })
+	// The default settings run DHCPv4 and the RA client; both must have
+	// started before they're counted.
+	b.workers.waitStarted(t, "dhcpv4 eth0", "ra eth0")
 	b.workers.mu.Lock()
 	before := len(b.workers.started)
+	ctxs := map[string]context.Context{"dhcpv4 eth0": b.workers.live["dhcpv4 eth0"], "ra eth0": b.workers.live["ra eth0"]}
 	b.workers.mu.Unlock()
 	s, _ := d.Get()
 	s.DNS = []netip.Addr{netip.MustParseAddr("192.0.2.54")}
@@ -216,6 +220,11 @@ func TestAnUnchangedInterfaceIsLeftAlone(t *testing.T) {
 	b.workers.mu.Unlock()
 	if after != before || !slices.Contains(b.sys.prefixes("eth0"), "192.0.2.100/24") {
 		t.Fatalf("workers restarted (%d to %d) or the lease dropped: %v", before, after, b.sys.prefixes("eth0"))
+	}
+	for name, ctx := range ctxs {
+		if ctx.Err() != nil {
+			t.Fatalf("%s was stopped", name)
+		}
 	}
 	if !strings.Contains(b.read("resolv.conf"), "nameserver 192.0.2.54") {
 		t.Fatalf("resolv.conf:\n%s", b.read("resolv.conf"))

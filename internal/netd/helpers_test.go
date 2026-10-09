@@ -242,6 +242,23 @@ func (w *fakeWorkers) running(t *testing.T) []string {
 	return out
 }
 
+// waitStarted waits until each named worker ("ra eth0", say) has started:
+// the daemon starts each in its own goroutine, so one may not have run yet
+// when the test goes on.
+func (w *fakeWorkers) waitStarted(t *testing.T, names ...string) {
+	t.Helper()
+	waitFor(t, func() bool {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		for _, n := range names {
+			if !slices.Contains(w.started, n) {
+				return false
+			}
+		}
+		return true
+	})
+}
+
 func (w *fakeWorkers) report4(t *testing.T, iface string, l *netd.Lease4) {
 	t.Helper()
 	waitFor(t, func() bool { w.mu.Lock(); defer w.mu.Unlock(); return w.r4[iface] != nil })
