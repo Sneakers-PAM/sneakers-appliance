@@ -1,0 +1,25 @@
+# Known lab key sets: the SHA-256 fingerprints (computed as in
+# keys/production/fingerprints.txt) of lab sets kept on disk for lab boxes.
+# build/release/check-production-keys.sh refuses a production set holding any
+# of them. Lab sets made fresh for one CI run aren't listed; their LAB label
+# is refused instead. One value per line, then a note.
+a7f1ab494b090aaedfc142e7627479547814a433c826a6c16a6a54d1e82b7dd7 lab set a PK
+5236f0e0f3972f8068979baed4f9383d553f054b936f5e199e0b09d03523db3a lab set a KEK
+407ee0c4c9f12a9ebf38fbe016e46477743d6c867aef9c9e6b4d39ebf3645941 lab set a db
+90b09a2289f5b5b118576d914b65b042ab126be3c5feeb0dbb2e6e06761b6658 lab set a rogue-db
+f01e2d207bd95f03a2cbb9d1a8e03495a0de7266454d7f33748b1fe247a2f939 lab set a cosign
+7689b4a5e6a8b7b4008bce7428c6eefa349603adf1b1fafa20bec6ae9baa0ac8 lab set a rogue-cosign
+9db7fc3e861c5d8f8adb924b38e6b1b09095c18db09c5624fe711761b43d389c lab set a update
+b5dcad4185e3151ac7e4cf9fe250100125f51ef9e78aef3ca1c55864510e0f6f lab set a rogue-update
+ad06a998c5624961e2a4ef977cbc6d69657e9e772d03947028c479b3256c9cb4 lab set b PK
+6a17ede9851a04b851b96addf5e9a51b27d9bf287e4bd3f042875b4ae5548123 lab set b KEK
+5efd7eccbe115c3d280ef689e39241f0666735513b46050fabab37e4dcff4a95 lab set b db
+9566efb7be1a737b259a232c74f9932d44f7307bd468915363074bbe031ca696 lab set b rogue-db
+5a0efff14060df4afcd1c0d48de2d9e4fa2ba0596ad4b8bb6884c6198ee01a19 lab set b cosign
+54ca0952aa397a0b536ca395d2914fdb451a63759171e04ffcc6f44cb592e206 lab set b rogue-cosign
+37f8f1eb59ddebb9a4b5e79762e5c3e8389f2f988b36fe2b88d8277bc9532a2e lab set b update
+1cff40f1df47605c9f89143538960201a08737e02c8e62591b93a76f43734adc lab set b rogue-update
+88c6f46f3bbf7bbe82ad1ad467da2bd4a7fecb1b3e740c89c071e5f2dbd6d6b2 lab set e PK
+a9e0e19b68a55d02ed0eea98b306141ef0f19cb8d45db2d191cf5d3f54be0067 lab set e KEK
+37d935cb74551fe73739a0ef40e281594d6c854fef3056ab790748afbfc46cb6 lab set e db
+0c3dce0da9ed1450e3ac1b3b160da9e8ad9b78ea8c280e1d939967aaf510a19a lab set e rogue-db
