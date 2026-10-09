@@ -43,6 +43,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
@@ -219,8 +220,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			}
 			return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 		},
-		Own:    func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
-		Logger: lg,
+		OwnName: func() string { name, _ := boxname.Ensure(c.state); return name },
+		Own:     func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
+		Logger:  lg,
 	})
 	if err != nil {
 		return err

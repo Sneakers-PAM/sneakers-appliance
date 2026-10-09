@@ -61,7 +61,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `ssh.login` (`refused`, `ACCESS_KEY_NO_CERTIFICATE`) | sneakers-sshd-run | a box-issued key sent without its certificate, read from sshd's log ([ssh-and-elevation.md](ssh-and-elevation.md#a-key-without-its-certificate)) |
 | `setup.code.redeem`, `setup.code.reset` | accessd | a browser redeems the setup code (or a wrong one), the console asks for a new code |
 | `recover-access.code`, `recover-access.cancel` | accessd | the console's Recover access code |
-| `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end |
+| `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end; `rootshell.end` is `ok` with how it ended in `detail.reason` (`exit`, `idle`, `time-box`, `terminated`) |
 | `product.value.read` | accessd | an admin reads a value the product exposes (`<product> <name>` or `ProductService.GetExposedValue`): `detail.name`, `detail.state` `shown` or `consumed`; never the value ([ssh-and-elevation.md](ssh-and-elevation.md#product-values)) |
 | `clock.step` | netd | SNTP stepped the clock (`detail.server`, `detail.offsetMs`, `detail.at`: `boot` or `running`); small offsets are slewed and not audited ([network.md](network.md#dns-ntp-and-the-host-name)) |
 

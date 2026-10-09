@@ -304,6 +304,8 @@ type fakeNetd struct {
 	servicePorts []uint32
 	// down makes Status fail, as a netd that doesn't answer.
 	down bool
+	// learnt is what DHCP gave, for Status.
+	learnt *netdv1.StatusResponse
 	// keepAtOnce makes Set keep the change with no window, as netd does
 	// for a DNS or NTP change.
 	keepAtOnce bool
@@ -356,7 +358,11 @@ func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest
 	if n.down {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("netd is down"))
 	}
-	return connect.NewResponse(&netdv1.StatusResponse{ManagementAddresses: slices.Clone(n.mgmt), Hostname: n.hostname, NtpSynced: n.ntp}), nil
+	out := &netdv1.StatusResponse{ManagementAddresses: slices.Clone(n.mgmt), Hostname: n.hostname, NtpSynced: n.ntp}
+	if l := n.learnt; l != nil {
+		out.LearntDns, out.LearntSearch, out.LearntNtp, out.NtpServers = l.GetLearntDns(), l.GetLearntSearch(), l.GetLearntNtp(), l.GetNtpServers()
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (n *fakeNetd) SetServicePorts(_ context.Context, r *connect.Request[netdv1.SetServicePortsRequest]) (*connect.Response[netdv1.SetServicePortsResponse], error) {

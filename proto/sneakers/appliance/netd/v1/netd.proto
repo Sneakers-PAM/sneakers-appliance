@@ -186,6 +186,15 @@ message StatusResponse {
   // ssh_open and https_open say whether the firewall accepts 22 and 8443.
   bool ssh_open = 6;
   bool https_open = 7;
+  // learnt_dns, learnt_search and learnt_ntp are what DHCP and router
+  // advertisements gave, management interface first. The resolver and the
+  // clock use them where the settings name none.
+  repeated string learnt_dns = 8;
+  repeated string learnt_search = 9;
+  repeated string learnt_ntp = 10;
+  // ntp_servers are the servers the clock asks now: the settings', else
+  // DHCP's, else the image's default pool.
+  repeated string ntp_servers = 11;
 }
 
 message ListInterfacesRequest {}

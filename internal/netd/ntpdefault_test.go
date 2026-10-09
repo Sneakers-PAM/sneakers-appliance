@@ -28,6 +28,11 @@ func TestTheDefaultPoolUntilDHCPOrTheSettingsNameServers(t *testing.T) {
 		DNS: []netip.Addr{netip.MustParseAddr("192.0.2.53")}, Search: []string{"sneakers.example.org"}, NTP: []string{"192.0.2.123"},
 	})
 	waitFor(t, func() bool { s, _ := b.time.get(); return slices.Equal(s, []string{"192.0.2.123"}) })
+	// What DHCP gave is in Status, for the Network page.
+	st := d.Status()
+	if !slices.Equal(st.LearntDNS, []netip.Addr{netip.MustParseAddr("192.0.2.53")}) || !slices.Equal(st.LearntSearch, []string{"sneakers.example.org"}) || !slices.Equal(st.LearntNTP, []string{"192.0.2.123"}) || !slices.Equal(st.NTPServers, []string{"192.0.2.123"}) {
+		t.Fatalf("learnt dns %v search %v ntp %v servers %v", st.LearntDNS, st.LearntSearch, st.LearntNTP, st.NTPServers)
+	}
 	s, _ := d.Get()
 	s.NTP = []string{"time.example.org"}
 	if _, err := d.Set(s); err != nil {

@@ -820,3 +820,29 @@ func TestAnAssignmentSurvivesAReopen(t *testing.T) {
 		}
 	}
 }
+
+// A box with no host name from the settings or DHCP still names itself in
+// a CSR: its own name (sneakers-<8 hex>), the name the console shows.
+func TestACSRCarriesTheBoxsOwnNameWithoutAHostName(t *testing.T) {
+	f := newFixtureWith(t, "", []string{"192.0.2.10/24"})
+	f.s.SetOwnName(func() string { return "sneakers-62f51517" })
+	csr, err := f.s.GenerateCSR(context.Background(), certstore.CSRRequest{KeyType: certstore.KeyECDSAP256})
+	if err != nil {
+		t.Fatal(err)
+	}
+	blk, _ := pem.Decode([]byte(csr.PEM))
+	req, err := x509.ParseCertificateRequest(blk.Bytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(req.DNSNames, []string{"sneakers-62f51517"}) || len(req.IPAddresses) != 1 || req.Subject.CommonName != "sneakers-62f51517" {
+		t.Fatalf("SANs %v %v CN %q", req.DNSNames, req.IPAddresses, req.Subject.CommonName)
+	}
+	// With a host name, that's the name; the box's own name isn't added.
+	g := newFixtureWith(t, host, []string{"192.0.2.10/24"})
+	g.s.SetOwnName(func() string { return "sneakers-62f51517" })
+	csr, err = g.s.GenerateCSR(context.Background(), certstore.CSRRequest{KeyType: certstore.KeyECDSAP256})
+	if err != nil || slices.Contains(csr.Names, "sneakers-62f51517") || !slices.Contains(csr.Names, host) {
+		t.Fatalf("%v %v", csr.Names, err)
+	}
+}

@@ -957,6 +957,8 @@ func (d *Daemon) Status() Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	st := Status{Management: a.Management, Service: a.Service, Hostname: a.Hostname}
+	st.LearntDNS, st.LearntSearch, st.LearntNTP = d.learnt(d.settings)
+	_, _, _, st.NTPServers, _, _ = d.effective()
 	if d.table != nil {
 		st.SSHOpen, st.HTTPSOpen = d.table.Open22, d.table.Open8443
 	}

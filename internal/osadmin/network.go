@@ -52,6 +52,7 @@ func (h *networkSvc) GetNetwork(ctx context.Context, _ *connect.Request[osadminv
 		ManagementAddresses: netdapi.Bare(st.Msg.GetManagementAddresses()), ServiceAddresses: st.Msg.GetServiceAddresses(),
 		NtpSynced: st.Msg.GetNtpSynced(), NtpOffsetMs: st.Msg.GetNtpOffsetMs(),
 		PendingChangeId: g.Msg.GetChangeId(), RevertSecondsLeft: g.Msg.GetSecondsLeft(),
+		LearntDns: st.Msg.GetLearntDns(), LearntSearch: st.Msg.GetLearntSearch(), LearntNtp: st.Msg.GetLearntNtp(), NtpServers: st.Msg.GetNtpServers(),
 	}
 	if l := g.Msg.GetLast(); l.GetReverted() {
 		out.LastChangeReverted, out.LastChangeRevertedAtStart, out.LastChangeId = true, l.GetAtStart(), l.GetChangeId()

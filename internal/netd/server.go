@@ -100,6 +100,7 @@ func (h *handler) Status(context.Context, *connect.Request[netdv1.StatusRequest]
 	return connect.NewResponse(&netdv1.StatusResponse{
 		ManagementAddresses: st.Management, ServiceAddresses: st.Service, Hostname: st.Hostname,
 		NtpSynced: st.NTPSynced, NtpOffsetMs: st.NTPOffset.Milliseconds(), SshOpen: st.SSHOpen, HttpsOpen: st.HTTPSOpen,
+		LearntDns: addrStrings(st.LearntDNS), LearntSearch: st.LearntSearch, LearntNtp: st.LearntNTP, NtpServers: st.NTPServers,
 	}), nil
 }
 
@@ -160,4 +161,12 @@ func (h *handler) Watch(ctx context.Context, _ *connect.Request[netdv1.WatchRequ
 			}
 		}
 	}
+}
+
+func addrStrings(in []netip.Addr) []string {
+	out := make([]string, 0, len(in))
+	for _, a := range in {
+		out = append(out, a.String())
+	}
+	return out
 }

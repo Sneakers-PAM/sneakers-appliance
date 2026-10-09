@@ -25,7 +25,9 @@ reverts unless confirmed, and the self-signed certificate is made again for the 
 With no host name, the box can only check its addresses, so a wildcard such as `*.example.org` is
 refused with `TLS_NO_HOSTNAME`, which says to set the host name first. The Certificates page shows
 the names the box checks, and when there's no host name a notice links to Network. The same names
-go into every CSR and into the `admin` endpoint's state.
+go into every CSR and into the `admin` endpoint's state. A CSR made while the box has no host name
+also names the box's own name (`sneakers-<8 hex>`, the name the console shows), as a DNS SAN and
+its common name.
 
 A management address here is the bare address (`192.0.2.10`), never the interface prefix netd
 reports (`192.0.2.10/24`), and link-local addresses are left out. That's what a CSR names, what the

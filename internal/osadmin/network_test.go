@@ -200,3 +200,21 @@ func TestStatusSaysANetworkChangeWaitsOrWasUndone(t *testing.T) {
 		t.Fatalf("after the undo %v", st.Msg.GetNetworkChange())
 	}
 }
+
+// The Network page shows what DHCP gave next to the typed settings.
+func TestGetNetworkShowsWhatDHCPGave(t *testing.T) {
+	b := newBox(t, true)
+	b.netd.mu.Lock()
+	b.netd.learnt = &netdv1.StatusResponse{LearntDns: []string{"192.0.2.53"}, LearntSearch: []string{"sneakers.example.org"}, LearntNtp: []string{"192.0.2.123"}, NtpServers: []string{"192.0.2.123"}}
+	b.netd.mu.Unlock()
+	alice := b.browser()
+	alice.signIn("alice")
+	g, err := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL).GetNetwork(context.Background(), connect.NewRequest(&osadminv1.GetNetworkRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := g.Msg
+	if len(m.GetLearntDns()) != 1 || m.GetLearntDns()[0] != "192.0.2.53" || len(m.GetLearntSearch()) != 1 || len(m.GetLearntNtp()) != 1 || len(m.GetNtpServers()) != 1 {
+		t.Fatalf("learnt %v %v %v %v", m.GetLearntDns(), m.GetLearntSearch(), m.GetLearntNtp(), m.GetNtpServers())
+	}
+}

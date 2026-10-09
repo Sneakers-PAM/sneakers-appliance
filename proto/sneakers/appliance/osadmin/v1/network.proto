@@ -65,6 +65,16 @@ message GetNetworkResponse {
   bool last_change_reverted = 10;
   bool last_change_reverted_at_start = 11;
   string last_change_id = 12;
+  // learnt_dns, learnt_search and learnt_ntp are what DHCP and router
+  // advertisements gave the box, which the page shows next to the typed
+  // values; the resolver and the clock use them where the settings name
+  // none.
+  repeated string learnt_dns = 13;
+  repeated string learnt_search = 14;
+  repeated string learnt_ntp = 15;
+  // ntp_servers are the servers the clock asks now: the settings', else
+  // DHCP's, else the image's default pool.
+  repeated string ntp_servers = 16;
 }
 
 message SetNetworkRequest {

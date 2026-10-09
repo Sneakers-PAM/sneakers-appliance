@@ -168,7 +168,10 @@ The clock is kept by SNTP (`internal/timesync`, IPv4 and IPv6 servers, up to
 four): one bounded sync, then polls. The servers are the settings', else
 DHCP's, else the image's default pool (`0.pool.ntp.org` to `3.pool.ntp.org`), <!-- scrub:allow=fqdn -->
 so a box on a network that names none still gets the time; naming servers in
-the settings replaces the pool.
+the settings replaces the pool. `Status` (and `GetNetwork`) list the servers in use as
+`ntp_servers`, and what DHCP and router advertisements gave as `learnt_dns`,
+`learnt_search` and `learnt_ntp`, which the Network page shows next to the
+typed values.
 
 An offset up to 128 ms is slewed. A larger one is stepped at the boot sync and
 whenever the clock is behind. A clock ahead of the servers on a running box

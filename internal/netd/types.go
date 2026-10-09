@@ -152,6 +152,11 @@ type Status struct {
 	NTPSynced           bool
 	NTPOffset           time.Duration
 	SSHOpen, HTTPSOpen  bool
+	// LearntDNS, LearntSearch and LearntNTP are what DHCP and RA gave;
+	// NTPServers what the clock asks now.
+	LearntDNS               []netip.Addr
+	LearntSearch, LearntNTP []string
+	NTPServers              []string
 }
 
 // Addresses is what Watch sends.
