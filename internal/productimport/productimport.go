@@ -362,7 +362,7 @@ func (m *Manager) Start(step Step, o Options) (Run, error) {
 	if err := m.writeRuns(runs); err != nil {
 		return Run{}, err
 	}
-	if err := os.WriteFile(filepath.Join(m.Stack, "job-"+job+".yaml"), []byte(doc), 0o644); err != nil { // #nosec G306 -- a stack k0s reads
+	if err := os.WriteFile(filepath.Join(m.Stack, "job-"+job+".yaml"), []byte(doc), 0o644); err != nil { // #nosec G306 G703 -- a stack k0s reads; the job name is built from a checked step
 		return Run{}, fmt.Errorf("productimport: %w", err)
 	}
 	m.lg().Info("productimport: step started", log.F("step", string(step)), log.F("job", job), log.F("rehearsal", o.Rehearsal), log.F("wipe", o.Wipe))
