@@ -55,6 +55,9 @@ is never used, and the previous one stays.
   signed for the admin's name ([access.md](access.md#issued-ssh-keys)). Password,
   keyboard-interactive and empty-password logins are off, and so is `PermitRootLogin`.
 - `RevokedKeys /var/lib/sneakers/ssh/revoked.krl`: removed keys, as keys and as certificate serials.
+- `HostCertificate /var/lib/sneakers/ssh/ssh_host_<kind>_key-cert.pub` for each host key that has
+  one: a host certificate signed by the box's SSH host CA (below), offered first
+  (`HostKeyAlgorithms` lists the certificate types before the bare keys).
 - `DisableForwarding yes`, `PermitTunnel no`, `PermitUserRC no`, `PermitUserEnvironment no`, and no
   `Subsystem` line, so there is no sftp or scp.
 - `ForceCommand /usr/bin/sneakers-shell` and `ExposeAuthInfo yes`, so the closed shell learns which
@@ -64,9 +67,35 @@ is never used, and the previous one stays.
   and their certificate types; ML-KEM and sntrup761 hybrid key exchange or curve25519;
   ChaCha20-Poly1305 and AES-GCM; encrypt-then-MAC SHA-2 MACs.
 
+### The host CA and the known_hosts line
+
+The box has two SSH CAs. The user CA is the root key ([access.md](access.md#issued-ssh-keys)),
+which signs the admins' certificates. The host CA is a key of its own, made at accessd's first start
+and sealed through KeyCustody like the root key (`host-ca-key`), with its public half in
+`/var/lib/sneakers/ssh/host_ca.pub`. accessd signs a host certificate for each host key with it
+(`ssh_host_ed25519_key-cert.pub`, `ssh_host_rsa_key-cert.pub`), for the box's host name and its
+management addresses (link-local ones left out), valid for a year. It signs them again whenever it
+renders sshd's files and the host key, the names or the addresses changed (netd's address and host
+name events re-render), or in a certificate's last 30 days, and then tells sshd to reload.
+
+A client that trusts the host CA never sees a host key prompt. Both CA public keys are in the
+`IssueSshKey` answer and in `ListAdmins` (`user_ca_public_key`, and `known_hosts` with
+`known_hosts_file_name` on the key download, `host_ca` on Access): the known_hosts line is
+
+```text
+@cert-authority box1.sneakers.example.org,192.0.2.10 ssh-ed25519 AAAA... sneakers-appliance host CA
+```
+
+Add it to `~/.ssh/known_hosts` (or point `-o UserKnownHostsFile=` at the downloaded file), and
+`ssh -o StrictHostKeyChecking=yes` connects with no prompt; a host certificate from any other CA is
+refused.
+
 The tests run the pinned static sshd's `sshd -t` on the rendered config, and
 `TestRealSshdTakesOnlyTheRootKeysCertificates` logs in against it: a certificate from the root key
 works, a plain key or another CA's certificate doesn't, and a revoked serial is refused.
+`TestRealSshdPresentsItsHostCertificate` connects with only the `@cert-authority` line in
+known_hosts and strict host key checking, with Go's client and, when `SNEAKERS_TEST_SSH` names
+OpenSSH's `ssh`, with that too; a line for another CA is refused.
 `TestRealSshdAuditsABareIssuedKey` sends an issued key without its certificate and checks the
 audit entry. The Static tools workflow runs them with `SNEAKERS_TEST_SSHD` pointing at the binary
 it built.

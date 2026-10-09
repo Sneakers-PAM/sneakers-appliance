@@ -85,6 +85,9 @@ type Options struct {
 	// HostKeyDir is where the SSH host keys live
 	// (/var/lib/sneakers/ssh); empty never makes them.
 	HostKeyDir string
+	// HostCA signs the host keys' certificates (rootkey.Key); nil leaves
+	// sshd presenting its bare host keys.
+	HostCA HostCA
 	// Elevated is sneakers-elevated, which runs a root shell.
 	Elevated string
 	// StartSSHD has init start sshd: the first admin exists.

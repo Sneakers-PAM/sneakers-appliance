@@ -45,6 +45,9 @@ type Paths struct {
 	AuthPath    string
 }
 
+// CertSuffix follows a host key's path for its host certificate.
+const CertSuffix = "-cert.pub"
+
 // DefaultPaths are the appliance's paths.
 func DefaultPaths() Paths {
 	return Paths{
@@ -74,8 +77,10 @@ var (
 	// PubkeyAlgorithms are the issued keys' type and its certificate type:
 	// the box issues ed25519 keys only.
 	PubkeyAlgorithms = []string{ssh.CertAlgoED25519v01, ssh.KeyAlgoED25519}
-	// HostKeyAlgorithms match the ed25519 and RSA host keys.
-	HostKeyAlgorithms = []string{ssh.KeyAlgoED25519, ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
+	// HostKeyAlgorithms match the ed25519 and RSA host keys, their host
+	// certificates first, so a client that trusts the box's host CA gets
+	// the certificate.
+	HostKeyAlgorithms = []string{ssh.CertAlgoED25519v01, ssh.CertAlgoRSASHA512v01, ssh.CertAlgoRSASHA256v01, ssh.KeyAlgoED25519, ssh.KeyAlgoRSASHA512, ssh.KeyAlgoRSASHA256}
 	// KexAlgorithms are the hybrid post-quantum exchanges and curve25519.
 	KexAlgorithms = []string{ssh.KeyExchangeMLKEM768X25519, "sntrup761x25519-sha512", ssh.KeyExchangeCurve25519}
 	// Ciphers are the AEAD ciphers.
@@ -109,6 +114,9 @@ The TOTP prompt comes next, in the menu.
 
 type view struct {
 	Paths
+	// HostCertificates are the host keys' certificates that exist,
+	// <key>-cert.pub (accessd signs them with the host CA).
+	HostCertificates  []string
 	Banner            string
 	ListenAddrs       []string
 	AllowUsers        []string
@@ -145,6 +153,11 @@ func Render(in Input, dir string) error {
 	}
 	for _, a := range in.ListenAddrs {
 		v.ListenAddrs = append(v.ListenAddrs, netip.AddrPortFrom(a, port).String())
+	}
+	for _, k := range p.HostKeys {
+		if _, err := os.Stat(k + CertSuffix); err == nil {
+			v.HostCertificates = append(v.HostCertificates, k+CertSuffix)
+		}
 	}
 	for _, a := range in.State.Admins {
 		if a.HasCredentials() {

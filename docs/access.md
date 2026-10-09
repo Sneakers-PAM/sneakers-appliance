@@ -54,7 +54,10 @@ seals both through init's KeyCustody (`root-key`, `access-pepper`): in the TPM w
 otherwise under the key file. Each is used only once its sealed copy reads back. The root key's
 private half is held in memory only; its public half is written to
 `/var/lib/sneakers/ssh/root_key.pub` for sshd. The root key signs the SSH certificates of the keys
-the box issues and makes the root-shell codes; the Access page shows its fingerprint.
+the box issues and makes the root-shell codes; the Access page shows its fingerprint. A third sealed
+item, the SSH **host CA** (`host-ca-key`, public half `/var/lib/sneakers/ssh/host_ca.pub`), signs
+only the box's host certificates
+([ssh-and-elevation.md](ssh-and-elevation.md#the-host-ca-and-the-known_hosts-line)).
 
 ## Passwords and TOTP
 

@@ -52,6 +52,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/kubeapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
@@ -187,6 +188,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		StatusFile: filepath.Join(c.run, "access", "status.json"),
 		Elevation:  elev,
 		HostKeyDir: paths.SSHDir(),
+		HostCA:     root,
 		AuditDir:   audit.Dir(),
 		Logger:     lg,
 	})
@@ -267,6 +269,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		},
 	})
 	d.Attach(store, api)
+	// The host certificates name the box's host name and addresses: a
+	// change re-renders sshd's files, which signs them again.
+	go watchNames(ctx, netdapi.NewClient(c.netdSock), lg, d.Rerender)
 	defer api.Close()
 
 	srv, err := listen(c.socket, d, lg)
@@ -318,6 +323,38 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			}
 			d.RefreshStatus(ctx)
 		}
+	}
+}
+
+// watchNames calls changed on each of netd's address and host name events
+// after the first; a broken stream is opened again.
+func watchNames(ctx context.Context, netd netdv1connect.NetworkServiceClient, lg log.Logger, changed func()) {
+	for ctx.Err() == nil {
+		stream, err := netd.Watch(ctx, connect.NewRequest(&netdv1.WatchRequest{}))
+		if err == nil {
+			first := true
+			for stream.Receive() {
+				if !first {
+					lg.Info("accessd: the box's addresses or host name changed; re-signing the host certificates", log.F("hostname", stream.Msg().GetHostname()))
+					changed()
+				}
+				first = false
+			}
+			err = stream.Err()
+			_ = stream.Close()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if err == nil {
+			err = errors.New("the stream ended")
+		}
+		lg.Warn("accessd: netd's address events stopped; watching again", log.F("error", err.Error()))
+		select {
+		case <-ctx.Done():
+		case <-time.After(5 * time.Second):
+		}
+		changed()
 	}
 }
 

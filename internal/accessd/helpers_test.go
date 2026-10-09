@@ -186,6 +186,7 @@ func newBox(t *testing.T) *box {
 		StatusFile: filepath.Join(b.run, "access", "status.json"),
 		Elevation:  b.elev,
 		HostKeyDir: filepath.Join(b.state, "ssh"),
+		HostCA:     b.root,
 		AuditDir:   b.log.Dir(),
 	})
 	b.d = d

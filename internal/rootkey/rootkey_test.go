@@ -153,3 +153,46 @@ func TestCodesAreDeterministicAndTiedToTheMessage(t *testing.T) {
 		t.Fatal("another box's root key gave the same code")
 	}
 }
+
+// The host CA is a key of its own, made and sealed once like the root key,
+// with its public half next to the root key's; it signs host certificates
+// only, for the names and addresses given.
+func TestTheHostCASignsHostCertificates(t *testing.T) {
+	s := newSealer()
+	dir := t.TempDir()
+	k, err := rootkey.Load(s, dir, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.items[rootkey.HostCAName]; !ok {
+		t.Fatal("the host CA isn't sealed")
+	}
+	if bytes.Equal(k.HostCAPublicKey().Marshal(), k.PublicKey().Marshal()) {
+		t.Fatal("the host CA is the user CA")
+	}
+	pub, err := os.ReadFile(filepath.Join(dir, rootkey.HostCAPublicFile))
+	if err != nil || !bytes.Equal(pub, ssh.MarshalAuthorizedKey(k.HostCAPublicKey())) {
+		t.Fatalf("%s %v", pub, err)
+	}
+	again, err := rootkey.Load(s, dir, nil)
+	if err != nil || !bytes.Equal(again.HostCAPublicKey().Marshal(), k.HostCAPublicKey().Marshal()) {
+		t.Fatal("the host CA changed on a reload")
+	}
+	_, hostPriv, _ := ed25519.GenerateKey(rand.Reader)
+	hs, _ := ssh.NewSignerFromKey(hostPriv)
+	now := time.Now()
+	cert, err := k.SignHostCert(hs.PublicKey(), []string{"box1.sneakers.example.org", "192.0.2.10"}, now.Add(-time.Minute), now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cert.CertType != ssh.HostCert || !bytes.Equal(cert.SignatureKey.Marshal(), k.HostCAPublicKey().Marshal()) {
+		t.Fatalf("%+v", cert)
+	}
+	checker := ssh.CertChecker{IsHostAuthority: func(a ssh.PublicKey, _ string) bool { return bytes.Equal(a.Marshal(), k.HostCAPublicKey().Marshal()) }}
+	if err := checker.CheckCert("192.0.2.10", cert); err != nil {
+		t.Fatal(err)
+	}
+	if err := checker.CheckCert("other.example.org", cert); err == nil {
+		t.Fatal("a name the certificate doesn't carry passed")
+	}
+}

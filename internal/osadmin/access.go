@@ -30,11 +30,14 @@ type accessSvc struct {
 	s *Server
 }
 
-func (h *accessSvc) ListAdmins(context.Context, *connect.Request[osadminv1.ListAdminsRequest]) (*connect.Response[osadminv1.ListAdminsResponse], error) {
+func (h *accessSvc) ListAdmins(ctx context.Context, _ *connect.Request[osadminv1.ListAdminsRequest]) (*connect.Response[osadminv1.ListAdminsResponse], error) {
 	st := h.s.o.Access.Read()
 	out := &osadminv1.ListAdminsResponse{HostKeys: h.s.hostKeys(), AccessPolicy: policyToWireAccess(st.AccessPolicy.Effective())}
-	if h.s.o.RootKey != nil {
-		out.RootKey = &osadminv1.HostKey{Type: h.s.o.RootKey.PublicKey().Type(), Fingerprint: h.s.o.RootKey.Fingerprint()}
+	if k := h.s.o.RootKey; k != nil {
+		out.RootKey = &osadminv1.HostKey{Type: k.PublicKey().Type(), Fingerprint: k.Fingerprint()}
+		out.UserCaPublicKey = strings.TrimSpace(string(ssh.MarshalAuthorizedKey(k.PublicKey())))
+		out.HostCa = &osadminv1.HostKey{Type: k.HostCAPublicKey().Type(), Fingerprint: ssh.FingerprintSHA256(k.HostCAPublicKey())}
+		out.KnownHosts, _ = h.s.knownHosts(ctx)
 	}
 	now := h.s.o.Clock.Now()
 	for _, a := range st.Admins {

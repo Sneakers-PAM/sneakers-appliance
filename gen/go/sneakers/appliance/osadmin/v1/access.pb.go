@@ -755,7 +755,15 @@ type ListAdminsResponse struct {
 	AccessPolicy    *AccessPolicy    `protobuf:"bytes,6,opt,name=access_policy,json=accessPolicy,proto3" json:"access_policy,omitempty"`
 	// root_key is the box's root key: its type and SHA256: fingerprint
 	// (the key itself never leaves the box).
-	RootKey       *HostKey `protobuf:"bytes,7,opt,name=root_key,json=rootKey,proto3" json:"root_key,omitempty"`
+	RootKey *HostKey `protobuf:"bytes,7,opt,name=root_key,json=rootKey,proto3" json:"root_key,omitempty"`
+	// user_ca_public_key is the root key's public half, the user CA sshd
+	// trusts (an authorized_keys line).
+	UserCaPublicKey string `protobuf:"bytes,8,opt,name=user_ca_public_key,json=userCaPublicKey,proto3" json:"user_ca_public_key,omitempty"`
+	// host_ca is the box's SSH host CA: its type and fingerprint.
+	HostCa *HostKey `protobuf:"bytes,9,opt,name=host_ca,json=hostCa,proto3" json:"host_ca,omitempty"`
+	// known_hosts is the "@cert-authority <names> <host CA key>" line for
+	// a client's known_hosts, as IssueSshKey gives it.
+	KnownHosts    string `protobuf:"bytes,10,opt,name=known_hosts,json=knownHosts,proto3" json:"known_hosts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -838,6 +846,27 @@ func (x *ListAdminsResponse) GetRootKey() *HostKey {
 		return x.RootKey
 	}
 	return nil
+}
+
+func (x *ListAdminsResponse) GetUserCaPublicKey() string {
+	if x != nil {
+		return x.UserCaPublicKey
+	}
+	return ""
+}
+
+func (x *ListAdminsResponse) GetHostCa() *HostKey {
+	if x != nil {
+		return x.HostCa
+	}
+	return nil
+}
+
+func (x *ListAdminsResponse) GetKnownHosts() string {
+	if x != nil {
+		return x.KnownHosts
+	}
+	return ""
 }
 
 type AddAdminRequest struct {
@@ -1729,9 +1758,19 @@ type IssueSshKeyResponse struct {
 	// certificate, so it pairs with certificate_file_name. Shown once.
 	Pem string `protobuf:"bytes,11,opt,name=pem,proto3" json:"pem,omitempty"`
 	// pem_file_name is <file_name>.pem.
-	PemFileName   string `protobuf:"bytes,12,opt,name=pem_file_name,json=pemFileName,proto3" json:"pem_file_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PemFileName string `protobuf:"bytes,12,opt,name=pem_file_name,json=pemFileName,proto3" json:"pem_file_name,omitempty"`
+	// user_ca_public_key is the box's user CA (its root key's public half),
+	// which signed the certificate; for reference.
+	UserCaPublicKey string `protobuf:"bytes,13,opt,name=user_ca_public_key,json=userCaPublicKey,proto3" json:"user_ca_public_key,omitempty"`
+	// known_hosts is a line for the client's known_hosts that trusts the
+	// box's host CA for its host name and management addresses:
+	// "@cert-authority <names> <host CA key>". sshd presents a host
+	// certificate that CA signed, so the first login has no host key prompt.
+	KnownHosts string `protobuf:"bytes,14,opt,name=known_hosts,json=knownHosts,proto3" json:"known_hosts,omitempty"`
+	// known_hosts_file_name is known_hosts_<box>, for known_hosts.
+	KnownHostsFileName string `protobuf:"bytes,15,opt,name=known_hosts_file_name,json=knownHostsFileName,proto3" json:"known_hosts_file_name,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *IssueSshKeyResponse) Reset() {
@@ -1844,6 +1883,27 @@ func (x *IssueSshKeyResponse) GetPem() string {
 func (x *IssueSshKeyResponse) GetPemFileName() string {
 	if x != nil {
 		return x.PemFileName
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetUserCaPublicKey() string {
+	if x != nil {
+		return x.UserCaPublicKey
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetKnownHosts() string {
+	if x != nil {
+		return x.KnownHosts
+	}
+	return ""
+}
+
+func (x *IssueSshKeyResponse) GetKnownHostsFileName() string {
+	if x != nil {
+		return x.KnownHostsFileName
 	}
 	return ""
 }
@@ -2415,7 +2475,7 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x11root_code_minutes\x18\x02 \x01(\x05R\x0frootCodeMinutes\x120\n" +
 	"\x14root_session_minutes\x18\x03 \x01(\x05R\x12rootSessionMinutes\x12+\n" +
 	"\x12ssh_key_valid_days\x18\x04 \x01(\x05R\x0fsshKeyValidDays\"\x13\n" +
-	"\x11ListAdminsRequest\"\x98\x04\n" +
+	"\x11ListAdminsRequest\"\xa7\x05\n" +
 	"\x12ListAdminsResponse\x12<\n" +
 	"\x06admins\x18\x01 \x03(\v2$.sneakers.appliance.osadmin.v1.AdminR\x06admins\x12C\n" +
 	"\thost_keys\x18\x02 \x03(\v2&.sneakers.appliance.osadmin.v1.HostKeyR\bhostKeys\x12]\n" +
@@ -2423,7 +2483,12 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x06quorum\x18\x04 \x01(\v2%.sneakers.appliance.osadmin.v1.QuorumR\x06quorum\x12L\n" +
 	"\frevoked_keys\x18\x05 \x03(\v2).sneakers.appliance.osadmin.v1.RevokedKeyR\vrevokedKeys\x12P\n" +
 	"\raccess_policy\x18\x06 \x01(\v2+.sneakers.appliance.osadmin.v1.AccessPolicyR\faccessPolicy\x12A\n" +
-	"\broot_key\x18\a \x01(\v2&.sneakers.appliance.osadmin.v1.HostKeyR\arootKey\"\xa6\x01\n" +
+	"\broot_key\x18\a \x01(\v2&.sneakers.appliance.osadmin.v1.HostKeyR\arootKey\x12+\n" +
+	"\x12user_ca_public_key\x18\b \x01(\tR\x0fuserCaPublicKey\x12?\n" +
+	"\ahost_ca\x18\t \x01(\v2&.sneakers.appliance.osadmin.v1.HostKeyR\x06hostCa\x12\x1f\n" +
+	"\vknown_hosts\x18\n" +
+	" \x01(\tR\n" +
+	"knownHosts\"\xa6\x01\n" +
 	"\x0fAddAdminRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
 	"\x04role\x18\x02 \x01(\x0e2#.sneakers.appliance.osadmin.v1.RoleR\x04role\x12!\n" +
@@ -2471,7 +2536,7 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
 	"valid_days\x18\x02 \x01(\x05R\tvalidDays\x12\x1b\n" +
-	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\xbc\x03\n" +
+	"\ttotp_code\x18\x03 \x01(\tR\btotpCode\"\xbd\x04\n" +
 	"\x13IssueSshKeyResponse\x124\n" +
 	"\x03key\x18\x01 \x01(\v2\".sneakers.appliance.osadmin.v1.KeyR\x03key\x12\x1f\n" +
 	"\vprivate_key\x18\x02 \x01(\tR\n" +
@@ -2488,7 +2553,11 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\x14public_key_file_name\x18\n" +
 	" \x01(\tR\x11publicKeyFileName\x12\x10\n" +
 	"\x03pem\x18\v \x01(\tR\x03pem\x12\"\n" +
-	"\rpem_file_name\x18\f \x01(\tR\vpemFileName\"e\n" +
+	"\rpem_file_name\x18\f \x01(\tR\vpemFileName\x12+\n" +
+	"\x12user_ca_public_key\x18\r \x01(\tR\x0fuserCaPublicKey\x12\x1f\n" +
+	"\vknown_hosts\x18\x0e \x01(\tR\n" +
+	"knownHosts\x121\n" +
+	"\x15known_hosts_file_name\x18\x0f \x01(\tR\x12knownHostsFileName\"e\n" +
 	"\x15ChangePasswordRequest\x12)\n" +
 	"\x10current_password\x18\x01 \x01(\tR\x0fcurrentPassword\x12!\n" +
 	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x18\n" +
@@ -2617,54 +2686,55 @@ var file_sneakers_appliance_osadmin_v1_access_proto_depIdxs = []int32{
 	3,  // 18: sneakers.appliance.osadmin.v1.ListAdminsResponse.revoked_keys:type_name -> sneakers.appliance.osadmin.v1.RevokedKey
 	7,  // 19: sneakers.appliance.osadmin.v1.ListAdminsResponse.access_policy:type_name -> sneakers.appliance.osadmin.v1.AccessPolicy
 	4,  // 20: sneakers.appliance.osadmin.v1.ListAdminsResponse.root_key:type_name -> sneakers.appliance.osadmin.v1.HostKey
-	42, // 21: sneakers.appliance.osadmin.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	41, // 22: sneakers.appliance.osadmin.v1.Invitation.expires:type_name -> google.protobuf.Timestamp
-	2,  // 23: sneakers.appliance.osadmin.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
-	11, // 24: sneakers.appliance.osadmin.v1.AddAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
-	42, // 25: sneakers.appliance.osadmin.v1.SetRoleRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	1,  // 26: sneakers.appliance.osadmin.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
-	5,  // 27: sneakers.appliance.osadmin.v1.SetElevationPolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.ElevationPolicy
-	1,  // 28: sneakers.appliance.osadmin.v1.IssueSshKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
-	43, // 29: sneakers.appliance.osadmin.v1.BeginTotpReplacementResponse.totp:type_name -> sneakers.appliance.osadmin.v1.TotpEnrolment
-	11, // 30: sneakers.appliance.osadmin.v1.ReinviteAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
-	7,  // 31: sneakers.appliance.osadmin.v1.SetAccessPolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.AccessPolicy
-	8,  // 32: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.osadmin.v1.ListAdminsRequest
-	10, // 33: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.osadmin.v1.AddAdminRequest
-	13, // 34: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:input_type -> sneakers.appliance.osadmin.v1.RemoveAdminRequest
-	15, // 35: sneakers.appliance.osadmin.v1.AccessService.SetRole:input_type -> sneakers.appliance.osadmin.v1.SetRoleRequest
-	17, // 36: sneakers.appliance.osadmin.v1.AccessService.AddKey:input_type -> sneakers.appliance.osadmin.v1.AddKeyRequest
-	19, // 37: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:input_type -> sneakers.appliance.osadmin.v1.RemoveKeyRequest
-	21, // 38: sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey:input_type -> sneakers.appliance.osadmin.v1.UnrevokeKeyRequest
-	23, // 39: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:input_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyRequest
-	25, // 40: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:input_type -> sneakers.appliance.osadmin.v1.SetQuorumRequest
-	27, // 41: sneakers.appliance.osadmin.v1.AccessService.IssueSshKey:input_type -> sneakers.appliance.osadmin.v1.IssueSshKeyRequest
-	29, // 42: sneakers.appliance.osadmin.v1.AccessService.ChangePassword:input_type -> sneakers.appliance.osadmin.v1.ChangePasswordRequest
-	31, // 43: sneakers.appliance.osadmin.v1.AccessService.BeginTotpReplacement:input_type -> sneakers.appliance.osadmin.v1.BeginTotpReplacementRequest
-	33, // 44: sneakers.appliance.osadmin.v1.AccessService.CompleteTotpReplacement:input_type -> sneakers.appliance.osadmin.v1.CompleteTotpReplacementRequest
-	35, // 45: sneakers.appliance.osadmin.v1.AccessService.ReinviteAdmin:input_type -> sneakers.appliance.osadmin.v1.ReinviteAdminRequest
-	37, // 46: sneakers.appliance.osadmin.v1.AccessService.UnlockAdmin:input_type -> sneakers.appliance.osadmin.v1.UnlockAdminRequest
-	39, // 47: sneakers.appliance.osadmin.v1.AccessService.SetAccessPolicy:input_type -> sneakers.appliance.osadmin.v1.SetAccessPolicyRequest
-	9,  // 48: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.osadmin.v1.ListAdminsResponse
-	12, // 49: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.osadmin.v1.AddAdminResponse
-	14, // 50: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.osadmin.v1.RemoveAdminResponse
-	16, // 51: sneakers.appliance.osadmin.v1.AccessService.SetRole:output_type -> sneakers.appliance.osadmin.v1.SetRoleResponse
-	18, // 52: sneakers.appliance.osadmin.v1.AccessService.AddKey:output_type -> sneakers.appliance.osadmin.v1.AddKeyResponse
-	20, // 53: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.osadmin.v1.RemoveKeyResponse
-	22, // 54: sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey:output_type -> sneakers.appliance.osadmin.v1.UnrevokeKeyResponse
-	24, // 55: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:output_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyResponse
-	26, // 56: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:output_type -> sneakers.appliance.osadmin.v1.SetQuorumResponse
-	28, // 57: sneakers.appliance.osadmin.v1.AccessService.IssueSshKey:output_type -> sneakers.appliance.osadmin.v1.IssueSshKeyResponse
-	30, // 58: sneakers.appliance.osadmin.v1.AccessService.ChangePassword:output_type -> sneakers.appliance.osadmin.v1.ChangePasswordResponse
-	32, // 59: sneakers.appliance.osadmin.v1.AccessService.BeginTotpReplacement:output_type -> sneakers.appliance.osadmin.v1.BeginTotpReplacementResponse
-	34, // 60: sneakers.appliance.osadmin.v1.AccessService.CompleteTotpReplacement:output_type -> sneakers.appliance.osadmin.v1.CompleteTotpReplacementResponse
-	36, // 61: sneakers.appliance.osadmin.v1.AccessService.ReinviteAdmin:output_type -> sneakers.appliance.osadmin.v1.ReinviteAdminResponse
-	38, // 62: sneakers.appliance.osadmin.v1.AccessService.UnlockAdmin:output_type -> sneakers.appliance.osadmin.v1.UnlockAdminResponse
-	40, // 63: sneakers.appliance.osadmin.v1.AccessService.SetAccessPolicy:output_type -> sneakers.appliance.osadmin.v1.SetAccessPolicyResponse
-	48, // [48:64] is the sub-list for method output_type
-	32, // [32:48] is the sub-list for method input_type
-	32, // [32:32] is the sub-list for extension type_name
-	32, // [32:32] is the sub-list for extension extendee
-	0,  // [0:32] is the sub-list for field type_name
+	4,  // 21: sneakers.appliance.osadmin.v1.ListAdminsResponse.host_ca:type_name -> sneakers.appliance.osadmin.v1.HostKey
+	42, // 22: sneakers.appliance.osadmin.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	41, // 23: sneakers.appliance.osadmin.v1.Invitation.expires:type_name -> google.protobuf.Timestamp
+	2,  // 24: sneakers.appliance.osadmin.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
+	11, // 25: sneakers.appliance.osadmin.v1.AddAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
+	42, // 26: sneakers.appliance.osadmin.v1.SetRoleRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	1,  // 27: sneakers.appliance.osadmin.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	5,  // 28: sneakers.appliance.osadmin.v1.SetElevationPolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.ElevationPolicy
+	1,  // 29: sneakers.appliance.osadmin.v1.IssueSshKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	43, // 30: sneakers.appliance.osadmin.v1.BeginTotpReplacementResponse.totp:type_name -> sneakers.appliance.osadmin.v1.TotpEnrolment
+	11, // 31: sneakers.appliance.osadmin.v1.ReinviteAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
+	7,  // 32: sneakers.appliance.osadmin.v1.SetAccessPolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.AccessPolicy
+	8,  // 33: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.osadmin.v1.ListAdminsRequest
+	10, // 34: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.osadmin.v1.AddAdminRequest
+	13, // 35: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:input_type -> sneakers.appliance.osadmin.v1.RemoveAdminRequest
+	15, // 36: sneakers.appliance.osadmin.v1.AccessService.SetRole:input_type -> sneakers.appliance.osadmin.v1.SetRoleRequest
+	17, // 37: sneakers.appliance.osadmin.v1.AccessService.AddKey:input_type -> sneakers.appliance.osadmin.v1.AddKeyRequest
+	19, // 38: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:input_type -> sneakers.appliance.osadmin.v1.RemoveKeyRequest
+	21, // 39: sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey:input_type -> sneakers.appliance.osadmin.v1.UnrevokeKeyRequest
+	23, // 40: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:input_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyRequest
+	25, // 41: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:input_type -> sneakers.appliance.osadmin.v1.SetQuorumRequest
+	27, // 42: sneakers.appliance.osadmin.v1.AccessService.IssueSshKey:input_type -> sneakers.appliance.osadmin.v1.IssueSshKeyRequest
+	29, // 43: sneakers.appliance.osadmin.v1.AccessService.ChangePassword:input_type -> sneakers.appliance.osadmin.v1.ChangePasswordRequest
+	31, // 44: sneakers.appliance.osadmin.v1.AccessService.BeginTotpReplacement:input_type -> sneakers.appliance.osadmin.v1.BeginTotpReplacementRequest
+	33, // 45: sneakers.appliance.osadmin.v1.AccessService.CompleteTotpReplacement:input_type -> sneakers.appliance.osadmin.v1.CompleteTotpReplacementRequest
+	35, // 46: sneakers.appliance.osadmin.v1.AccessService.ReinviteAdmin:input_type -> sneakers.appliance.osadmin.v1.ReinviteAdminRequest
+	37, // 47: sneakers.appliance.osadmin.v1.AccessService.UnlockAdmin:input_type -> sneakers.appliance.osadmin.v1.UnlockAdminRequest
+	39, // 48: sneakers.appliance.osadmin.v1.AccessService.SetAccessPolicy:input_type -> sneakers.appliance.osadmin.v1.SetAccessPolicyRequest
+	9,  // 49: sneakers.appliance.osadmin.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.osadmin.v1.ListAdminsResponse
+	12, // 50: sneakers.appliance.osadmin.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.osadmin.v1.AddAdminResponse
+	14, // 51: sneakers.appliance.osadmin.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.osadmin.v1.RemoveAdminResponse
+	16, // 52: sneakers.appliance.osadmin.v1.AccessService.SetRole:output_type -> sneakers.appliance.osadmin.v1.SetRoleResponse
+	18, // 53: sneakers.appliance.osadmin.v1.AccessService.AddKey:output_type -> sneakers.appliance.osadmin.v1.AddKeyResponse
+	20, // 54: sneakers.appliance.osadmin.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.osadmin.v1.RemoveKeyResponse
+	22, // 55: sneakers.appliance.osadmin.v1.AccessService.UnrevokeKey:output_type -> sneakers.appliance.osadmin.v1.UnrevokeKeyResponse
+	24, // 56: sneakers.appliance.osadmin.v1.AccessService.SetElevationPolicy:output_type -> sneakers.appliance.osadmin.v1.SetElevationPolicyResponse
+	26, // 57: sneakers.appliance.osadmin.v1.AccessService.SetQuorum:output_type -> sneakers.appliance.osadmin.v1.SetQuorumResponse
+	28, // 58: sneakers.appliance.osadmin.v1.AccessService.IssueSshKey:output_type -> sneakers.appliance.osadmin.v1.IssueSshKeyResponse
+	30, // 59: sneakers.appliance.osadmin.v1.AccessService.ChangePassword:output_type -> sneakers.appliance.osadmin.v1.ChangePasswordResponse
+	32, // 60: sneakers.appliance.osadmin.v1.AccessService.BeginTotpReplacement:output_type -> sneakers.appliance.osadmin.v1.BeginTotpReplacementResponse
+	34, // 61: sneakers.appliance.osadmin.v1.AccessService.CompleteTotpReplacement:output_type -> sneakers.appliance.osadmin.v1.CompleteTotpReplacementResponse
+	36, // 62: sneakers.appliance.osadmin.v1.AccessService.ReinviteAdmin:output_type -> sneakers.appliance.osadmin.v1.ReinviteAdminResponse
+	38, // 63: sneakers.appliance.osadmin.v1.AccessService.UnlockAdmin:output_type -> sneakers.appliance.osadmin.v1.UnlockAdminResponse
+	40, // 64: sneakers.appliance.osadmin.v1.AccessService.SetAccessPolicy:output_type -> sneakers.appliance.osadmin.v1.SetAccessPolicyResponse
+	49, // [49:65] is the sub-list for method output_type
+	33, // [33:49] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_access_proto_init() }

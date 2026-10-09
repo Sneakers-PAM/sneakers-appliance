@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -19,10 +20,12 @@ import (
 	"golang.org/x/crypto/ssh"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ppk"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
@@ -107,13 +110,51 @@ func (h *accessSvc) IssueSshKey(ctx context.Context, r *connect.Request[osadminv
 	file := keyFileName(admin, issued.Serial)
 	c.note(admin, "key", issued.Fingerprint, "serial", strconv.FormatUint(issued.Serial, 10), "validBefore", vb.Format(time.RFC3339))
 	h.s.o.Logger.Info("osadmin: SSH key issued", log.F("admin", admin), log.F("key", issued.Fingerprint), log.F("serial", issued.Serial), log.F("file", file))
+	known, box := h.s.knownHosts(ctx)
 	return connect.NewResponse(&osadminv1.IssueSshKeyResponse{
 		Key: keyToWire(issued), PrivateKey: string(pem.EncodeToMemory(block)), Certificate: certLine,
 		PublicKey: issued.PublicKey, FileName: file, CertificateFileName: file + "-cert.pub",
 		Ppk: string(putty), PpkFileName: file + ".ppk",
 		PublicKeyFileName: file + ".pub", Pem: string(pkcs8), PemFileName: file + ".pem",
-		SshCommand: sshCommand(file, admin, h.s.boxHost(ctx)),
+		SshCommand:      sshCommand(file, admin, h.s.boxHost(ctx)),
+		UserCaPublicKey: strings.TrimSpace(string(ssh.MarshalAuthorizedKey(h.s.o.RootKey.PublicKey()))),
+		KnownHosts:      known, KnownHostsFileName: "known_hosts_" + box,
 	}), nil
+}
+
+// knownHosts is the "@cert-authority <names> <host CA>" line that trusts
+// the box's host certificates for its host name and management addresses
+// (the principals accessd signs them for), and the box's name for the
+// file name.
+func (s *Server) knownHosts(ctx context.Context) (string, string) {
+	st, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
+	if err != nil || s.o.RootKey == nil {
+		return "", "box"
+	}
+	var addrs []string
+	for _, a := range netdapi.Bindable(st.Msg.GetManagementAddresses()) {
+		addrs = append(addrs, a.String())
+	}
+	names := HostPrincipals(st.Msg.GetHostname(), addrs)
+	if len(names) == 0 {
+		return "", "box"
+	}
+	return "@cert-authority " + strings.Join(names, ",") + " " + strings.TrimSpace(string(ssh.MarshalAuthorizedKey(s.o.RootKey.HostCAPublicKey()))), names[0]
+}
+
+// HostPrincipals are the names the box's SSH host certificates carry:
+// the host name, then each management address.
+func HostPrincipals(hostname string, addrs []string) []string {
+	var out []string
+	if hostname != "" {
+		out = append(out, hostname)
+	}
+	for _, a := range addrs {
+		if !slices.Contains(out, a) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // keyFileName names an issued key's files by its admin and serial, so no
