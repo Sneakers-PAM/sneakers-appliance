@@ -52,6 +52,7 @@ func TestOpenWithoutAllowListAcceptsAnySourceOnTheManagementInterface(t *testing
 	p := firewall.Plan(firewall.Table{MgmtIf: "eth0", Open22: true})
 	assertRules(t, p.Rules,
 		"ct state established,related accept",
+		`iifname "lo" tcp dport 22 accept`,
 		`iifname "eth0" tcp dport 22 accept`,
 		"tcp dport 22 drop",
 		"tcp dport 8443 drop",
@@ -63,8 +64,10 @@ func TestAllowListBothFamilies(t *testing.T) {
 		AllowV4: prefixes("192.0.2.0/24"), AllowV6: prefixes("2001:db8::/64")})
 	assertRules(t, p.Rules,
 		"ct state established,related accept",
+		`iifname "lo" tcp dport 22 accept`,
 		`iifname "eth0" ip saddr @allow4 tcp dport 22 accept`,
 		`iifname "eth0" ip6 saddr @allow6 tcp dport 22 accept`,
+		`iifname "lo" tcp dport 8443 accept`,
 		`iifname "eth0" ip saddr @allow4 tcp dport 8443 accept`,
 		`iifname "eth0" ip6 saddr @allow6 tcp dport 8443 accept`,
 		"tcp dport 22 drop",
@@ -80,6 +83,7 @@ func TestAllowListOfOneFamilyShutsTheOther(t *testing.T) {
 	p := firewall.Plan(firewall.Table{MgmtIf: "eth0", Open22: true, AllowV4: prefixes("192.0.2.50/32")})
 	assertRules(t, p.Rules,
 		"ct state established,related accept",
+		`iifname "lo" tcp dport 22 accept`,
 		`iifname "eth0" ip saddr @allow4 tcp dport 22 accept`,
 		"tcp dport 22 drop",
 		"tcp dport 8443 drop",
