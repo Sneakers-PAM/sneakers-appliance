@@ -5,10 +5,12 @@ package osadmin_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -549,5 +552,71 @@ func TestAnOsadminRestartIsNotTheReboot(t *testing.T) {
 	again.srv.RebootWatchdog()
 	if got := steps(owner.progress(t)); got != "verify:DONE stage:DONE switch:DONE reboot:FAILED health:PENDING mark_good:PENDING" {
 		t.Fatalf("past the bound: %s", got)
+	}
+}
+
+// savingClock reads the progress record each time osadmin asks the time:
+// osadmin stamps the record before every save, so the reads see each
+// record a poll of GetUpgrades could have seen.
+type savingClock struct {
+	*clock.Fake
+	file  string
+	mu    sync.Mutex
+	saved []string
+}
+
+func (c *savingClock) Now() time.Time {
+	if b, err := os.ReadFile(c.file); err == nil {
+		var r struct {
+			Target string `json:"target"`
+			Steps  []struct {
+				ID string `json:"id"`
+			} `json:"steps"`
+		}
+		if json.Unmarshal(b, &r) == nil {
+			var ids []string
+			for _, s := range r.Steps {
+				ids = append(ids, s.ID)
+			}
+			c.mu.Lock()
+			if rec := r.Target + ": " + strings.Join(ids, " "); len(c.saved) == 0 || c.saved[len(c.saved)-1] != rec {
+				c.saved = append(c.saved, rec)
+			}
+			c.mu.Unlock()
+		}
+	}
+	return c.Fake.Now()
+}
+
+// A product stage never shows a base update's steps: until the file's
+// header is read, the record has the verify step alone.
+func TestAProductStageNeverReportsBaseSteps(t *testing.T) {
+	var clk *savingClock
+	b := newBox(t, false, func(b *box, o *osadmin.Options) {
+		clk = &savingClock{Fake: b.clk, file: filepath.Join(b.state, "osadmin-api", "upgrade-progress.json")}
+		o.Clock = clk
+	})
+	alice := b.browser()
+	alice.signIn("alice")
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	clk.Now()
+	clk.mu.Lock()
+	saved := append([]string(nil), clk.saved...)
+	clk.mu.Unlock()
+	if len(saved) == 0 || saved[0] != ": verify" {
+		t.Fatalf("the stage's first record %q", saved)
+	}
+	for _, rec := range saved {
+		for _, base := range []string{"reboot", "health", "mark_good"} {
+			if strings.Contains(rec, base) {
+				t.Fatalf("a product stage reported base steps: %q", saved)
+			}
+		}
+	}
+	if got := saved[len(saved)-1]; got != "product: verify stage switch restart" {
+		t.Fatalf("the stage's last record %q", got)
 	}
 }

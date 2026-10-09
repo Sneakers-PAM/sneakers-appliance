@@ -561,7 +561,9 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	if err != nil {
 		return nil, nil, err
 	}
-	s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, "", s.otherSlot())
+	// What's staged isn't known until the header is read, so the record
+	// starts with the verify step alone.
+	s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED, "", "")
 	s.setStep(stepVerify, "")
 	f, err := os.Open(path) // #nosec G304 -- an upload this box made
 	if err != nil {
@@ -577,6 +579,12 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 		s.reject(path, err)
 		return nil, nil, err
 	}
+	if p.Header.IsProduct() {
+		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "", "")
+	} else {
+		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, "", s.otherSlot())
+	}
+	s.setStep(stepVerify, "")
 	if err := p.Verify(s.o.Upgrade.ReleaseKeyPEM, s.o.Upgrade.Channel); err != nil {
 		s.reject(path, err)
 		return nil, nil, err
@@ -584,13 +592,11 @@ func (s *Server) stage(ctx context.Context, id string) (*osadminv1.UpdatePackage
 	h := p.Header
 	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
 		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE}
+	s.setVersion(h.Version)
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
-		s.beginProgress("stage", pkg.Target, h.Version, "")
-		s.setStep(stepVerify, "")
 		return pkg, nil, s.stageProduct(ctx, path, p)
 	}
-	s.setVersion(h.Version)
 	img, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
 		return pkg, nil, err

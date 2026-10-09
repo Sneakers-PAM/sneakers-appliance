@@ -81,7 +81,9 @@ A stage runs the first two and leaves the rest pending for Apply, which carries 
 on; an apply of a release staged before this record starts with those two done. A revert has no
 file, so it starts at `switch`, and its version is the release it goes back to. A product bundle
 has `verify`, `stage` (into the free product slot), `switch` and `restart` (restarting the product),
-and no reboot.
+and no reboot. Until a stage has read the file's header it doesn't know which of the two it is, so
+its record starts with `verify` alone and no target; the base or product steps replace it once the
+header is read, so a product stage never shows the base's slot, reboot or health steps.
 
 Each step is pending, active, done or failed, and `in_progress` is set while one is active. A
 failed step carries why in its detail and the failure's code (`UPGRADE_SIGNATURE`, say) in the
