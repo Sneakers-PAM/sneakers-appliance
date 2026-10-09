@@ -40,7 +40,7 @@ It serves exactly these, and nothing else:
 |---|---|
 | `GET /_box/state` | `{"state":"rebooting"}`, with `"brand"` when the product has one (below), `Cache-Control: no-store` |
 | `GET /_box/poll.js` | the poller |
-| `GET /_box/logo` | the product's logo, only when its brand has one, from edgefall's own copy (`Content-Security-Policy: default-src 'none'; sandbox`, `nosniff`) |
+| `GET /_box/logo` | the product's logo for the poller's overlay, only when its brand has one, from edgefall's own copy (`Content-Security-Policy: default-src 'none'; sandbox`, `nosniff`) |
 | anything else, any path, method or host | the branded page, `503`, `Retry-After: 10`, `Sneakers-Box-State: <state>` |
 
 It never serves product content and never proxies. The page has a strict CSP (`default-src
@@ -78,7 +78,8 @@ with it. Each load runs the bundle's brand check again; a brand that fails it is
 warning) and the base look stays, and colours that fail the contrast check give way to the base
 colours while the logo stays.
 
-- **The page:** the logo replaces the wordmark as `<img src="/_box/logo">`, and the colours are
+- **The page:** the logo replaces the wordmark, carried in the page itself as a `data:` image, so
+  it shows even when edgefall lets 443 go between the page and another request; the colours are
   added to the page's one stylesheet as the checked `#rrggbb` values. The CSP still pins that
   stylesheet by its hash, so a brand never loosens it: no `unsafe-inline`, no other origin.
 - **The state:** `/_box/state` adds `"brand":{"background":"#rrggbb","text":"#rrggbb","accent":"#rrggbb","logo":"/_box/logo"}`

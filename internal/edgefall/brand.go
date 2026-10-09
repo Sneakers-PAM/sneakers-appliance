@@ -4,6 +4,7 @@
 package edgefall
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -21,7 +22,10 @@ type look struct {
 	style, csp string
 	logo       []byte
 	logoType   string
-	state      *stateLook
+	// logoURI is the logo as a data: URI: the page carries it, so it
+	// shows even when 443 goes away between the page and another request.
+	logoURI string
+	state   *stateLook
 }
 
 // stateLook is the brand in /_box/state, for the poller's overlay.
@@ -56,6 +60,7 @@ func newLook(b *brand.Brand) *look {
 	lk := &look{style: style, csp: pageCSP(style), state: sl}
 	if b != nil && b.Logo != nil {
 		lk.logo, lk.logoType = b.Logo, b.LogoType
+		lk.logoURI = "data:" + b.LogoType + ";base64," + base64.StdEncoding.EncodeToString(b.Logo)
 	}
 	return lk
 }

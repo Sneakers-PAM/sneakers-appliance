@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -123,7 +124,9 @@ func TestAProductsBrandShowsOnThePage(t *testing.T) {
 	if res.StatusCode != http.StatusServiceUnavailable || !strings.Contains(body, "Sneakers-PAM is rebooting") {
 		t.Fatalf("%d %s", res.StatusCode, body)
 	}
-	if !strings.Contains(body, `<img class="logo" src="/_box/logo"`) || strings.Contains(body, `class="mark"`) {
+	// The page carries the logo itself, so it shows even when 443 goes
+	// away between the page and a second request.
+	if !strings.Contains(html.UnescapeString(body), `<img class="logo" src="data:image/svg+xml;base64,`+base64.StdEncoding.EncodeToString([]byte(brandSVG))+`"`) || strings.Contains(body, `class="mark"`) {
 		t.Fatalf("no logo: %s", body)
 	}
 	strictCSP(t, res.Header.Get("Content-Security-Policy"))
@@ -194,7 +197,7 @@ func TestPoorContrastKeepsTheBaseColours(t *testing.T) {
 	defer ts.Close()
 	res, body := get(t, ts.URL+"/")
 	css := styleOf(t, res, body)
-	if strings.Contains(css, "#0b1f33") || !strings.Contains(body, "/_box/logo") {
+	if strings.Contains(css, "#0b1f33") || !strings.Contains(body, `class="logo"`) {
 		t.Fatalf("%s", body)
 	}
 }
@@ -214,14 +217,14 @@ func TestTheBrandFollowsTheSlot(t *testing.T) {
 		return changed
 	}
 	load()
-	if _, body := get(t, ts.URL+"/"); strings.Contains(body, "/_box/logo") {
+	if _, body := get(t, ts.URL+"/"); strings.Contains(body, `class="logo"`) {
 		t.Fatal("a logo before any brand")
 	}
 	setSlot(t, dir, "b", map[string]string{"brand.yaml": brandYAML, "logo.svg": brandSVG})
 	if !load() {
 		t.Fatal("the apply wasn't seen")
 	}
-	if _, body := get(t, ts.URL+"/"); !strings.Contains(body, "/_box/logo") {
+	if _, body := get(t, ts.URL+"/"); !strings.Contains(body, `class="logo"`) {
 		t.Fatal("no logo after the apply")
 	}
 	if load() {
@@ -231,7 +234,7 @@ func TestTheBrandFollowsTheSlot(t *testing.T) {
 	if !load() {
 		t.Fatal("the revert wasn't seen")
 	}
-	if _, body := get(t, ts.URL+"/"); strings.Contains(body, "/_box/logo") {
+	if _, body := get(t, ts.URL+"/"); strings.Contains(body, `class="logo"`) {
 		t.Fatal("the logo stayed after the revert")
 	}
 }

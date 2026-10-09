@@ -141,8 +141,8 @@ func (s *Server) page(w http.ResponseWriter, st boxstate.State, lk *look) {
 		State       string
 		Title, Note string
 		Style       template.CSS
-		Logo        bool
-	}{string(st), wd.Title, wd.Note, template.CSS(lk.style), lk.logo != nil}) // #nosec G203 -- the embedded stylesheet and validated #rrggbb colours, pinned by the CSP's hash
+		LogoURI     template.URL
+	}{string(st), wd.Title, wd.Note, template.CSS(lk.style), template.URL(lk.logoURI)}) // #nosec G203 -- the embedded stylesheet and validated #rrggbb colours, pinned by the CSP's hash; the checked logo as a data: URI
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_, _ = w.Write(b.Bytes())
 }
