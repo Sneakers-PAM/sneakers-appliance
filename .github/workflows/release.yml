@@ -45,6 +45,11 @@ jobs:
           COMMIT: ${{ github.sha }}
           INPUT_VERSION: ${{ inputs.version }}
         run: bash build/release/guard.sh
+      # Before the long build: a production tag needs the committed public
+      # keys, every one labelled Production and none from a known lab set.
+      - name: Check the production public keys
+        if: github.event_name == 'push'
+        run: bash build/release/check-production-keys.sh keys/production
 
   build:
     name: 🏗️ Build (unsigned, amd64)
@@ -134,6 +139,7 @@ jobs:
       - name: Check the digests and the production public keys
         run: |
           (cd "$RUNNER_TEMP/unsigned" && sha256sum -c --quiet SHA256SUMS)
+          bash build/release/check-production-keys.sh keys/production
           bash build/release/check-fingerprints.sh keys/production keys/production/fingerprints.txt
       # The release tool is built here from the tagged commit, not taken from
       # the build job. The only key it reads is the update key, in the step
@@ -381,6 +387,10 @@ jobs:
           fi
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
+          fi
+          cp "$lab/keys.txt" "$keys/fingerprints.txt"
+          if bash build/release/check-production-keys.sh "$keys"; then
+            echo "the lab keys passed the production key check" >&2; exit 1
           fi
           {
             echo "### Lab dry run ${VERSION}"

@@ -10,8 +10,8 @@ every production UKI carries it ([release.md](../release.md)):
 
 | `production` environment secret | Key | Signs | Read by the release job |
 |---|---|---|---|
-| `SB_PK_KEY` | RSA-2048 | `PK.auth`, `KEK.auth` | only when a tag changes the committed KEK |
-| `SB_KEK_KEY` | RSA-2048 | `db.auth`, `dbx.auth` | only when a tag changes the committed db or dbx |
+| none: kept offline (PK) | RSA-2048 | `PK.auth`, `KEK.auth` | never; signed once, by hand |
+| none: kept offline (KEK) | RSA-2048 | `db.auth`, `dbx.auth` | never; signed by hand when db or dbx changes |
 | `SB_DB_KEY` | RSA-2048 | Authenticode on the UKI and systemd-boot | every tag |
 | `RELEASE_COSIGN_KEY` and `RELEASE_COSIGN_PASSWORD` | cosign ECDSA P-256 (encrypted key file) | the `sneakers-os` artifact, `release.yaml`, the `.bin` header, and every image in the bundle, third-party ones included | every tag |
 | `UPDATE_AGE_KEY` | the update key, age X25519 | nothing: the `.bin` payload is encrypted to its public half, `update.pub`, and the sign job adds the private half to the unsigned UKI as its `.updkey` section before the db key signs it | every tag, only by the step that adds it to the UKI |
@@ -27,14 +27,21 @@ pins the lab keys and a production build the production ones, so a production bo
 `.bin` (`UPGRADE_CHANNEL`) and a lab box refuses a production one. The release workflow's `sign`
 job runs `build/release/check-fingerprints.sh` and refuses to sign unless every certificate and
 `update.pub` match `fingerprints.txt`, and it checks each private key belongs to its committed
-public half before using it. Before any production key is used, read its subject (or label) and
+public half before using it. `build/release/check-production-keys.sh` runs in the guard and before
+signing: it refuses the set unless every file in `keys/production/expected-files.txt` is there,
+each certificate's CN says `Production` (and never lab, test, ephemeral or dev), `update.pub`'s
+label says `Production`, and nothing is in `build/keys/lab-fingerprints.txt`, the record of the
+lab sets kept on disk. Before any production key is used, read its subject (or label) and
 check it says production: anything labelled `LAB`, test, ephemeral or dev is refused.
 
 ## Custody rules
 
-- Each private key exists only as a secret of the GitHub `production` environment of
-  Sneakers-PAM/sneakers-appliance. It's never stored in any other secret store, and never taken
-  from a lab key or another project's key.
+- The db, release and update keys are secrets of the GitHub `production` environment of
+  Sneakers-PAM/sneakers-appliance. PK and KEK are never GitHub secrets: no job reads them.
+- Every private key also sits in two offline, encrypted copies the owner keeps in two places
+  (an encrypted volume holding a passphrase-encrypted archive), the only way to recover PK and KEK
+  or to re-add a lost secret. A copy may also go into the owner's own Sneakers-PAM instance, never
+  as the only copy. No key is ever taken from a lab key or another project's key.
 - The `production` environment has the owner as required reviewer and allows only `v*` tags
   ([repo-settings.md](../repo-settings.md)). Only the tag release workflow's `sign` job reads it.
 - Inside that job the secrets are written to a tmpfs directory (mode 0600), used by the pinned
@@ -103,17 +110,19 @@ and `fingerprints.txt` into `keys/production/`. A test in `🧪 Build & Test`
 
 ## 4. Set the secrets, then wipe
 
-Under Settings, Environments, `production`, set `SB_PK_KEY`, `SB_KEK_KEY` and `SB_DB_KEY` (the PEM
-`.key` files), `RELEASE_COSIGN_KEY` (`release-cosign.key`), `RELEASE_COSIGN_PASSWORD` and
-`UPDATE_AGE_KEY` (`update.key`, comment line included). Then unmount the tmpfs. The environment is
-now the only place the private keys exist; no box is provisioned with the update key by hand,
-because each one reads it from the UKI it boots.
+From each file on stdin, never pasted: `gh secret set <NAME> --env production -R
+Sneakers-PAM/sneakers-appliance < <file>` for `SB_DB_KEY` (`db.key`), `RELEASE_COSIGN_KEY`
+(`release-cosign.key`), `RELEASE_COSIGN_PASSWORD` (the password file, no trailing newline) and
+`UPDATE_AGE_KEY` (`update.key`, comment line included); `gh secret list --env production` then
+shows the four names. Make the two offline copies of every private key, PK and KEK included, check
+both read back, then unmount the tmpfs. No box is provisioned with the update key by hand, because
+each one reads it from the UKI it boots.
 
 ## Rotation and loss
 
 - **db or the release key:** make a new key and certificate, sign a new `db.auth` (or pin a new
-  cosign public key) with KEK in CI, and ship it in a release; boxes enrol it through KEK. Add the
-  old db certificate to dbx if it might be compromised.
+  cosign public key) with KEK (by hand, from an offline copy), and ship it in a release; boxes
+  enrol it through KEK. Add the old db certificate to dbx if it might be compromised.
 - **KEK or PK:** a new key set, and a re-enrolment on every box, which the docs describe as a
   reinstall and restore.
 - **The update key:** a box opens a `.bin` with the key in the UKI it's running, so a new key
@@ -123,7 +132,7 @@ because each one reads it from the UKI it boots.
   that support is tracked in
   [Sneakers-PAM/sneakers-appliance#72](https://github.com/Sneakers-PAM/sneakers-appliance/issues/72).
   The key is readable from any genuine image anyway, so a leak alone isn't a reason to rotate it.
-- GitHub secrets can't be read back, so losing the environment loses the keys; recover as above.
-  The update key can also be read back out of any production UKI.
+- GitHub secrets can't be read back; a lost secret is re-added from an offline copy. The update
+  key can also be read back out of any production UKI.
 - A suspected leak: rotate db through KEK, put the old db certificate in dbx, and pin a new release
   key in a new kit.
