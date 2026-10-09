@@ -115,10 +115,20 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 	cl := edgefall.NewClaimer(edgefall.ClaimOptions{HTTPS: c.https, HTTP: c.http, Cert: edgefall.LoadCert(c.tlsDir), Handler: h, Logger: lg})
 	defer cl.Close()
 	// The answer waits until 80 and 443 are let go, so Traefik binds them
-	// as soon as the edge's init container returns.
+	// as soon as the edge's start command execs it; how long 443 refused
+	// in between goes to the log.
 	local := edgefall.HTTPServer(edgefall.LocalHandler(h, func() bool {
 		ok := w.Handoff()
 		cl.Want(w.Claim())
+		if ok {
+			go edgefall.WatchTaken(c.https, edgefall.HandoffWait, 100*time.Millisecond, func(gap time.Duration, taken bool) {
+				if taken {
+					lg.Info("edgefall: the edge took 443", log.F("refusedMs", gap.Milliseconds()))
+					return
+				}
+				lg.Error(nil, "edgefall: nothing took 443 after the handoff", log.F("waited", gap.String()))
+			})
+		}
 		return ok
 	}))
 	go func() {

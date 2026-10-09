@@ -59,15 +59,19 @@ poller, so a browser that lands on it goes back to the product by itself.
   half second. Before a product is installed nothing answers 80 or 443.
 - **The handoff:** when k0s starts (edgefall saw it stopped, then running), edgefall keeps both
   until the product's edge asks for them with `POST /_box/edge-handoff` on the loopback listener.
-  The edge's pod does that from an init container, which runs only once the pod's images are in and
-  just before Traefik starts and binds: edgefall lets both go before it answers, so Traefik binds
-  them about a second later and the product URL never refuses for the minute k0s takes to bring the
-  edge up. The init container ignores a failure (no edgefall), so the edge always starts. An edge
-  without the init container gets them `HandoffWait` (2 minutes) after k0s started; Traefik's bind
-  fails until then and the kubelet restarts it. A handoff while k0s doesn't run, or after a reboot
-  or a shutdown was seen, is ignored. When edgefall starts on a box whose k0s already runs, it holds
-  nothing: Traefik has the edge already. The lab edge stack carries the init container
-  (`build/lab/stacks/edge/edge.yaml`); a product's own edge needs the same.
+  Traefik's own container asks, from its start command, right before it execs `traefik`
+  (`wget ... /_box/edge-handoff || true; exec traefik "$@"`): edgefall lets both go before it
+  answers, so 443 is free only for the moment Traefik takes to bind it. An init container asked
+  before, and the kubelet then had to start Traefik's container while it started every other pod
+  of the product, which left 443 refusing for tens of seconds after a reboot, an update or a
+  revert. A failed ask (no edgefall) never stops Traefik. After each handoff edgefall dials 443 on
+  loopback until something accepts and logs how long it refused (`edgefall: the edge took 443`,
+  `refusedMs`), or an error when nothing took it within `HandoffWait`. An edge that never asks
+  gets them `HandoffWait` (2 minutes) after k0s started; Traefik's bind fails until then and the
+  kubelet restarts it. A handoff while k0s doesn't run, or after a reboot or a shutdown was seen, is
+  ignored. When edgefall starts on a box whose k0s already runs, it holds nothing: Traefik has the
+  edge already. The lab edge stack does this (`build/lab/stacks/edge/edge.yaml`); a product's own
+  edge needs the same.
 - **The state:** edgefall asks accessd's `GetPhase` every half second on `access.sock`, where its
   uid may ask that and nothing else ([access.md](access.md#accesssock)), and serves the last answer,
   so a request never waits on accessd. A reboot or a shutdown holds once seen: accessd stops during
