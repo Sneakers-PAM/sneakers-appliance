@@ -318,8 +318,10 @@ type box struct {
 	workers *fakeWorkers
 	time    *fakeTime
 	clk     *clock.Fake
-	d       *netd.Daemon
-	cancel  context.CancelFunc
+	// fallback is the box's own name (Options.Fallback).
+	fallback string
+	d        *netd.Daemon
+	cancel   context.CancelFunc
 }
 
 var (
@@ -337,7 +339,7 @@ func newBox(t *testing.T, links ...netd.Link) *box {
 
 func (b *box) start() *netd.Daemon {
 	b.t.Helper()
-	d, err := netd.New(netd.Options{StateDir: b.state, RunDir: b.run, Sys: b.sys, Workers: b.workers, NewTimeSync: b.time.New, Clock: b.clk})
+	d, err := netd.New(netd.Options{StateDir: b.state, RunDir: b.run, Sys: b.sys, Workers: b.workers, NewTimeSync: b.time.New, Clock: b.clk, Fallback: b.fallback})
 	if err != nil {
 		b.t.Fatal(err)
 	}

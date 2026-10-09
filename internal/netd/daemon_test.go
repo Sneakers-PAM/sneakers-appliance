@@ -103,6 +103,43 @@ func TestDHCPLeaseFeedsTheAddressResolverNTPAndHostname(t *testing.T) {
 	waitFor(t, func() bool { return !slices.Contains(b.sys.prefixes("eth0"), "192.0.2.100/24") })
 }
 
+func (f *fakeSys) host() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.hostname
+}
+
+// The kernel host name: the setting, else the DHCP name, else the box's
+// own name. Only the first two are the box's host name for certificates.
+func TestTheKernelHostNameFallsBackToTheBoxName(t *testing.T) {
+	b := newBox(t)
+	b.fallback = "sneakers-0a1b2c3d"
+	b.start()
+	waitFor(t, func() bool { return b.sys.host() == "sneakers-0a1b2c3d" })
+	addrs, stop := b.d.Watch()
+	defer stop()
+	if a := <-addrs; a.Hostname != "" {
+		t.Fatalf("the box's own name was reported as its host name: %q", a.Hostname)
+	}
+	b.workers.report4(t, "eth0", &netd.Lease4{
+		Addr: netip.MustParsePrefix("192.0.2.100/24"), Router: netip.MustParseAddr("192.0.2.1"), Lease: time.Hour,
+		Hostname: "box1", Domain: "sneakers.example.org",
+	})
+	waitFor(t, func() bool { return b.sys.host() == "box1.sneakers.example.org" })
+	b.workers.report4(t, "eth0", nil)
+	waitFor(t, func() bool { return b.sys.host() == "sneakers-0a1b2c3d" })
+}
+
+func TestTheSettingWinsOverTheBoxName(t *testing.T) {
+	b := newBox(t)
+	b.fallback = "sneakers-0a1b2c3d"
+	b.writeSettings("network.yaml", static("eth0"))
+	b.start()
+	if got := b.sys.host(); got != "appliance.sneakers.example.org" {
+		t.Fatalf("hostname %q", got)
+	}
+}
+
 func TestRouterAdvertisementDNSServersReachTheResolver(t *testing.T) {
 	b := newBox(t)
 	s := network.Defaults("eth0")

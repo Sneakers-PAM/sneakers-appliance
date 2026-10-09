@@ -15,10 +15,11 @@
 set -eu
 data=/var/lib/k0s
 product=/var/lib/sneakers/product/current
-# The node's name, made once per box and kept on the state volume, so it
-# doesn't follow the host name netd sets and stays unique when more nodes
-# join (spec 3, Section 2.12).
-name_file=/var/lib/sneakers/k0s/node-name
+# The node's name is the box's own name, which init makes once per box and
+# keeps on the state volume (internal/boxname; a box that had a k0s node
+# name keeps it), so it doesn't follow the host name netd sets and stays
+# unique when more nodes join (spec 3, Section 2.12).
+name_file=/var/lib/sneakers/box-name
 # The API and node address on the sneakers0 dummy interface (spec 3): a
 # DHCP change on a real interface never changes it, its certificates or
 # etcd's peer address. RFC 2544 space, never routed.
@@ -54,19 +55,11 @@ prepare() {
   fi
 
   if [ ! -s "$name_file" ]; then
-    mkdir -p "${name_file%/*}"
-    read -r uuid < /proc/sys/kernel/random/uuid
-    echo "sneakers-$(echo "$uuid" | cut -c1-8)" > "$name_file.new"
-    mv "$name_file.new" "$name_file"
+    say "the box has no name of its own yet ($name_file); init makes it at boot"
+    exit 1
   fi
   read -r name < "$name_file"
   say "node $name"
-  # The API server labels its lease with the host name, which the kernel
-  # leaves as "(none)" until netd sets one.
-  read -r host < /proc/sys/kernel/hostname || host=""
-  case "$host" in
-    ""|"(none)") echo "$name" > /proc/sys/kernel/hostname ;;
-  esac
   # /etc/machine-id leads here.
   if [ ! -s /var/lib/sneakers/machine-id ]; then
     read -r uuid < /proc/sys/kernel/random/uuid

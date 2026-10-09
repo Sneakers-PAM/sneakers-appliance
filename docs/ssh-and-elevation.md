@@ -136,5 +136,10 @@ closed shell:
    data and resizes. The session ends after the policy's minutes, after 10 minutes idle, when the SSH
    client goes away, or when an owner ends it on the Sessions page.
 
+The root shell is busybox ash. Its prompt, `[root@<host> <n> min left] <dir> # `, shows the kernel
+host name ([network.md](network.md#dns-ntp-and-the-host-name): the configured name, else the DHCP
+name, else the box's own `sneakers-<8 hex>`), the minutes left and the working directory; busybox is
+built with the shell arithmetic and prompt escapes it needs (`build/busybox/busybox.config`).
+
 Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
 Removing an admin's key ends a root shell it opened.

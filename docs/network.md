@@ -114,7 +114,13 @@ Default routes have metric 100 on the management interface and 200 on the servic
 The settings win where they say something; otherwise netd uses what DHCP and router advertisements
 offer, management interface first. `/run/sneakers/resolv.conf` (which `/etc/resolv.conf` links to)
 lists at most three servers, link-local ones left out, and at most six search domains. The host
-name is the setting, else the DHCP host name joined to its domain. With no DNS server set or
+name is the setting, else the DHCP host name joined to its domain. The kernel always has a host
+name: init sets it once the state is open, before any service starts, to the setting or else the
+box's own name, and netd keeps it current from then on (the setting, else the DHCP name, else the
+box's own name). The box's own name, `sneakers-<8 hex>`, is made once from random bytes and kept on
+the state volume in `/var/lib/sneakers/box-name`; it is also the k0s node name
+([k0s.md](k0s.md#the-nodes-address-and-name)). It only names the kernel: the box's host name for
+certificates, `Status` and `Watch` stays the setting or the DHCP name, and is empty without one. With no DNS server set or
 offered the file names none, and the box still runs; k0s's cluster DNS falls back as
 [k0s.md](k0s.md#cluster-dns-with-no-dns-server) describes.
 

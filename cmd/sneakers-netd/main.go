@@ -21,6 +21,7 @@ import (
 
 	log "github.com/Bugs5382/go-log"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
@@ -62,7 +63,12 @@ func buildTime() time.Time {
 }
 
 func run(ctx context.Context, c config, lg log.Logger) error {
+	own, err := boxname.Ensure(c.state)
+	if err != nil {
+		lg.Warn("netd: the box has no name of its own; the host name waits for the settings or DHCP", log.F("error", err.Error()))
+	}
 	d, err := netd.New(netd.Options{
+		Fallback: own,
 		StateDir: c.state, RunDir: c.run,
 		Sys:         netd.Linux{},
 		Workers:     netd.Clients{Logger: lg},

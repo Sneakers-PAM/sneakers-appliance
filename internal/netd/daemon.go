@@ -48,6 +48,10 @@ type Options struct {
 	NewTimeSync func(servers []string, src timesync.Source) TimeSync
 	Clock       clock.Clock
 	Logger      log.Logger
+	// Fallback is the box's own name (internal/boxname): the kernel host
+	// name while neither the settings nor DHCP give one. It is never
+	// reported as the host name, so certificates don't take it.
+	Fallback string
 }
 
 // Daemon is netd's state and logic.
@@ -69,6 +73,8 @@ type Daemon struct {
 	service  []PortRule
 	table    *firewall.Table
 	hostname string
+	// kernel is the host name last given to the kernel.
+	kernel   string
 	resolv   string
 	ntp      TimeSync
 	ntpKey   string
@@ -723,13 +729,20 @@ func (d *Daemon) refresh() error {
 			lg.Info("netd: resolv.conf written", log.F("servers", len(dns)), log.F("search", len(search)))
 		}
 	}
-	if host != "" && host != d.hostname {
-		if err := d.o.Sys.SetHostname(host); err != nil {
+	kname := host
+	if kname == "" {
+		kname = d.o.Fallback
+	}
+	if kname != "" && kname != d.kernel {
+		if err := d.o.Sys.SetHostname(kname); err != nil {
 			errs = append(errs, err)
 		} else {
-			d.hostname = host
-			lg.Info("netd: host name set", log.F("hostname", host))
+			d.kernel = kname
+			lg.Info("netd: host name set", log.F("hostname", kname), log.F("own_name", host == ""))
 		}
+	}
+	if host != "" && host == d.kernel {
+		d.hostname = host
 	}
 	key := fmt.Sprint(src, ntp)
 	if d.ntp == nil || key != d.ntpKey {

@@ -40,6 +40,9 @@ wait_for() {
   say "$what"
 }
 
+# The kernel host name init set at boot: with no name configured and none
+# from DHCP, the box's own, never "(none)".
+say "host name $(uname -n)"
 if [ ! -s "$product/bundle.json" ]; then
   if [ -e /var/lib/k0s/bin ]; then
     say "k0s ran without a product bundle"
