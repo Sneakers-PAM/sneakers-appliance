@@ -112,9 +112,13 @@ func stageLabel(target osadminv1.UpdateTarget, slot string) string {
 }
 
 // stepsFor are an action's steps, all pending: a stage or an apply runs
-// them all, a revert has no file to verify or stage.
+// them all, a revert has no file to verify or stage, and a stage whose
+// target isn't known yet (its header isn't read) has only verifying.
 func stepsFor(action string, target osadminv1.UpdateTarget, slot string) []progressStep {
 	product := target == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+	if target == osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED {
+		return []progressStep{{ID: stepVerify, Label: "Verifying (signature, channel, SHA-256)", State: statePending}}
+	}
 	var out []progressStep
 	if action != "revert" {
 		out = append(out, progressStep{ID: stepVerify, Label: "Verifying (signature, channel, SHA-256)"}, progressStep{ID: stepStage, Label: stageLabel(target, slot)})
@@ -187,9 +191,18 @@ func (s *Server) beginProgress(action string, target osadminv1.UpdateTarget, ver
 	s.saveProgressLocked()
 }
 
+// recordTarget is a record's target as stored: "" while a stage hasn't
+// read its file's header.
+func recordTarget(t osadminv1.UpdateTarget) string {
+	if t == osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED {
+		return ""
+	}
+	return targetName(t)
+}
+
 func (s *Server) newRecordLocked(action string, target osadminv1.UpdateTarget, version, slot string) {
-	s.progress.rec = &progressRecord{Action: action, Target: targetName(target), Version: version, Steps: stepsFor(action, target, slot), Started: s.o.Clock.Now().UTC()}
-	s.o.Logger.Info("osadmin: update progress begins", log.F("action", action), log.F("target", targetName(target)), log.F("version", version))
+	s.progress.rec = &progressRecord{Action: action, Target: recordTarget(target), Version: version, Steps: stepsFor(action, target, slot), Started: s.o.Clock.Now().UTC()}
+	s.o.Logger.Info("osadmin: update progress begins", log.F("action", action), log.F("target", recordTarget(target)), log.F("version", version))
 }
 
 // continueApply carries a stage's record on into its apply, or starts one
@@ -369,8 +382,11 @@ func (s *Server) progressToWire(img *initv1.ImageServiceStatusResponse) *osadmin
 		return nil
 	}
 	target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
-	if r.Target == "product" {
+	switch r.Target {
+	case "product":
 		target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+	case "":
+		target = osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED
 	}
 	out := &osadminv1.UpgradeProgress{Action: r.Action, Target: target, Version: r.Version, Code: r.Code, StartedAt: timestamppb.New(r.Started), UpdatedAt: timestamppb.New(r.Updated)}
 	for _, st := range r.Steps {
