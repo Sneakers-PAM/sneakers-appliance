@@ -144,7 +144,9 @@ Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s
   `127.0.0.1:9180`, and the hello route's `box-page` middleware serves edgefall's box-state page for
   `502` to `504`. The hello page loads `/_box/poll.js`, so an open tab shows "Sneakers-PAM is
   rebooting" and the like through a reboot, a shutdown or an update, and comes back by itself; while
-  k0s is down edgefall answers 80 and 443 itself ([edge-fallback.md](edge-fallback.md)).
+  k0s is down edgefall answers 80 and 443 itself ([edge-fallback.md](edge-fallback.md)). The
+  edge's `edge-handoff` init container asks edgefall for 80 and 443 just before Traefik starts,
+  so they're held until then rather than refused while k0s brings the edge up.
 - Once a bundle is installed, accessd opens 80 and 443 on the service interface (the management
   one when the box has only one) through netd's `SetServicePorts`, after each product apply and
   revert and when it starts. 22 and 8443 are as before. Before a bundle is installed nothing

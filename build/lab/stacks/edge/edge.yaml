@@ -142,6 +142,31 @@ spec:
       securityContext:
         seccompProfile:
           type: RuntimeDefault
+      # edgefall holds 80 and 443 from k0s's start until this asks for them
+      # on its loopback listener, so the product URL shows the box-state
+      # page instead of refusing while Traefik comes up
+      # (docs/edge-fallback.md). The answer comes once they're free;
+      # without edgefall it fails, and Traefik starts anyway.
+      initContainers:
+        - name: edge-handoff
+          image: docker.io/library/traefik@sha256:e849695bc5c317da0cec22bfee4794fd9e15871fe554f864d31b625983e883ff
+          imagePullPolicy: Never
+          command:
+            - /bin/sh
+            - -c
+            - wget -q -T 5 -O /dev/null --post-data= http://127.0.0.1:9180/_box/edge-handoff || true
+          securityContext:
+            runAsUser: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
       containers:
         - name: traefik
           image: docker.io/library/traefik@sha256:e849695bc5c317da0cec22bfee4794fd9e15871fe554f864d31b625983e883ff

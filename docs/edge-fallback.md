@@ -40,6 +40,7 @@ It serves exactly these, and nothing else:
 |---|---|
 | `GET /_box/state` | `{"state":"rebooting"}`, with `"brand"` when the product has one (below), `Cache-Control: no-store` |
 | `GET /_box/poll.js` | the poller |
+| `POST /_box/edge-handoff` | loopback only: the edge asking for 80 and 443 (below); `204` |
 | `GET /_box/logo` | the product's logo for the poller's overlay, only when its brand has one, from edgefall's own copy (`Content-Security-Policy: default-src 'none'; sandbox`, `nosniff`) |
 | anything else, any path, method or host | the branded page, `503`, `Retry-After: 10`, `Sneakers-Box-State: <state>` |
 
@@ -51,12 +52,22 @@ poller, so a browser that lands on it goes back to the product by itself.
   it for its error pages (`502` to `504`), so an open tab gets the state from the same origin. The
   lab edge stack does both (`build/lab/stacks/edge/edge.yaml`, [k0s.md](k0s.md)), and the lab hello
   page loads the poller.
-- **80 and 443, while k0s doesn't run:** on a box with a product bundle installed, edgefall holds
-  `:443` (TLS 1.2 and up, the box's certificate) and `:80` (a redirect to https, as Traefik's 80
-  does) while `GetPhase` says the product doesn't run, and from a reboot or a shutdown on. Both or
-  neither: while Traefik still holds 443 it tries again every half second, and it lets both go as
-  soon as k0s runs again, long before Traefik binds them, so the two never hold them together.
-  Before a product is installed nothing answers 80 or 443.
+- **80 and 443, while k0s doesn't run and until the edge takes them:** on a box with a product
+  bundle installed, edgefall holds `:443` (TLS 1.2 and up, the box's certificate) and `:80` (a
+  redirect to https, as Traefik's 80 does) while `GetPhase` says the product doesn't run, and from
+  a reboot or a shutdown on. Both or neither: while Traefik still holds 443 it tries again every
+  half second. Before a product is installed nothing answers 80 or 443.
+- **The handoff:** when k0s starts (edgefall saw it stopped, then running), edgefall keeps both
+  until the product's edge asks for them with `POST /_box/edge-handoff` on the loopback listener.
+  The edge's pod does that from an init container, which runs only once the pod's images are in and
+  just before Traefik starts and binds: edgefall lets both go before it answers, so Traefik binds
+  them about a second later and the product URL never refuses for the minute k0s takes to bring the
+  edge up. The init container ignores a failure (no edgefall), so the edge always starts. An edge
+  without the init container gets them `HandoffWait` (2 minutes) after k0s started; Traefik's bind
+  fails until then and the kubelet restarts it. A handoff while k0s doesn't run, or after a reboot
+  or a shutdown was seen, is ignored. When edgefall starts on a box whose k0s already runs, it holds
+  nothing: Traefik has the edge already. The lab edge stack carries the init container
+  (`build/lab/stacks/edge/edge.yaml`); a product's own edge needs the same.
 - **The state:** edgefall asks accessd's `GetPhase` every half second on `access.sock`, where its
   uid may ask that and nothing else ([access.md](access.md#accesssock)), and serves the last answer,
   so a request never waits on accessd. A reboot or a shutdown holds once seen: accessd stops during
@@ -117,5 +128,6 @@ page does.
 | k0s stopped, the box still draining | edgefall | the overlay; a new visit gets the page |
 | the power is off, firmware, early boot | nothing | the overlay, kept |
 | booted, k0s not started | edgefall (`starting`) | the overlay |
-| k0s starting, Traefik not bound yet | nothing (about a minute) | the overlay, kept |
+| k0s starting, Traefik not bound yet | edgefall (`running`), until the edge's handoff | the overlay |
+| the handoff, Traefik binding | nothing (about a second) | the overlay, kept |
 | Traefik and the product back | Traefik | the page reloads into the product |

@@ -22,8 +22,14 @@ type edgeDeployment struct {
 	Spec struct {
 		Template struct {
 			Spec struct {
+				InitContainers []struct {
+					Name    string   `yaml:"name"`
+					Image   string   `yaml:"image"`
+					Command []string `yaml:"command"`
+				} `yaml:"initContainers"`
 				Containers []struct {
 					Name           string   `yaml:"name"`
+					Image          string   `yaml:"image"`
 					Args           []string `yaml:"args"`
 					ReadinessProbe *struct {
 						HTTPGet *struct {
@@ -95,4 +101,40 @@ func TestTheEdgeProbesTraefiksPingOnItsOwnLoopbackEntryPoint(t *testing.T) {
 	if !found {
 		t.Fatal("edge.yaml has no traefik container")
 	}
+}
+
+// edgefall holds 443 from k0s's start until the edge asks for it, so the
+// product URL answers with the box-state page instead of refusing while
+// Traefik comes up. The edge's init container asks on edgefall's loopback
+// listener, just before Traefik binds, from Traefik's own image (its
+// busybox wget), and never fails the pod when edgefall doesn't answer.
+func TestTheEdgeAsksEdgefallForThePortsBeforeTraefikStarts(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "stacks", "edge", "edge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var d edgeDeployment
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind != "Deployment" {
+			continue
+		}
+		s := d.Spec.Template.Spec
+		if len(s.InitContainers) != 1 || len(s.Containers) == 0 {
+			t.Fatalf("init containers %+v", s.InitContainers)
+		}
+		ic := s.InitContainers[0]
+		cmd := strings.Join(ic.Command, " ")
+		if ic.Image != s.Containers[0].Image || !strings.Contains(cmd, "wget") || !strings.Contains(cmd, "--post-data=") ||
+			!strings.Contains(cmd, "http://127.0.0.1:9180/_box/edge-handoff") || !strings.HasSuffix(strings.TrimSpace(cmd), "|| true") {
+			t.Fatalf("the handoff init container is %s %q", ic.Image, cmd)
+		}
+		return
+	}
+	t.Fatal("edge.yaml has no Deployment")
 }

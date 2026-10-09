@@ -8,6 +8,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
@@ -49,11 +50,61 @@ func TestTheEdgeIsClaimedWhileTheProductDoesntRun(t *testing.T) {
 	src.p = edgefall.Phase{ProductInstalled: true, State: "starting"}
 	poll(t, w, boxstate.Starting, true)
 	src.p = edgefall.Phase{ProductInstalled: true, State: "running", ProductRunning: true}
+	poll(t, w, boxstate.Running, true)
+	w.Handoff()
 	poll(t, w, boxstate.Running, false)
 	src.p = edgefall.Phase{ProductInstalled: true, State: "updating"}
 	poll(t, w, boxstate.Updating, true)
 	src.p = edgefall.Phase{ProductInstalled: true, State: "running", ProductRunning: true}
+	poll(t, w, boxstate.Running, true)
+	w.Handoff()
 	poll(t, w, boxstate.Running, false)
+}
+
+// Once k0s starts, edgefall keeps 80 and 443 until the edge asks for them
+// (its init container, just before Traefik binds), so the product URL
+// answers with the page instead of refusing while k0s brings Traefik up.
+// An edge that never asks gets them HandoffWait after k0s started.
+func TestTheEdgeIsHeldUntilTheEdgeAsks(t *testing.T) {
+	now := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	w, src, _ := watcher(t)
+	w.SetClock(func() time.Time { return now })
+	src.err = nil
+	src.p = edgefall.Phase{ProductInstalled: true, State: "starting"}
+	poll(t, w, boxstate.Starting, true)
+	if w.Handoff() {
+		t.Fatal("a handoff before k0s runs was taken")
+	}
+	poll(t, w, boxstate.Starting, true)
+	src.p = edgefall.Phase{ProductInstalled: true, State: "running", ProductRunning: true}
+	poll(t, w, boxstate.Running, true)
+	now = now.Add(edgefall.HandoffWait - time.Second)
+	poll(t, w, boxstate.Running, true)
+	now = now.Add(2 * time.Second)
+	poll(t, w, boxstate.Running, false)
+	// k0s restarts: held again until the edge asks.
+	src.p = edgefall.Phase{ProductInstalled: true, State: "starting"}
+	poll(t, w, boxstate.Starting, true)
+	src.p = edgefall.Phase{ProductInstalled: true, State: "running", ProductRunning: true}
+	poll(t, w, boxstate.Running, true)
+	if !w.Handoff() {
+		t.Fatal("the edge's handoff wasn't taken")
+	}
+	poll(t, w, boxstate.Running, false)
+}
+
+// A reboot after the handoff takes the edge back at once.
+func TestARebootAfterTheHandoffClaimsTheEdge(t *testing.T) {
+	w, src, _ := watcher(t)
+	src.err = nil
+	src.p = edgefall.Phase{ProductInstalled: true, State: "starting"}
+	poll(t, w, boxstate.Starting, true)
+	src.p = edgefall.Phase{ProductInstalled: true, State: "running", ProductRunning: true}
+	poll(t, w, boxstate.Running, true)
+	w.Handoff()
+	poll(t, w, boxstate.Running, false)
+	src.p = edgefall.Phase{ProductInstalled: true, State: "rebooting", ProductRunning: true}
+	poll(t, w, boxstate.Rebooting, true)
 }
 
 // A reboot holds once seen: accessd stops during the drain, and the page
