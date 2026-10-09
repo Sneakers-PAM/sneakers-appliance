@@ -8,13 +8,13 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -66,9 +66,12 @@ type UpgradeOptions struct {
 	// UpdateKey reads the .bin decryption key from the booted UKI. It is
 	// called only after a package verifies.
 	UpdateKey func() (age.Identity, error)
-	// HTTPClient fetches from the mirror; nil uses a client with the
-	// environment's proxy.
+	// HTTPClient fetches from every source; nil builds a client per
+	// fetch with the environment's proxy, the system roots and, for the
+	// mirror, the update trust.
 	HTTPClient *http.Client
+	// SystemRoots stands in for the system's roots; nil reads them.
+	SystemRoots *x509.CertPool
 	// ElevationEndWait bounds how long an owner's override waits for the
 	// elevated session it terminated to end; 0 is DefaultElevationEndWait.
 	ElevationEndWait time.Duration
@@ -393,7 +396,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 	p := h.s.policy()
 	direct := h.s.o.Upgrade.DirectURL != ""
 	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && (!p.Direct || !direct), History: h.s.readHistory(100),
-		Product: h.s.productSlots(ctx), DirectAvailable: direct}
+		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p)}
 	if st, err := h.s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); err == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = st.Msg.GetRunningVersion(), st.Msg.GetStagedVersion(), st.Msg.GetFailedVersion()
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = st.Msg.GetRevertedVersion(), st.Msg.GetRevertedBy(), st.Msg.GetRevertedAt()
@@ -427,11 +430,8 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 	if !windowRE.MatchString(p.WindowStart) || p.WindowMinutes < 45 || p.WindowMinutes > 720 {
 		return nil, codes.New(codes.AccessConfirm, "the window starts at HH:MM and lasts 45 to 720 minutes")
 	}
-	if p.MirrorURL != "" {
-		u, err := url.Parse(p.MirrorURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
-			return nil, codes.New(codes.AccessConfirm, "the mirror is an https:// URL without credentials, or empty for upload only")
-		}
+	if p.MirrorURL != "" && !validMirror(p.MirrorURL) {
+		return nil, codes.New(codes.AccessConfirm, "the mirror is an http:// or https:// URL with a host and no credentials or query, or empty for upload only")
 	}
 	b, err := json.Marshal(p)
 	if err != nil {
@@ -443,6 +443,7 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 	if err := writeAtomic(h.s.ownPath(policyFile), b); err != nil {
 		return nil, err
 	}
+	h.s.o.Logger.Info("osadmin: update policy set", log.F("mode", p.Mode), log.F("mirror", p.MirrorURL), log.F("direct", p.Direct))
 	return connect.NewResponse(&osadminv1.SetUpgradePolicyResponse{}), nil
 }
 
@@ -466,7 +467,7 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 		err      error
 	)
 	for _, src := range srcs {
-		if id, n, err = h.s.fetch(ctx, src.url); err == nil {
+		if id, n, err = h.s.fetch(ctx, src); err == nil {
 			from = src.name
 			break
 		}
@@ -479,24 +480,16 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	return connect.NewResponse(&osadminv1.FetchUpdateResponse{UploadId: id, Source: from}), nil
 }
 
-func (s *Server) fetch(ctx context.Context, target string) (string, int64, error) {
-	hc := s.httpClient()
+// fetch downloads a .bin from src into a new upload. It isn't trusted
+// until StageUpdate verifies it, whichever way it came.
+func (s *Server) fetch(ctx context.Context, src source) (id string, n int64, err error) {
 	started := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return "", 0, codes.Wrap(codes.UpgradeUpload, err)
+	resp, peer, err := s.open(ctx, src, ".bin")
+	if err == nil {
+		id, n, err = s.saveUpload(resp.Body)
+		_ = resp.Body.Close()
 	}
-	resp, err := hc.Do(req)
-	if err != nil {
-		s.o.Logger.Warn("osadmin: mirror fetch failed", log.F("target", target), log.F("error", err.Error()))
-		return "", 0, codes.New(codes.UpgradeUpload, "the mirror didn't answer: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", 0, codes.New(codes.UpgradeUpload, "the mirror answered %s", resp.Status)
-	}
-	id, n, err := s.saveUpload(resp.Body)
-	s.o.Logger.Info("osadmin: mirror fetch", log.F("target", target), log.F("bytes", n), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", err == nil))
+	s.fetched(ctx, src, ".bin", peer, started, n, err)
 	return id, n, err
 }
 

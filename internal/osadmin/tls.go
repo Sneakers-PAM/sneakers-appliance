@@ -43,7 +43,7 @@ func (h *tlsSvc) GetCertificateStore(ctx context.Context, _ *connect.Request[osa
 	if err != nil {
 		return nil, err
 	}
-	out := &osadminv1.GetCertificateStoreResponse{Acme: &osadminv1.AcmeState{Available: snap.ACME.Available, Reason: snap.ACME.Reason}}
+	out := &osadminv1.GetCertificateStoreResponse{Acme: &osadminv1.AcmeState{Available: snap.ACME.Available, Reason: snap.ACME.Reason}, UpdateTrust: h.s.updateTrustWire()}
 	for _, c := range snap.Certificates {
 		out.Certificates = append(out.Certificates, certProto(c))
 	}

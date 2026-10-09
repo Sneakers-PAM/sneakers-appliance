@@ -123,6 +123,25 @@ service TlsService {
       audit: "tls.acme.renew"
     };
   }
+  // SetUpdateTrust sets the update trust: the private CA certificates an
+  // https:// update mirror may chain to, added to the system roots for the
+  // mirror's fetches only, and an optional SHA-256 pin on the mirror's
+  // server certificate, checked after the chain. It replaces the trust
+  // set before. There is no way to turn verification off.
+  rpc SetUpdateTrust(SetUpdateTrustRequest) returns (SetUpdateTrustResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "tls.update-trust.set"
+    };
+  }
+  // ClearUpdateTrust removes the update trust: the mirror is checked
+  // against the system roots alone.
+  rpc ClearUpdateTrust(ClearUpdateTrustRequest) returns (ClearUpdateTrustResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "tls.update-trust.clear"
+    };
+  }
 }
 
 message Certificate {
@@ -304,7 +323,47 @@ message GetCertificateStoreResponse {
   repeated PendingCsr csrs = 2;
   repeated Endpoint endpoints = 3;
   AcmeState acme = 4;
+  // update_trust is the update mirror's trust; unset when none is set.
+  UpdateTrust update_trust = 5;
 }
+
+// UpdateTrust is what an https:// update mirror is checked against beyond
+// the system roots. It's trusted for the mirror's fetches and nothing else.
+message UpdateTrust {
+  repeated TrustedCa cas = 1;
+  // pin_sha256 is the pinned server certificate fingerprint, colon hex in
+  // capitals; empty when there's no pin.
+  string pin_sha256 = 2;
+  string set_by = 3;
+  google.protobuf.Timestamp set_at = 4;
+}
+
+// TrustedCa is one CA certificate in the update trust.
+message TrustedCa {
+  string subject = 1;
+  string issuer = 2;
+  google.protobuf.Timestamp not_after = 3;
+  // sha256 is the certificate's fingerprint, colon hex.
+  string sha256 = 4;
+}
+
+message SetUpdateTrustRequest {
+  // ca_pem is one or more PEM CA certificates (basic constraints CA:TRUE,
+  // valid now), at most 8; empty keeps the system roots alone, for a pin
+  // on a mirror with a public certificate.
+  string ca_pem = 1;
+  // pin_sha256 is an optional SHA-256 of the mirror's server certificate:
+  // 64 hex digits, colons and spaces allowed, any case.
+  string pin_sha256 = 2;
+}
+
+message SetUpdateTrustResponse {
+  UpdateTrust update_trust = 1;
+}
+
+message ClearUpdateTrustRequest {}
+
+message ClearUpdateTrustResponse {}
 
 message GenerateCsrRequest {
   // names is at most one extra name, a DNS name or an IP address: a CSR is

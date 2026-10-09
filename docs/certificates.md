@@ -76,6 +76,15 @@ takes one change at a time but keeps answering reads during that check, so Statu
 stay live while a certificate is being applied; the endpoint shows its old assignment until the
 check passes.
 
+## Update trust
+
+The update mirror's own trust, kept apart from the store: one or more private CA certificates
+(PEM) an `https://` update mirror may chain to, and an optional SHA-256 pin on the mirror's server
+certificate (`TlsService.SetUpdateTrust` and `ClearUpdateTrust`, owner). The CAs are trusted for
+the mirror's fetches only; nothing else on the box uses them. Only CA certificates valid now are
+taken, at most 8. `GetCertificateStore.update_trust` lists them (subject, issuer, expiry,
+fingerprint) with the pin. See [upgrades.md](upgrades.md#an-internal-mirror).
+
 ## Where things live
 
 - The store: `/var/lib/sneakers/osadmin-api/tls/store.json` (root only): the certificates and chains,

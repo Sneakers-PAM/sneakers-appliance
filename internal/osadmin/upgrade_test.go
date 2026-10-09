@@ -221,7 +221,7 @@ func TestAirGapMeansNoFetch(t *testing.T) {
 		t.Fatal("an air-gapped box made a network fetch")
 	}
 
-	pol := &osadminv1.UpgradePolicy{Mode: "manual", WindowStart: "02:00", WindowMinutes: 120, MirrorUrl: "http://mirror.sneakers.example.org"}
+	pol := &osadminv1.UpgradePolicy{Mode: "manual", WindowStart: "02:00", WindowMinutes: 120, MirrorUrl: "ftp://mirror.sneakers.example.org"}
 	_, err = alice.upgrade().SetUpgradePolicy(ctx, connect.NewRequest(&osadminv1.SetUpgradePolicyRequest{Policy: pol}))
 	symbolIn(t, err, connect.CodeInvalidArgument, "ACCESS_CONFIRM")
 	pol.MirrorUrl = b.mirror.URL + "/"

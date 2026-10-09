@@ -73,6 +73,12 @@ const (
 	TlsServiceSetAcmeProcedure = "/sneakers.appliance.osadmin.v1.TlsService/SetAcme"
 	// TlsServiceRenewNowProcedure is the fully-qualified name of the TlsService's RenewNow RPC.
 	TlsServiceRenewNowProcedure = "/sneakers.appliance.osadmin.v1.TlsService/RenewNow"
+	// TlsServiceSetUpdateTrustProcedure is the fully-qualified name of the TlsService's SetUpdateTrust
+	// RPC.
+	TlsServiceSetUpdateTrustProcedure = "/sneakers.appliance.osadmin.v1.TlsService/SetUpdateTrust"
+	// TlsServiceClearUpdateTrustProcedure is the fully-qualified name of the TlsService's
+	// ClearUpdateTrust RPC.
+	TlsServiceClearUpdateTrustProcedure = "/sneakers.appliance.osadmin.v1.TlsService/ClearUpdateTrust"
 )
 
 // TlsServiceClient is a client for the sneakers.appliance.osadmin.v1.TlsService service.
@@ -113,6 +119,15 @@ type TlsServiceClient interface {
 	// RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
 	// TLS_ACME_UNAVAILABLE until then.
 	RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error)
+	// SetUpdateTrust sets the update trust: the private CA certificates an
+	// https:// update mirror may chain to, added to the system roots for the
+	// mirror's fetches only, and an optional SHA-256 pin on the mirror's
+	// server certificate, checked after the chain. It replaces the trust
+	// set before. There is no way to turn verification off.
+	SetUpdateTrust(context.Context, *connect.Request[v1.SetUpdateTrustRequest]) (*connect.Response[v1.SetUpdateTrustResponse], error)
+	// ClearUpdateTrust removes the update trust: the mirror is checked
+	// against the system roots alone.
+	ClearUpdateTrust(context.Context, *connect.Request[v1.ClearUpdateTrustRequest]) (*connect.Response[v1.ClearUpdateTrustResponse], error)
 }
 
 // NewTlsServiceClient constructs a client for the sneakers.appliance.osadmin.v1.TlsService service.
@@ -212,6 +227,18 @@ func NewTlsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(tlsServiceMethods.ByName("RenewNow")),
 			connect.WithClientOptions(opts...),
 		),
+		setUpdateTrust: connect.NewClient[v1.SetUpdateTrustRequest, v1.SetUpdateTrustResponse](
+			httpClient,
+			baseURL+TlsServiceSetUpdateTrustProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("SetUpdateTrust")),
+			connect.WithClientOptions(opts...),
+		),
+		clearUpdateTrust: connect.NewClient[v1.ClearUpdateTrustRequest, v1.ClearUpdateTrustResponse](
+			httpClient,
+			baseURL+TlsServiceClearUpdateTrustProcedure,
+			connect.WithSchema(tlsServiceMethods.ByName("ClearUpdateTrust")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -231,6 +258,8 @@ type tlsServiceClient struct {
 	revertToSelfSigned  *connect.Client[v1.RevertToSelfSignedRequest, v1.RevertToSelfSignedResponse]
 	setAcme             *connect.Client[v1.SetAcmeRequest, v1.SetAcmeResponse]
 	renewNow            *connect.Client[v1.RenewNowRequest, v1.RenewNowResponse]
+	setUpdateTrust      *connect.Client[v1.SetUpdateTrustRequest, v1.SetUpdateTrustResponse]
+	clearUpdateTrust    *connect.Client[v1.ClearUpdateTrustRequest, v1.ClearUpdateTrustResponse]
 }
 
 // GetTls calls sneakers.appliance.osadmin.v1.TlsService.GetTls.
@@ -303,6 +332,16 @@ func (c *tlsServiceClient) RenewNow(ctx context.Context, req *connect.Request[v1
 	return c.renewNow.CallUnary(ctx, req)
 }
 
+// SetUpdateTrust calls sneakers.appliance.osadmin.v1.TlsService.SetUpdateTrust.
+func (c *tlsServiceClient) SetUpdateTrust(ctx context.Context, req *connect.Request[v1.SetUpdateTrustRequest]) (*connect.Response[v1.SetUpdateTrustResponse], error) {
+	return c.setUpdateTrust.CallUnary(ctx, req)
+}
+
+// ClearUpdateTrust calls sneakers.appliance.osadmin.v1.TlsService.ClearUpdateTrust.
+func (c *tlsServiceClient) ClearUpdateTrust(ctx context.Context, req *connect.Request[v1.ClearUpdateTrustRequest]) (*connect.Response[v1.ClearUpdateTrustResponse], error) {
+	return c.clearUpdateTrust.CallUnary(ctx, req)
+}
+
 // TlsServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.TlsService service.
 type TlsServiceHandler interface {
 	GetTls(context.Context, *connect.Request[v1.GetTlsRequest]) (*connect.Response[v1.GetTlsResponse], error)
@@ -341,6 +380,15 @@ type TlsServiceHandler interface {
 	// RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
 	// TLS_ACME_UNAVAILABLE until then.
 	RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error)
+	// SetUpdateTrust sets the update trust: the private CA certificates an
+	// https:// update mirror may chain to, added to the system roots for the
+	// mirror's fetches only, and an optional SHA-256 pin on the mirror's
+	// server certificate, checked after the chain. It replaces the trust
+	// set before. There is no way to turn verification off.
+	SetUpdateTrust(context.Context, *connect.Request[v1.SetUpdateTrustRequest]) (*connect.Response[v1.SetUpdateTrustResponse], error)
+	// ClearUpdateTrust removes the update trust: the mirror is checked
+	// against the system roots alone.
+	ClearUpdateTrust(context.Context, *connect.Request[v1.ClearUpdateTrustRequest]) (*connect.Response[v1.ClearUpdateTrustResponse], error)
 }
 
 // NewTlsServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -436,6 +484,18 @@ func NewTlsServiceHandler(svc TlsServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(tlsServiceMethods.ByName("RenewNow")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tlsServiceSetUpdateTrustHandler := connect.NewUnaryHandler(
+		TlsServiceSetUpdateTrustProcedure,
+		svc.SetUpdateTrust,
+		connect.WithSchema(tlsServiceMethods.ByName("SetUpdateTrust")),
+		connect.WithHandlerOptions(opts...),
+	)
+	tlsServiceClearUpdateTrustHandler := connect.NewUnaryHandler(
+		TlsServiceClearUpdateTrustProcedure,
+		svc.ClearUpdateTrust,
+		connect.WithSchema(tlsServiceMethods.ByName("ClearUpdateTrust")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.TlsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TlsServiceGetTlsProcedure:
@@ -466,6 +526,10 @@ func NewTlsServiceHandler(svc TlsServiceHandler, opts ...connect.HandlerOption) 
 			tlsServiceSetAcmeHandler.ServeHTTP(w, r)
 		case TlsServiceRenewNowProcedure:
 			tlsServiceRenewNowHandler.ServeHTTP(w, r)
+		case TlsServiceSetUpdateTrustProcedure:
+			tlsServiceSetUpdateTrustHandler.ServeHTTP(w, r)
+		case TlsServiceClearUpdateTrustProcedure:
+			tlsServiceClearUpdateTrustHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -529,4 +593,12 @@ func (UnimplementedTlsServiceHandler) SetAcme(context.Context, *connect.Request[
 
 func (UnimplementedTlsServiceHandler) RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.RenewNow is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) SetUpdateTrust(context.Context, *connect.Request[v1.SetUpdateTrustRequest]) (*connect.Response[v1.SetUpdateTrustResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.SetUpdateTrust is not implemented"))
+}
+
+func (UnimplementedTlsServiceHandler) ClearUpdateTrust(context.Context, *connect.Request[v1.ClearUpdateTrustRequest]) (*connect.Response[v1.ClearUpdateTrustResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.TlsService.ClearUpdateTrust is not implemented"))
 }

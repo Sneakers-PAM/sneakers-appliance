@@ -92,8 +92,12 @@ message UpgradePolicy {
   // window_start is HH:MM local; window_minutes its length.
   string window_start = 2;
   int32 window_minutes = 3;
-  // mirror_url is the HTTPS base the .bin files are fetched from. Empty,
-  // with direct off, means air-gapped: the box never fetches.
+  // mirror_url is the internal source the .bin files and the product
+  // index are fetched from: an http:// or https:// base with no
+  // credentials. Every .bin is verified by its signature whichever it is.
+  // An https:// mirror is checked against the system roots plus the
+  // update trust (TlsService.SetUpdateTrust). Empty, with direct off,
+  // means air-gapped: the box never fetches.
   string mirror_url = 4;
   // direct fetches from the release source (the GitHub Release) when no
   // mirror is set or the mirror fails. Off by default.
@@ -258,6 +262,42 @@ message GetUpgradesResponse {
   // upgrade_progress is the last stage, apply or revert, step by step;
   // unset when the box has made none.
   UpgradeProgress upgrade_progress = 16;
+  // mirror_status is the mirror's transport and its last fetch; unset when
+  // no mirror is configured.
+  MirrorStatus mirror_status = 17;
+}
+
+// MirrorStatus is how the box reaches the mirror and how its last fetch
+// went. It's kept in memory: checked is false after a restart until the
+// next mirror fetch.
+message MirrorStatus {
+  // scheme is http or https.
+  string scheme = 1;
+  // note is the transport in words, such as "plain HTTP: integrity from
+  // the signature only".
+  string note = 2;
+  // custom_ca is true when the update trust adds a private CA, and pinned
+  // when it pins the server certificate.
+  bool custom_ca = 3;
+  bool pinned = 4;
+  // checked is true once a mirror fetch has been tried since the box
+  // started; checked_at is when the last one ended.
+  bool checked = 5;
+  google.protobuf.Timestamp checked_at = 6;
+  // ok is the last fetch's outcome; code is its refusal's symbol, such as
+  // UPGRADE_MIRROR_UNTRUSTED or UPGRADE_MIRROR_PIN, and error the reason.
+  bool ok = 7;
+  string code = 8;
+  string error = 9;
+  // The server certificate the last HTTPS fetch was presented with, even
+  // when it was refused: its subject, issuer, expiry and SHA-256 (colon
+  // hex).
+  string server_subject = 10;
+  string server_issuer = 11;
+  google.protobuf.Timestamp server_not_after = 12;
+  string server_sha256 = 13;
+  // pin_matched is true when the pinned fingerprint matched it.
+  bool pin_matched = 14;
 }
 
 message FetchUpdateRequest {

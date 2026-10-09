@@ -13,7 +13,6 @@ package osadmin
 import (
 	"context"
 	"errors"
-	"net/http"
 	"os"
 	"regexp"
 	"time"
@@ -69,13 +68,6 @@ func directPath(file string) string {
 	return "download/v" + m[1] + "/" + file
 }
 
-func (s *Server) httpClient() *http.Client {
-	if hc := s.o.Upgrade.HTTPClient; hc != nil {
-		return hc
-	}
-	return &http.Client{Timeout: time.Hour, Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}}
-}
-
 func (s *Server) slots() product.Slots {
 	if s.o.Upgrade.ProductDir != "" {
 		return product.Slots{Dir: s.o.Upgrade.ProductDir}
@@ -127,7 +119,7 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 	installed := s.slots().Status().Installed
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src.url)
+		idx, err := s.fetchIndex(ctx, src)
 		if err != nil {
 			lastErr = err
 			continue
@@ -142,24 +134,14 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 	return nil, lastErr
 }
 
-func (s *Server) fetchIndex(ctx context.Context, target string) (updatepkg.Index, error) {
+func (s *Server) fetchIndex(ctx context.Context, src source) (idx updatepkg.Index, err error) {
 	started := time.Now()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return updatepkg.Index{}, codes.Wrap(codes.UpgradeUpload, err)
+	resp, peer, err := s.open(ctx, src, "product index")
+	if err == nil {
+		idx, err = updatepkg.ReadIndex(resp.Body)
+		_ = resp.Body.Close()
 	}
-	resp, err := s.httpClient().Do(req)
-	if err != nil {
-		s.o.Logger.Warn("osadmin: product index fetch failed", log.F("target", target), log.F("error", err.Error()))
-		return updatepkg.Index{}, codes.New(codes.UpgradeUpload, "the product index didn't come: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		s.o.Logger.Warn("osadmin: product index fetch refused", log.F("target", target), log.F("status", resp.Status))
-		return updatepkg.Index{}, codes.New(codes.UpgradeUpload, "the product index source answered %s", resp.Status)
-	}
-	idx, err := updatepkg.ReadIndex(resp.Body)
-	s.o.Logger.Info("osadmin: product index fetch", log.F("target", target), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", err == nil))
+	s.fetched(ctx, src, "product index", peer, started, 0, err)
 	return idx, err
 }
 
