@@ -97,6 +97,12 @@ type Release struct {
 type Image struct {
 	Image  string `yaml:"image"`
 	Digest string `yaml:"digest"`
+	// Version is the image's version (a service's, which its build is
+	// stamped with).
+	Version string `yaml:"version"`
+	// Build is a service image's source, which the release builds it
+	// from; nil for an image the release pulls.
+	Build *Build `yaml:"build"`
 }
 
 var digestRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)

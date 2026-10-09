@@ -38,6 +38,8 @@
 #   MIGRATE_IMAGE the sneakers-migrate image by digest, which release.yaml
 #                pins (required with IMPORT_JOB)
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
+#   LAYOUTS      the service images a release built (build/bundle/build.sh;
+#                optional)
 #   OUT          the output directory: tree/ (the unpacked bundle) and
 #                bin/header.json, bin/payload.age
 set -euo pipefail
@@ -69,7 +71,7 @@ install -m 0755 "$K0S" "$tree/k0s"
 if [ -n "$want_helm" ]; then install -m 0755 "$HELM" "$tree/helm"; fi
 
 echo "product: images ($arch)"
-RELEASE="$RELEASE" RELEASE_KEY="$RELEASE_KEY" SIGNATURES="$SIGNATURES" ARCH="$arch" OUT="$tree/images" PLAIN_HTTP="${PLAIN_HTTP:-}" \
+RELEASE="$RELEASE" RELEASE_KEY="$RELEASE_KEY" SIGNATURES="$SIGNATURES" ARCH="$arch" OUT="$tree/images" PLAIN_HTTP="${PLAIN_HTTP:-}" LAYOUTS="${LAYOUTS:-}" \
   bash "$root/build/bundle/build.sh"
 
 if [ -n "${STACKS:-}" ]; then
