@@ -63,10 +63,66 @@ const (
 // product's section; an exposed value can't take one.
 var Reserved = []string{"mcp", "help"}
 
+// SwitchStacksFile is written into the slot next to the bundle: one line
+// per stack a switch gates, "<switch> <stack> <on|off default>", for
+// k0s-interim.
+const SwitchStacksFile = "switch-stacks"
+
 // Spec is product.yaml.
 type Spec struct {
 	Format        int            `yaml:"format"`
 	ExposedValues []ExposedValue `yaml:"exposed_values"`
+	// Components are what every bundle of the product must carry, each
+	// named by its image's last path element; the bundle check refuses a
+	// bundle without one.
+	Components []Component `yaml:"components"`
+	// Switches turn parts of the product on and off from :8443: each
+	// gates its own stacks, which k0s applies only while it's on.
+	Switches []Switch `yaml:"switches"`
+}
+
+// Component is one part of the product the bundle must carry.
+type Component struct {
+	Name  string `yaml:"name"`
+	Image string `yaml:"image"`
+}
+
+// Switch is a part of the product an admin turns on and off.
+type Switch struct {
+	Name    string `yaml:"name"`
+	Label   string `yaml:"label"`
+	Default bool   `yaml:"default"`
+	// Stacks are the bundle's stacks applied only while it's on.
+	Stacks []string `yaml:"stacks"`
+	// Restart are workloads restarted after a change,
+	// <namespace>/<deployment|statefulset|daemonset>/<name>, so they read
+	// what the stacks bring or take away.
+	Restart []string `yaml:"restart"`
+}
+
+var (
+	restartRE = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)/(deployment|statefulset|daemonset)/([a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?)$`)
+	stackRE   = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,62}$`)
+	imageRE   = regexp.MustCompile(`^[a-z0-9]([a-z0-9._-]{0,127})$`)
+)
+
+// RestartRef splits Restart[i].
+func (w Switch) RestartRef(i int) (ns, kind, name string, ok bool) {
+	m := restartRE.FindStringSubmatch(w.Restart[i])
+	if m == nil {
+		return "", "", "", false
+	}
+	return m[1], m[3], m[4], true
+}
+
+// Switch returns the switch named name.
+func (s Spec) Switch(name string) (Switch, bool) {
+	for _, w := range s.Switches {
+		if w.Name == name {
+			return w, true
+		}
+	}
+	return Switch{}, false
 }
 
 // ExposedValue is one Secret key a product lets the listed roles read.
@@ -121,6 +177,9 @@ func Parse(b []byte) (Spec, error) {
 	if s.Format != Format {
 		return Spec{}, bad("is format %d; this appliance reads format %d", s.Format, Format)
 	}
+	if err := s.checkParts(); err != nil {
+		return Spec{}, err
+	}
 	seen := map[string]bool{}
 	for i, v := range s.ExposedValues {
 		if err := v.check(); err != nil {
@@ -132,6 +191,36 @@ func Parse(b []byte) (Spec, error) {
 		seen[v.Name] = true
 	}
 	return s, nil
+}
+
+func (s Spec) checkParts() error {
+	for i, c := range s.Components {
+		if c.Name == "" || !imageRE.MatchString(c.Image) {
+			return bad("components[%d]: a component has a name and its image's last path element", i)
+		}
+	}
+	names, stacks := map[string]bool{}, map[string]bool{}
+	for i, w := range s.Switches {
+		if !nameRE.MatchString(w.Name) || names[w.Name] {
+			return bad("switches[%d]: %q isn't a lower-case word, or is declared twice", i, w.Name)
+		}
+		names[w.Name] = true
+		if len(w.Stacks) == 0 {
+			return bad("switches[%d]: %s gates no stack", i, w.Name)
+		}
+		for _, st := range w.Stacks {
+			if !stackRE.MatchString(st) || stacks[st] {
+				return bad("switches[%d]: the stack %q isn't a stack name, or another switch gates it", i, st)
+			}
+			stacks[st] = true
+		}
+		for j := range w.Restart {
+			if _, _, _, ok := w.RestartRef(j); !ok {
+				return bad("switches[%d]: %q isn't <namespace>/<deployment|statefulset|daemonset>/<name>", i, w.Restart[j])
+			}
+		}
+	}
+	return nil
 }
 
 func (v ExposedValue) check() error {
@@ -342,10 +431,14 @@ func quoted(names []string) string {
 }
 
 // WriteRBAC renders the RBAC for the product.yaml in slot dir into
-// dir/RBACFile; a bundle that exposes nothing gets none.
+// dir/RBACFile (a bundle that exposes nothing gets none), and the
+// stacks its switches gate into dir/SwitchStacksFile.
 func WriteRBAC(dir string) error {
 	s, err := Load(dir)
 	if err != nil {
+		return err
+	}
+	if err := writeSwitchStacks(dir, s); err != nil {
 		return err
 	}
 	p := filepath.Join(dir, RBACFile)
@@ -356,6 +449,30 @@ func WriteRBAC(dir string) error {
 		return nil
 	}
 	if err := os.WriteFile(p, RBAC(s), 0o644); err != nil { // #nosec G306 -- RBAC, nothing secret; k0s reads the slot as root
+		return fmt.Errorf("productspec: %w", err)
+	}
+	return nil
+}
+
+func writeSwitchStacks(dir string, s Spec) error {
+	p := filepath.Join(dir, SwitchStacksFile)
+	if len(s.Switches) == 0 {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("productspec: %w", err)
+		}
+		return nil
+	}
+	var b strings.Builder
+	for _, w := range s.Switches {
+		def := "off"
+		if w.Default {
+			def = "on"
+		}
+		for _, st := range w.Stacks {
+			fmt.Fprintf(&b, "%s %s %s\n", w.Name, st, def)
+		}
+	}
+	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil { // #nosec G306 -- stack names, nothing secret
 		return fmt.Errorf("productspec: %w", err)
 	}
 	return nil

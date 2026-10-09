@@ -19,3 +19,38 @@ exposed_values:
       equals: false
     label: Sneakers setup token
     link: https://{host}/admin/setup
+
+# What every Sneakers bundle carries, by each image's last path element: the
+# bundle check (bundle.CheckProduct) refuses one that's missing any of them.
+components:
+  - {name: PostgreSQL, image: postgres}
+  - {name: Valkey, image: valkey}
+  - {name: Ory Kratos, image: kratos}
+  - {name: Ory Hydra, image: hydra}
+  - {name: Traefik, image: traefik}
+  - {name: cert-manager, image: cert-manager-controller}
+  - {name: sneakers-identity, image: sneakers-identity}
+  - {name: sneakers-vault, image: sneakers-vault}
+  - {name: sneakers-workflow, image: sneakers-workflow}
+  - {name: sneakers-audit, image: sneakers-audit}
+  - {name: sneakers-notify, image: sneakers-notify}
+  - {name: sneakers-connector, image: sneakers-connector}
+  - {name: sneakers-sshbroker, image: sneakers-sshbroker}
+  - {name: sneakers-gateway, image: sneakers-gateway}
+  - {name: sneakers-mcp, image: sneakers-mcp}
+  - {name: sneakers-web-staff, image: sneakers-web-staff}
+  - {name: sneakers-web-admin, image: sneakers-web-admin}
+
+# The MCP page's switch. The sneakers-mcp stack holds the MCP server, Hydra
+# (which only the MCP's OAuth flow uses) and the ConfigMap that gives the
+# gateway and the staff web app their MCP settings; off by default, so none
+# of it runs until an admin turns it on. A change restarts the two so they
+# read the ConfigMap, or its absence.
+switches:
+  - name: mcp
+    label: The MCP server
+    default: false
+    stacks: [sneakers-mcp]
+    restart:
+      - sneakers/deployment/sneakers-gateway
+      - sneakers/deployment/sneakers-web-staff

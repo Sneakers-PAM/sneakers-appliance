@@ -60,6 +60,25 @@ exposed_rbac() {
   fi
 }
 
+# switched_off <slot> <stack> <state file>: whether a switch the bundle
+# declares gates the stack and is off (internal/productswitch): the state
+# an admin set on :8443, else the default the slot records.
+switched_off() {
+  [ -s "$1/switch-stacks" ] || return 1
+  while read -r sw st def; do
+    [ "$st" = "$2" ] || continue
+    v="$def"
+    if [ -s "$3" ]; then
+      while read -r name val; do
+        if [ "$name" = "$sw" ]; then v="$val"; fi
+      done < "$3"
+    fi
+    [ "$v" = off ] && return 0
+    return 1
+  done < "$1/switch-stacks"
+  return 1
+}
+
 # box_tls <crt> <key> <stack dir>: the box-tls Secret in sneakers-edge
 # with the chain and key, and the Traefik dynamic config that makes them
 # the default certificate (traefik-tls.yaml), which the edge mounts next to
@@ -157,6 +176,10 @@ prepare() {
     [ -d "$d" ] || continue
     stack="$(basename "$d")"
     rm -rf "$data/manifests/$stack"
+    if switched_off "$slot" "$stack" /var/lib/sneakers/platform/switches; then
+      say "stack $stack is off (its switch on :8443)"
+      continue
+    fi
     mkdir -p "$data/manifests/$stack"
     cp "$d"*.yaml "$data/manifests/$stack/"
     say "stack $stack in place"

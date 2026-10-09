@@ -161,6 +161,23 @@ func TestAnEdgeErrorIsNotUp(t *testing.T) {
 	}
 }
 
+// A stack whose switch is off isn't applied, so it isn't waited for.
+func TestASwitchedOffStackIsntWaitedFor(t *testing.T) {
+	e := edge(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	k := &fakeK0s{apiUp: true, images: "sha256:" + hexA + " sha256:" + hexB, stacks: map[string]bool{"edge": true}, podsJSON: strings.Replace(twoPods, "%s", "True", 1)}
+	p := probe(t, k, e)
+	if r := check(t, p); r.Step != productup.StepManifests {
+		t.Fatalf("hello is waited for: %+v", r)
+	}
+	if err := os.WriteFile(filepath.Join(p.Slot, "switch-stacks"), []byte("hi hello off\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p.SwitchDir = t.TempDir()
+	if r := check(t, p); r.Step != "" {
+		t.Fatalf("a switched-off stack is waited for: %+v", r)
+	}
+}
+
 // k0s is asked with the bundle's own binary and the admin kubeconfig in
 // its data directory.
 func TestTheProbeUsesTheBundlesK0s(t *testing.T) {

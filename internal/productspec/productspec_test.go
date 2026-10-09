@@ -226,4 +226,77 @@ func TestTheSneakersBundleExposesItsSetupToken(t *testing.T) {
 	if !ok || !v.Allows("owner") || !v.Allows("admin") || !v.OneTime || v.ConsumedWhen == nil || v.LinkFor("box1.sneakers.example.org") != "https://box1.sneakers.example.org/admin/setup" {
 		t.Fatalf("%+v", v)
 	}
+	// Every agreed component, MCP and Hydra among them, and the MCP switch,
+	// off by default.
+	var images []string
+	for _, c := range s.Components {
+		images = append(images, c.Image)
+	}
+	for _, want := range []string{"postgres", "valkey", "kratos", "hydra", "traefik", "cert-manager-controller", "sneakers-identity", "sneakers-vault", "sneakers-workflow",
+		"sneakers-audit", "sneakers-notify", "sneakers-connector", "sneakers-sshbroker", "sneakers-gateway", "sneakers-mcp", "sneakers-web-staff", "sneakers-web-admin"} {
+		if !slices.Contains(images, want) {
+			t.Errorf("no component %s", want)
+		}
+	}
+	if w, ok := s.Switch("mcp"); !ok || w.Default || !slices.Equal(w.Stacks, []string{"sneakers-mcp"}) {
+		t.Errorf("the mcp switch %+v", w)
+	}
+}
+
+const withSwitches = `format: 2
+components:
+  - {name: PostgreSQL, image: postgres}
+  - {name: the MCP server, image: sneakers-mcp}
+switches:
+  - name: mcp
+    label: The MCP server
+    default: false
+    stacks: [sneakers-mcp]
+    restart: [sneakers/deployment/sneakers-gateway, sneakers/deployment/sneakers-web-staff]
+`
+
+func TestComponentsAndSwitchesParse(t *testing.T) {
+	s, err := productspec.Parse([]byte(withSwitches))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Components) != 2 || s.Components[1].Image != "sneakers-mcp" {
+		t.Fatalf("components %+v", s.Components)
+	}
+	sw, ok := s.Switch("mcp")
+	if !ok || sw.Default || !slices.Equal(sw.Stacks, []string{"sneakers-mcp"}) || len(sw.Restart) != 2 {
+		t.Fatalf("%+v", sw)
+	}
+	ns, kind, name, ok := sw.RestartRef(0)
+	if !ok || ns != "sneakers" || kind != "deployment" || name != "sneakers-gateway" {
+		t.Fatalf("restart %q %q %q", ns, kind, name)
+	}
+	for name, doc := range map[string]string{
+		"a bad switch name":    "format: 2\nswitches:\n  - {name: MCP, stacks: [a]}\n",
+		"a switch twice":       "format: 2\nswitches:\n  - {name: mcp, stacks: [a]}\n  - {name: mcp, stacks: [b]}\n",
+		"no stacks":            "format: 2\nswitches:\n  - {name: mcp}\n",
+		"a stack in two":       "format: 2\nswitches:\n  - {name: mcp, stacks: [a]}\n  - {name: api, stacks: [a]}\n",
+		"a bad restart":        "format: 2\nswitches:\n  - {name: mcp, stacks: [a], restart: [sneakers/pod/x]}\n",
+		"a component no image": "format: 2\ncomponents:\n  - {name: x}\n",
+	} {
+		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// A slot records which of its stacks each switch gates, with the
+// default, for k0s-interim.
+func TestTheSwitchStacksAreWrittenIntoTheSlot(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, productspec.File), []byte(withSwitches), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := productspec.WriteRBAC(dir); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, productspec.SwitchStacksFile))
+	if err != nil || string(b) != "mcp sneakers-mcp off\n" {
+		t.Fatalf("%q %v", b, err)
+	}
 }

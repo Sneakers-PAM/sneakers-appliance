@@ -19,8 +19,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 )
 
 // The steps, in the order the product comes up, as UpgradeStep.id names
@@ -68,6 +71,10 @@ type Probe struct {
 	// HTTP asks the edge; nil is a client that accepts the box's own
 	// certificate (on loopback only the answer's source matters).
 	HTTP *http.Client
+	// SwitchDir holds the product's switch settings
+	// (/var/lib/sneakers/platform); a stack whose switch is off isn't
+	// applied, so it isn't waited for.
+	SwitchDir string
 }
 
 // askTimeout bounds each command and the edge request.
@@ -231,9 +238,10 @@ func (p *Probe) stacks(ctx context.Context) ([]string, error) {
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
+	off := productswitch.OffStacks(p.Slot, p.SwitchDir)
 	var missing []string
 	for _, d := range dirs {
-		if !d.IsDir() {
+		if !d.IsDir() || slices.Contains(off, d.Name()) {
 			continue
 		}
 		out, err := p.kubectl(ctx, "get", "namespaces,deployments,daemonsets,statefulsets,services,configmaps", "--all-namespaces", "-l", StackLabel+"="+d.Name(), "-o", "name")

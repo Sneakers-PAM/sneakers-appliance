@@ -4,6 +4,7 @@
 package bundle_test
 
 import (
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -168,5 +169,32 @@ func TestAProductBundleMayCarryProductYAML(t *testing.T) {
 		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) {
 			t.Errorf("%s: want KIT_BUNDLE_MISMATCH, got %v", name, err)
 		}
+	}
+}
+
+// A bundle carries every component its product.yaml names (by the image's
+// last path element), and every stack its switches gate; one missing
+// refuses the bundle, naming it.
+func TestABundleCarriesEveryComponentItsProductNames(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	spec := func(extra string) func(fstest.MapFS) {
+		return func(m fstest.MapFS) {
+			m["product.yaml"] = &fstest.MapFile{Data: []byte("format: 2\ncomponents:\n  - {name: Valkey, image: valkey}\n  - {name: the gateway, image: sneakers-gateway}\n" + extra), Mode: 0o644}
+		}
+	}
+	tree, _ := fixtures.ProductTree(t, k, "amd64", spec("switches:\n  - {name: hi, stacks: [hello]}\n"))
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatal(err)
+	}
+	tree, _ = fixtures.ProductTree(t, k, "amd64", spec("  - {name: the MCP server, image: sneakers-mcp}\n"))
+	_, err := bundle.CheckProduct(tree, "amd64", pub)
+	if !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "the MCP server") {
+		t.Fatalf("a missing component: %v", err)
+	}
+	tree, _ = fixtures.ProductTree(t, k, "amd64", spec("switches:\n  - {name: mcp, stacks: [sneakers-mcp]}\n"))
+	_, err = bundle.CheckProduct(tree, "amd64", pub)
+	if !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "sneakers-mcp") {
+		t.Fatalf("a switch's missing stack: %v", err)
 	}
 }
