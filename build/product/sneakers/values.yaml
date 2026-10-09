@@ -1,0 +1,91 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Sneakers product bundle's values, for every channel: layered over
+# sneakers-release's charts/sneakers/examples/values-small-box.yaml by
+# render.sh, which turns the render into the bundle's stacks. The MCP and
+# Hydra are off here; values-mcp-on.yaml turns them on for the second
+# render, whose extra objects become the sneakers-mcp stack (the MCP
+# switch, product.yaml).
+#
+# No secret value is set or generated here: every Secret the stacks read is
+# one product.yaml declares as a box secret, made on each box
+# (sneakers-bundled, sneakers-kratos, sneakers-hydra, sneakers-box and
+# sneakers-setup-token). The chart still renders its bundled Secrets, which
+# render.sh drops.
+global:
+  # The box has no name of its own at build time; the edge serves every
+  # name on 443 (render.sh drops the Ingress hosts).
+  host: sneakers.box.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+  environment: production
+  logLevel: error
+  logFormat: json
+  workloadIdentityIssuer: https://kubernetes.default.svc
+bundledSecrets:
+  enabled: true
+identity:
+  secretEnv:
+    TOTP_ENC_KEY:
+      secretName: sneakers-box
+vault:
+  secretEnv:
+    VAULT_ROOT_KEK:
+      secretName: sneakers-box
+gateway:
+  env:
+    MCP_HEALTH_URL: ''
+    OAUTH_PUBLIC_URL: ''
+    MCP_ENABLED: 'false'
+  secretEnv:
+    SETUP_TOKEN:
+      secretName: sneakers-setup-token
+  ingress:
+    enabled: true
+    className: traefik
+    annotations: &edge
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      traefik.ingress.kubernetes.io/router.tls: 'true'
+      traefik.ingress.kubernetes.io/router.middlewares: box-page@file
+  networkPolicy:
+    # The edge is on the host network: it reaches the pods from the node
+    # address and the pod network's gateway.
+    ingressFrom: &edgeFrom
+      - namespaceSelector: {}
+      - ipBlock:
+          cidr: 198.18.0.1/32
+      - ipBlock:
+          cidr: 10.244.0.1/32  # scrub:allow=private-ip -- k0s's default pod network gateway
+  envFromConfigMaps: &switch
+    - name: sneakers-mcp-switch
+      optional: true
+mcp:
+  enabled: false
+hydra:
+  enabled: false
+web-staff:
+  env:
+    MCP_URL: ''
+    APPLIANCE_BOX_POLLER: 'true'
+  ingress:
+    enabled: true
+    className: traefik
+    annotations: *edge
+  networkPolicy:
+    ingressFrom: *edgeFrom
+  envFromConfigMaps: *switch
+web-admin:
+  ingress:
+    enabled: true
+    className: traefik
+    annotations: *edge
+  networkPolicy:
+    ingressFrom: *edgeFrom
+  env:
+    APPLIANCE_BOX_POLLER: 'true'
+sshbroker:
+  ingress:
+    enabled: true
+    className: traefik
+    annotations: *edge
+  networkPolicy:
+    ingressFrom: *edgeFrom

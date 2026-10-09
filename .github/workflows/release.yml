@@ -4,10 +4,12 @@ name: Release
 # Base Web and Product, each a signed and encrypted .bin, with the index a
 # mirror serves (docs/release.md).
 #
-# Production (push of a v tag): guard -> build (no keys, no environment) ->
-# sign (the production environment, the only job that reads its secrets) ->
-# publish (verify, push sneakers-os to GHCR by digest, attach the units, the
-# index and the countersignatures to the tag's GitHub Release).
+# Production (push of a v tag): guard -> images (every Sneakers service
+# image, built from the source the pinned release.yaml names; no keys) ->
+# build (no keys, no environment) -> sign (the production environment, the
+# only job that reads its secrets) -> publish (verify, push the service
+# images and sneakers-os to GHCR by digest, attach the units, the index and
+# the countersignatures to the tag's GitHub Release).
 #
 # Lab (workflow_dispatch): one job with keys made for that run only, never
 # the production environment, and nothing published or uploaded.
@@ -51,9 +53,57 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: bash build/release/guard.sh
 
+  images:
+    name: 🐳 Service images (amd64)
+    needs: guard
+    if: needs.guard.outputs.channel == 'production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - name: Check out the pinned sneakers-release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          repository: ${{ needs.guard.outputs.release_repo }}
+          ref: ${{ needs.guard.outputs.release_commit }}
+          path: .pinned/sneakers-release
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+      # Each service image is built from the repository and full commit its
+      # build block in the pinned release.yaml names, with that
+      # repository's own Dockerfile. Nothing is pushed here.
+      - name: Build the service images
+        env:
+          RELEASE_COMMIT: ${{ needs.guard.outputs.release_commit }}
+        run: |
+          [ "$(git -C .pinned/sneakers-release rev-parse HEAD)" = "$RELEASE_COMMIT" ]
+          RELEASE=.pinned/sneakers-release/manifest/release.yaml OUT="$RUNNER_TEMP/service-images" \
+            bash build/release/images.sh
+          {
+            echo "### Service images (amd64)"
+            echo '```'
+            for d in "$RUNNER_TEMP"/service-images/*/; do
+              echo "$(basename "$d") $(sed -n 's/.*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$d/index.json" | head -1)"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the service images
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: service-images-amd64
+          path: ${{ runner.temp }}/service-images
+          if-no-files-found: error
+          retention-days: 7
+
   build:
     name: 🏗️ Build (unsigned, amd64)
-    needs: guard
+    needs: [guard, images]
     if: needs.guard.outputs.channel == 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -89,14 +139,22 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: '24'
-      # Before the long build: every image the pinned release.yaml names is
+      - name: Download the service images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: service-images-amd64
+          path: ${{ runner.temp }}/service-images
+      # Before the long build: every service image the pinned release.yaml
+      # names was built, and with its digests in place every image is
       # pinned by a digest, not a placeholder.
       - name: Check the pinned release.yaml
         env:
           RELEASE_COMMIT: ${{ needs.guard.outputs.release_commit }}
         run: |
           [ "$(git -C .pinned/sneakers-release rev-parse HEAD)" = "$RELEASE_COMMIT" ]
-          go run ./build/tools/bundle images --release .pinned/sneakers-release/manifest/release.yaml
+          go run ./build/tools/bundle fill --release .pinned/sneakers-release/manifest/release.yaml \
+            --layouts "$RUNNER_TEMP/service-images" > "$RUNNER_TEMP/release-filled.yaml"
+          go run ./build/tools/bundle images --release "$RUNNER_TEMP/release-filled.yaml"
       - name: Install the build tools
         run: |
           sudo apt-get update -q
@@ -124,6 +182,7 @@ jobs:
           VERITYSETUP=build/out/veritysetup-amd64 \
           OPENSSH=out/static BUSYBOX=out/static/busybox STATIC=build/out \
           RELEASE=.pinned/sneakers-release/manifest/release.yaml WEB=.pinned/sneakers-web \
+          CHARTS=.pinned/sneakers-release SERVICE_IMAGES="$RUNNER_TEMP/service-images" \
           OUT="$RUNNER_TEMP/unsigned" bash build/release/build.sh
           {
             echo "### Unsigned build ${VERSION} (amd64)"
@@ -156,6 +215,11 @@ jobs:
         with:
           name: unsigned-amd64
           path: ${{ runner.temp }}/unsigned
+      - name: Download the service images
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: service-images-amd64
+          path: ${{ runner.temp }}/service-images
       - name: Install the pinned signers
         run: |
           sudo apt-get update -q
@@ -260,22 +324,26 @@ jobs:
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/artifact.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$(cat "$work/index-blob")" >/dev/null
           "$RUNNER_TEMP/sneakers-artifact" attach --layout "$RUNNER_TEMP/signed/artifact" --bundle "$work/artifact.sigstore.json"
-      # The product bundle: k0s, helm and every pinned image, each checked
-      # against its countersignature, for this release's base and newer. It
-      # needs no private key: it's encrypted to the committed update.pub.
+      # The product bundle: k0s, helm, every pinned image (the service images
+      # from the images job's layouts, the rest from their registries), each
+      # checked against its countersignature, the Sneakers stacks the build
+      # job rendered and product.yaml, for this release's base and newer.
+      # The bundle check refuses it without every component product.yaml
+      # names. It needs no private key: it's encrypted to the committed
+      # update.pub.
       - name: Build the product bundle
         env:
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
           in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" cs="$RUNNER_TEMP/signed/countersignatures"
-          mkdir -p "$work/no-stacks"
           chmod +x "$in/k0s"
           helm=()
           if [ -f "$in/helm" ]; then chmod +x "$in/helm"; helm=(HELM="$in/helm"); fi
-          inputs="$(RELEASE="$in/release.yaml" STACKS="$work/no-stacks" bash build/lab/units.sh inputs product)"
+          inputs="$(RELEASE="$in/release.yaml" STACKS="$in/stacks" bash build/lab/units.sh inputs product)"
           env "${helm[@]}" VERSION="$VERSION" ARCH=amd64 CHANNEL=production MIN_BASE="$VERSION" BASES="$VERSION" \
             RELEASE="$in/release.yaml" RELEASE_KEY=keys/production/cosign.pub SIGNATURES="$cs/image-sigs" \
             K0S="$in/k0s" RECIPIENT=keys/production/update.pub INPUTS="$inputs" OUT="$work/product" \
+            STACKS="$in/stacks" PRODUCT_YAML="$in/product.yaml" LAYOUTS="$RUNNER_TEMP/service-images" \
             bash build/product/build.sh
       # The three units, sealed by build/lab/units.sh on the production
       # channel, from the layout a lab build leaves: the signed artifact, the
@@ -303,7 +371,7 @@ jobs:
             --tlog-upload=false --use-signing-config=false "$work/product/bin/header.json" >/dev/null
           "$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/product/bin" \
             --bundle "$work/product/bin/header.sigstore.json" --out "$rel/product" >/dev/null
-          CHANNEL=production COMMIT="$GITHUB_SHA" BASEOS_INPUTS="$(cat "$in/inputs-baseOS")" STACKS="$work/no-stacks" \
+          CHANNEL=production COMMIT="$GITHUB_SHA" BASEOS_INPUTS="$(cat "$in/inputs-baseOS")" STACKS="$in/stacks" \
             OUT="$rel" KEYS="$keys" UNITS="$RUNNER_TEMP/signed/units" bash build/lab/units.sh
       - name: Verify the units
         env:
@@ -368,6 +436,10 @@ jobs:
         run: |
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
       - name: Verify, push and attach
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -390,6 +462,10 @@ jobs:
           while read -r image dgst; do
             verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
           done < "$in/images.txt"
+          # Every service image the release built, to the image release.yaml
+          # names, by the digest it pins (and the version tag); each push is
+          # read back by that digest.
+          go run ./build/tools/bundle push --release "$in/release.yaml" --layouts "$RUNNER_TEMP/service-images-amd64" --tag "$VERSION"
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sneakers-os"
           digest="$("$in/sneakers-artifact" push --layout "$signed/artifact" --repo "$repo" --tag "$VERSION")"
           "$in/sneakers-kit" verify "$repo@$digest"
@@ -406,6 +482,9 @@ jobs:
           {
             echo "### Published $VERSION"
             echo "- sneakers-os: $repo@$digest"
+            go run ./build/tools/bundle sources --release "$in/release.yaml" | while read -r name image _; do
+              echo "- $name: $image@$(sed -n "s|^$image ||p" "$in/images.txt")"
+            done
             for b in "$units"/*.bin; do echo "- $(basename "$b") ($(sha256sum < "$b" | cut -d' ' -f1))"; done
             echo "- release.yaml and $(wc -l < "$in/images.txt") image countersignatures"
           } >> "$GITHUB_STEP_SUMMARY"

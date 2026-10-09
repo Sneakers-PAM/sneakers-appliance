@@ -1,8 +1,10 @@
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# INTERIM, LAB ONLY, until Traefik comes with the platform (#102): a
-# minimal edge that serves the hello stack on the box's normal ports.
+# INTERIM, until Traefik comes with the platform (#102): a minimal edge
+# that serves the product (and, in a lab bundle, the hello stack) on the
+# box's normal ports. The Sneakers product bundle carries it on every
+# channel (build/product/sneakers/render.sh).
 # Traefik runs on the host network and listens on 443 (TLS with the
 # certificate the box hands in as the box-tls Secret: the one assigned to
 # the Product (443) endpoint, else the box's own :8443 one; without it
