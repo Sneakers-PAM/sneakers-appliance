@@ -258,6 +258,11 @@ func (s *Server) newestEscrow() (string, error) {
 }
 
 func (h *setup) DownloadEscrow(ctx context.Context, _ *connect.Request[osadminv1.DownloadEscrowRequest]) (*connect.Response[osadminv1.DownloadEscrowResponse], error) {
+	// The escrow carries the installed product's keys too: sealed now, and a
+	// new escrow file written, when one is new or changed.
+	if err := h.s.refreshEscrow(ctx); err != nil && !codes.Is(err, codes.SetupIncomplete) {
+		h.s.o.Logger.Error(err, "osadmin: the product's keys couldn't be added to the escrow; the last escrow file is downloaded")
+	}
 	name, err := h.s.newestEscrow()
 	if err != nil {
 		return nil, err

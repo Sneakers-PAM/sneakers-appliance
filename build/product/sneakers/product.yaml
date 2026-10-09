@@ -76,3 +76,15 @@ import:
   setup: setup-token
   restart:
     - sneakers/deployment/sneakers-vault
+
+# The keys Sneakers' data can't be opened without: the vault's root key
+# and the identity service's TOTP key. The box seals each under
+# KeyCustody, so the recovery escrow carries them for a restore onto a
+# replacement box (docs/key-custody.md#product-keys).
+escrow:
+  - name: vault-root-key
+    secret: sneakers/sneakers-vault-generated
+    key: VAULT_ROOT_KEK
+  - name: totp-key
+    secret: sneakers/sneakers-identity-generated
+    key: TOTP_ENC_KEY

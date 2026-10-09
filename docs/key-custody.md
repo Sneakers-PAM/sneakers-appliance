@@ -79,6 +79,26 @@ security-key types are refused, because a restore mustn't need the hardware the 
 Each recovery key opens it on its own, with the stock `age -d -i <private key>`. A restore onto new
 hardware uses it; losing the TPM without the escrow loses the data.
 
+## Product keys
+
+A product's `product.yaml` names the keys its data can't be opened without, under `escrow`
+([release.md](release.md#productyaml)); the Sneakers bundle names the vault's root key
+(`VAULT_ROOT_KEK`) and the identity service's TOTP key (`TOTP_ENC_KEY`). The box reads each from the
+product's Secret, as the appliance's own service account (whose Role names those Secrets), and seals
+it as the item `product-<product>-<name>`, so the escrow carries it with the state key. This runs
+each time an owner downloads the escrow (`SetupService.DownloadEscrow`): a key that is new or has
+changed is sealed again and a new escrow file is written to the current recovery keys before the
+download, so **download the escrow after the product is installed**, and again after an import or
+anything that changes the keys. A key the product hasn't made yet is sealed next time.
+
+Restoring the product onto a replacement box: decrypt the escrow with one recovery key
+(`age -d -i <private key> escrow-*.age`). It is JSON: `items` maps each sealed item's name to its
+value (base64). Before the product's data is restored, put `product-sneakers-vault-root-key` and
+`product-sneakers-totp-key` back as the new box's `VAULT_ROOT_KEK` and `TOTP_ENC_KEY` (the root
+shell's `kubectl` edits the product's Secrets), then restart the vault and the identity service.
+Without the vault's root key no stored secret opens; without the TOTP key every second factor has
+to be enrolled again.
+
 ## Importing an escrow on new hardware
 
 A restore onto new hardware brings the old box's sealed items back with
