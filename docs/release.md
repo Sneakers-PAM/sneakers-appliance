@@ -236,7 +236,7 @@ which the box keeps in the recovery escrow ([key-custody.md](key-custody.md#prod
 ```yaml
 escrow:
   - name: vault-root-key            # sealed as product-<product>-vault-root-key
-    secret: sneakers/sneakers-vault-generated
+    secret: sneakers/sneakers-box
     key: VAULT_ROOT_KEK
 ```
 
@@ -259,6 +259,39 @@ puts its own value in place of each placeholder when a stack goes in front of k0
 ([network.md](network.md#the-host-name)). The Sneakers bundle's values set `global.host` to the
 placeholder, so every host-dependent setting carries it and no bundle names a box.
 
+And it declares the **box secrets**, the Secrets every box makes for itself, so no bundle carries a
+secret value and no two boxes share one:
+
+```yaml
+box_secrets:
+  - secret: sneakers/sneakers-bundled         # <namespace>/<name>
+    keys:
+      - {key: password, generate: password}   # 32 letters and digits
+      - {key: redis-url, value: "redis://:{valkey-password}@sneakers-valkey:6379/0"}
+      - {key: valkey-password, generate: password}
+  - secret: sneakers/sneakers-box
+    keys:
+      - {key: VAULT_ROOT_KEK, generate: key32}  # 32 random bytes, base64
+  - secret: sneakers/sneakers-setup-token
+    keys:
+      - {key: SETUP_TOKEN, generate: token}     # 32 random bytes, URL-safe base64
+```
+
+A key is either generated (`password`, `key32` or `token`) or a `value`, which may name generated
+keys as `{key}` (the same Secret's) or `{secret/key}` (another box secret's in the same namespace).
+The box refuses a key that's both or neither, an unknown generator, a key or a Secret twice, a
+reference to a key that isn't generated, a brace that isn't closed, and the appliance's own
+namespace. At each product apply and revert, after the slots switch and before k0s restarts,
+accessd makes every generated value the current slot declares that it hasn't made before (from the
+kernel's random source) and keeps them in `/var/lib/sneakers/platform/box-secrets.json` (mode
+0600, on the encrypted state volume). It then writes the Secrets that slot declares as the stack
+`sneakers-appliance-secrets` (`/var/lib/k0s/manifests`, mode 0600). A value is never made twice:
+updates, reverts and reboots keep it, and a value a later bundle stops declaring is kept for one
+that declares it again. A bundle that declares none leaves no stack. No value is logged. If they
+can't be made, the apply stops before k0s is touched. The keys `escrow` names (the Sneakers bundle's vault
+root key and TOTP key, in `sneakers-box`) also go into the recovery escrow. INTERIM: platformd seals
+all of them through KeyCustody when it lands (#100).
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,
@@ -267,7 +300,9 @@ ConfigMap that gives the gateway and the staff web app their MCP settings, so no
 neither app offers the MCP, until an admin turns it on. It also declares the `import` switch, off by
 default, whose `sneakers-import` stack (`build/product/sneakers/import-stack.yaml`) holds the
 migrate service account, and the import, with its Job template in
-`build/product/sneakers/import-job.yaml`.
+`build/product/sneakers/import-job.yaml`. Its box secrets are every Secret the
+Sneakers stacks read: the bundled PostgreSQL, Valkey, Kratos and Hydra credentials, the vault root
+key and TOTP key (`sneakers-box`) and the setup token it exposes.
 
 - **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it

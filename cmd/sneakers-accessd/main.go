@@ -45,6 +45,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsecrets"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
@@ -259,6 +260,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			Restart: rolloutRestart(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig),
 			Settled: stackSettled(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig), Logger: lg,
 		},
+		// The Secrets the installed product declares, made on this box
+		// once and kept on the state volume (docs/release.md#productyaml).
+		BoxSecrets:      &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Logger: lg},
 		Paths:           paths,
 		BoxStateFile:    boxstate.File,
 		CertDir:         paths.OwnDir(),

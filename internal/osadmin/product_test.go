@@ -7,9 +7,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
@@ -355,5 +358,65 @@ func TestStatusCarriesTheProductSlots(t *testing.T) {
 	}
 	if p := status(); p.GetInstalledVersion() != "0.2.0" || p.GetStagedVersion() != "" || !p.GetRunning() {
 		t.Fatalf("Status after the install: %v", p)
+	}
+}
+
+// fakeBoxSecrets records the slots it made box secrets for, and what the
+// services had been asked by then.
+type fakeBoxSecrets struct {
+	b     *box
+	slots []string
+	seen  [][]string
+	err   error
+}
+
+func (f *fakeBoxSecrets) Ensure(slot string) error {
+	cur, _ := filepath.EvalSymlinks(filepath.Join(f.b.state, "product", "current"))
+	if got, _ := filepath.EvalSymlinks(slot); got != cur {
+		slot = "not the current slot " + slot
+	}
+	f.slots = append(f.slots, slot)
+	f.seen = append(f.seen, f.b.services.log())
+	return f.err
+}
+
+// A product apply and a revert make the current slot's box secrets after
+// the switch and before k0s restarts, so the product's first start already
+// has them; a failure stops the apply before k0s is touched.
+func TestAProductApplyMakesTheBoxSecretsBeforeK0sStarts(t *testing.T) {
+	fake := &fakeBoxSecrets{}
+	b := newBox(t, false, func(b *box, o *osadmin.Options) { fake.b = b; o.BoxSecrets = fake })
+	alice := b.browser()
+	alice.signIn("alice")
+	alice.installProduct(t, "0.2.0")
+	alice.installProduct(t, "0.3.0")
+	if len(fake.slots) != 2 {
+		t.Fatalf("box secrets made %d times", len(fake.slots))
+	}
+	for i, s := range fake.slots {
+		if strings.HasPrefix(s, "not") {
+			t.Fatalf("made for %s", s)
+		}
+		if n := len(fake.seen[i]); n != 2*i {
+			t.Fatalf("made when the services had %v, want before the restart", fake.seen[i])
+		}
+	}
+	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.slots) != 3 {
+		t.Fatalf("a revert didn't make the box secrets: %d", len(fake.slots))
+	}
+	fake.err = errors.New("no random source")
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.4.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	before := len(b.services.log())
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err == nil {
+		t.Fatal("the apply went on without its box secrets")
+	}
+	if got := b.services.log()[before:]; len(got) != 0 {
+		t.Fatalf("services after a failed box secrets step %v", got)
 	}
 }

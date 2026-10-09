@@ -136,6 +136,10 @@ type Options struct {
 	// ImportChown hands the import directory's files to the import Job's
 	// user; nil is os.Chown (tests run unprivileged).
 	ImportChown func(path string, uid, gid int) error
+	// BoxSecrets makes the Secrets the current product slot declares
+	// (boxsecrets.Store on the box) at each product apply and revert,
+	// before the product restarts; nil makes none.
+	BoxSecrets BoxSecrets
 	// Exposed reads the installed product's exposed values as the
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.

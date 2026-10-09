@@ -241,6 +241,12 @@ func (s *Server) stageProduct(ctx context.Context, path string, p *updatepkg.Pac
 	return nil
 }
 
+// BoxSecrets makes the Secrets a product slot's product.yaml declares
+// (package boxsecrets).
+type BoxSecrets interface {
+	Ensure(slot string) error
+}
+
 // applyProduct switches to the staged product slot and restarts the
 // product, under the same maintenance gate as a base apply.
 func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, string, error) {
@@ -288,6 +294,13 @@ func (s *Server) switchProduct(ctx context.Context, switchSlots func() error) er
 	if err := switchSlots(); err != nil {
 		s.failStep(stepSwitch, err)
 		return err
+	}
+	if s.o.BoxSecrets != nil {
+		if err := s.o.BoxSecrets.Ensure(s.slots().Current()); err != nil {
+			s.o.Logger.Error(err, "osadmin: the product's box secrets can't be made; the product isn't restarted")
+			s.failStep(stepSwitch, err)
+			return err
+		}
 	}
 	s.recordBoxValues(ctx)
 	s.setStep(stepRestart, "")

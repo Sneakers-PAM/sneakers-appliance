@@ -448,7 +448,7 @@ func checkStacks(fsys fs.FS) error {
 		if !st.IsDir() || !nameRE.MatchString(st.Name()) {
 			return codes.New(codes.KitBundleMismatch, "the product bundle's %s/%s isn't a stack directory", ProductManifests, st.Name())
 		}
-		if st.Name() == productspec.RBACStack {
+		if st.Name() == productspec.RBACStack || st.Name() == productspec.BoxSecretsStack {
 			return codes.New(codes.KitBundleMismatch, "the stack name %s is the appliance's own", st.Name())
 		}
 		files, err := fs.ReadDir(fsys, path.Join(ProductManifests, st.Name()))
