@@ -25,7 +25,7 @@ jobs:
     timeout-minutes: 60
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0
       - name: Install the kernel build dependencies
@@ -34,7 +34,7 @@ jobs:
           sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev
       - name: Cache the kernel
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: build/out/kernel/amd64
           key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
@@ -59,10 +59,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
       - name: Cache the tools
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: build/out
           key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env', 'build/lib/**') }}

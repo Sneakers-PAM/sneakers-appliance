@@ -30,11 +30,11 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
         with:
           fetch-depth: 0
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
         with:
           go-version-file: go.mod
       - name: Install the build and boot tools
@@ -49,7 +49,7 @@ jobs:
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
       - name: Cache the kernel
         id: kernel
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: build/out/kernel/amd64
           key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
@@ -60,7 +60,7 @@ jobs:
         run: bash build/kernel/build.sh amd64
       - name: Cache the static tools
         id: static
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: |
             build/out/cryptsetup-amd64
@@ -75,7 +75,7 @@ jobs:
       # all four).
       - name: Cache the static e2fsprogs and gptfdisk
         id: fstools
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: |
             build/out/mke2fs-amd64
@@ -92,7 +92,7 @@ jobs:
       # restores what the other built.
       - name: Cache the static OpenSSH and busybox
         id: sshtools
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: out/static
           key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
