@@ -3,6 +3,7 @@
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Health        \e[1;32mOK\e[0m\e[2m      all services running\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m   Base          \e[1;32mOK\e[0m\e[2m      0.1.0 in slot A\e[0m                      \e[34m|\e[0m
 \e[34m|\e[0m   Product       \e[1;32mOK\e[0m\e[2m      Sneakers-PAM running\e[0m                 \e[34m|\e[0m
 \e[34m|\e[0m   Protection    \e[1;32mFULL\e[0m\e[2m    Secure Boot on, key in the TPM\e[0m       \e[34m|\e[0m
 \e[34m|\e[0m   Clock         \e[1;32mOK\e[0m\e[2m      synced 18:03 UTC\e[0m                     \e[34m|\e[0m
@@ -14,7 +15,6 @@
 \e[34m|\e[0m             E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5          \e[34m|\e[0m
 \e[34m|\e[0m     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             \e[34m|\e[0m
 \e[34m|\e[0m                    cH76 LnuV dAfL HqOr ZRw                   \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m

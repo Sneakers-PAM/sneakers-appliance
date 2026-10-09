@@ -3,12 +3,12 @@
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Health        \e[1;32mOK\e[0m\e[2m      all services running\e[0m                 \e[34m|\e[0m
+\e[34m|\e[0m   Base          \e[1;32mOK\e[0m\e[2m      0.0.0-lab.20261007d in slot A\e[0m        \e[34m|\e[0m
 \e[34m|\e[0m   Product       \e[2mNONE\e[0m\e[2m    installed from the admin page, Update\e[0m\e[34m|\e[0m
 \e[34m|\e[0m   Protection    \e[1;33mREDUCED\e[0m\e[2m no TPM, Secure Boot off\e[0m              \e[34m|\e[0m
 \e[34m|\e[0m   Clock         \e[1;32mOK\e[0m\e[2m      synced 18:03 UTC\e[0m                     \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Admin         \e[1;33maddress not known: the network service isn't \e[0m\e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m

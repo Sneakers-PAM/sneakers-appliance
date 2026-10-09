@@ -1,11 +1,13 @@
 +------------------------------------------------------------------------------+
 |          /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node               |
 +------------------------------------------------------------------------------+
+|                                                                              |
 |           Health        OK      all services running                         |
-|           Base          OK      0.1.0 in slot A                              |
-|           Product       OK      Sneakers-PAM running                         |
+|           Base          OK      0.1.0 in slot A; 0.0.9 to go back            |
+|           Product       OK      0.1.0-lab.hello.1 running                    |
 |           Protection    FULL    Secure Boot on, key in the TPM               |
 |           Clock         OK      synced 18:03 UTC                             |
+|                                                                              |
 |           Admin         https://192.0.2.10:8443                              |
 |                         https://sneakers.example.org:8443                    |
 |           SSH           192.0.2.10:22                                        |
@@ -17,8 +19,6 @@
 |             ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F                     |
 |                            cH76 LnuV dAfL HqOr ZRw                           |
 |                                                                              |
-|           ! Reverted from 0.1.1 by alice at 17:43 UTC.                       |
-|             The box runs 0.1.0 again.                                        |
 +------------------------------------------------------------------------------+
 |          R  Recover access                                                   |
 +------------------------------------------------------------------------------+

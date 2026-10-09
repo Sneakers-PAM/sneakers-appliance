@@ -17,6 +17,7 @@ import (
 	"filippo.io/age"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
@@ -315,5 +316,38 @@ func TestTheProductSlotsNameTheInstalledProduct(t *testing.T) {
 	}
 	if s := alice.productSlots(t); s.GetName() != "Sneakers" {
 		t.Fatalf("installed product name %q", s.GetName())
+	}
+}
+
+// Status carries the product's slots as Updates gives them, for the
+// console's status screen.
+func TestStatusCarriesTheProductSlots(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	status := func() *osadminv1.ProductSlots {
+		t.Helper()
+		st, err := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL).GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return st.Msg.GetProduct()
+	}
+	if p := status(); p.GetInstalledVersion() != "" || p.GetRunning() {
+		t.Fatalf("a new box's Status has a product: %v", p)
+	}
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if p := status(); p.GetStagedVersion() != "0.2.0" || p.GetInstalledVersion() != "" {
+		t.Fatalf("Status after the stage: %v", p)
+	}
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if p := status(); p.GetInstalledVersion() != "0.2.0" || p.GetStagedVersion() != "" || !p.GetRunning() {
+		t.Fatalf("Status after the install: %v", p)
 	}
 }

@@ -3,12 +3,12 @@
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        OK      all services running                 |
+|   Base          OK      0.0.0-lab.20261007d in slot A        |
 |   Product       NONE    installed from the admin page, Update|
 |   Protection    REDUCED no TPM, Secure Boot off              |
 |   Clock         OK      synced 18:03 UTC                     |
 |                                                              |
 |   Admin         address not known: the network service isn't |
-|                                                              |
 |                                                              |
 |                                                              |
 |                                                              |

@@ -3,6 +3,7 @@
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        OK      all services running                 |
+|   Base          OK      0.1.0 in slot A                      |
 |   Product       OK      Sneakers-PAM running                 |
 |   Protection    FULL    Secure Boot on, key in the TPM       |
 |   Clock         OK      synced 18:03 UTC                     |
@@ -14,7 +15,6 @@
 |             E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5          |
 |     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             |
 |                    cH76 LnuV dAfL HqOr ZRw                   |
-|                                                              |
 |                                                              |
 |                                                              |
 |                                                              |

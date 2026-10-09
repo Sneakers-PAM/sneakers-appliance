@@ -2,10 +2,10 @@
 |  /o\__  Sneakers-PAM Appliance   0.1.0  slot A  1 node       |
 +--------------------------------------------------------------+
 |   Health        OK      all services running                 |
+|   Base          OK      0.1.0 in slot A                      |
 |   Product       OK      Sneakers-PAM running                 |
 |   Protection    REDUCED no TPM, Secure Boot off              |
 |   Clock         UNSYNCED 18:03 UTC by the box's own clock    |
-|                                                              |
 |   Admin         https://198.51.100.7:8443                    |
 |                 https://sneakers.example.org:8443            |
 |   SSH           198.51.100.7:22                              |

@@ -3,6 +3,7 @@
 \e[34m+--------------------------------------------------------------+\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Health        \e[1;33mUNKNOWN\e[0m\e[2m no status yet\e[0m                        \e[34m|\e[0m
+\e[34m|\e[0m   Base          \e[1;33mUNKNOWN\e[0m\e[2m no status yet\e[0m                        \e[34m|\e[0m
 \e[34m|\e[0m   Product       \e[2m        \e[0m                                     \e[34m|\e[0m
 \e[34m|\e[0m   Protection    \e[1;33mUNKNOWN\e[0m\e[2m the boot hasn't answered yet\e[0m         \e[34m|\e[0m
 \e[34m|\e[0m   Clock         \e[2mUNKNOWN\e[0m\e[2m 18:03 UTC\e[0m                            \e[34m|\e[0m
@@ -11,7 +12,6 @@
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   \e[1;31m!\e[0m \e[1;37mThe appliance services aren't answering yet; there's\e[0m     \e[34m|\e[0m
 \e[34m|\e[0m     \e[1;37mno status to show.\e[0m                                       \e[34m|\e[0m
-\e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m

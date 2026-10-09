@@ -107,8 +107,14 @@ func TestDashboardScreens(t *testing.T) {
 	code := sources.RecoverCode{Code: "6HDW-2RTE-KM8Q-0VXA", Expires: now.Add(time.Hour), AttemptsLeft: 5, URL: "https://192.0.2.10:8443/recover"}
 	inUse := code
 	inUse.InUse, inUse.Source = true, "192.0.2.50"
+	hello := status()
+	hello.RunningVersion, hello.PreviousVersion, hello.PreviousSlot = "0.1.0", "0.0.9", "B"
+	hello.Product = &osadminv1.ProductSlots{InstalledVersion: "0.1.0-lab.hello.1", Running: true}
+	helloData := data(hello)
+	helloData.Platform, helloData.PlatformErr = sources.PlatformState{}, sources.NotInstalled{What: "The platform"}
 	cases := map[string]tui.Page{
 		"normal":                 dashboard.Page(chrome(full, keycustody.ModeTPM), data(status()), now),
+		"product-installed":      dashboard.Page(chrome(full, keycustody.ModeTPM), helloData, now),
 		"reduced-sb-off":         dashboard.Page(chrome(sbOff, keycustody.ModeKeyfile), data(status()), now),
 		"reduced-no-sb-no-tpm":   dashboard.Page(chrome(noSB, keycustody.ModeKeyfile), data(status()), now),
 		"reduced-no-tpm":         dashboard.Page(chrome(keycustody.Reduced(keycustody.ReasonNoTPM), keycustody.ModeKeyfile), data(status()), now),
@@ -540,4 +546,55 @@ func TestTheStatusViewLeavesMaintenanceWhenTheRebootIsGivenUp(t *testing.T) {
 		t.Fatalf("after the reboot was given up on the status view shows:\n%s", txt)
 	}
 	tuitest.Golden(t, "dashboard-upgrade-reboot-missed", p)
+}
+
+// Until platformd is in the build, the Product line reads the product's
+// slots from Status, and the Base line the base's: the version running,
+// its slot, and what's staged or kept to go back to.
+func TestTheBaseAndProductLines(t *testing.T) {
+	noPlatform := func(st *osadminv1.GetStatusResponse) dashboard.Data {
+		d := data(st)
+		d.Platform, d.PlatformErr = sources.PlatformState{}, sources.NotInstalled{What: "The platform"}
+		return d
+	}
+	withProduct := func(p *osadminv1.ProductSlots) *osadminv1.GetStatusResponse {
+		st := status()
+		st.RunningVersion, st.Product = "0.1.0", p
+		return st
+	}
+	failedProduct := withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.1.0-lab.hello.1", StagedVersion: "0.2.0"})
+	failedProduct.UpgradeProgress = progress("apply", "0.2.0", "switch", "")
+	failedProduct.UpgradeProgress.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+	failedProduct.UpgradeProgress.InProgress, failedProduct.UpgradeProgress.Failed = false, true
+	failedProduct.UpgradeProgress.Steps[2].State = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_FAILED
+	baseStaged := withProduct(nil)
+	baseStaged.StagedVersion = "0.1.1"
+	baseBack := withProduct(nil)
+	baseBack.PreviousVersion, baseBack.PreviousSlot = "0.0.9", "B"
+	cases := []struct {
+		name string
+		d    dashboard.Data
+		want []string
+	}{
+		{"no product", noPlatform(withProduct(nil)), []string{"Base          OK      0.1.0 in slot A", "Product       NONE    installed from the admin page, Updates"}},
+		{"product staged, none installed", noPlatform(withProduct(&osadminv1.ProductSlots{StagedVersion: "0.2.0"})), []string{"Product       NONE    0.2.0 staged; install it from Updates"}},
+		{"installed and running", noPlatform(withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.1.0-lab.hello.1", Running: true})), []string{"Product       OK      0.1.0-lab.hello.1 running"}},
+		{"running with an upgrade staged", noPlatform(withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.1.0", StagedVersion: "0.2.0", Running: true})), []string{"Product       OK      0.1.0 running; 0.2.0 staged"}},
+		{"running with a way back", noPlatform(withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.2.0", PreviousVersion: "0.1.0", Running: true})), []string{"Product       OK      0.2.0 running; 0.1.0 to go back"}},
+		{"installed, stopped", noPlatform(withProduct(&osadminv1.ProductSlots{InstalledVersion: "0.1.0"})), []string{"Product       STOPPED 0.1.0 isn't running"}},
+		{"the last product update failed", noPlatform(failedProduct), []string{"Product       FAILED  the update to 0.2.0 failed"}},
+		{"base staged", noPlatform(baseStaged), []string{"Base          OK      0.1.0 in slot A; 0.1.1 staged"}},
+		{"base with a way back", noPlatform(baseBack), []string{"Base          OK      0.1.0 in slot A; 0.0.9 to go back"}},
+		{"no status", dashboard.Data{Status: sources.StatusView{Err: errors.New("connection refused")}, Slot: "A", PlatformErr: sources.NotInstalled{What: "The platform"}}, []string{"Base          UNKNOWN no status yet", "Product       UNKNOWN no status yet"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			screen := dashboard.Page(chrome(full, keycustody.ModeTPM), c.d, now).Frame(80, 24).Text()
+			for _, w := range c.want {
+				if !strings.Contains(screen, w) {
+					t.Errorf("no %q in\n%s", w, screen)
+				}
+			}
+		})
+	}
 }

@@ -550,8 +550,11 @@ type GetStatusResponse struct {
 	// upgrade_progress is the last stage, apply or revert, step by step;
 	// unset when the box has made none.
 	UpgradeProgress *UpgradeProgress `protobuf:"bytes,25,opt,name=upgrade_progress,json=upgradeProgress,proto3" json:"upgrade_progress,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// product is the product bundle's slots, as GetUpgrades gives them, for
+	// the console's status screen.
+	Product       *ProductSlots `protobuf:"bytes,26,opt,name=product,proto3" json:"product,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
@@ -759,6 +762,13 @@ func (x *GetStatusResponse) GetUpgradeProgress() *UpgradeProgress {
 	return nil
 }
 
+func (x *GetStatusResponse) GetProduct() *ProductSlots {
+	if x != nil {
+		return x.Product
+	}
+	return nil
+}
+
 type SetSecureBootRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	On              bool                   `protobuf:"varint,1,opt,name=on,proto3" json:"on,omitempty"`
@@ -873,7 +883,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
 	"totalBytes\x12/\n" +
-	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xb0\t\n" +
+	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xf7\t\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1a\n" +
@@ -906,7 +916,8 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"revertedAt\x12)\n" +
 	"\x10previous_version\x18\x17 \x01(\tR\x0fpreviousVersion\x12#\n" +
 	"\rprevious_slot\x18\x18 \x01(\tR\fpreviousSlot\x12Y\n" +
-	"\x10upgrade_progress\x18\x19 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\"Q\n" +
+	"\x10upgrade_progress\x18\x19 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\x12E\n" +
+	"\aproduct\x18\x1a \x01(\v2+.sneakers.appliance.osadmin.v1.ProductSlotsR\aproduct\"Q\n" +
 	"\x14SetSecureBootRequest\x12\x0e\n" +
 	"\x02on\x18\x01 \x01(\bR\x02on\x12)\n" +
 	"\x10confirm_hostname\x18\x02 \x01(\tR\x0fconfirmHostname\"\x17\n" +
@@ -963,6 +974,7 @@ var file_sneakers_appliance_osadmin_v1_status_proto_goTypes = []any{
 	(*UpgradeProgress)(nil),       // 11: sneakers.appliance.osadmin.v1.UpgradeProgress
 	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
 	(*FactoryReset)(nil),          // 13: sneakers.appliance.osadmin.v1.FactoryReset
+	(*ProductSlots)(nil),          // 14: sneakers.appliance.osadmin.v1.ProductSlots
 }
 var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
 	11, // 0: sneakers.appliance.osadmin.v1.GetPhaseResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
@@ -975,17 +987,18 @@ var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
 	13, // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
 	12, // 8: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
 	11, // 9: sneakers.appliance.osadmin.v1.GetStatusResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
-	4,  // 10: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
-	9,  // 11: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	2,  // 12: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
-	8,  // 13: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	10, // 14: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	3,  // 15: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
-	13, // [13:16] is the sub-list for method output_type
-	10, // [10:13] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	14, // 10: sneakers.appliance.osadmin.v1.GetStatusResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
+	4,  // 11: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
+	9,  // 12: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	2,  // 13: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
+	8,  // 14: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	10, // 15: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	3,  // 16: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
+	14, // [14:17] is the sub-list for method output_type
+	11, // [11:14] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_status_proto_init() }

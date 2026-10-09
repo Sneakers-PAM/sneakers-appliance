@@ -147,6 +147,17 @@ func (p Page) Frame(cols, rows int) Frame {
 		// Short of room, the body moves up to the header's rule.
 		content = content[1:]
 	}
+	if !p.Big {
+		// Still short, the body's blank rows go, from the top, before
+		// anything is cut.
+		for i := 0; i < len(content) && len(content) > room; {
+			if blank(content[i]) {
+				content = append(content[:i:i], content[i+1:]...)
+				continue
+			}
+			i++
+		}
+	}
 	if p.Big || len(content) < room {
 		// A blank row before the keys, so the body never runs into them.
 		room--
@@ -221,4 +232,14 @@ func (f Frame) Coloured() string {
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// blank reports whether l shows nothing but spaces.
+func blank(l Line) bool {
+	for _, sp := range l {
+		if strings.TrimSpace(sp.Text) != "" {
+			return false
+		}
+	}
+	return true
 }

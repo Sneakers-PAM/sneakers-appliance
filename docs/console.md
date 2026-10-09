@@ -168,7 +168,8 @@ invariant applies.
 +--------------------------------------------------------------+
 |                                                              |
 |   Health        OK      all services running                 |
-|   Product       OK      Sneakers-PAM running                 |
+|   Base          OK      0.1.0 in slot A; 0.0.9 to go back    |
+|   Product       OK      0.1.0-lab.hello.1 running            |
 |   Protection    FULL    Secure Boot on, key in the TPM       |
 |   Clock         OK      synced 18:03 UTC                     |
 |                                                              |
@@ -183,7 +184,6 @@ invariant applies.
 |     ssh     SHA256:yskn evuN I/Ng 13w+ vvxl QW6F             |
 |                    cH76 LnuV dAfL HqOr ZRw                   |
 |                                                              |
-|                                                              |
 +--------------------------------------------------------------+
 |  R  Recover access                                           |
 +--------------------------------------------------------------+
@@ -192,8 +192,8 @@ invariant applies.
 It reads :8443's Status data from accessd (or, while accessd is down, its last saved copy, with the
 time it was saved), the protection and the custody mode from init, the root slot from init's
 environment, the host keys from the state volume and the node count from the platform, every 5
-seconds. In order: health, the product, protection and the clock, each a status word in its colour
-with the details dim; the admin page on the first management address and, on the line under it, on
+seconds. In order: health, the base, the product, protection and the clock, each a status word in
+its colour with the details dim; the admin page on the first management address and, on the line under it, on
 the box's FQDN once one is set; SSH on port 22, with a dim line under it saying the key comes from
 :8443's Access page and a TOTP code follows ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)); the fingerprints of the page's
 certificate and the SSH host key; then the warnings, each a `!` in its colour with its first
@@ -207,6 +207,20 @@ the network editor. A failed update step is a warning for a day ("The update to 
 then the step and why), from Status's `upgrade_progress`. A reboot that never came is one: after
 10 minutes on the same boot the update fails at Rebooting with `UPGRADE_NO_REBOOT` and the
 maintenance screen gives way to this one.
+When the body doesn't fit the screen, its blank rows go first (from the top), so the warnings are
+cut only when there's no other room.
+
+**Base** is the release running and its slot, with what's staged ("0.1.0 in slot A; 0.1.1 staged")
+or else the release kept to go back to ("; 0.0.9 to go back"), from Status. **Product** is the
+product bundle, from Status's `product` slots until platformd is in the build:
+
+| Word | When | Details |
+|---|---|---|
+| `NONE` (dim) | no bundle installed | "installed from the admin page, Updates", or "0.2.0 staged; install it from Updates" |
+| `OK` | the installed version runs | "0.1.0 running", then "; 0.2.0 staged" or "; 0.0.9 to go back" |
+| `STOPPED` | installed, but k0s isn't running | "0.1.0 isn't running" |
+| `FAILED` | a product update failed in the last day | "the update to 0.2.0 failed" (the warning says which step and why) |
+| `UNKNOWN` | no status yet | "no status yet" |
 
 During a stage, an apply or a revert (Status's `upgrade_progress` with `in_progress`) the
 maintenance screen replaces it. It says what's happening ("Staging 0.1.1. The box keeps running.",
@@ -259,4 +273,4 @@ to the screens:
 |---|---|
 | netd, on a build without it | first boot skips the network step and the screens say the address isn't known |
 | moving to normal while init runs | setup completes and the box restarts once into normal operation |
-| the platform (spec 3) | Product shows `NONE YET` |
+| the platform (spec 3) | Product reads the product's slots from Status, and the node count is 1 |

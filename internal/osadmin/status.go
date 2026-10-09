@@ -97,6 +97,7 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	} else {
 		out.UpgradeProgress = s.progressToWire(nil)
 	}
+	out.Product = s.productSlots(ctx)
 	if cert.SelfSigned {
 		add(osadminv1.WarningKind_WARNING_KIND_SELF_SIGNED_TLS, "This page uses the box's own self-signed certificate; check its fingerprint.")
 	}
