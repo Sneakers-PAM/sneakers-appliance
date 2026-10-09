@@ -187,7 +187,7 @@ func (s *Server) fetchClient(src source) (*http.Client, error) {
 		roots = roots.Clone()
 	}
 	cfg := &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
-	if src.name == "mirror" {
+	if src.mirror() {
 		t, _, err := s.readTrust()
 		if err != nil {
 			return nil, codes.New(codes.UpgradeMirrorUntrusted, "%v; set the update trust again", err)
@@ -262,7 +262,7 @@ func (s *Server) refusal(src source, what string, err error) (*x509.Certificate,
 	var ve *tls.CertificateVerificationError
 	if errors.As(err, &ve) && len(ve.UnverifiedCertificates) > 0 {
 		c := ve.UnverifiedCertificates[0]
-		if src.name == "mirror" {
+		if src.mirror() {
 			return c, codes.New(codes.UpgradeMirrorUntrusted, "the mirror's certificate %s (%s, issued by %s) isn't trusted: %v; add its CA as the update trust on Certificates", Fingerprint(c.Raw), subjectName(c), issuerOf(c), ve.Err)
 		}
 		return c, codes.New(codes.UpgradeUpload, "the %s's certificate isn't trusted: %v", src.name, ve.Err)
@@ -287,7 +287,7 @@ func (s *Server) fetched(ctx context.Context, src source, what string, peer *x50
 	c := callFrom(ctx)
 	s.write(osaudit.Entry{Actor: c.session.Admin, Source: c.source, Action: "upgrade.source.fetch", Target: src.url,
 		Detail: map[string]string{"source": src.name, "what": what, "ms": strconv.FormatInt(ms, 10), "bytes": strconv.FormatInt(n, 10)}}, err)
-	if src.name != "mirror" {
+	if !src.mirror() && s.policy().Source != SourceBuiltIn {
 		return
 	}
 	pinMatched := false
@@ -296,8 +296,12 @@ func (s *Server) fetched(ctx context.Context, src source, what string, peer *x50
 	}
 	s.mirror.mu.Lock()
 	defer s.mirror.mu.Unlock()
-	s.mirror.base, s.mirror.at, s.mirror.err, s.mirror.peer, s.mirror.pinMatched = s.policy().MirrorURL, s.o.Clock.Now(), err, peer, pinMatched
+	s.mirror.base, s.mirror.at, s.mirror.err, s.mirror.peer, s.mirror.pinMatched = src.base, s.o.Clock.Now(), err, peer, pinMatched
 }
+
+// mirror reports whether src is a mirror, the manual one or one of the
+// built-in list: fetched with the update trust, and its status shown.
+func (src source) mirror() bool { return src.name == "mirror" || src.name == SourceBuiltIn }
 
 // forgetMirrorCheck drops the last mirror fetch when what it was checked
 // against changes.
@@ -307,13 +311,16 @@ func (s *Server) forgetMirrorCheck() {
 	s.mirror.base, s.mirror.peer, s.mirror.err = "", nil, nil
 }
 
-// mirrorStatus is GetUpgrades' view of the mirror; nil with none set.
+// mirrorStatus is GetUpgrades' view of the source: the manual mirror, or
+// the built-in list and the one of it last fetched from; nil when the box
+// has no source.
 func (s *Server) mirrorStatus(p Policy) *osadminv1.MirrorStatus {
-	if p.MirrorURL == "" {
+	base := s.statusBase(p)
+	if base == "" {
 		return nil
 	}
-	out := &osadminv1.MirrorStatus{Scheme: "https"}
-	if strings.HasPrefix(p.MirrorURL, "http://") {
+	out := &osadminv1.MirrorStatus{Scheme: "https", Source: effectiveSource(p, s.o.Upgrade.DirectURL != ""), Url: base, BuiltinUrls: s.builtinList()}
+	if strings.HasPrefix(base, "http://") {
 		out.Scheme, out.Note = "http", httpNote
 	}
 	t, set, err := s.readTrust()
@@ -332,7 +339,7 @@ func (s *Server) mirrorStatus(p Policy) *osadminv1.MirrorStatus {
 	}
 	s.mirror.mu.Lock()
 	defer s.mirror.mu.Unlock()
-	if s.mirror.base != p.MirrorURL || s.mirror.at.IsZero() {
+	if s.mirror.base != base || s.mirror.at.IsZero() {
 		return out
 	}
 	out.Checked, out.CheckedAt, out.Ok = true, timestamppb.New(s.mirror.at), s.mirror.err == nil
@@ -344,6 +351,31 @@ func (s *Server) mirrorStatus(p Policy) *osadminv1.MirrorStatus {
 		out.PinMatched = s.mirror.pinMatched
 	}
 	return out
+}
+
+// statusBase is the source the status is about: the manual mirror; for
+// the built-in list, the entry last fetched from, else its first; ""
+// with no source.
+func (s *Server) statusBase(p Policy) string {
+	if p.Source != SourceBuiltIn {
+		if p.Source == SourceNone {
+			return ""
+		}
+		return p.MirrorURL
+	}
+	list := s.builtinList()
+	s.mirror.mu.Lock()
+	last := s.mirror.base
+	s.mirror.mu.Unlock()
+	for _, u := range list {
+		if u == last {
+			return u
+		}
+	}
+	if len(list) > 0 {
+		return list[0]
+	}
+	return ""
 }
 
 // trustToWire is the update trust as the Certificates page shows it,

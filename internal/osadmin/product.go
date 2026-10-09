@@ -38,20 +38,43 @@ const ProductService = "k0s"
 // bundle is installed: 443, and 80, which redirects to it.
 var ProductPorts = []uint32{80, 443}
 
-// source is one place the box fetches from.
-type source struct{ name, url string }
+// source is one place the box fetches from: its name (mirror, builtin or
+// direct), the file's URL, and the base URL it's under.
+type source struct{ name, url, base string }
 
-// sources lists, in order, where file is fetched from: the mirror, then
-// the release source when the policy allows direct fetches. direct is the
-// path under the release source (the index's or the file's).
+// sources lists, in order, where file is fetched from (spec 7, Section
+// 2.1): with the built-in source, each entry of the built-in list (a flat
+// mirror, or the release source's tag path); with the manual source, the
+// mirror URL; with none, nothing. A policy from before the source keeps
+// its order: the mirror, then the release source when direct is on.
+// direct is the path under the release source (the index's or the
+// file's).
 func (s *Server) sources(file, direct string) []source {
 	p := s.policy()
 	var out []source
-	if p.MirrorURL != "" {
-		out = append(out, source{"mirror", p.MirrorURL + "/" + file})
+	switch p.Source {
+	case SourceBuiltIn:
+		for _, u := range s.o.Upgrade.BuiltinMirrors {
+			b := strings.TrimRight(u, "/")
+			out = append(out, source{SourceBuiltIn, b + "/" + file, b})
+		}
+		if d := s.o.Upgrade.DirectURL; d != "" {
+			out = append(out, source{"direct", d + "/" + direct, d})
+		}
+		return out
+	case SourceManual:
+		if p.MirrorURL != "" {
+			out = append(out, source{"mirror", p.MirrorURL + "/" + file, p.MirrorURL})
+		}
+		return out
+	case SourceNone:
+		return nil
 	}
-	if p.Direct && s.o.Upgrade.DirectURL != "" {
-		out = append(out, source{"direct", s.o.Upgrade.DirectURL + "/" + direct})
+	if p.MirrorURL != "" {
+		out = append(out, source{"mirror", p.MirrorURL + "/" + file, p.MirrorURL})
+	}
+	if d := s.o.Upgrade.DirectURL; p.Direct && d != "" {
+		out = append(out, source{"direct", d + "/" + direct, d})
 	}
 	return out
 }
@@ -92,7 +115,13 @@ func (s *Server) productSlots(ctx context.Context) *osadminv1.ProductSlots {
 	sl := s.slots()
 	st := sl.Status()
 	out := &osadminv1.ProductSlots{InstalledVersion: st.Installed, StagedVersion: st.Staged, PreviousVersion: st.Previous,
-		Name: productinfo.Installed(sl.Dir).Title}
+		Name: productinfo.Installed(sl.Dir).Title, Fits: true}
+	if inst, ok := sl.Installed(); ok && inst.HasRange() {
+		out.RequiresBaseOs = inst.RangeText()
+		if base, err := s.baseVersion(ctx); err == nil {
+			out.Fits = inst.InRange(base)
+		}
+	}
 	if s.o.Services != nil {
 		if r, err := s.o.Services.Status(ctx, connect.NewRequest(&initv1.StatusRequest{Name: ProductService})); err == nil {
 			out.Running = r.Msg.GetRunning()
@@ -153,7 +182,7 @@ func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[os
 			continue
 		}
 		out := &osadminv1.ListBaseVersionsResponse{BaseVersion: base}
-		for _, e := range idx.OfferBase(s.arch(), s.o.Upgrade.Channel, base) {
+		for _, e := range idx.OfferBaseOS(s.box(base)) {
 			v := &osadminv1.BaseVersion{Version: e.Version, Arch: e.Arch, Channel: e.Channel, Kind: e.Kind, Bases: e.Bases, FileName: e.File, Size: e.Size, Source: src.name}
 			if hasProduct && inst.HasRange() && !inst.InRange(e.Version) {
 				v.OutsideProductRange, v.ProductRange = true, inst.RangeText()

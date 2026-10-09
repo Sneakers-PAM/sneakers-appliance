@@ -254,3 +254,26 @@ func TestAnUpdateOfAnotherEpochIsRefused(t *testing.T) {
 		t.Fatal("decrypted")
 	}
 }
+
+// A staged Base OS whose built-in pages the installed Base Web doesn't fit
+// says, before Apply, what the box serves after the reboot.
+func TestAStagedBaseOSSaysWhichPagesServeAfterTheReboot(t *testing.T) {
+	wb := newWebBox(t)
+	alice := wb.browser()
+	alice.signIn("alice")
+	id, _ := alice.upload(t, wb.webBin(t, web("0.1.2")))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyWeb(wb.box, alice); err != nil {
+		t.Fatal(err)
+	}
+	id, _ = alice.upload(t, bin(t, wb.sign, wb.enc, full(release.ChannelProduction)))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	g, _ := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if n := g.Msg.GetBaseOsNote(); !strings.Contains(n, "serves the built-in pages of 0.2.0") || !strings.Contains(n, "0.1.0 to before 0.2.0") {
+		t.Fatalf("note %q", n)
+	}
+}

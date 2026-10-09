@@ -39,6 +39,10 @@ var (
 	Channel    string
 	// Version is the kit or init version.
 	Version = "0.0.0-dev"
+	// Mirrors is the built-in list of update sources a lab build names
+	// (comma-separated base URLs, walked in order), compiled into the
+	// signed root. A production build's list is its release source.
+	Mirrors string
 )
 
 // The channels a build may carry. A lab build is signed with a throwaway

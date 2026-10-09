@@ -150,6 +150,7 @@ type Server struct {
 	resets   resets
 	upgrades upgrades
 	mirror   mirrorCheck
+	checks   checks
 	progress progress
 	// revertMu guards revertAudited, the last network change whose revert
 	// is in the audit, so a timer and a late check don't write it twice.

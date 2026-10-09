@@ -167,6 +167,23 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
    `GetUpgrades.active_elevations` lists the open elevated shells, so the page shows who holds one
    before an owner tries.
 
+**The three cards, Check now and a fetch's progress.** The Updates page shows one card per unit,
+Base OS, Base Web and Product (spec 7), each from `GetUpgrades`: the Base OS's running, previous
+and staged versions (and `base_os_note` when a staged Base OS's built-in pages are what the box
+serves after the reboot); the Base Web's (`base_web`: what serves, from which slot or the built-in
+pages, and why); the product's (`product`, with its base range and whether the running Base OS is
+in it). `CheckUpdates` (Check now, any admin) reads the index again from the policy's source on
+every press and answers each unit's offers: the Base OS's full and patch files (a patch only for
+the running base), the Base Web's (only those that fit the running Base OS; `base_web_waits` names
+a newer one that needs a newer Base OS), and the product's, each with its size and what it needs,
+the one to take marked `preferred` (the newest Base OS's patch, unless the box has less free
+memory than the rebuild needs, 600 MB by default). `GetUpgrades.last_check` keeps the last answer.
+While `FetchUpdate` runs, `GetUpgrades.fetch_progress` reports its state (`querying`,
+`downloading`, `verifying`, `done` or `failed`), the bytes, the speed and the time left; once the
+file is in, its signature and SHA-256 are checked as a stage will (`verified`), and a file that
+fails stays held for Verify and stage to refuse, or Cancel. Install an update is the upload, for
+air-gapped boxes: the uploaded file's signed header picks its card.
+
 **The elevation override.** An owner may end the open shell and go ahead in the same request:
 Apply and Revert take an `elevation_override` with the session's id, a typed confirmation of its
 admin and id (`bob E-7KQ2`) and a reason. The override is owner only and needs the same fresh

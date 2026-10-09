@@ -71,6 +71,9 @@ const (
 	// UpgradeServiceListBaseVersionsProcedure is the fully-qualified name of the UpgradeService's
 	// ListBaseVersions RPC.
 	UpgradeServiceListBaseVersionsProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/ListBaseVersions"
+	// UpgradeServiceCheckUpdatesProcedure is the fully-qualified name of the UpgradeService's
+	// CheckUpdates RPC.
+	UpgradeServiceCheckUpdatesProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/CheckUpdates"
 	// UpgradeServiceSetUpgradePolicyProcedure is the fully-qualified name of the UpgradeService's
 	// SetUpgradePolicy RPC.
 	UpgradeServiceSetUpgradePolicyProcedure = "/sneakers.appliance.osadmin.v1.UpgradeService/SetUpgradePolicy"
@@ -117,6 +120,13 @@ type UpgradeServiceClient interface {
 	// patch only for the base it names. The index is only a menu: the chosen
 	// .bin goes through FetchUpdate and is verified when it's staged.
 	ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error)
+	// CheckUpdates (Check now) reads the index again from the policy's
+	// source and answers what it offers for each unit: the Base OS (full and
+	// patch), the Base Web and the product, each line labelled full or patch
+	// with its size, the one to take marked preferred. The answer is kept and
+	// GetUpgrades returns it as last_check. Refused with UPGRADE_AIR_GAPPED
+	// when the box has no source.
+	CheckUpdates(context.Context, *connect.Request[v1.CheckUpdatesRequest]) (*connect.Response[v1.CheckUpdatesResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
 
@@ -182,6 +192,13 @@ func NewUpgradeServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		checkUpdates: connect.NewClient[v1.CheckUpdatesRequest, v1.CheckUpdatesResponse](
+			httpClient,
+			baseURL+UpgradeServiceCheckUpdatesProcedure,
+			connect.WithSchema(upgradeServiceMethods.ByName("CheckUpdates")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		setUpgradePolicy: connect.NewClient[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse](
 			httpClient,
 			baseURL+UpgradeServiceSetUpgradePolicyProcedure,
@@ -201,6 +218,7 @@ type upgradeServiceClient struct {
 	discardUpdate       *connect.Client[v1.DiscardUpdateRequest, v1.DiscardUpdateResponse]
 	listProductVersions *connect.Client[v1.ListProductVersionsRequest, v1.ListProductVersionsResponse]
 	listBaseVersions    *connect.Client[v1.ListBaseVersionsRequest, v1.ListBaseVersionsResponse]
+	checkUpdates        *connect.Client[v1.CheckUpdatesRequest, v1.CheckUpdatesResponse]
 	setUpgradePolicy    *connect.Client[v1.SetUpgradePolicyRequest, v1.SetUpgradePolicyResponse]
 }
 
@@ -242,6 +260,11 @@ func (c *upgradeServiceClient) ListProductVersions(ctx context.Context, req *con
 // ListBaseVersions calls sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions.
 func (c *upgradeServiceClient) ListBaseVersions(ctx context.Context, req *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error) {
 	return c.listBaseVersions.CallUnary(ctx, req)
+}
+
+// CheckUpdates calls sneakers.appliance.osadmin.v1.UpgradeService.CheckUpdates.
+func (c *upgradeServiceClient) CheckUpdates(ctx context.Context, req *connect.Request[v1.CheckUpdatesRequest]) (*connect.Response[v1.CheckUpdatesResponse], error) {
+	return c.checkUpdates.CallUnary(ctx, req)
 }
 
 // SetUpgradePolicy calls sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy.
@@ -291,6 +314,13 @@ type UpgradeServiceHandler interface {
 	// patch only for the base it names. The index is only a menu: the chosen
 	// .bin goes through FetchUpdate and is verified when it's staged.
 	ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error)
+	// CheckUpdates (Check now) reads the index again from the policy's
+	// source and answers what it offers for each unit: the Base OS (full and
+	// patch), the Base Web and the product, each line labelled full or patch
+	// with its size, the one to take marked preferred. The answer is kept and
+	// GetUpgrades returns it as last_check. Refused with UPGRADE_AIR_GAPPED
+	// when the box has no source.
+	CheckUpdates(context.Context, *connect.Request[v1.CheckUpdatesRequest]) (*connect.Response[v1.CheckUpdatesResponse], error)
 	SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error)
 }
 
@@ -352,6 +382,13 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	upgradeServiceCheckUpdatesHandler := connect.NewUnaryHandler(
+		UpgradeServiceCheckUpdatesProcedure,
+		svc.CheckUpdates,
+		connect.WithSchema(upgradeServiceMethods.ByName("CheckUpdates")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	upgradeServiceSetUpgradePolicyHandler := connect.NewUnaryHandler(
 		UpgradeServiceSetUpgradePolicyProcedure,
 		svc.SetUpgradePolicy,
@@ -376,6 +413,8 @@ func NewUpgradeServiceHandler(svc UpgradeServiceHandler, opts ...connect.Handler
 			upgradeServiceListProductVersionsHandler.ServeHTTP(w, r)
 		case UpgradeServiceListBaseVersionsProcedure:
 			upgradeServiceListBaseVersionsHandler.ServeHTTP(w, r)
+		case UpgradeServiceCheckUpdatesProcedure:
+			upgradeServiceCheckUpdatesHandler.ServeHTTP(w, r)
 		case UpgradeServiceSetUpgradePolicyProcedure:
 			upgradeServiceSetUpgradePolicyHandler.ServeHTTP(w, r)
 		default:
@@ -417,6 +456,10 @@ func (UnimplementedUpgradeServiceHandler) ListProductVersions(context.Context, *
 
 func (UnimplementedUpgradeServiceHandler) ListBaseVersions(context.Context, *connect.Request[v1.ListBaseVersionsRequest]) (*connect.Response[v1.ListBaseVersionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions is not implemented"))
+}
+
+func (UnimplementedUpgradeServiceHandler) CheckUpdates(context.Context, *connect.Request[v1.CheckUpdatesRequest]) (*connect.Response[v1.CheckUpdatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.UpgradeService.CheckUpdates is not implemented"))
 }
 
 func (UnimplementedUpgradeServiceHandler) SetUpgradePolicy(context.Context, *connect.Request[v1.SetUpgradePolicyRequest]) (*connect.Response[v1.SetUpgradePolicyResponse], error) {

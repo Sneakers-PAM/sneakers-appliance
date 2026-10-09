@@ -128,6 +128,7 @@ about the box.
 | `UpgradeService.DiscardUpdate` | owner | no | `upgrade.discard` |
 | `UpgradeService.ListProductVersions` | admin | no | |
 | `UpgradeService.ListBaseVersions` | admin | no | |
+| `UpgradeService.CheckUpdates` | admin | no | |
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ProductService.ListExposedValues` | admin | no | |
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
