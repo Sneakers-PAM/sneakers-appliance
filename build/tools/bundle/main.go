@@ -3,16 +3,20 @@
 
 // Command bundle builds the airgap image bundle from release.yaml (pull) and
 // checks a bundle directory against it in both directions (check), for
-// build/bundle/build.sh. For the lab build, manifest writes the manifest or
-// index bytes of one pinned image, which the lab key then signs.
+// build/bundle/build.sh. manifest writes the manifest or index bytes of one
+// pinned image, which the release key (or a lab build's lab key) then
+// signs, and images lists every image the bundle carries, "<image>
+// <digest>" a line, refusing a placeholder digest.
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"time"
 
@@ -32,10 +36,13 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: bundle pull|check|manifest [flags]")
+		return fmt.Errorf("usage: bundle pull|check|manifest|images [flags]")
 	}
-	if args[0] == "manifest" {
+	switch args[0] {
+	case "manifest":
 		return manifest(args[1:])
+	case "images":
+		return images(args[1:], os.Stdout)
 	}
 	fl := flag.NewFlagSet("bundle "+args[0], flag.ContinueOnError)
 	relPath := fl.String("release", "", "release.yaml")
@@ -80,7 +87,7 @@ func run(args []string) error {
 		lg := log.NewLoggerWithOptions("bundle", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatConsole), log.WithDefaultLevel(log.LevelInfo))
 		return bundle.Pull(ctx, bundle.PullOptions{Release: rel, Arch: *arch, Signatures: *sigs, Key: key, Out: *out, ModTime: epoch, PlainHTTP: *plain, Logger: lg})
 	default:
-		return fmt.Errorf("unknown command %q (pull, check or manifest)", args[0])
+		return fmt.Errorf("unknown command %q (pull, check, manifest or images)", args[0])
 	}
 }
 
@@ -100,4 +107,38 @@ func manifest(args []string) error {
 		return err
 	}
 	return os.WriteFile(*out, b, 0o644) // #nosec G306 G703 -- a public manifest, for the build to sign
+}
+
+// images writes every image release.yaml's bundle carries, "<image>
+// <digest>" a line, sorted by image then digest; nothing when a pin isn't a
+// digest.
+func images(args []string, w io.Writer) error {
+	fl := flag.NewFlagSet("bundle images", flag.ContinueOnError)
+	relPath := fl.String("release", "", "release.yaml")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	relYAML, err := os.ReadFile(*relPath) // #nosec G304 G703 -- a build tool reading the file it was handed
+	if err != nil {
+		return err
+	}
+	rel, err := bundle.ParseRelease(relYAML)
+	if err != nil {
+		return err
+	}
+	pinned, err := rel.Images()
+	if err != nil {
+		return err
+	}
+	lines := make([]string, 0, len(pinned))
+	for hexd, image := range pinned {
+		lines = append(lines, image+" sha256:"+hexd)
+	}
+	sort.Strings(lines)
+	for _, l := range lines {
+		if _, err := fmt.Fprintln(w, l); err != nil {
+			return err
+		}
+	}
+	return nil
 }

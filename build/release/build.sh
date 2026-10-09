@@ -16,59 +16,73 @@
 #   STATIC         directory with the static cryptsetup, veritysetup, mke2fs
 #                  and sgdisk and their stamps (build/static), which the root
 #                  carries for first boot
-#   SIGNATURES     the org signatures of the pinned images, <hex>.sigstore.json
-#                  each (the sneakers-release countersignatures)
+#   RELEASE        the release.yaml: sneakers-release's manifest/release.yaml
+#                  at the commit build/release/pins.env pins
+#   WEB            a sneakers-web checkout at the commit pins.env pins: the
+#                  :8443 pages are built from it (build/lab/pages.sh)
 #   OUT            the output directory
 #   KEYS           the public key directory (default keys/production)
 #
-# The release.yaml (and its signature) comes from the sneakers-release
-# GitHub Release pinned by SNEAKERS_RELEASE_VERSION in build/release/pins.env.
-# It isn't trusted here: the publish job's production kit verifies its
-# signature, and the root build checks the k0s binary against its pin.
+# release.yaml isn't trusted here and nothing is signed: the sign job
+# countersigns it and the manifest of every image it pins with the release
+# key, then builds the product bundle from them. A placeholder instead of a
+# digest is refused before anything is fetched.
 #
 # Output in $OUT: sneakers-<version>.efi (unsigned UKI), systemd-bootx64.efi
 # (unsigned), root-<version>.img, verity.json, release.yaml,
-# release.yaml.sigstore.json, systemd-version, sneakers-artifact and
-# sneakers-kit (production pins), the product bundle packed for the sign
-# job (product-header.json, the header to sign, and product-payload.age,
-# encrypted to keys/production/update.pub; build/product/build.sh), and
-# SHA256SUMS over all of them. The base root carries no k0s or images.
+# systemd-version, k0s and helm (checked against release.yaml's pins),
+# images.txt ("<image> <digest>" for every pinned image) with manifests/<hex>
+# (each image's manifest or index bytes, which hash to its digest, for the
+# sign job to countersign), pages/ (the :8443 pages, also in the root, for
+# the Base Web unit), inputs-baseOS (the Base OS input digest,
+# build/lab/units.sh inputs baseOS), sneakers-artifact and sneakers-kit
+# (production pins), and SHA256SUMS over all of them. The base root carries
+# no k0s or images.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 : "${VERSION:?}" "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${STATIC:?}" "${OUT:?}"
-: "${SIGNATURES:?sneakers-release publishes no image countersignatures yet; the bundle cannot be built without them}"
+: "${RELEASE:?set RELEASE to manifest/release.yaml from sneakers-release at the pinned commit}"
+: "${WEB:?set WEB to the sneakers-web checkout at the pinned commit}"
 keys="${KEYS:-$root/keys/production}"
 arch=amd64
-# shellcheck source=build/release/pins.env
-source "$here/pins.env"
-: "${SNEAKERS_RELEASE_VERSION:?pin SNEAKERS_RELEASE_VERSION in build/release/pins.env}"
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$root" log -1 --format=%ct)}"
 export SOURCE_DATE_EPOCH
+tools="$(mktemp -d)"
+trap 'rm -rf "$tools"' EXIT
+CGO_ENABLED=0 go build -trimpath -o "$tools/bundle" "$root/build/tools/bundle"
+"$tools/bundle" images --release "$RELEASE" > "$tools/images.txt"
 mkdir -p "$OUT"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$tools" "$work"' EXIT
 
-echo "release: release.yaml from sneakers-release v$SNEAKERS_RELEASE_VERSION"
-base="https://github.com/Sneakers-PAM/sneakers-release/releases/download/v$SNEAKERS_RELEASE_VERSION"
-for f in release.yaml release.yaml.sigstore.json; do
-  curl -fsSL --retry 3 -o "$OUT/$f" "$base/$f"
-done
+echo "release: release.yaml $(sha256sum < "$RELEASE" | cut -d' ' -f1), $(wc -l < "$tools/images.txt") images"
+install -m 0644 "$RELEASE" "$OUT/release.yaml"
+install -m 0644 "$tools/images.txt" "$OUT/images.txt"
+rm -rf "$OUT/manifests"
+mkdir -p "$OUT/manifests"
+while read -r image dgst; do
+  hexd="${dgst#sha256:}"
+  "$tools/bundle" manifest --image "$image" --digest "$dgst" --out "$OUT/manifests/$hexd"
+  got="$(sha256sum < "$OUT/manifests/$hexd" | cut -d' ' -f1)"
+  [ "$got" = "$hexd" ] || { echo "release: $image's manifest hashes to $got, not its pin $dgst" >&2; exit 1; }
+done < "$OUT/images.txt"
 
 k0s_version="$(awk '/^ *k0s:/ { k = 1; next } k && /^ *version:/ { print $2; exit }' "$OUT/release.yaml")"
 [ -n "$k0s_version" ] || { echo "release: release.yaml names no k0s version" >&2; exit 1; }
 echo "release: k0s $k0s_version"
-curl -fsSL --retry 3 -o "$work/k0s" "https://github.com/k0sproject/k0s/releases/download/$k0s_version/k0s-$k0s_version-$arch"
-# helm ships when release.yaml pins it; the product build checks the binary
-# against that pin.
+curl -fsSL --retry 3 -o "$OUT/k0s" "https://github.com/k0sproject/k0s/releases/download/${k0s_version//+/%2B}/k0s-$k0s_version-$arch"
+want="$(go run "$root/build/tools/k0spin" "$OUT/release.yaml" "$arch")"
+[ "$(sha256sum < "$OUT/k0s" | cut -d' ' -f1)" = "$want" ] || { echo "release: k0s $k0s_version isn't the binary release.yaml pins ($want)" >&2; exit 1; }
+# helm ships when release.yaml pins it.
 helm_version="$(awk '/^ *helm:/ { h = 1; next } h && /^ *version:/ { print $2; exit }' "$OUT/release.yaml")"
-helm_env=()
 if [ -n "$helm_version" ]; then
   echo "release: helm $helm_version"
   curl -fsSL --retry 3 -o "$work/helm.tar.gz" "https://get.helm.sh/helm-$helm_version-linux-$arch.tar.gz"
-  tar -xzOf "$work/helm.tar.gz" "linux-$arch/helm" > "$work/helm"
-  helm_env=(HELM="$work/helm")
+  tar -xzOf "$work/helm.tar.gz" "linux-$arch/helm" > "$OUT/helm"
+  want="$(go run "$root/build/tools/k0spin" "$OUT/release.yaml" "$arch" helm)"
+  [ "$(sha256sum < "$OUT/helm" | cut -d' ' -f1)" = "$want" ] || { echo "release: helm $helm_version isn't the binary release.yaml pins ($want)" >&2; exit 1; }
 fi
 
 pkg=github.com/Sneakers-PAM/sneakers-appliance/internal/release
@@ -77,18 +91,12 @@ pins="-X $pkg.Channel=production -X $pkg.Version=$VERSION \
   -X $pkg.ReleaseKey=$(b64 "$keys/cosign.pub") -X $pkg.DBCert=$(b64 "$keys/db.crt") \
   -X $pkg.PKCert=$(b64 "$keys/PK.crt") -X $pkg.KEKCert=$(b64 "$keys/KEK.crt")"
 
-echo "release: product bundle"
-# It fits the base built here and newer (BASES for boxes that predate the
-# range). Encrypting needs only the public update key;
-# the sign job signs the header and seals the .bin.
-env "${helm_env[@]}" VERSION="$VERSION" ARCH="$arch" CHANNEL=production MIN_BASE="$VERSION" BASES="$VERSION" RELEASE="$OUT/release.yaml" RELEASE_KEY="$keys/cosign.pub" \
-  SIGNATURES="$SIGNATURES" K0S="$work/k0s" RECIPIENT="$keys/update.pub" OUT="$work/product" bash "$root/build/product/build.sh"
-cp "$work/product/bin/header.json" "$OUT/product-header.json"
-cp "$work/product/bin/payload.age" "$OUT/product-payload.age"
+echo "release: :8443 pages"
+WEB="$WEB" VERSION="$VERSION" OUT="$OUT/pages" bash "$root/build/lab/pages.sh"
 
 echo "release: root"
 PINS_LDFLAGS="$pins" VERSION="$VERSION" ARCH="$arch" RELEASE="$OUT/release.yaml" OPENSSH="$OPENSSH" \
-  BUSYBOX="$BUSYBOX" STATIC="$STATIC" OUT="$work/root" bash "$root/build/root/build.sh"
+  BUSYBOX="$BUSYBOX" STATIC="$STATIC" OSADMIN_ASSETS="$OUT/pages" OUT="$work/root" bash "$root/build/root/build.sh"
 cp "$work/root/root-$VERSION.img" "$work/root/verity.json" "$OUT/"
 
 echo "release: UKI (unsigned)"
@@ -98,9 +106,14 @@ cp "$work/uki/sneakers-$VERSION.efi" "$OUT/"
 cp /usr/lib/systemd/boot/efi/systemd-bootx64.efi "$OUT/"
 dpkg-query -W -f='${Version}' systemd-boot-efi > "$OUT/systemd-version"
 
+# The sign job seals the units without these components, so the Base OS
+# input digest is taken here, from what this build took.
+KERNEL="$KERNEL" VERITYSETUP="$VERITYSETUP" BUSYBOX="$BUSYBOX" OPENSSH="$OPENSSH" STATIC="$STATIC" \
+  bash "$root/build/lab/units.sh" inputs baseOS > "$OUT/inputs-baseOS"
+
 echo "release: tools"
 CGO_ENABLED=0 go build -trimpath -o "$OUT/sneakers-artifact" -ldflags "-s -w" "$root/cmd/sneakers-artifact"
 CGO_ENABLED=0 go build -trimpath -o "$OUT/sneakers-kit" -ldflags "-s -w $pins" "$root/cmd/sneakers-kit"
 
-( cd "$OUT" && sha256sum -- * | grep -v ' SHA256SUMS$' > SHA256SUMS )
+( cd "$OUT" && find . -type f ! -name SHA256SUMS -printf '%P\0' | LC_ALL=C sort -z | xargs -0 sha256sum -- > SHA256SUMS )
 echo "release: built $VERSION ($arch), unsigned"

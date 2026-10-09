@@ -8,11 +8,12 @@ with keys made for that run and publishes nothing.
 
 | Output | Where | Used by |
 |---|---|---|
-| `sneakers-os:<version>` | GHCR, pushed by digest, with its signature | the kit, to build install media |
-| `sneakers-appliance-<version>-<arch>.bin` | the GitHub Release the owner created for the tag | the box: downloaded, or uploaded by hand |
-| `sneakers-product-<version>-<arch>.bin` and `sneakers-product-index.json` | built and sealed next to the base `.bin` (attaching them to the Release isn't in the workflow yet) | the box's Updates page: the product bundle, k0s and its images |
+| `sneakers-os:<version>` | GHCR (`ghcr.io/<owner>/sneakers-os`), pushed by digest, with its signature | the kit, to build install media |
+| the three units: `sneakers-appliance-baseOS-<version>-g<commit>-<arch>.bin`, `sneakers-appliance-baseWeb-<version>-g<commit>-<arch>.bin` and `sneakers-product-<version>-<arch>.bin`, each with its `.inputs` | the tag's GitHub Release | the box: downloaded, or uploaded by hand on the Updates page |
+| `sneakers-product-index.json` (format 2) and `SHA256SUMS` over the units | the tag's GitHub Release | a mirror, served next to the units |
+| `release.yaml`, `release.yaml.sigstore.json` and one `<digest hex>.sigstore.json` per pinned image | the tag's GitHub Release | anyone checking what the release pinned: the appliance's countersignatures, made with the release key |
 
-The `.bin` is the update package. The box downloads it from the GitHub Release, or an admin
+Each `.bin` is an update package. The box downloads it from the GitHub Release, or an admin
 uploads the identical file through :8443 or the console on an air-gapped box. Both paths read it
 the same way, and the box contacts no other package source.
 
@@ -205,8 +206,9 @@ volume, so it outlives a reboot, an update and a revert) or else the default; th
 progress after an apply doesn't wait for a stack that's off. The MCP page (`McpService`) drives the
 switch named `mcp` (and `machine-api` when the product declares one; without it the machine API
 stays on): `SetMcp` keeps the setting, puts the switch's stacks in front of k0s or takes them away
-(k0s removes their objects), and restarts the workloads it names with the installed bundle's k0s,
-audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
+(k0s removes their objects), waits up to 90 s until k0s has applied every object in them (or
+removed them all), and only then restarts the workloads it names with the installed bundle's k0s,
+so a restarted workload reads the change; audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
 installed`.
 
 It may also declare an **import**: the product takes an export of an earlier install from the
@@ -290,10 +292,10 @@ any certificate or key that isn't the recorded production one.
 
 | Job | Holds | Does |
 |---|---|---|
-| `guard` | nothing | refuses a tag that isn't `v<semver>` or whose commit isn't on `main`, and a production release before `keys/production/fingerprints.txt` and the `SNEAKERS_RELEASE_VERSION` pin (`build/release/pins.env`) exist |
-| `build` | nothing | builds the kernel, the root image, the unsigned UKI and systemd-boot, the production kit, the product bundle packed for signing, and `SHA256SUMS` over all of it (`build/release/build.sh`) |
-| `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; adds the update key to the UKI; signs the UKI and systemd-boot with the db key, then the artifact, the `.bin` header and the product bundle's header with the release key; checks both `.bin` files decrypt with the key in the signed UKI, and the product bundle's contents; each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
-| `publish` | `packages: write`, `contents: write` | verifies the artifact with the production kit and the `.bin` with the production key, pushes `sneakers-os` to GHCR, verifies what it pushed, and attaches the `.bin` and its `.sha256` to the tag's GitHub Release |
+| `guard` | nothing | refuses a tag that isn't `v<semver>` or whose commit isn't on `main`, and a production release before `keys/production/fingerprints.txt` exists or while a source pin in `build/release/pins.env` is empty or isn't a full 40-character commit |
+| `build` | nothing | checks out sneakers-release and sneakers-web at the pinned commits; refuses a `release.yaml` that pins an image by a placeholder, before the long build; builds the kernel, the :8443 pages, the root image (with the pages), the unsigned UKI and systemd-boot, the production kit; fetches k0s and helm (checked against `release.yaml`) and the manifest of every pinned image (checked against its digest); takes the Base OS input digest; and writes `SHA256SUMS` over all of it (`build/release/build.sh`) |
+| `sign` | the `production` environment | checks `SHA256SUMS` and the fingerprints; adds the update key to the UKI; signs the UKI and systemd-boot with the db key; countersigns `release.yaml` and every pinned image's manifest with the release key; assembles and signs the artifact; builds the product bundle from the countersigned images; seals the three units with `build/lab/units.sh` on the production channel; opens each the way the box does (the production kit checks the Base OS); each key is written to a tmpfs only in the step that uses it and removed there, and the tmpfs is unmounted at the end |
+| `publish` | `packages: write`, `contents: write` | verifies the artifact with the production kit, each unit with the production key and every countersignature with `cosign verify-blob`, pushes `sneakers-os` to GHCR, verifies what it pushed, and attaches the units, their `.inputs`, the index, `SHA256SUMS`, `release.yaml` and the countersignatures to the tag's GitHub Release (a draft when the owner made none; nothing publishes it) |
 | `lab` | the `lab` environment, lab keys only | the whole path with a lab key set: builds (the lab update key in the UKI), packs, verifies, decrypts with the key in the signed UKI, unpacks, runs the lab kit on the result, opens and checks the lab product bundle, and checks a production verify of either lab `.bin` is refused; nothing leaves the run |
 
 ## The environments
@@ -324,9 +326,23 @@ gh api -X POST repos/Sneakers-PAM/sneakers-appliance/environments/production/dep
 gh api -X PUT repos/Sneakers-PAM/sneakers-appliance/environments/lab --input build/ci/environment-lab.json
 ```
 
-The release `release.yaml` and its signature come from the pinned `sneakers-release` GitHub
-Release; the k0s binary from its upstream release, checked against the pin in `release.yaml`, goes
-into the product bundle with the images, and so does helm's when `release.yaml` pins it. The charts and the platform add-ons join the product
+## The pinned sources
+
+`build/release/pins.env` pins what a production release is built from, each as a repository and a
+full commit: `SNEAKERS_RELEASE_REPO` and `SNEAKERS_RELEASE_COMMIT` (its `manifest/release.yaml`),
+`SNEAKERS_WEB_REPO` and `SNEAKERS_WEB_COMMIT` (`apps/appliance-admin`, the :8443 pages). They're git
+content, not release assets, so neither repository has to tag before the appliance does. The
+appliance signs what it takes: the sign job countersigns `release.yaml` and the manifest of every
+image it pins with the release key, and those signatures are the ones the kit, the bundle check
+and the box verify. Bump a pin by hand, in a PR of its own, to a commit on that repository's
+`main`; a `release.yaml` with a placeholder digest (`sha256:TBD-at-release`) is refused by the build
+job before the long build.
+
+The k0s binary comes from its upstream release, checked against the pin in `release.yaml`, and goes
+into the product bundle with the images, and so does helm's when `release.yaml` pins it. The first
+production release ships full units only: no bridge copy and no patch (`build/lab/units.sh` refuses
+`BRIDGE=1` on the production channel). Choosing only the units whose inputs changed since the last
+release isn't in the workflow yet: every release builds all three. The charts and the platform add-ons join the product
 bundle as their builds land; every
 image in it is signed with the release key, third-party ones included. amd64 only for now; arm64
 follows its kernel build.

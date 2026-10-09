@@ -41,6 +41,11 @@ type Switches struct {
 	Manifests string
 	// Restart restarts a workload after a change; nil restarts none.
 	Restart func(ctx context.Context, ns, kind, name string) error
+	// Settled waits until k0s has applied the stack in the slot directory
+	// stack (on) or taken its objects away (off), so a restarted workload
+	// reads the change; nil waits for nothing. An error is logged and the
+	// restarts still run.
+	Settled func(ctx context.Context, stack string, on bool) error
 	Logger  log.Logger
 }
 
@@ -81,7 +86,8 @@ func (s *Switches) On(spec productspec.Spec, name string) (bool, bool) {
 }
 
 // Set turns switch name on or off: the setting is kept, its stacks are put
-// in front of k0s or taken away, and its workloads restarted. With k0s not
+// in front of k0s or taken away, and once k0s has settled them its
+// workloads are restarted. With k0s not
 // running the stacks wait for its next start.
 func (s *Switches) Set(ctx context.Context, spec productspec.Spec, name string, on bool) error {
 	w, ok := spec.Switch(name)
@@ -105,6 +111,14 @@ func (s *Switches) Set(ctx context.Context, spec productspec.Spec, name string, 
 		}
 	}
 	var errs []error
+	if s.Settled != nil {
+		for _, stack := range w.Stacks {
+			if err := s.Settled(ctx, filepath.Join(s.Slot, "manifests", stack), on); err != nil {
+				lg.Warn("productswitch: k0s hasn't settled the stack; restarting anyway", log.F("stack", stack), log.F("on", on), log.F("error", err.Error()))
+				errs = append(errs, err)
+			}
+		}
+	}
 	for i := range w.Restart {
 		ns, kind, n, _ := w.RestartRef(i)
 		if s.Restart == nil {
