@@ -45,6 +45,12 @@ and rebuilds the target from the base layout; with `--extract` the rebuilt layou
 `sneakers-kit verify`. A patch that doesn't rebuild is never published. How the box applies one is
 in [upgrades.md](upgrades.md#base-os-patches).
 
+**Base Web.** `sneakers-artifact web-pack --pages <built pages> --version <v> --commit <sha> --out <dir>`
+lays out the payload, `pages/` and `web.yaml` (with `--requires-baseos-min` and
+`--requires-baseos-before` for a range other than its own major.minor); the build signs
+`web.yaml` into `web.yaml.sig` with the release key, `web-check --dir <dir>` loads it the way
+:8443 does, and `bin-pack --unit baseWeb --layout <dir>` packs it, one file per architecture.
+
 **The bridge.** A box on build l fetches only the old names and can't apply a patch or a Base Web.
 The m release publishes its Base OS full file a second time under the old name (the same bytes;
 the name isn't signed: `bin-seal --bridge`), and lists it in the index's legacy `base` section

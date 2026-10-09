@@ -36,17 +36,23 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// UpdateTarget is what an update changes. Unspecified is the base image,
-// as before product bundles.
+// UpdateTarget is what an update changes: one of the three update units.
+// Unspecified is the Base OS, as before product bundles.
 type UpdateTarget int32
 
 const (
 	UpdateTarget_UPDATE_TARGET_UNSPECIFIED UpdateTarget = 0
-	// UPDATE_TARGET_BASE is the base image: the OS slots and a reboot.
+	// UPDATE_TARGET_BASE is the Base OS: the root image, the UKI and the
+	// boot files, in the A/B root slots, applied with a reboot.
 	UpdateTarget_UPDATE_TARGET_BASE UpdateTarget = 1
 	// UPDATE_TARGET_PRODUCT is the product bundle: k0s, its images and the
 	// product, in their own slots on the state volume.
 	UpdateTarget_UPDATE_TARGET_PRODUCT UpdateTarget = 2
+	// UPDATE_TARGET_BASE_WEB is the Base Web: the :8443 admin pages, in the
+	// web slots on the state volume, switched in place with no reboot.
+	// Apply and Revert take a fresh code, need no maintenance and leave the
+	// root slots, the product, the sessions and elevation alone.
+	UpdateTarget_UPDATE_TARGET_BASE_WEB UpdateTarget = 3
 )
 
 // Enum value maps for UpdateTarget.
@@ -55,11 +61,13 @@ var (
 		0: "UPDATE_TARGET_UNSPECIFIED",
 		1: "UPDATE_TARGET_BASE",
 		2: "UPDATE_TARGET_PRODUCT",
+		3: "UPDATE_TARGET_BASE_WEB",
 	}
 	UpdateTarget_value = map[string]int32{
 		"UPDATE_TARGET_UNSPECIFIED": 0,
 		"UPDATE_TARGET_BASE":        1,
 		"UPDATE_TARGET_PRODUCT":     2,
+		"UPDATE_TARGET_BASE_WEB":    3,
 	}
 )
 
@@ -237,6 +245,145 @@ func (x *UpgradePolicy) GetDirect() bool {
 	return false
 }
 
+// BaseWebStatus is the Base Web: which pages :8443 serves, and its slots.
+type BaseWebStatus struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// running_version is the served pages' version; the built-in pages
+	// carry the running Base OS's.
+	RunningVersion string `protobuf:"bytes,1,opt,name=running_version,json=runningVersion,proto3" json:"running_version,omitempty"`
+	// source is slot or built-in; slot is the served slot, a or b.
+	Source string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	Slot   string `protobuf:"bytes,3,opt,name=slot,proto3" json:"slot,omitempty"`
+	// reason says why the built-in pages serve (no Base Web is installed,
+	// the current slot failed its checks or doesn't fit the running Base
+	// OS), or why the last switch didn't take.
+	Reason string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	// current_version is what the current link names, served or not.
+	CurrentVersion string `protobuf:"bytes,5,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
+	StagedVersion  string `protobuf:"bytes,6,opt,name=staged_version,json=stagedVersion,proto3" json:"staged_version,omitempty"`
+	// previous_version is the slot a revert goes back to; empty when a
+	// revert goes to the built-in pages (can_revert says whether there's
+	// anything to revert).
+	PreviousVersion string `protobuf:"bytes,7,opt,name=previous_version,json=previousVersion,proto3" json:"previous_version,omitempty"`
+	CanRevert       bool   `protobuf:"varint,8,opt,name=can_revert,json=canRevert,proto3" json:"can_revert,omitempty"`
+	// builtin_version is the running root's own pages' version.
+	BuiltinVersion string `protobuf:"bytes,9,opt,name=builtin_version,json=builtinVersion,proto3" json:"builtin_version,omitempty"`
+	// requires_base_os is what the current Base Web needs of the Base OS,
+	// such as "0.3.0 to before 0.4.0"; fits is whether the running Base OS
+	// is in it.
+	RequiresBaseOs string `protobuf:"bytes,10,opt,name=requires_base_os,json=requiresBaseOs,proto3" json:"requires_base_os,omitempty"`
+	Fits           bool   `protobuf:"varint,11,opt,name=fits,proto3" json:"fits,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BaseWebStatus) Reset() {
+	*x = BaseWebStatus{}
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BaseWebStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BaseWebStatus) ProtoMessage() {}
+
+func (x *BaseWebStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BaseWebStatus.ProtoReflect.Descriptor instead.
+func (*BaseWebStatus) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BaseWebStatus) GetRunningVersion() string {
+	if x != nil {
+		return x.RunningVersion
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetSlot() string {
+	if x != nil {
+		return x.Slot
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetCurrentVersion() string {
+	if x != nil {
+		return x.CurrentVersion
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetStagedVersion() string {
+	if x != nil {
+		return x.StagedVersion
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetPreviousVersion() string {
+	if x != nil {
+		return x.PreviousVersion
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetCanRevert() bool {
+	if x != nil {
+		return x.CanRevert
+	}
+	return false
+}
+
+func (x *BaseWebStatus) GetBuiltinVersion() string {
+	if x != nil {
+		return x.BuiltinVersion
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetRequiresBaseOs() string {
+	if x != nil {
+		return x.RequiresBaseOs
+	}
+	return ""
+}
+
+func (x *BaseWebStatus) GetFits() bool {
+	if x != nil {
+		return x.Fits
+	}
+	return false
+}
+
 // ProductSlots are the product bundle's slots on the state volume.
 type ProductSlots struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -260,7 +407,7 @@ type ProductSlots struct {
 
 func (x *ProductSlots) Reset() {
 	*x = ProductSlots{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -272,7 +419,7 @@ func (x *ProductSlots) String() string {
 func (*ProductSlots) ProtoMessage() {}
 
 func (x *ProductSlots) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -285,7 +432,7 @@ func (x *ProductSlots) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProductSlots.ProtoReflect.Descriptor instead.
 func (*ProductSlots) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{1}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ProductSlots) GetInstalledVersion() string {
@@ -349,7 +496,7 @@ type ProductVersion struct {
 
 func (x *ProductVersion) Reset() {
 	*x = ProductVersion{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -361,7 +508,7 @@ func (x *ProductVersion) String() string {
 func (*ProductVersion) ProtoMessage() {}
 
 func (x *ProductVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -374,7 +521,7 @@ func (x *ProductVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProductVersion.ProtoReflect.Descriptor instead.
 func (*ProductVersion) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{2}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProductVersion) GetVersion() string {
@@ -468,7 +615,7 @@ type UpdatePackage struct {
 
 func (x *UpdatePackage) Reset() {
 	*x = UpdatePackage{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -480,7 +627,7 @@ func (x *UpdatePackage) String() string {
 func (*UpdatePackage) ProtoMessage() {}
 
 func (x *UpdatePackage) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -493,7 +640,7 @@ func (x *UpdatePackage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePackage.ProtoReflect.Descriptor instead.
 func (*UpdatePackage) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{3}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UpdatePackage) GetUploadId() string {
@@ -606,7 +753,7 @@ type HeldUpload struct {
 
 func (x *HeldUpload) Reset() {
 	*x = HeldUpload{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -618,7 +765,7 @@ func (x *HeldUpload) String() string {
 func (*HeldUpload) ProtoMessage() {}
 
 func (x *HeldUpload) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -631,7 +778,7 @@ func (x *HeldUpload) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HeldUpload.ProtoReflect.Descriptor instead.
 func (*HeldUpload) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{4}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *HeldUpload) GetUploadId() string {
@@ -687,7 +834,7 @@ type UpgradeEvent struct {
 
 func (x *UpgradeEvent) Reset() {
 	*x = UpgradeEvent{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -699,7 +846,7 @@ func (x *UpgradeEvent) String() string {
 func (*UpgradeEvent) ProtoMessage() {}
 
 func (x *UpgradeEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -712,7 +859,7 @@ func (x *UpgradeEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpgradeEvent.ProtoReflect.Descriptor instead.
 func (*UpgradeEvent) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{5}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *UpgradeEvent) GetTime() *timestamppb.Timestamp {
@@ -800,7 +947,7 @@ type UpgradeStep struct {
 
 func (x *UpgradeStep) Reset() {
 	*x = UpgradeStep{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -812,7 +959,7 @@ func (x *UpgradeStep) String() string {
 func (*UpgradeStep) ProtoMessage() {}
 
 func (x *UpgradeStep) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -825,7 +972,7 @@ func (x *UpgradeStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpgradeStep.ProtoReflect.Descriptor instead.
 func (*UpgradeStep) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{6}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *UpgradeStep) GetId() string {
@@ -897,7 +1044,7 @@ type UpgradeProgress struct {
 
 func (x *UpgradeProgress) Reset() {
 	*x = UpgradeProgress{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -909,7 +1056,7 @@ func (x *UpgradeProgress) String() string {
 func (*UpgradeProgress) ProtoMessage() {}
 
 func (x *UpgradeProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -922,7 +1069,7 @@ func (x *UpgradeProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpgradeProgress.ProtoReflect.Descriptor instead.
 func (*UpgradeProgress) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{7}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UpgradeProgress) GetAction() string {
@@ -996,7 +1143,7 @@ type GetUpgradesRequest struct {
 
 func (x *GetUpgradesRequest) Reset() {
 	*x = GetUpgradesRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1008,7 +1155,7 @@ func (x *GetUpgradesRequest) String() string {
 func (*GetUpgradesRequest) ProtoMessage() {}
 
 func (x *GetUpgradesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1021,7 +1168,7 @@ func (x *GetUpgradesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpgradesRequest.ProtoReflect.Descriptor instead.
 func (*GetUpgradesRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{8}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{9}
 }
 
 type GetUpgradesResponse struct {
@@ -1064,14 +1211,16 @@ type GetUpgradesResponse struct {
 	// unset when there's none.
 	HeldUpload *HeldUpload `protobuf:"bytes,18,opt,name=held_upload,json=heldUpload,proto3" json:"held_upload,omitempty"`
 	// receiving is true while an upload or fetch is coming in.
-	Receiving     bool `protobuf:"varint,19,opt,name=receiving,proto3" json:"receiving,omitempty"`
+	Receiving bool `protobuf:"varint,19,opt,name=receiving,proto3" json:"receiving,omitempty"`
+	// base_web is the Base Web unit.
+	BaseWeb       *BaseWebStatus `protobuf:"bytes,20,opt,name=base_web,json=baseWeb,proto3" json:"base_web,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetUpgradesResponse) Reset() {
 	*x = GetUpgradesResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1083,7 +1232,7 @@ func (x *GetUpgradesResponse) String() string {
 func (*GetUpgradesResponse) ProtoMessage() {}
 
 func (x *GetUpgradesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1096,7 +1245,7 @@ func (x *GetUpgradesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpgradesResponse.ProtoReflect.Descriptor instead.
 func (*GetUpgradesResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{9}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetUpgradesResponse) GetRunningVersion() string {
@@ -1232,6 +1381,13 @@ func (x *GetUpgradesResponse) GetReceiving() bool {
 	return false
 }
 
+func (x *GetUpgradesResponse) GetBaseWeb() *BaseWebStatus {
+	if x != nil {
+		return x.BaseWeb
+	}
+	return nil
+}
+
 // MirrorStatus is how the box reaches the mirror and how its last fetch
 // went. It's kept in memory: checked is false after a restart until the
 // next mirror fetch.
@@ -1270,7 +1426,7 @@ type MirrorStatus struct {
 
 func (x *MirrorStatus) Reset() {
 	*x = MirrorStatus{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1282,7 +1438,7 @@ func (x *MirrorStatus) String() string {
 func (*MirrorStatus) ProtoMessage() {}
 
 func (x *MirrorStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1295,7 +1451,7 @@ func (x *MirrorStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MirrorStatus.ProtoReflect.Descriptor instead.
 func (*MirrorStatus) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{10}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MirrorStatus) GetScheme() string {
@@ -1408,7 +1564,7 @@ type FetchUpdateRequest struct {
 
 func (x *FetchUpdateRequest) Reset() {
 	*x = FetchUpdateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1420,7 +1576,7 @@ func (x *FetchUpdateRequest) String() string {
 func (*FetchUpdateRequest) ProtoMessage() {}
 
 func (x *FetchUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1433,7 +1589,7 @@ func (x *FetchUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchUpdateRequest.ProtoReflect.Descriptor instead.
 func (*FetchUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{11}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *FetchUpdateRequest) GetFileName() string {
@@ -1454,7 +1610,7 @@ type FetchUpdateResponse struct {
 
 func (x *FetchUpdateResponse) Reset() {
 	*x = FetchUpdateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1466,7 +1622,7 @@ func (x *FetchUpdateResponse) String() string {
 func (*FetchUpdateResponse) ProtoMessage() {}
 
 func (x *FetchUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1479,7 +1635,7 @@ func (x *FetchUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FetchUpdateResponse.ProtoReflect.Descriptor instead.
 func (*FetchUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{12}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *FetchUpdateResponse) GetUploadId() string {
@@ -1509,7 +1665,7 @@ type StageUpdateRequest struct {
 
 func (x *StageUpdateRequest) Reset() {
 	*x = StageUpdateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1521,7 +1677,7 @@ func (x *StageUpdateRequest) String() string {
 func (*StageUpdateRequest) ProtoMessage() {}
 
 func (x *StageUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1534,7 +1690,7 @@ func (x *StageUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StageUpdateRequest.ProtoReflect.Descriptor instead.
 func (*StageUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{13}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *StageUpdateRequest) GetUploadId() string {
@@ -1563,7 +1719,7 @@ type StageUpdateResponse struct {
 
 func (x *StageUpdateResponse) Reset() {
 	*x = StageUpdateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1575,7 +1731,7 @@ func (x *StageUpdateResponse) String() string {
 func (*StageUpdateResponse) ProtoMessage() {}
 
 func (x *StageUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1588,7 +1744,7 @@ func (x *StageUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StageUpdateResponse.ProtoReflect.Descriptor instead.
 func (*StageUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{14}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StageUpdateResponse) GetPackage() *UpdatePackage {
@@ -1623,7 +1779,7 @@ type ElevationOverride struct {
 
 func (x *ElevationOverride) Reset() {
 	*x = ElevationOverride{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1635,7 +1791,7 @@ func (x *ElevationOverride) String() string {
 func (*ElevationOverride) ProtoMessage() {}
 
 func (x *ElevationOverride) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1648,7 +1804,7 @@ func (x *ElevationOverride) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ElevationOverride.ProtoReflect.Descriptor instead.
 func (*ElevationOverride) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{15}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ElevationOverride) GetElevationId() string {
@@ -1684,7 +1840,7 @@ type ApplyUpdateRequest struct {
 
 func (x *ApplyUpdateRequest) Reset() {
 	*x = ApplyUpdateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1696,7 +1852,7 @@ func (x *ApplyUpdateRequest) String() string {
 func (*ApplyUpdateRequest) ProtoMessage() {}
 
 func (x *ApplyUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1709,7 +1865,7 @@ func (x *ApplyUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyUpdateRequest.ProtoReflect.Descriptor instead.
 func (*ApplyUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{16}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ApplyUpdateRequest) GetElevationOverride() *ElevationOverride {
@@ -1741,7 +1897,7 @@ type ApplyUpdateResponse struct {
 
 func (x *ApplyUpdateResponse) Reset() {
 	*x = ApplyUpdateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1753,7 +1909,7 @@ func (x *ApplyUpdateResponse) String() string {
 func (*ApplyUpdateResponse) ProtoMessage() {}
 
 func (x *ApplyUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1766,7 +1922,7 @@ func (x *ApplyUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyUpdateResponse.ProtoReflect.Descriptor instead.
 func (*ApplyUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{17}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{18}
 }
 
 type RevertUpdateRequest struct {
@@ -1781,7 +1937,7 @@ type RevertUpdateRequest struct {
 
 func (x *RevertUpdateRequest) Reset() {
 	*x = RevertUpdateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1793,7 +1949,7 @@ func (x *RevertUpdateRequest) String() string {
 func (*RevertUpdateRequest) ProtoMessage() {}
 
 func (x *RevertUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1806,7 +1962,7 @@ func (x *RevertUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertUpdateRequest.ProtoReflect.Descriptor instead.
 func (*RevertUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{18}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RevertUpdateRequest) GetElevationOverride() *ElevationOverride {
@@ -1843,7 +1999,7 @@ type DiscardUpdateRequest struct {
 
 func (x *DiscardUpdateRequest) Reset() {
 	*x = DiscardUpdateRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1855,7 +2011,7 @@ func (x *DiscardUpdateRequest) String() string {
 func (*DiscardUpdateRequest) ProtoMessage() {}
 
 func (x *DiscardUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1868,7 +2024,7 @@ func (x *DiscardUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardUpdateRequest.ProtoReflect.Descriptor instead.
 func (*DiscardUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{19}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DiscardUpdateRequest) GetUploadId() string {
@@ -1895,7 +2051,7 @@ type DiscardUpdateResponse struct {
 
 func (x *DiscardUpdateResponse) Reset() {
 	*x = DiscardUpdateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1907,7 +2063,7 @@ func (x *DiscardUpdateResponse) String() string {
 func (*DiscardUpdateResponse) ProtoMessage() {}
 
 func (x *DiscardUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1920,7 +2076,7 @@ func (x *DiscardUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardUpdateResponse.ProtoReflect.Descriptor instead.
 func (*DiscardUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{20}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *DiscardUpdateResponse) GetVersion() string {
@@ -1938,7 +2094,7 @@ type ListBaseVersionsRequest struct {
 
 func (x *ListBaseVersionsRequest) Reset() {
 	*x = ListBaseVersionsRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1950,7 +2106,7 @@ func (x *ListBaseVersionsRequest) String() string {
 func (*ListBaseVersionsRequest) ProtoMessage() {}
 
 func (x *ListBaseVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1963,7 +2119,7 @@ func (x *ListBaseVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBaseVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListBaseVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{21}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{22}
 }
 
 type ListBaseVersionsResponse struct {
@@ -1978,7 +2134,7 @@ type ListBaseVersionsResponse struct {
 
 func (x *ListBaseVersionsResponse) Reset() {
 	*x = ListBaseVersionsResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1990,7 +2146,7 @@ func (x *ListBaseVersionsResponse) String() string {
 func (*ListBaseVersionsResponse) ProtoMessage() {}
 
 func (x *ListBaseVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2003,7 +2159,7 @@ func (x *ListBaseVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBaseVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListBaseVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{22}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListBaseVersionsResponse) GetVersions() []*BaseVersion {
@@ -2049,7 +2205,7 @@ type BaseVersion struct {
 
 func (x *BaseVersion) Reset() {
 	*x = BaseVersion{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2061,7 +2217,7 @@ func (x *BaseVersion) String() string {
 func (*BaseVersion) ProtoMessage() {}
 
 func (x *BaseVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2074,7 +2230,7 @@ func (x *BaseVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BaseVersion.ProtoReflect.Descriptor instead.
 func (*BaseVersion) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{23}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *BaseVersion) GetVersion() string {
@@ -2155,7 +2311,7 @@ type ListProductVersionsRequest struct {
 
 func (x *ListProductVersionsRequest) Reset() {
 	*x = ListProductVersionsRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2167,7 +2323,7 @@ func (x *ListProductVersionsRequest) String() string {
 func (*ListProductVersionsRequest) ProtoMessage() {}
 
 func (x *ListProductVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2180,7 +2336,7 @@ func (x *ListProductVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProductVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListProductVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{24}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{25}
 }
 
 type ListProductVersionsResponse struct {
@@ -2195,7 +2351,7 @@ type ListProductVersionsResponse struct {
 
 func (x *ListProductVersionsResponse) Reset() {
 	*x = ListProductVersionsResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2207,7 +2363,7 @@ func (x *ListProductVersionsResponse) String() string {
 func (*ListProductVersionsResponse) ProtoMessage() {}
 
 func (x *ListProductVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2220,7 +2376,7 @@ func (x *ListProductVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProductVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListProductVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{25}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListProductVersionsResponse) GetVersions() []*ProductVersion {
@@ -2245,7 +2401,7 @@ type RevertUpdateResponse struct {
 
 func (x *RevertUpdateResponse) Reset() {
 	*x = RevertUpdateResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2257,7 +2413,7 @@ func (x *RevertUpdateResponse) String() string {
 func (*RevertUpdateResponse) ProtoMessage() {}
 
 func (x *RevertUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2270,7 +2426,7 @@ func (x *RevertUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertUpdateResponse.ProtoReflect.Descriptor instead.
 func (*RevertUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{26}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{27}
 }
 
 type SetUpgradePolicyRequest struct {
@@ -2282,7 +2438,7 @@ type SetUpgradePolicyRequest struct {
 
 func (x *SetUpgradePolicyRequest) Reset() {
 	*x = SetUpgradePolicyRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2294,7 +2450,7 @@ func (x *SetUpgradePolicyRequest) String() string {
 func (*SetUpgradePolicyRequest) ProtoMessage() {}
 
 func (x *SetUpgradePolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2307,7 +2463,7 @@ func (x *SetUpgradePolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUpgradePolicyRequest.ProtoReflect.Descriptor instead.
 func (*SetUpgradePolicyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{27}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SetUpgradePolicyRequest) GetPolicy() *UpgradePolicy {
@@ -2325,7 +2481,7 @@ type SetUpgradePolicyResponse struct {
 
 func (x *SetUpgradePolicyResponse) Reset() {
 	*x = SetUpgradePolicyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2337,7 +2493,7 @@ func (x *SetUpgradePolicyResponse) String() string {
 func (*SetUpgradePolicyResponse) ProtoMessage() {}
 
 func (x *SetUpgradePolicyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2350,7 +2506,7 @@ func (x *SetUpgradePolicyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUpgradePolicyResponse.ProtoReflect.Descriptor instead.
 func (*SetUpgradePolicyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{28}
+	return file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP(), []int{29}
 }
 
 var File_sneakers_appliance_osadmin_v1_upgrade_proto protoreflect.FileDescriptor
@@ -2364,7 +2520,21 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x0ewindow_minutes\x18\x03 \x01(\x05R\rwindowMinutes\x12\x1d\n" +
 	"\n" +
 	"mirror_url\x18\x04 \x01(\tR\tmirrorUrl\x12\x16\n" +
-	"\x06direct\x18\x05 \x01(\bR\x06direct\"\xbb\x01\n" +
+	"\x06direct\x18\x05 \x01(\bR\x06direct\"\xfd\x02\n" +
+	"\rBaseWebStatus\x12'\n" +
+	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12\x12\n" +
+	"\x04slot\x18\x03 \x01(\tR\x04slot\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12'\n" +
+	"\x0fcurrent_version\x18\x05 \x01(\tR\x0ecurrentVersion\x12%\n" +
+	"\x0estaged_version\x18\x06 \x01(\tR\rstagedVersion\x12)\n" +
+	"\x10previous_version\x18\a \x01(\tR\x0fpreviousVersion\x12\x1d\n" +
+	"\n" +
+	"can_revert\x18\b \x01(\bR\tcanRevert\x12'\n" +
+	"\x0fbuiltin_version\x18\t \x01(\tR\x0ebuiltinVersion\x12(\n" +
+	"\x10requires_base_os\x18\n" +
+	" \x01(\tR\x0erequiresBaseOs\x12\x12\n" +
+	"\x04fits\x18\v \x01(\bR\x04fits\"\xbb\x01\n" +
 	"\fProductSlots\x12+\n" +
 	"\x11installed_version\x18\x01 \x01(\tR\x10installedVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12)\n" +
@@ -2435,7 +2605,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"started_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x14\n" +
-	"\x12GetUpgradesRequest\"\x9f\b\n" +
+	"\x12GetUpgradesRequest\"\xe8\b\n" +
 	"\x13GetUpgradesResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12%\n" +
@@ -2460,7 +2630,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\rmirror_status\x18\x11 \x01(\v2+.sneakers.appliance.osadmin.v1.MirrorStatusR\fmirrorStatus\x12J\n" +
 	"\vheld_upload\x18\x12 \x01(\v2).sneakers.appliance.osadmin.v1.HeldUploadR\n" +
 	"heldUpload\x12\x1c\n" +
-	"\treceiving\x18\x13 \x01(\bR\treceiving\"\xd6\x03\n" +
+	"\treceiving\x18\x13 \x01(\bR\treceiving\x12G\n" +
+	"\bbase_web\x18\x14 \x01(\v2,.sneakers.appliance.osadmin.v1.BaseWebStatusR\abaseWeb\"\xd6\x03\n" +
 	"\fMirrorStatus\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x12\n" +
 	"\x04note\x18\x02 \x01(\tR\x04note\x12\x1b\n" +
@@ -2531,11 +2702,12 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x14RevertUpdateResponse\"_\n" +
 	"\x17SetUpgradePolicyRequest\x12D\n" +
 	"\x06policy\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.UpgradePolicyR\x06policy\"\x1a\n" +
-	"\x18SetUpgradePolicyResponse*`\n" +
+	"\x18SetUpgradePolicyResponse*|\n" +
 	"\fUpdateTarget\x12\x1d\n" +
 	"\x19UPDATE_TARGET_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12UPDATE_TARGET_BASE\x10\x01\x12\x19\n" +
-	"\x15UPDATE_TARGET_PRODUCT\x10\x02*\xb1\x01\n" +
+	"\x15UPDATE_TARGET_PRODUCT\x10\x02\x12\x1a\n" +
+	"\x16UPDATE_TARGET_BASE_WEB\x10\x03*\xb1\x01\n" +
 	"\x10UpgradeStepState\x12\"\n" +
 	"\x1eUPGRADE_STEP_STATE_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aUPGRADE_STEP_STATE_PENDING\x10\x01\x12\x1d\n" +
@@ -2567,94 +2739,96 @@ func file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_upgrade_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_sneakers_appliance_osadmin_v1_upgrade_proto_goTypes = []any{
 	(UpdateTarget)(0),                   // 0: sneakers.appliance.osadmin.v1.UpdateTarget
 	(UpgradeStepState)(0),               // 1: sneakers.appliance.osadmin.v1.UpgradeStepState
 	(*UpgradePolicy)(nil),               // 2: sneakers.appliance.osadmin.v1.UpgradePolicy
-	(*ProductSlots)(nil),                // 3: sneakers.appliance.osadmin.v1.ProductSlots
-	(*ProductVersion)(nil),              // 4: sneakers.appliance.osadmin.v1.ProductVersion
-	(*UpdatePackage)(nil),               // 5: sneakers.appliance.osadmin.v1.UpdatePackage
-	(*HeldUpload)(nil),                  // 6: sneakers.appliance.osadmin.v1.HeldUpload
-	(*UpgradeEvent)(nil),                // 7: sneakers.appliance.osadmin.v1.UpgradeEvent
-	(*UpgradeStep)(nil),                 // 8: sneakers.appliance.osadmin.v1.UpgradeStep
-	(*UpgradeProgress)(nil),             // 9: sneakers.appliance.osadmin.v1.UpgradeProgress
-	(*GetUpgradesRequest)(nil),          // 10: sneakers.appliance.osadmin.v1.GetUpgradesRequest
-	(*GetUpgradesResponse)(nil),         // 11: sneakers.appliance.osadmin.v1.GetUpgradesResponse
-	(*MirrorStatus)(nil),                // 12: sneakers.appliance.osadmin.v1.MirrorStatus
-	(*FetchUpdateRequest)(nil),          // 13: sneakers.appliance.osadmin.v1.FetchUpdateRequest
-	(*FetchUpdateResponse)(nil),         // 14: sneakers.appliance.osadmin.v1.FetchUpdateResponse
-	(*StageUpdateRequest)(nil),          // 15: sneakers.appliance.osadmin.v1.StageUpdateRequest
-	(*StageUpdateResponse)(nil),         // 16: sneakers.appliance.osadmin.v1.StageUpdateResponse
-	(*ElevationOverride)(nil),           // 17: sneakers.appliance.osadmin.v1.ElevationOverride
-	(*ApplyUpdateRequest)(nil),          // 18: sneakers.appliance.osadmin.v1.ApplyUpdateRequest
-	(*ApplyUpdateResponse)(nil),         // 19: sneakers.appliance.osadmin.v1.ApplyUpdateResponse
-	(*RevertUpdateRequest)(nil),         // 20: sneakers.appliance.osadmin.v1.RevertUpdateRequest
-	(*DiscardUpdateRequest)(nil),        // 21: sneakers.appliance.osadmin.v1.DiscardUpdateRequest
-	(*DiscardUpdateResponse)(nil),       // 22: sneakers.appliance.osadmin.v1.DiscardUpdateResponse
-	(*ListBaseVersionsRequest)(nil),     // 23: sneakers.appliance.osadmin.v1.ListBaseVersionsRequest
-	(*ListBaseVersionsResponse)(nil),    // 24: sneakers.appliance.osadmin.v1.ListBaseVersionsResponse
-	(*BaseVersion)(nil),                 // 25: sneakers.appliance.osadmin.v1.BaseVersion
-	(*ListProductVersionsRequest)(nil),  // 26: sneakers.appliance.osadmin.v1.ListProductVersionsRequest
-	(*ListProductVersionsResponse)(nil), // 27: sneakers.appliance.osadmin.v1.ListProductVersionsResponse
-	(*RevertUpdateResponse)(nil),        // 28: sneakers.appliance.osadmin.v1.RevertUpdateResponse
-	(*SetUpgradePolicyRequest)(nil),     // 29: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
-	(*SetUpgradePolicyResponse)(nil),    // 30: sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
-	(*timestamppb.Timestamp)(nil),       // 31: google.protobuf.Timestamp
-	(*Elevation)(nil),                   // 32: sneakers.appliance.osadmin.v1.Elevation
+	(*BaseWebStatus)(nil),               // 3: sneakers.appliance.osadmin.v1.BaseWebStatus
+	(*ProductSlots)(nil),                // 4: sneakers.appliance.osadmin.v1.ProductSlots
+	(*ProductVersion)(nil),              // 5: sneakers.appliance.osadmin.v1.ProductVersion
+	(*UpdatePackage)(nil),               // 6: sneakers.appliance.osadmin.v1.UpdatePackage
+	(*HeldUpload)(nil),                  // 7: sneakers.appliance.osadmin.v1.HeldUpload
+	(*UpgradeEvent)(nil),                // 8: sneakers.appliance.osadmin.v1.UpgradeEvent
+	(*UpgradeStep)(nil),                 // 9: sneakers.appliance.osadmin.v1.UpgradeStep
+	(*UpgradeProgress)(nil),             // 10: sneakers.appliance.osadmin.v1.UpgradeProgress
+	(*GetUpgradesRequest)(nil),          // 11: sneakers.appliance.osadmin.v1.GetUpgradesRequest
+	(*GetUpgradesResponse)(nil),         // 12: sneakers.appliance.osadmin.v1.GetUpgradesResponse
+	(*MirrorStatus)(nil),                // 13: sneakers.appliance.osadmin.v1.MirrorStatus
+	(*FetchUpdateRequest)(nil),          // 14: sneakers.appliance.osadmin.v1.FetchUpdateRequest
+	(*FetchUpdateResponse)(nil),         // 15: sneakers.appliance.osadmin.v1.FetchUpdateResponse
+	(*StageUpdateRequest)(nil),          // 16: sneakers.appliance.osadmin.v1.StageUpdateRequest
+	(*StageUpdateResponse)(nil),         // 17: sneakers.appliance.osadmin.v1.StageUpdateResponse
+	(*ElevationOverride)(nil),           // 18: sneakers.appliance.osadmin.v1.ElevationOverride
+	(*ApplyUpdateRequest)(nil),          // 19: sneakers.appliance.osadmin.v1.ApplyUpdateRequest
+	(*ApplyUpdateResponse)(nil),         // 20: sneakers.appliance.osadmin.v1.ApplyUpdateResponse
+	(*RevertUpdateRequest)(nil),         // 21: sneakers.appliance.osadmin.v1.RevertUpdateRequest
+	(*DiscardUpdateRequest)(nil),        // 22: sneakers.appliance.osadmin.v1.DiscardUpdateRequest
+	(*DiscardUpdateResponse)(nil),       // 23: sneakers.appliance.osadmin.v1.DiscardUpdateResponse
+	(*ListBaseVersionsRequest)(nil),     // 24: sneakers.appliance.osadmin.v1.ListBaseVersionsRequest
+	(*ListBaseVersionsResponse)(nil),    // 25: sneakers.appliance.osadmin.v1.ListBaseVersionsResponse
+	(*BaseVersion)(nil),                 // 26: sneakers.appliance.osadmin.v1.BaseVersion
+	(*ListProductVersionsRequest)(nil),  // 27: sneakers.appliance.osadmin.v1.ListProductVersionsRequest
+	(*ListProductVersionsResponse)(nil), // 28: sneakers.appliance.osadmin.v1.ListProductVersionsResponse
+	(*RevertUpdateResponse)(nil),        // 29: sneakers.appliance.osadmin.v1.RevertUpdateResponse
+	(*SetUpgradePolicyRequest)(nil),     // 30: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
+	(*SetUpgradePolicyResponse)(nil),    // 31: sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
+	(*timestamppb.Timestamp)(nil),       // 32: google.protobuf.Timestamp
+	(*Elevation)(nil),                   // 33: sneakers.appliance.osadmin.v1.Elevation
 }
 var file_sneakers_appliance_osadmin_v1_upgrade_proto_depIdxs = []int32{
 	0,  // 0: sneakers.appliance.osadmin.v1.UpdatePackage.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	31, // 1: sneakers.appliance.osadmin.v1.HeldUpload.received_at:type_name -> google.protobuf.Timestamp
-	31, // 2: sneakers.appliance.osadmin.v1.UpgradeEvent.time:type_name -> google.protobuf.Timestamp
+	32, // 1: sneakers.appliance.osadmin.v1.HeldUpload.received_at:type_name -> google.protobuf.Timestamp
+	32, // 2: sneakers.appliance.osadmin.v1.UpgradeEvent.time:type_name -> google.protobuf.Timestamp
 	0,  // 3: sneakers.appliance.osadmin.v1.UpgradeEvent.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
 	1,  // 4: sneakers.appliance.osadmin.v1.UpgradeStep.state:type_name -> sneakers.appliance.osadmin.v1.UpgradeStepState
 	0,  // 5: sneakers.appliance.osadmin.v1.UpgradeProgress.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	8,  // 6: sneakers.appliance.osadmin.v1.UpgradeProgress.steps:type_name -> sneakers.appliance.osadmin.v1.UpgradeStep
-	31, // 7: sneakers.appliance.osadmin.v1.UpgradeProgress.started_at:type_name -> google.protobuf.Timestamp
-	31, // 8: sneakers.appliance.osadmin.v1.UpgradeProgress.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 6: sneakers.appliance.osadmin.v1.UpgradeProgress.steps:type_name -> sneakers.appliance.osadmin.v1.UpgradeStep
+	32, // 7: sneakers.appliance.osadmin.v1.UpgradeProgress.started_at:type_name -> google.protobuf.Timestamp
+	32, // 8: sneakers.appliance.osadmin.v1.UpgradeProgress.updated_at:type_name -> google.protobuf.Timestamp
 	2,  // 9: sneakers.appliance.osadmin.v1.GetUpgradesResponse.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
-	7,  // 10: sneakers.appliance.osadmin.v1.GetUpgradesResponse.history:type_name -> sneakers.appliance.osadmin.v1.UpgradeEvent
-	32, // 11: sneakers.appliance.osadmin.v1.GetUpgradesResponse.active_elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	3,  // 12: sneakers.appliance.osadmin.v1.GetUpgradesResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
-	31, // 13: sneakers.appliance.osadmin.v1.GetUpgradesResponse.reverted_at:type_name -> google.protobuf.Timestamp
-	9,  // 14: sneakers.appliance.osadmin.v1.GetUpgradesResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
-	12, // 15: sneakers.appliance.osadmin.v1.GetUpgradesResponse.mirror_status:type_name -> sneakers.appliance.osadmin.v1.MirrorStatus
-	6,  // 16: sneakers.appliance.osadmin.v1.GetUpgradesResponse.held_upload:type_name -> sneakers.appliance.osadmin.v1.HeldUpload
-	31, // 17: sneakers.appliance.osadmin.v1.MirrorStatus.checked_at:type_name -> google.protobuf.Timestamp
-	31, // 18: sneakers.appliance.osadmin.v1.MirrorStatus.server_not_after:type_name -> google.protobuf.Timestamp
-	5,  // 19: sneakers.appliance.osadmin.v1.StageUpdateResponse.package:type_name -> sneakers.appliance.osadmin.v1.UpdatePackage
-	17, // 20: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	0,  // 21: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	17, // 22: sneakers.appliance.osadmin.v1.RevertUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	0,  // 23: sneakers.appliance.osadmin.v1.RevertUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	0,  // 24: sneakers.appliance.osadmin.v1.DiscardUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	25, // 25: sneakers.appliance.osadmin.v1.ListBaseVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.BaseVersion
-	4,  // 26: sneakers.appliance.osadmin.v1.ListProductVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.ProductVersion
-	2,  // 27: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
-	10, // 28: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:input_type -> sneakers.appliance.osadmin.v1.GetUpgradesRequest
-	13, // 29: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:input_type -> sneakers.appliance.osadmin.v1.FetchUpdateRequest
-	15, // 30: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:input_type -> sneakers.appliance.osadmin.v1.StageUpdateRequest
-	18, // 31: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:input_type -> sneakers.appliance.osadmin.v1.ApplyUpdateRequest
-	20, // 32: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:input_type -> sneakers.appliance.osadmin.v1.RevertUpdateRequest
-	21, // 33: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:input_type -> sneakers.appliance.osadmin.v1.DiscardUpdateRequest
-	26, // 34: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:input_type -> sneakers.appliance.osadmin.v1.ListProductVersionsRequest
-	23, // 35: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:input_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsRequest
-	29, // 36: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:input_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
-	11, // 37: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:output_type -> sneakers.appliance.osadmin.v1.GetUpgradesResponse
-	14, // 38: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:output_type -> sneakers.appliance.osadmin.v1.FetchUpdateResponse
-	16, // 39: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:output_type -> sneakers.appliance.osadmin.v1.StageUpdateResponse
-	19, // 40: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:output_type -> sneakers.appliance.osadmin.v1.ApplyUpdateResponse
-	28, // 41: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:output_type -> sneakers.appliance.osadmin.v1.RevertUpdateResponse
-	22, // 42: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:output_type -> sneakers.appliance.osadmin.v1.DiscardUpdateResponse
-	27, // 43: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:output_type -> sneakers.appliance.osadmin.v1.ListProductVersionsResponse
-	24, // 44: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:output_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsResponse
-	30, // 45: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:output_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
-	37, // [37:46] is the sub-list for method output_type
-	28, // [28:37] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	8,  // 10: sneakers.appliance.osadmin.v1.GetUpgradesResponse.history:type_name -> sneakers.appliance.osadmin.v1.UpgradeEvent
+	33, // 11: sneakers.appliance.osadmin.v1.GetUpgradesResponse.active_elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	4,  // 12: sneakers.appliance.osadmin.v1.GetUpgradesResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
+	32, // 13: sneakers.appliance.osadmin.v1.GetUpgradesResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	10, // 14: sneakers.appliance.osadmin.v1.GetUpgradesResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	13, // 15: sneakers.appliance.osadmin.v1.GetUpgradesResponse.mirror_status:type_name -> sneakers.appliance.osadmin.v1.MirrorStatus
+	7,  // 16: sneakers.appliance.osadmin.v1.GetUpgradesResponse.held_upload:type_name -> sneakers.appliance.osadmin.v1.HeldUpload
+	3,  // 17: sneakers.appliance.osadmin.v1.GetUpgradesResponse.base_web:type_name -> sneakers.appliance.osadmin.v1.BaseWebStatus
+	32, // 18: sneakers.appliance.osadmin.v1.MirrorStatus.checked_at:type_name -> google.protobuf.Timestamp
+	32, // 19: sneakers.appliance.osadmin.v1.MirrorStatus.server_not_after:type_name -> google.protobuf.Timestamp
+	6,  // 20: sneakers.appliance.osadmin.v1.StageUpdateResponse.package:type_name -> sneakers.appliance.osadmin.v1.UpdatePackage
+	18, // 21: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	0,  // 22: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	18, // 23: sneakers.appliance.osadmin.v1.RevertUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	0,  // 24: sneakers.appliance.osadmin.v1.RevertUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	0,  // 25: sneakers.appliance.osadmin.v1.DiscardUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	26, // 26: sneakers.appliance.osadmin.v1.ListBaseVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.BaseVersion
+	5,  // 27: sneakers.appliance.osadmin.v1.ListProductVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.ProductVersion
+	2,  // 28: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
+	11, // 29: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:input_type -> sneakers.appliance.osadmin.v1.GetUpgradesRequest
+	14, // 30: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:input_type -> sneakers.appliance.osadmin.v1.FetchUpdateRequest
+	16, // 31: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:input_type -> sneakers.appliance.osadmin.v1.StageUpdateRequest
+	19, // 32: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:input_type -> sneakers.appliance.osadmin.v1.ApplyUpdateRequest
+	21, // 33: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:input_type -> sneakers.appliance.osadmin.v1.RevertUpdateRequest
+	22, // 34: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:input_type -> sneakers.appliance.osadmin.v1.DiscardUpdateRequest
+	27, // 35: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:input_type -> sneakers.appliance.osadmin.v1.ListProductVersionsRequest
+	24, // 36: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:input_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsRequest
+	30, // 37: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:input_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
+	12, // 38: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:output_type -> sneakers.appliance.osadmin.v1.GetUpgradesResponse
+	15, // 39: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:output_type -> sneakers.appliance.osadmin.v1.FetchUpdateResponse
+	17, // 40: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:output_type -> sneakers.appliance.osadmin.v1.StageUpdateResponse
+	20, // 41: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:output_type -> sneakers.appliance.osadmin.v1.ApplyUpdateResponse
+	29, // 42: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:output_type -> sneakers.appliance.osadmin.v1.RevertUpdateResponse
+	23, // 43: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:output_type -> sneakers.appliance.osadmin.v1.DiscardUpdateResponse
+	28, // 44: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:output_type -> sneakers.appliance.osadmin.v1.ListProductVersionsResponse
+	25, // 45: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:output_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsResponse
+	31, // 46: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:output_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
+	38, // [38:47] is the sub-list for method output_type
+	29, // [29:38] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_upgrade_proto_init() }
@@ -2670,7 +2844,7 @@ func file_sneakers_appliance_osadmin_v1_upgrade_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   29,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -282,6 +282,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			},
 			DirectURL: directURL(pins.Channel),
 			Arch:      runtime.GOARCH,
+			// sneakers-osadmin serves the pages and says which it serves.
+			WebServedFile: filepath.Join(paths.OwnDir(), osadmin.WebServedFile),
 		},
 	})
 	d.Attach(store, api)

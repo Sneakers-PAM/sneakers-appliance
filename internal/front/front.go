@@ -61,8 +61,16 @@ type Options struct {
 	// StatusFile is accessd's status cache, read when accessd is down and
 	// this front has seen no status.
 	StatusFile string
+	// WebVersion is the served pages' version, which every API answer
+	// carries in WebVersionHeader so an open page can tell it was
+	// replaced; nil sends none.
+	WebVersion func() string
 	Logger     log.Logger
 }
+
+// WebVersionHeader carries the served admin pages' version on every API
+// answer.
+const WebVersionHeader = "X-Sneakers-Web-Version"
 
 // Front is sneakers-osadmin's handler.
 type Front struct {
@@ -162,8 +170,11 @@ func cookieKey(r *http.Request) ([32]byte, bool) {
 }
 
 // observe remembers the browsers accessd accepted and keeps the last
-// status it answered.
+// status it answered, and names the served pages' version.
 func (f *Front) observe(res *http.Response) error {
+	if f.o.WebVersion != nil {
+		res.Header.Set(WebVersionHeader, f.o.WebVersion())
+	}
 	if res.StatusCode/100 != 2 {
 		return nil
 	}

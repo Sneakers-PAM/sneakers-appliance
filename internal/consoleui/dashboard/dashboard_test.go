@@ -567,6 +567,18 @@ func TestTheStatusViewLeavesMaintenanceWhenTheRebootIsGivenUp(t *testing.T) {
 	tuitest.Golden(t, "dashboard-upgrade-reboot-missed", p)
 }
 
+// A Base Web switch leaves the box and the product alone and takes
+// seconds: the status view stays on the status screen while it runs.
+func TestABaseWebSwitchKeepsTheStatusScreen(t *testing.T) {
+	c := chrome(full, keycustody.ModeTPM)
+	st := status()
+	st.UpgradeProgress = progress("apply", "0.1.2", "switch", "")
+	st.UpgradeProgress.Target = osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB
+	if got, want := dashboard.Screen(c, data(st), now).Frame(80, 24).Text(), dashboard.Page(c, data(st), now).Frame(80, 24).Text(); got != want {
+		t.Fatalf("during a Base Web switch the status view shows:\n%s", got)
+	}
+}
+
 // Until platformd is in the build, the Product line reads the product's
 // slots from Status, and the Base line the base's: the version running,
 // its slot, and what's staged or kept to go back to.

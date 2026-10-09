@@ -125,15 +125,50 @@ message UpgradePolicy {
   bool direct = 5;
 }
 
-// UpdateTarget is what an update changes. Unspecified is the base image,
-// as before product bundles.
+// UpdateTarget is what an update changes: one of the three update units.
+// Unspecified is the Base OS, as before product bundles.
 enum UpdateTarget {
   UPDATE_TARGET_UNSPECIFIED = 0;
-  // UPDATE_TARGET_BASE is the base image: the OS slots and a reboot.
+  // UPDATE_TARGET_BASE is the Base OS: the root image, the UKI and the
+  // boot files, in the A/B root slots, applied with a reboot.
   UPDATE_TARGET_BASE = 1;
   // UPDATE_TARGET_PRODUCT is the product bundle: k0s, its images and the
   // product, in their own slots on the state volume.
   UPDATE_TARGET_PRODUCT = 2;
+  // UPDATE_TARGET_BASE_WEB is the Base Web: the :8443 admin pages, in the
+  // web slots on the state volume, switched in place with no reboot.
+  // Apply and Revert take a fresh code, need no maintenance and leave the
+  // root slots, the product, the sessions and elevation alone.
+  UPDATE_TARGET_BASE_WEB = 3;
+}
+
+// BaseWebStatus is the Base Web: which pages :8443 serves, and its slots.
+message BaseWebStatus {
+  // running_version is the served pages' version; the built-in pages
+  // carry the running Base OS's.
+  string running_version = 1;
+  // source is slot or built-in; slot is the served slot, a or b.
+  string source = 2;
+  string slot = 3;
+  // reason says why the built-in pages serve (no Base Web is installed,
+  // the current slot failed its checks or doesn't fit the running Base
+  // OS), or why the last switch didn't take.
+  string reason = 4;
+  // current_version is what the current link names, served or not.
+  string current_version = 5;
+  string staged_version = 6;
+  // previous_version is the slot a revert goes back to; empty when a
+  // revert goes to the built-in pages (can_revert says whether there's
+  // anything to revert).
+  string previous_version = 7;
+  bool can_revert = 8;
+  // builtin_version is the running root's own pages' version.
+  string builtin_version = 9;
+  // requires_base_os is what the current Base Web needs of the Base OS,
+  // such as "0.3.0 to before 0.4.0"; fits is whether the running Base OS
+  // is in it.
+  string requires_base_os = 10;
+  bool fits = 11;
 }
 
 // ProductSlots are the product bundle's slots on the state volume.
@@ -326,6 +361,8 @@ message GetUpgradesResponse {
   HeldUpload held_upload = 18;
   // receiving is true while an upload or fetch is coming in.
   bool receiving = 19;
+  // base_web is the Base Web unit.
+  BaseWebStatus base_web = 20;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch

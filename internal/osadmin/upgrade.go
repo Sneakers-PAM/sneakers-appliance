@@ -86,6 +86,16 @@ type UpgradeOptions struct {
 	// ProductUpEvery is how often Options.ProductUp is asked while a
 	// product comes up; 0 is DefaultProductUpEvery.
 	ProductUpEvery time.Duration
+	// WebDir holds the web slots; empty is webslots.Dir. WebServedFile is
+	// the status sneakers-osadmin writes of the pages it serves; empty
+	// doesn't wait for a switch to be served. WebSwitchWait bounds that
+	// wait; 0 is DefaultWebSwitchWait.
+	WebDir        string
+	WebServedFile string
+	WebSwitchWait time.Duration
+	// BuiltinWebVersion is the running root's own pages' version; empty is
+	// release.Version.
+	BuiltinWebVersion string
 }
 
 // DefaultElevationEndWait is how long an override waits for a terminated
@@ -260,10 +270,24 @@ func (s *Server) history(action, version, actor string, err error, detail string
 }
 
 func targetName(t osadminv1.UpdateTarget) string {
-	if t == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+	switch t {
+	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
 		return "product"
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		return "web"
 	}
 	return "base"
+}
+
+// targetOf is the target a stored name names.
+func targetOf(name string) osadminv1.UpdateTarget {
+	switch name {
+	case "product":
+		return osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
+	case "web":
+		return osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB
+	}
+	return osadminv1.UpdateTarget_UPDATE_TARGET_BASE
 }
 
 func (s *Server) historyFor(target osadminv1.UpdateTarget, action, version, actor string, err error, detail string) {
@@ -302,10 +326,7 @@ func (s *Server) readHistory(limit int) []*osadminv1.UpgradeEvent {
 		if json.Unmarshal(sc.Bytes(), &e) != nil {
 			continue
 		}
-		target := osadminv1.UpdateTarget_UPDATE_TARGET_BASE
-		if e.Target == "product" {
-			target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
-		}
+		target := targetOf(e.Target)
 		all = append(all, &osadminv1.UpgradeEvent{Time: timestamppb.New(e.Time), Action: e.Action, Version: e.Version, Actor: e.Actor, Outcome: e.Outcome, Code: e.Code, Detail: e.Detail, Target: target})
 	}
 	slices.Reverse(all)
@@ -575,7 +596,7 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 	p := h.s.policy()
 	direct := h.s.o.Upgrade.DirectURL != ""
 	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p), AirGapped: p.MirrorURL == "" && (!p.Direct || !direct), History: h.s.readHistory(100),
-		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p), HeldUpload: h.s.heldUpload()}
+		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p), HeldUpload: h.s.heldUpload(), BaseWeb: h.s.baseWebStatus(ctx)}
 	h.s.upgrades.mu.Lock()
 	out.Receiving = h.s.upgrades.receiving > 0
 	h.s.upgrades.mu.Unlock()
@@ -716,7 +737,11 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	}
 	h.s.finishSteps(stepStage)
 	out := &osadminv1.StageUpdateResponse{Package: pkg}
-	if target != osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
+	switch target {
+	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		out.Slot = h.s.webSlots().Status().StagedSlot
+	default:
 		out.Slot = h.s.otherSlot()
 	}
 	return connect.NewResponse(out), nil
@@ -827,13 +852,20 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 		s.reject(path, err)
 		return nil, nil, err
 	}
-	if p.Header.IsProduct() {
+	switch updatepkg.UnitOf(p.Header) {
+	case updatepkg.UnitProduct:
 		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "", "")
-	} else {
+	case updatepkg.UnitBaseWeb:
+		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB, "", s.freeWebSlot())
+	default:
 		s.beginProgress("stage", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, "", s.otherSlot())
 	}
 	s.setStep(stepVerify, "")
 	if err := p.Verify(s.o.Upgrade.ReleaseKeyPEM, s.o.Upgrade.Channel); err != nil {
+		s.reject(path, err)
+		return nil, nil, err
+	}
+	if err := updatepkg.CheckEpoch(p.Header, updatepkg.BoxEpoch); err != nil {
 		s.reject(path, err)
 		return nil, nil, err
 	}
@@ -847,6 +879,10 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
 		return pkg, nil, s.stageProduct(ctx, path, p)
+	}
+	if updatepkg.UnitOf(h) == updatepkg.UnitBaseWeb {
+		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB
+		return pkg, nil, s.stageWeb(ctx, path, p)
 	}
 	img, err := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{}))
 	if err != nil {
@@ -1050,13 +1086,15 @@ func (h *upgradeSvc) DiscardUpdate(ctx context.Context, r *connect.Request[osadm
 	switch target {
 	case osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT:
 		v, err = h.s.slots().Unstage()
+	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB:
+		v, err = h.s.webSlots().Unstage()
 	case osadminv1.UpdateTarget_UPDATE_TARGET_BASE:
 		var res *connect.Response[initv1.UnstageResponse]
 		if res, err = h.s.o.Image.Unstage(ctx, connect.NewRequest(&initv1.UnstageRequest{})); err == nil {
 			v = res.Msg.GetVersion()
 		}
 	default:
-		return nil, codes.New(codes.AccessConfirm, "name the upload to drop, or the target (base or product) to unstage")
+		return nil, codes.New(codes.AccessConfirm, "name the upload to drop, or the target (base, web or product) to unstage")
 	}
 	if v != "" {
 		c.note("release "+v, "version", v, "target", targetName(target))
@@ -1071,6 +1109,14 @@ func (h *upgradeSvc) DiscardUpdate(ctx context.Context, r *connect.Request[osadm
 
 func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {
 	c := callFrom(ctx)
+	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
+		v, err := h.s.applyWeb(ctx, c.by("upgrade.apply"))
+		c.note("web", "version", v)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&osadminv1.ApplyUpdateResponse{}), nil
+	}
 	apply, what := h.s.apply, "box"
 	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
 		apply, what = h.s.applyProduct, "product"
@@ -1276,6 +1322,15 @@ func overrideDetail(id string) string {
 
 func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadminv1.RevertUpdateRequest]) (*connect.Response[osadminv1.RevertUpdateResponse], error) {
 	c := callFrom(ctx)
+	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
+		c.note("web")
+		v, err := h.s.revertWeb(ctx, c.by("upgrade.revert"))
+		c.note("web", "version", v)
+		if err != nil {
+			return nil, err
+		}
+		return connect.NewResponse(&osadminv1.RevertUpdateResponse{}), nil
+	}
 	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT {
 		c.note("product")
 		v, overrode, err := h.s.revertProduct(ctx, c.by("upgrade.revert"), r.Msg.GetElevationOverride())

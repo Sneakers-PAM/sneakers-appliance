@@ -75,6 +75,7 @@ const (
 	// The three update units' refusals (spec 7).
 	UpgradeCompat      = 2530
 	UpgradeEpoch       = 2531
+	UpgradeWebLoad     = 2532
 	UpgradePatchResult = 2533
 )
 
@@ -137,6 +138,7 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeMirrorPin, Symbol: "UPGRADE_MIRROR_PIN", Title: "upgrade", Cause: "the HTTPS mirror's certificate isn't the one the update trust pins"},
 	{Code: UpgradeCompat, Symbol: "UPGRADE_COMPAT", Title: "upgrade", Cause: "an update unit doesn't fit the other units this box runs, such as a Base Web built for another Base OS"},
 	{Code: UpgradeEpoch, Symbol: "UPGRADE_EPOCH", Title: "upgrade", Cause: "the update is for another signing-key epoch than this box's"},
+	{Code: UpgradeWebLoad, Symbol: "UPGRADE_WEB_LOAD", Title: "upgrade", Cause: "a Base Web slot failed its load checks (signature, file hashes, or a file that isn't listed); the pages it would replace keep serving"},
 	{Code: UpgradePatchResult, Symbol: "UPGRADE_PATCH_RESULT", Title: "upgrade", Cause: "a patch didn't rebuild the release byte for byte; nothing was staged"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},

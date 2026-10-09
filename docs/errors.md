@@ -137,4 +137,5 @@ shell, the console and :8443 show the same sentence.
 | 2521 | `UPGRADE_MIRROR_PIN` | the HTTPS mirror's certificate isn't the one the update trust pins; the refusal names the presented SHA-256 |
 | 2530 | `UPGRADE_COMPAT` | an update unit doesn't fit the other units this box runs, such as a Base Web built for another Base OS; the refusal says what it needs and what to install first ([release.md](release.md#the-three-update-units)) |
 | 2531 | `UPGRADE_EPOCH` | the update is for another signing-key epoch than this box's; a box takes only units of its own epoch |
+| 2532 | `UPGRADE_WEB_LOAD` | a Base Web slot failed its load checks (the signature, a file's SHA-256 or size, a file or link that isn't listed); a switch puts the links back and the pages it would replace keep serving, and at start the built-in pages serve ([upgrades.md](upgrades.md#base-web)) |
 | 2533 | `UPGRADE_PATCH_RESULT` | a patch didn't rebuild the release byte for byte; nothing was staged, and a fetched patch falls back to the full `.bin` ([upgrades.md](upgrades.md#base-os-patches)) |

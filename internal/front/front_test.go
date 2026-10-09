@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,6 +24,10 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/front"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/webslots"
 )
 
 // fakeAPI is accessd's side: GetStatus for a known cookie, and what the
@@ -279,4 +284,72 @@ func TestAccessdDownServesThePages(t *testing.T) {
 	if res := r.page("/"); res.StatusCode != http.StatusOK {
 		t.Fatalf("%d %q", res.StatusCode, res.Header.Get("Location"))
 	}
+}
+
+// The pages are swapped in one step: the front serves whatever the live
+// set serves, an open page's old assets keep answering, and every API
+// answer names the served version so the page can offer a reload.
+func TestALiveSwapOfThePagesWithTheVersionOnEveryAnswer(t *testing.T) {
+	r := newRig(t)
+	live := webslots.NewLive(fstest.MapFS{"index.html": {Data: []byte("<html>0.3.0</html>")}, "assets/old.js": {Data: []byte("old")}}, "0.3.0")
+	u, _ := url.Parse(r.back.URL)
+	f := front.New(front.Options{Backend: u, Transport: r.back.Client().Transport, Assets: live, WebVersion: live.Version})
+	ts := httptest.NewServer(f.Handler())
+	t.Cleanup(ts.Close)
+	get := func(p string) (string, http.Header) {
+		res, err := ts.Client().Get(ts.URL + p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		_ = res.Body.Close()
+		return string(b), res.Header
+	}
+	if b, _ := get("/updates"); b != "<html>0.3.0</html>" {
+		t.Fatalf("before: %q", b)
+	}
+	res, err := osadminv1connect.NewStatusServiceClient(ts.Client(), ts.URL).GetPhase(context.Background(), connect.NewRequest(&osadminv1.GetPhaseRequest{}))
+	if err != nil || res.Header().Get(front.WebVersionHeader) != "0.3.0" {
+		t.Fatalf("the API answer names %q (%v)", res.Header().Get(front.WebVersionHeader), err)
+	}
+	sign := testpki.ECDSA(t)
+	key, _ := sigbundle.ParsePublicKey(sign.PublicPEM)
+	sl := webslots.Slots{Dir: t.TempDir()}
+	if err := sl.Stage(updatepkg.Header{Name: updatepkg.NameWeb, Unit: updatepkg.UnitBaseWeb, Version: "0.3.1", Arch: "amd64", Kind: updatepkg.KindFull, Channel: "production"}, func(dir string) error {
+		return writeSignedPages(t, sign, dir, "0.3.1")
+	}, key); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := sl.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	(&webslots.Watcher{Slots: sl, Key: key, Channel: "production", BaseOS: "0.3.0", Live: live}).Sync()
+	if b, _ := get("/updates"); b != "<html>0.3.1</html>" {
+		t.Fatalf("after: %q", b)
+	}
+	if b, _ := get("/assets/old.js"); b != "old" {
+		t.Fatalf("an open page's old asset: %q", b)
+	}
+	res, err = osadminv1connect.NewStatusServiceClient(ts.Client(), ts.URL).GetPhase(context.Background(), connect.NewRequest(&osadminv1.GetPhaseRequest{}))
+	if err != nil || res.Header().Get(front.WebVersionHeader) != "0.3.1" {
+		t.Fatalf("after the swap the API answer names %q (%v)", res.Header().Get(front.WebVersionHeader), err)
+	}
+}
+
+func writeSignedPages(t *testing.T, sign testpki.ECKey, dir, version string) error {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, webslots.PagesDir), 0o750); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, webslots.PagesDir, "index.html"), []byte("<html>"+version+"</html>"), 0o600); err != nil {
+		return err
+	}
+	m, err := webslots.WriteManifest(filepath.Join(dir, webslots.PagesDir), version, "", nil)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(dir, webslots.ManifestFile), m, 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, webslots.SigFile), sign.BlobBundle(t, m), 0o600)
 }

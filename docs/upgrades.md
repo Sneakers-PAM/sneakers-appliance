@@ -222,6 +222,48 @@ Apply, Revert, boot counting and retention are unchanged: a patched box is byte 
 the full `.bin` makes. The rebuild needs about the root image's size in memory (some 200 MB) and
 the same again on the state volume while it runs.
 
+## Base Web
+
+The :8443 admin pages are their own update unit (spec 7): static files with a signed manifest,
+switched in place with no reboot. The osadmin binary and the API the pages call stay in the Base
+OS, so no code from a Base Web ever runs on the box; switching one changes the pages only.
+
+- **The slots.** `/var/lib/sneakers/web/a` and `b`, with the links `current`, `staged` and
+  `previous`, the product slots' pattern. A slot holds `pages/`, `web.yaml` (the version, commit,
+  `requires`, and every file's path, size and SHA-256), `web.yaml.sig` (a Sigstore bundle over
+  `web.yaml` by the channel's release key) and `header.json`, the verified `.bin` header, written
+  last; a slot without it is never used.
+- **Every load checks** the signature against the release key in the running root, reads every
+  listed file and checks its size and SHA-256, and refuses any other file, a link or a path outside
+  `pages/` (`UPGRADE_WEB_LOAD`). The set is then served from memory, so what's on disk later
+  can't change what's served until the next load, which checks again.
+- **Stage** (`target` is the package's own: `UPDATE_TARGET_BASE_WEB`). The package must fit the
+  running Base OS (its header's `requires.baseOS`, or its own major.minor): a Base Web for another
+  Base OS is refused with `UPGRADE_COMPAT`, saying what it needs, what runs and what to install
+  first, nothing is written, and the upload is kept so it can be staged once the Base OS fits. It
+  must be newer than the pages served now (`UPGRADE_DOWNGRADE`). It's decrypted, unpacked into the
+  slot `current` doesn't name, and loaded there with every check before `staged` is set.
+- **Apply and Revert** (`target: UPDATE_TARGET_BASE_WEB`) take a fresh code like every Apply and
+  Revert, but need no maintenance and are never held by an elevated shell: they don't touch the
+  root slots, the UKI, the ESP, k0s, the product (443 keeps serving), the network, the :8443
+  sessions or elevation. Apply moves `current` to the staged slot (the old one becomes
+  `previous`); Revert moves it back, or with no previous slot removes it, so the built-in pages
+  serve. A revert to a Base Web that doesn't fit the running Base OS is refused (`UPGRADE_COMPAT`).
+  The steps are switching and loading: sneakers-osadmin, which serves :8443, sees the link change
+  within a second, loads the slot and swaps what it serves in one step. accessd waits for
+  sneakers-osadmin's record of what it serves (`web-served.json` in its own directory); when the
+  pages don't take, the links go back, the step fails with `UPGRADE_WEB_LOAD`, and the pages
+  served before keep serving.
+- **Open browsers.** The set that was replaced keeps answering for files the new one lacks (an
+  open page's hashed assets) until the next switch, and every API answer carries the served
+  version in `X-Sneakers-Web-Version`, so a page built as another version offers a reload.
+- **At start** sneakers-osadmin serves the `current` slot when it passes the checks and fits the
+  running Base OS, else the root's built-in pages, which every Base OS still carries. Updates says
+  which (`GetUpgrades.base_web`: the served version, `slot` or `built-in`, and why).
+- **A Base OS update first.** The Base OS never waits for a Base Web: after a Base OS update whose
+  pages the installed Base Web doesn't fit, the box serves the new root's built-in pages until a
+  fitting Base Web is installed.
+
 ## An internal mirror
 
 An air-gapped site can serve the release files from a web server of its own and set it as the

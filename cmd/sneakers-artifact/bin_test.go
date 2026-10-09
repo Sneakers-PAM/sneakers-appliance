@@ -367,3 +367,38 @@ func TestTheUnitsSteps(t *testing.T) {
 		t.Fatal("a Base Web file was listed as a bridge")
 	}
 }
+
+// The Base Web steps: web-pack lays out the payload, the build signs
+// web.yaml, web-check loads it as :8443 does, and bin-pack --unit baseWeb
+// seals it under the Base Web name.
+func TestTheBaseWebSteps(t *testing.T) {
+	tmp := t.TempDir()
+	built := filepath.Join(tmp, "client")
+	if err := os.MkdirAll(filepath.Join(built, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(built, "index.html"), []byte("<html></html>"))
+	writeFile(t, filepath.Join(built, "assets", "app.js"), []byte("app"))
+	payload := filepath.Join(tmp, "layout")
+	manifest, err := runCmd(t, "web-pack", "--pages", built, "--version", "0.3.2", "--commit", "1a2b3c4", "--requires-baseos-min", "0.3.0", "--requires-baseos-before", "0.4.0", "--out", payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _ := os.ReadFile(manifest) // #nosec G304 -- the test's own output
+	if !strings.Contains(string(m), "path: assets/app.js") || !strings.Contains(string(m), "before: 0.4.0") {
+		t.Fatalf("web.yaml:\n%s", m)
+	}
+	sign := testpki.ECDSA(t)
+	writeFile(t, filepath.Join(tmp, "cosign.pub"), sign.PublicPEM)
+	if _, err := runCmd(t, "web-check", "--dir", payload, "--release-key", filepath.Join(tmp, "cosign.pub")); err == nil {
+		t.Fatal("unsigned pages checked out")
+	}
+	writeFile(t, filepath.Join(payload, "web.yaml.sig"), sign.BlobBundle(t, m))
+	if got, err := runCmd(t, "web-check", "--dir", payload, "--release-key", filepath.Join(tmp, "cosign.pub")); err != nil || got != "checked Base Web 0.3.2: 2 files" {
+		t.Fatalf("%q %v", got, err)
+	}
+	bin := sealUnit(t, tmp, nil, "--unit", "baseWeb", "--version", "0.3.2", "--commit", "1a2b3c4")
+	if filepath.Base(bin) != "sneakers-appliance-baseWeb-0.3.2-g1a2b3c4-amd64-LAB.bin" {
+		t.Fatalf("sealed %s", bin)
+	}
+}
