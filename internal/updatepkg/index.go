@@ -15,9 +15,14 @@ import (
 )
 
 // IndexName is the index's file name on a mirror and on the GitHub
-// Release. It lists the product bundles and, in its base section, the
-// base releases.
+// Release. It lists the product bundles, the Base OS releases and the
+// Base Web releases (format 2), and in its legacy base section the Base OS
+// release a box from before the units can fetch.
 const IndexName = "sneakers-product-index.json"
+
+// IndexFormat is the index format this build writes: 2, with a list per
+// unit.
+const IndexFormat = 2
 
 // maxIndex caps an index read from a mirror.
 const maxIndex = 1 << 20
@@ -27,8 +32,15 @@ const maxIndex = 1 << 20
 // .bin is verified when it's staged. An index from before the base
 // section has none, and offers no base update.
 type Index struct {
+	// Format is 2 with the units' lists; absent before them.
+	Format   int          `json:"format,omitempty"`
 	Products []IndexEntry `json:"products"`
-	Base     []IndexEntry `json:"base,omitempty"`
+	// BaseOS and BaseWeb are the units' releases, full and patch.
+	BaseOS  []IndexEntry `json:"baseOS,omitempty"`
+	BaseWeb []IndexEntry `json:"baseWeb,omitempty"`
+	// Base is the legacy section: base releases under the names a box from
+	// before the units fetches.
+	Base []IndexEntry `json:"base,omitempty"`
 }
 
 // IndexEntry is one bundle, copied from its header.
@@ -43,8 +55,16 @@ type IndexEntry struct {
 	// MinBase and MaxBase are the bundle's base range, when it has one.
 	MinBase string `json:"min_base,omitempty"`
 	MaxBase string `json:"max_base,omitempty"`
-	File    string `json:"file"`
-	Size    int64  `json:"size"`
+	// Epoch, Commit, Requires and Inputs are copied from the header.
+	Epoch    int            `json:"epoch,omitempty"`
+	Commit   string         `json:"commit,omitempty"`
+	Requires map[Unit]Range `json:"requires,omitempty"`
+	Inputs   string         `json:"inputs,omitempty"`
+	// BaseRootSHA256 is a patch's base root image, so a box offers a patch
+	// only for the exact root it runs.
+	BaseRootSHA256 string `json:"base_root_sha256,omitempty"`
+	File           string `json:"file"`
+	Size           int64  `json:"size"`
 }
 
 // EntryOf is h's index entry for a sealed file of size bytes.
@@ -53,7 +73,28 @@ func EntryOf(h Header, size int64) IndexEntry {
 	if h.IsProduct() {
 		kind = ""
 	}
-	return IndexEntry{Kind: kind, Version: h.Version, Arch: h.Arch, Channel: h.Channel, Bases: slices.Clone(h.Bases), MinBase: h.MinBase, MaxBase: h.MaxBase, File: FileName(h), Size: size}
+	e := IndexEntry{Kind: kind, Version: h.Version, Arch: h.Arch, Channel: h.Channel, Bases: slices.Clone(h.Bases), MinBase: h.MinBase, MaxBase: h.MaxBase, File: FileName(h), Size: size,
+		Epoch: h.Epoch, Commit: h.Commit, Requires: h.Requires, Inputs: h.Inputs}
+	if h.Base != nil {
+		e.BaseRootSHA256 = h.Base.RootSHA256
+	}
+	return e
+}
+
+// header is the header an entry was copied from, as far as the index
+// tells: enough to check its rules and its name.
+func (e IndexEntry) header(u Unit) Header {
+	k := Kind(e.Kind)
+	if u == UnitProduct {
+		k = KindProduct
+	}
+	h := Header{Format: Format, Version: e.Version, Arch: e.Arch, Kind: k, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel,
+		Epoch: e.Epoch, Commit: e.Commit, Requires: e.Requires, Inputs: e.Inputs}
+	if u == UnitBaseOS || u == UnitBaseWeb {
+		h.Unit = u
+	}
+	h.Name = nameOf(h)
+	return h
 }
 
 // ReadIndex parses an index of at most 1 MiB.
@@ -93,13 +134,143 @@ func (idx Index) Offer(arch, channel, base, installed string) []IndexEntry {
 	return slices.CompactFunc(out, func(a, b IndexEntry) bool { return a.Version == b.Version })
 }
 
-// Add puts h's entry in its section: products or base.
+// Add puts h's entry in its section: products, baseOS, baseWeb, or for a
+// header from before the units, base. The index is then format 2.
 func (idx *Index) Add(h Header, size int64) {
-	if h.IsProduct() {
+	idx.Format = IndexFormat
+	switch {
+	case h.IsProduct():
 		idx.Products = append(idx.Products, EntryOf(h, size))
-		return
+	case UnitOf(h) == UnitBaseWeb:
+		idx.BaseWeb = append(idx.BaseWeb, EntryOf(h, size))
+	case h.Unit == "":
+		idx.Base = append(idx.Base, EntryOf(h, size))
+	default:
+		idx.BaseOS = append(idx.BaseOS, EntryOf(h, size))
 	}
-	idx.Base = append(idx.Base, EntryOf(h, size))
+}
+
+// AddBridge lists a Base OS full release in the legacy base section under
+// its legacy name (LegacyFileName), for boxes from before the units: the
+// release that bridges to the units publishes the same file under that
+// name too (spec 7, Section 6).
+func (idx *Index) AddBridge(h Header, size int64) {
+	idx.Format = IndexFormat
+	e := EntryOf(h, size)
+	e.File = LegacyFileName(h)
+	idx.Base = append(idx.Base, e)
+}
+
+// Box is what a box runs, for the units' offers. BaseWeb is the Base Web
+// it serves (its built-in pages' version when none is installed);
+// RootSHA256 is its running root image's, when it's known.
+type Box struct {
+	Arch, Channel   string
+	Epoch           int
+	BaseOS, BaseWeb string
+	RootSHA256      string
+}
+
+func (b Box) epoch() int {
+	if b.Epoch == 0 {
+		return BoxEpoch
+	}
+	return b.Epoch
+}
+
+// offerable is whether e, of unit u, is for b at all: its rules hold, its
+// name is the one its header gives, and it's b's architecture, channel and
+// epoch, stable on a production box.
+func (b Box) offerable(e IndexEntry, u Unit, name func(Header) string) (Header, bool) {
+	h := e.header(u)
+	switch {
+	case h.check() != nil, e.Arch != b.Arch, e.Channel != b.Channel, e.File != name(h):
+	case h.EpochOf() != b.epoch():
+	case b.Channel == release.ChannelProduction && semver.Prerelease("v"+e.Version) != "":
+	default:
+		return h, true
+	}
+	return h, false
+}
+
+// OfferBaseOS is the Base OS releases b may stage: full or patch, newer
+// than b.BaseOS, a patch only for the base b runs (and its root image,
+// when both are known). The units' baseOS list comes first; the legacy
+// base section adds what it alone lists. Newest first, a version's patch
+// before its full release.
+func (idx Index) OfferBaseOS(b Box) []IndexEntry {
+	var out []IndexEntry
+	seen := map[string]bool{}
+	add := func(list []IndexEntry, u Unit, name func(Header) string) {
+		for _, e := range list {
+			h, ok := b.offerable(e, u, name)
+			k := Kind(e.Kind)
+			switch {
+			case !ok, k != KindFull && k != KindPatch:
+			case h.AppliesTo(b.BaseOS) != nil:
+			case k == KindPatch && b.RootSHA256 != "" && e.BaseRootSHA256 != "" && e.BaseRootSHA256 != b.RootSHA256:
+			case semver.Compare("v"+e.Version, "v"+b.BaseOS) <= 0:
+			case seen[e.Version+"/"+e.Kind]:
+			default:
+				seen[e.Version+"/"+e.Kind] = true
+				out = append(out, e)
+			}
+		}
+	}
+	add(idx.BaseOS, UnitBaseOS, FileName)
+	add(idx.Base, "", FileName)
+	slices.SortStableFunc(out, func(x, y IndexEntry) int {
+		if c := semver.Compare("v"+y.Version, "v"+x.Version); c != 0 {
+			return c
+		}
+		if x.Kind == y.Kind {
+			return 0
+		}
+		if x.Kind == string(KindPatch) {
+			return -1
+		}
+		return 1
+	})
+	return out
+}
+
+// OfferBaseWeb is the Base Web releases b may stage: newer than the Base
+// Web b serves, and fitting the Base OS b runs. Newest first.
+func (idx Index) OfferBaseWeb(b Box) []IndexEntry {
+	var out []IndexEntry
+	for _, e := range idx.BaseWeb {
+		h, ok := b.offerable(e, UnitBaseWeb, FileName)
+		switch {
+		case !ok, h.Kind != KindFull:
+		case FitsBaseOS(h, b.BaseOS, "") != nil:
+		case b.BaseWeb != "" && semver.Compare("v"+e.Version, "v"+b.BaseWeb) <= 0:
+		default:
+			out = append(out, e)
+		}
+	}
+	slices.SortStableFunc(out, func(x, y IndexEntry) int { return semver.Compare("v"+y.Version, "v"+x.Version) })
+	return slices.CompactFunc(out, func(x, y IndexEntry) bool { return x.Version == y.Version })
+}
+
+// UnfitBaseWeb is the newest Base Web release for b's architecture,
+// channel and epoch that doesn't fit the Base OS b runs, and the Base OS
+// it needs; ok is false when there's none newer than b.BaseWeb. The
+// Updates page names it, so an owner knows which Base OS comes first.
+func (idx Index) UnfitBaseWeb(b Box) (IndexEntry, Range, bool) {
+	var best IndexEntry
+	var need Range
+	found := false
+	for _, e := range idx.BaseWeb {
+		h, ok := b.offerable(e, UnitBaseWeb, FileName)
+		if !ok || FitsBaseOS(h, b.BaseOS, "") == nil || (b.BaseWeb != "" && semver.Compare("v"+e.Version, "v"+b.BaseWeb) <= 0) {
+			continue
+		}
+		if !found || semver.Compare("v"+e.Version, "v"+best.Version) > 0 {
+			best, found = e, true
+			need, _ = h.NeedsBaseOS()
+		}
+	}
+	return best, need, found
 }
 
 // OfferBase is the base releases a box running base may stage from idx:

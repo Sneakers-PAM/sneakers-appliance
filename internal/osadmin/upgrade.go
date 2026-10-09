@@ -54,7 +54,6 @@ const (
 
 var (
 	uploadIDRE = regexp.MustCompile(`^[0-9a-f]{32}$`)
-	binNameRE  = regexp.MustCompile(`^sneakers-(appliance|product)-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?-(amd64|arm64)(-LAB)?\.bin$`)
 	windowRE   = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 )
 
@@ -631,7 +630,7 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	if len(srcs) == 0 {
 		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the .bin instead")
 	}
-	if !binNameRE.MatchString(name) {
+	if !updatepkg.ValidFileName(name) {
 		return nil, codes.New(codes.UpgradeUpload, "%q isn't a sneakers-appliance or sneakers-product .bin name", name)
 	}
 	if err := h.s.reserveReceive(); err != nil {

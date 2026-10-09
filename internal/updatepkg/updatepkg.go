@@ -88,6 +88,25 @@ type Header struct {
 	MinBase string `json:"min_base,omitempty"`
 	MaxBase string `json:"max_base,omitempty"`
 	Channel string `json:"channel"`
+	// Unit is baseOS or baseWeb (spec 7). A sneakers-appliance header
+	// without it is the Base OS; a sneakers-product header is the Product.
+	Unit Unit `json:"unit,omitempty"`
+	// Commit is the short commit the package was built from; the file
+	// name carries it.
+	Commit string `json:"commit,omitempty"`
+	// Epoch is the signing-key generation the package needs; absent reads
+	// as 1.
+	Epoch int `json:"epoch,omitempty"`
+	// Requires is what a Base Web package needs of the Base OS; absent, the
+	// same major.minor (DefaultRange).
+	Requires map[Unit]Range `json:"requires,omitempty"`
+	// Inputs is the SHA-256 of the unit's build inputs, which a release job
+	// compares to decide whether the unit changed.
+	Inputs string `json:"inputs,omitempty"`
+	// Method, Base and Target describe a patch (spec 5, Section 2.10.1).
+	Method string       `json:"method,omitempty"`
+	Base   *PatchBase   `json:"base,omitempty"`
+	Target *PatchTarget `json:"target,omitempty"`
 	// Recipient is the hex SHA-256 of the age recipient the payload is
 	// encrypted to.
 	Recipient string `json:"recipient"`
@@ -118,6 +137,9 @@ func (h Header) check() error {
 	}
 	if (h.MinBase != "" || h.MaxBase != "") && h.Kind != KindProduct {
 		return codes.New(codes.UpgradeFormat, "only a product bundle names a base range")
+	}
+	if err := h.checkUnit(); err != nil {
+		return err
 	}
 	switch h.Kind {
 	case KindFull:
@@ -209,7 +231,8 @@ func (h Header) RangeText() string {
 	return h.MinBase + " to " + h.MaxBase
 }
 
-// NameFor is the header name a package of kind k carries.
+// NameFor is the header name a package of kind k carries; a Base Web
+// package carries NameWeb (nameOf).
 func NameFor(k Kind) string {
 	if k == KindProduct {
 		return NameProduct
@@ -217,15 +240,43 @@ func NameFor(k Kind) string {
 	return Name
 }
 
-// FileName is the package's published name: sneakers-appliance-<version>-<arch>.bin,
-// or sneakers-product-... for a product bundle, with -LAB before the
-// extension for a lab package.
-func FileName(h Header) string {
-	suffix := ""
-	if h.Channel == release.ChannelLab {
-		suffix = "-LAB"
+func nameOf(h Header) string {
+	if h.Unit == UnitBaseWeb {
+		return NameWeb
 	}
-	return fmt.Sprintf("%s-%s-%s%s.bin", NameFor(h.Kind), h.Version, h.Arch, suffix)
+	return NameFor(h.Kind)
+}
+
+// FileName is the package's published name, with -LAB before the extension
+// for a lab package (spec 7, Section 2.2):
+//
+//	sneakers-appliance-baseOS-<version>-<arch>.bin
+//	sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin
+//	sneakers-appliance-baseWeb-<version>-<arch>.bin
+//	sneakers-product-<version>-<arch>.bin
+//
+// A Base OS or Base Web version carries -g<commit> once. A
+// sneakers-appliance header without a unit, from before the units, keeps
+// its old name, sneakers-appliance-<version>-<arch>.bin (LegacyFileName).
+func FileName(h Header) string {
+	suffix := labSuffix(h.Channel)
+	switch {
+	case h.IsProduct():
+		return fmt.Sprintf("%s-%s-%s%s.bin", NameProduct, h.Version, h.Arch, suffix)
+	case UnitOf(h) == UnitBaseWeb:
+		return fmt.Sprintf("%s-baseWeb-%s-%s%s.bin", Name, stamped(h.Version, h.Commit), h.Arch, suffix)
+	case h.Unit == "":
+		return LegacyFileName(h)
+	case h.Kind == KindPatch:
+		base := ""
+		if h.Base != nil {
+			base = h.Base.Version
+		} else if len(h.Bases) > 0 {
+			base = h.Bases[0]
+		}
+		return fmt.Sprintf("%s-baseOS-patch-%s-from-%s-%s%s.bin", Name, stamped(h.Version, h.Commit), base, h.Arch, suffix)
+	}
+	return fmt.Sprintf("%s-baseOS-%s-%s%s.bin", Name, stamped(h.Version, h.Commit), h.Arch, suffix)
 }
 
 // RecipientID is the fingerprint the header records for an age recipient.
@@ -241,7 +292,7 @@ func (c *counter) Write(p []byte) (int, error) { c.n += int64(len(p)); return le
 // Encrypt encrypts payload to r into ciphertext and returns h completed with
 // the fixed fields, the recipient and the ciphertext digest, ready to sign.
 func Encrypt(payload io.Reader, h Header, r *age.X25519Recipient, ciphertext io.Writer) (Header, error) {
-	h.Format, h.Name = Format, NameFor(h.Kind)
+	h.Format, h.Name = Format, nameOf(h)
 	if err := h.check(); err != nil {
 		return Header{}, err
 	}
@@ -358,8 +409,8 @@ func (p *Package) Verify(releaseKeyPEM []byte, channel string) error {
 	if p.Header.Channel != channel {
 		return codes.New(codes.UpgradeChannel, "this is a %s package; this box is %s", p.Header.Channel, channel)
 	}
-	if p.Header.Format != Format || (p.Header.Name != Name && p.Header.Name != NameProduct) {
-		return codes.New(codes.UpgradeFormat, "the package is %s format %d; this box reads %s or %s format %d", p.Header.Name, p.Header.Format, Name, NameProduct, Format)
+	if p.Header.Format != Format || (p.Header.Name != Name && p.Header.Name != NameProduct && p.Header.Name != NameWeb) {
+		return codes.New(codes.UpgradeFormat, "the package is %s format %d; this box reads %s, %s or %s format %d", p.Header.Name, p.Header.Format, Name, NameWeb, NameProduct, Format)
 	}
 	if err := p.Header.check(); err != nil {
 		return err

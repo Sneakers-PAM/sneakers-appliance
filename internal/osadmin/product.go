@@ -13,7 +13,6 @@ package osadmin
 import (
 	"context"
 	"errors"
-	"regexp"
 	"strings"
 	"time"
 
@@ -39,8 +38,6 @@ const ProductService = "k0s"
 // bundle is installed: 443, and 80, which redirects to it.
 var ProductPorts = []uint32{80, 443}
 
-var fileVersionRE = regexp.MustCompile(`^sneakers-(?:appliance|product)-([0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?)-(?:amd64|arm64)(?:-LAB)?\.bin$`)
-
 // source is one place the box fetches from.
 type source struct{ name, url string }
 
@@ -61,11 +58,11 @@ func (s *Server) sources(file, direct string) []source {
 
 // directPath is where the release source keeps a .bin: the tag's assets.
 func directPath(file string) string {
-	m := fileVersionRE.FindStringSubmatch(file)
-	if m == nil {
+	v, ok := updatepkg.ReleaseOf(file)
+	if !ok {
 		return ""
 	}
-	return "download/v" + m[1] + "/" + file
+	return "download/v" + v + "/" + file
 }
 
 func (s *Server) slots() product.Slots {

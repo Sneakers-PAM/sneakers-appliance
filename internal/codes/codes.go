@@ -72,6 +72,9 @@ const (
 	// other upgrade codes can follow 2514.
 	UpgradeMirrorUntrusted = 2520
 	UpgradeMirrorPin       = 2521
+	// The three update units' refusals (spec 7).
+	UpgradeCompat = 2530
+	UpgradeEpoch  = 2531
 )
 
 // The key custody codes.
@@ -131,6 +134,8 @@ var Entries = []apperr.Entry{
 	{Code: ProductValueUnavailable, Symbol: "PRODUCT_VALUE_UNAVAILABLE", Title: "upgrade", Cause: "the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there"},
 	{Code: UpgradeMirrorUntrusted, Symbol: "UPGRADE_MIRROR_UNTRUSTED", Title: "upgrade", Cause: "the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host"},
 	{Code: UpgradeMirrorPin, Symbol: "UPGRADE_MIRROR_PIN", Title: "upgrade", Cause: "the HTTPS mirror's certificate isn't the one the update trust pins"},
+	{Code: UpgradeCompat, Symbol: "UPGRADE_COMPAT", Title: "upgrade", Cause: "an update unit doesn't fit the other units this box runs, such as a Base Web built for another Base OS"},
+	{Code: UpgradeEpoch, Symbol: "UPGRADE_EPOCH", Title: "upgrade", Cause: "the update is for another signing-key epoch than this box's"},
 	{Code: KeyCustodyLocked, Symbol: "KEYCUSTODY_LOCKED", Title: "keycustody", Cause: "the state key can't be recovered: no sealed copy unseals, or the key file is missing"},
 	{Code: KeyCustodyNotFound, Symbol: "KEYCUSTODY_NOT_FOUND", Title: "keycustody", Cause: "there's no sealed item of that name"},
 	{Code: KeyCustodyRecipients, Symbol: "KEYCUSTODY_RECIPIENTS", Title: "keycustody", Cause: "the escrow takes one to three ssh-ed25519 or ssh-rsa recovery keys"},

@@ -292,3 +292,78 @@ func TestTheIndexListsBaseReleases(t *testing.T) {
 		t.Fatalf("entry %+v", e)
 	}
 }
+
+// sealUnit packs, signs and seals a layout as a unit's .bin with extra
+// bin-pack flags and returns its path.
+func sealUnit(t *testing.T, tmp string, sealFlags []string, packFlags ...string) string {
+	t.Helper()
+	keys, layout, work, out := filepath.Join(tmp, "keys"), filepath.Join(tmp, "layout"), filepath.Join(tmp, "work"), filepath.Join(tmp, "out")
+	if _, err := os.Stat(filepath.Join(keys, "update.pub")); err != nil {
+		if _, err := runCmd(t, "lab-update-key", "--out", keys); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(layout, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(layout, "oci-layout"), []byte(`{"imageLayoutVersion":"1.0.0"}`))
+	_ = os.RemoveAll(work)
+	header, err := runCmd(t, append([]string{"bin-pack", "--layout", layout, "--recipient", filepath.Join(keys, "update.pub"), "--arch", "amd64", "--channel", "lab", "--out", work}, packFlags...)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hdr, err := os.ReadFile(header) // #nosec G304 -- the test's own output
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(work, "header.sigstore.json"), testpki.ECDSA(t).BlobBundle(t, hdr))
+	bin, err := runCmd(t, append([]string{"bin-seal", "--work", work, "--bundle", filepath.Join(work, "header.sigstore.json"), "--out", out}, sealFlags...)...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
+
+// The units' .bin files carry their unit, commit, inputs and requires,
+// take their new names, and land in the index's lists; the bridge copy
+// is the same bytes under the old name, in the legacy base section.
+func TestTheUnitsSteps(t *testing.T) {
+	tmp := t.TempDir()
+	const v = "0.0.0-lab.20261012m-g1a2b3c4"
+	inputs := strings.Repeat("e", 64)
+	osBin := sealUnit(t, tmp, []string{"--bridge"}, "--unit", "baseOS", "--version", v, "--commit", "1a2b3c4", "--inputs", inputs, "--epoch", "1")
+	if filepath.Base(osBin) != "sneakers-appliance-baseOS-"+v+"-amd64-LAB.bin" {
+		t.Fatalf("sealed %s", osBin)
+	}
+	bridge := filepath.Join(filepath.Dir(osBin), "sneakers-appliance-"+v+"-amd64-LAB.bin")
+	a, _ := os.ReadFile(osBin)  // #nosec G304 -- the test's own output
+	b, _ := os.ReadFile(bridge) // #nosec G304 -- the test's own output
+	if len(a) == 0 || !bytes.Equal(a, b) {
+		t.Fatal("the bridge copy isn't the same bytes")
+	}
+	webBin := sealUnit(t, tmp, nil, "--unit", "baseWeb", "--version", v, "--commit", "1a2b3c4", "--requires-baseos-min", "0.0.0-0", "--requires-baseos-before", "0.1.0-0")
+	if filepath.Base(webBin) != "sneakers-appliance-baseWeb-"+v+"-amd64-LAB.bin" {
+		t.Fatalf("sealed %s", webBin)
+	}
+	idx := filepath.Join(tmp, updatepkg.IndexName)
+	if _, err := runCmd(t, "index", "--out", idx, "--bridge", osBin, osBin, webBin); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(idx) // #nosec G304 -- the test's own output
+	var index updatepkg.Index
+	if err := json.Unmarshal(raw, &index); err != nil || index.Format != 2 || len(index.BaseOS) != 1 || len(index.BaseWeb) != 1 || len(index.Base) != 1 {
+		t.Fatalf("index %s: %v", raw, err)
+	}
+	if e := index.BaseOS[0]; e.Inputs != inputs || e.Commit != "1a2b3c4" || e.File != filepath.Base(osBin) {
+		t.Fatalf("Base OS entry %+v", e)
+	}
+	if e := index.BaseWeb[0]; e.Requires[updatepkg.UnitBaseOS].Before != "0.1.0-0" {
+		t.Fatalf("Base Web entry %+v", e)
+	}
+	if e := index.Base[0]; e.File != filepath.Base(bridge) {
+		t.Fatalf("bridge entry %+v", e)
+	}
+	if _, err := runCmd(t, "index", "--out", idx, "--bridge", webBin, webBin); err == nil {
+		t.Fatal("a Base Web file was listed as a bridge")
+	}
+}
