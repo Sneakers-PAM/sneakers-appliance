@@ -14,7 +14,7 @@ first-boot network step and later on the :8443 Network page or with `network set
 | IPv6 | `slaac` (also reads RDNSS), `dhcpv6`, `static` (address with prefix length, gateway link-local or inside it) or `off` | `slaac` |
 | Hostname | a fully qualified name such as `appliance.example.org` | from DHCP |
 | DNS | up to 3 IPv4 or IPv6 addresses, and up to 6 search domains | from DHCP and RA |
-| NTP | up to 4 addresses or host names | from DHCP (option 42, DHCPv6 option 56) |
+| NTP | up to 4 addresses or host names | from DHCP (option 42, DHCPv6 option 56), else the public pool `0.pool.ntp.org` to `3.pool.ntp.org` | <!-- scrub:allow=fqdn -->
 | Allow-list | the prefixes 22 and 8443 accept, without host bits | during setup any source on the management interface |
 | Time zone | an IANA name such as `Europe/Paris`, or `UTC` | `UTC` |
 | HTTPS proxy | an `http://` or `https://` URL without credentials | none |
@@ -165,9 +165,19 @@ offered the file names none, and the box still runs; k0s's cluster DNS falls bac
 [k0s.md](k0s.md#cluster-dns-with-no-dns-server) describes.
 
 The clock is kept by SNTP (`internal/timesync`, IPv4 and IPv6 servers, up to
-four): one bounded sync, then polls. A large offset is stepped once at the
-start and slewed after that; the clock is never stepped behind its floor
-(`/var/lib/sneakers/netd/clock-floor`, never earlier than the image's build time).
+four): one bounded sync, then polls. The servers are the settings', else
+DHCP's, else the image's default pool (`0.pool.ntp.org` to `3.pool.ntp.org`), <!-- scrub:allow=fqdn -->
+so a box on a network that names none still gets the time; naming servers in
+the settings replaces the pool.
+
+An offset up to 128 ms is slewed. A larger one is stepped at the boot sync and
+whenever the clock is behind. A clock ahead of the servers on a running box
+(one that booted a few seconds fast and missed the boot sync) is slewed back
+when it's up to 30 seconds ahead, so it never runs backwards, and stepped back
+beyond that. Every step is audited as `clock.step` (actor `netd`, with the
+server, `offsetMs` and whether it was the boot sync). The clock is never
+stepped behind its floor (`/var/lib/sneakers/netd/clock-floor`, never earlier
+than the image's build time).
 
 ### The checks
 

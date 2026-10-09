@@ -45,6 +45,9 @@ const (
 	SourceSettings
 	// SourceDHCP: DHCPv4 option 42 or DHCPv6 option 56.
 	SourceDHCP
+	// SourceDefault: the image's default pool, used while neither the
+	// settings nor DHCP name a server.
+	SourceDefault
 )
 
 // Status is the engine's state for netd's Status and the NTP check.
@@ -68,6 +71,8 @@ func (s Source) String() string {
 		return "SETTINGS"
 	case SourceDHCP:
 		return "DHCP"
+	case SourceDefault:
+		return "DEFAULT"
 	default:
 		return "NONE"
 	}

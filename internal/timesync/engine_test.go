@@ -387,9 +387,16 @@ func TestTimeBehindTheFloorIsRefused(t *testing.T) {
 	}
 }
 
-func TestPeriodicSyncSlewsStepsForwardAndRefusesBackwards(t *testing.T) {
+func TestPeriodicSyncSlewsSmallOffsetsBothWaysAndStepsLargeOnes(t *testing.T) {
 	h := newHarness(t)
 	s := h.add("192.0.2.1", 10*time.Millisecond)
+	var stepped []time.Duration
+	h.cfg.OnStep = func(d time.Duration, server string, boot bool) {
+		if server != "192.0.2.1" || boot {
+			t.Errorf("OnStep(%v, %q, %v)", d, server, boot)
+		}
+		stepped = append(stepped, d)
+	}
 	e := h.engine()
 	e.BootSync(context.Background())
 	if !e.SignAllowed() {
@@ -410,20 +417,50 @@ func TestPeriodicSyncSlewsStepsForwardAndRefusesBackwards(t *testing.T) {
 		t.Fatalf("steps = %v, want one forward step of 2s", steps)
 	}
 
+	// A clock a few seconds fast is slewed back, never refused: a box that
+	// booted fast still gets the right time.
 	s.set(func(s *fakeServer) { s.offset = -2 * time.Second })
 	e.sync(context.Background(), true)
-	steps, _ = h.clock.adjustments()
-	if len(steps) != 1 {
-		t.Fatalf("steps = %v, want the backwards step refused", steps)
+	steps, slews = h.clock.adjustments()
+	if len(steps) != 1 || len(slews) != 3 || !approx(slews[2], -2*time.Second) {
+		t.Fatalf("steps = %v slews = %v, want the 2s back slewed", steps, slews)
 	}
-	st := e.Status()
-	if st.State != StateUnsynced || !strings.Contains(st.LastError, "backwards") {
+	if st := e.Status(); st.State != StateSynced {
 		t.Fatalf("status = %v", st)
 	}
-	// The gate is "never synced this boot": a later refusal does not stop
-	// signing on a clock that was already corrected.
+
+	if len(stepped) != 1 {
+		t.Fatalf("OnStep saw %v", stepped)
+	}
 	if !e.SignAllowed() {
-		t.Fatal("SignAllowed = false after a later round failed")
+		t.Fatal("SignAllowed = false after a later round")
+	}
+}
+
+// A box that came up far ahead and missed the boot sync (its network
+// wasn't up yet) is stepped back at the first poll, never left wrong for
+// the rest of its uptime, and the step is reported for the audit.
+func TestARunningBoxFarAheadIsSteppedBack(t *testing.T) {
+	h := newHarness(t)
+	h.add("192.0.2.1", -10*time.Minute)
+	var stepped []time.Duration
+	h.cfg.OnStep = func(d time.Duration, _ string, boot bool) {
+		if boot {
+			t.Error("reported as the boot sync's")
+		}
+		stepped = append(stepped, d)
+	}
+	e := h.engine()
+	e.sync(context.Background(), true)
+	steps, _ := h.clock.adjustments()
+	if len(steps) != 1 || !approx(steps[0], -10*time.Minute) {
+		t.Fatalf("steps = %v, want a step back of 10 minutes", steps)
+	}
+	if len(stepped) != 1 || !approx(stepped[0], -10*time.Minute) {
+		t.Fatalf("OnStep saw %v", stepped)
+	}
+	if st := e.Status(); st.State != StateSynced {
+		t.Fatalf("status = %v", st)
 	}
 }
 

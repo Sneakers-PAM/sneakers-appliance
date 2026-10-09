@@ -62,6 +62,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `setup.code.redeem`, `setup.code.reset` | accessd | a browser redeems the setup code (or a wrong one), the console asks for a new code |
 | `recover-access.code`, `recover-access.cancel` | accessd | the console's Recover access code |
 | `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end |
+| `clock.step` | netd | SNTP stepped the clock (`detail.server`, `detail.offsetMs`, `detail.at`: `boot` or `running`); small offsets are slewed and not audited ([network.md](network.md#dns-ntp-and-the-host-name)) |
 
 ## Reboot and shutdown
 

@@ -104,6 +104,11 @@ var (
 	DefaultServices = netip.MustParsePrefix("10.96.0.0/12")  // scrub:allow=private-ip -- the k0s default
 )
 
+// DefaultNTP is the image's default time servers, used while neither the
+// settings nor DHCP name one: the public NTP pool. An admin replaces it by
+// naming servers in the settings.
+var DefaultNTP = []string{"0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org"} // scrub:allow=fqdn -- the public NTP pool
+
 // Defaults is the first-boot screen's starting point on nic: DHCP for IPv4,
 // SLAAC for IPv6, everything else from DHCP.
 func Defaults(nic string) Settings {

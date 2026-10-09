@@ -87,7 +87,7 @@ func boxHelper() error {
 	lg := log.NewLoggerWithOptions("sneakers-netd", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatConsole), log.WithDefaultLevel(log.LevelDebug))
 	d, err := netd.New(netd.Options{
 		StateDir: state, RunDir: run, Sys: &labSys{}, Workers: netd.Clients{Logger: lg},
-		NewTimeSync: netd.TimeSyncs(labClock{}, filepath.Join(state, "netd", "clock-floor"), time.Now().Add(-time.Hour), lg),
+		NewTimeSync: netd.TimeSyncs(labClock{}, filepath.Join(state, "netd", "clock-floor"), time.Now().Add(-time.Hour), lg, nil),
 		Logger:      lg,
 	})
 	if err != nil {

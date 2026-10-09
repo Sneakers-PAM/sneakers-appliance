@@ -738,7 +738,7 @@ func (d *Daemon) effective() (s network.Settings, dns []netip.Addr, search, ntp 
 		ntp = ntp[:network.MaxNTP]
 	}
 	if len(ntp) == 0 {
-		src = timesync.SourceNone
+		ntp, src = slices.Clone(network.DefaultNTP), timesync.SourceDefault
 	}
 	host = s.Hostname
 	if host == "" {
