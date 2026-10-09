@@ -87,6 +87,7 @@ func TestDashboardScreens(t *testing.T) {
 	checking := progress("apply", "0.1.1", "health", "Waiting for netd to answer: connection refused")
 	reverting := progress("revert", "0.0.9", "reboot", "The box restarts into 0.0.9.")
 	reverting.Steps = reverting.Steps[2:]
+	productUp := productProgress("pods", "2 of 5 pods ready")
 	stepFailed := status()
 	stepFailed.UpgradeProgress = progress("stage", "0.1.1", "verify", "")
 	stepFailed.UpgradeProgress.InProgress, stepFailed.UpgradeProgress.Failed, stepFailed.UpgradeProgress.Code = false, true, "UPGRADE_SIGNATURE"
@@ -135,6 +136,7 @@ func TestDashboardScreens(t *testing.T) {
 		"maintenance-rebooting":  dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), rebooting),
 		"maintenance-health":     dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), checking),
 		"maintenance-revert":     dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), reverting),
+		"maintenance-product":    dashboard.MaintenancePage(chrome(full, keycustody.ModeTPM), productUp),
 		"upgrade-step-failed":    dashboard.Page(chrome(full, keycustody.ModeTPM), data(stepFailed), now),
 		"recover":                dashboard.RecoverPage(chrome(full, keycustody.ModeTPM), ""),
 		"recover-not-installed":  dashboard.RecoverPage(chrome(full, keycustody.ModeTPM), "No code was made: Recover access by code isn't installed in this build yet"),
@@ -153,6 +155,23 @@ func progress(action, version, at, detail string) *osadminv1.UpgradeProgress {
 	ids := []string{"verify", "stage", "switch", "reboot", "health", "mark_good"}
 	labels := []string{"Verifying (signature, channel, SHA-256)", "Staging into slot B", "Switching slots", "Rebooting", "Checking health", "Marking good"}
 	p := &osadminv1.UpgradeProgress{Action: action, Version: version, InProgress: true, UpdatedAt: timestamppb.New(now.Add(-time.Minute))}
+	state := osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_DONE
+	for i, id := range ids {
+		st := &osadminv1.UpgradeStep{Id: id, Label: labels[i], State: state}
+		if id == at {
+			st.State, st.Detail = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_ACTIVE, detail
+			state = osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_PENDING
+		}
+		p.Steps = append(p.Steps, st)
+	}
+	return p
+}
+
+// productProgress is a product apply coming up, on step at.
+func productProgress(at, detail string) *osadminv1.UpgradeProgress {
+	ids := []string{"verify", "stage", "switch", "restart", "k0s", "images", "manifests", "pods", "edge"}
+	labels := []string{"Verifying (signature, channel, SHA-256)", "Staging into the free product slot", "Switching slots", "Restarting the product", "Starting k0s", "Importing the images", "Applying the product's stacks", "Waiting for the pods to be ready", "Opening the product on 443"}
+	p := &osadminv1.UpgradeProgress{Action: "apply", Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, Version: "0.2.0", InProgress: true, UpdatedAt: timestamppb.New(now.Add(-time.Minute))}
 	state := osadminv1.UpgradeStepState_UPGRADE_STEP_STATE_DONE
 	for i, id := range ids {
 		st := &osadminv1.UpgradeStep{Id: id, Label: labels[i], State: state}

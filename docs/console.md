@@ -249,6 +249,26 @@ from the release the box booted, so the screen is back on the new release's cons
 health and marking good, and gives way to the status view once the update is done. **R** (Recover
 access) still works.
 
+A product apply says "Installing the product 0.2.0. The box keeps running." (a revert "Going back
+to the product 0.1.0. The box keeps running."), and has no fallback line: the box doesn't revert a
+product by itself. It stays on the screen while the product comes up, until 443 answers with it
+([upgrades.md](upgrades.md#the-product-coming-up)):
+
+```text
+Installing the product 0.2.0. The box keeps running.
+
+  [ok]  Verifying (signature, channel, SHA-256)
+  [ok]  Staging into the free product slot
+  [ok]  Switching slots
+  [ok]  Restarting the product
+  [ok]  Starting k0s
+  [ok]  Importing the images
+  [ok]  Applying the product's stacks
+  [..]  Waiting for the pods to be ready
+        2 of 5 pods ready
+  [  ]  Opening the product on 443
+```
+
 ## Recover access
 
 **R**, for when no admin can sign in. It's recorded, and every admin sees a notice the next time

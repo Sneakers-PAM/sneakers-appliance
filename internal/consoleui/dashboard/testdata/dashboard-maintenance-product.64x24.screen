@@ -1,0 +1,24 @@
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM Appliance   0.1.0                       |
++--------------------------------------------------------------+
+|                                                              |
+|   Installing the product 0.2.0. The box keeps running.       |
+|                                                              |
+|     [ok]  Verifying (signature, channel, SHA-256)            |
+|     [ok]  Staging into the free product slot                 |
+|     [ok]  Switching slots                                    |
+|     [ok]  Restarting the product                             |
+|     [ok]  Starting k0s                                       |
+|     [ok]  Importing the images                               |
+|     [ok]  Applying the product's stacks                      |
+|     [..]  Waiting for the pods to be ready                   |
+|           2 of 5 pods ready                                  |
+|     [  ]  Opening the product on 443                         |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  R  Recover access                                           |
++--------------------------------------------------------------+

@@ -52,6 +52,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
@@ -226,8 +228,14 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
 		// Stopping k0s may take its whole stop-timeout (2 minutes).
-		Services:        initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
-		Network:         netd,
+		Services: initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
+		Network:  netd,
+		// accessd is root, so it may ask the installed bundle's k0s how
+		// far the product has come up after an apply (docs/upgrades.md).
+		ProductUp: &productup.Probe{
+			Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s",
+			Containerd: "/run/k0s/containerd.sock", Edge: "127.0.0.1:443",
+		},
 		Paths:           paths,
 		BoxStateFile:    boxstate.File,
 		CertDir:         paths.OwnDir(),
@@ -253,6 +261,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		},
 	})
 	d.Attach(store, api)
+	defer api.Close()
 
 	srv, err := listen(c.socket, d, lg)
 	if err != nil {
@@ -277,6 +286,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	lg.Info("accessd: ready", log.F("socket", c.socket))
 
 	d.RefreshStatus(ctx)
+	api.ResumeProductUp()
 	// netd keeps the product's ports only while it runs: open them again
 	// at start, and each minute until that works.
 	portsOpen := api.OpenProductPorts(ctx) == nil

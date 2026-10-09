@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM Appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mInstalling the product 0.2.0. The box keeps running.\e[0m       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Verifying (signature, channel, SHA-256)            \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Staging into the free product slot                 \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Switching slots                                    \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Restarting the product                             \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Starting k0s                                       \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Importing the images                               \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;32m[ok]\e[0m  Applying the product's stacks                      \e[34m|\e[0m
+\e[34m|\e[0m     \e[1;33m[..]\e[0m\e[1;37m  Waiting for the pods to be ready\e[0m                   \e[34m|\e[0m
+\e[34m|\e[0m           \e[2m2 of 5 pods ready\e[0m                                  \e[34m|\e[0m
+\e[34m|\e[0m     \e[2m[  ]\e[0m\e[2m  Opening the product on 443\e[0m                         \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m                                           \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

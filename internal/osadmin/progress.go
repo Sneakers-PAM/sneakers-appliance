@@ -70,6 +70,12 @@ type progress struct {
 	mu     sync.Mutex
 	loaded bool
 	rec    *progressRecord
+	// following is true while a goroutine follows the product coming up;
+	// closing stop (Close) ends it, and done counts it.
+	following bool
+	stop      chan struct{}
+	stopped   bool
+	done      sync.WaitGroup
 }
 
 func (r *progressRecord) find(id string) int {
@@ -114,7 +120,7 @@ func stageLabel(target osadminv1.UpdateTarget, slot string) string {
 // stepsFor are an action's steps, all pending: a stage or an apply runs
 // them all, a revert has no file to verify or stage, and a stage whose
 // target isn't known yet (its header isn't read) has only verifying.
-func stepsFor(action string, target osadminv1.UpdateTarget, slot string) []progressStep {
+func stepsFor(action string, target osadminv1.UpdateTarget, slot string, followUp bool) []progressStep {
 	product := target == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
 	if target == osadminv1.UpdateTarget_UPDATE_TARGET_UNSPECIFIED {
 		return []progressStep{{ID: stepVerify, Label: "Verifying (signature, channel, SHA-256)", State: statePending}}
@@ -126,6 +132,9 @@ func stepsFor(action string, target osadminv1.UpdateTarget, slot string) []progr
 	out = append(out, progressStep{ID: stepSwitch, Label: "Switching slots"})
 	if product {
 		out = append(out, progressStep{ID: stepRestart, Label: "Restarting the product"})
+		if followUp {
+			out = append(out, productUpSteps...)
+		}
 	} else {
 		out = append(out, progressStep{ID: stepReboot, Label: "Rebooting"}, progressStep{ID: stepHealth, Label: "Checking health"}, progressStep{ID: stepMarkGood, Label: "Marking good"})
 	}
@@ -201,7 +210,7 @@ func recordTarget(t osadminv1.UpdateTarget) string {
 }
 
 func (s *Server) newRecordLocked(action string, target osadminv1.UpdateTarget, version, slot string) {
-	s.progress.rec = &progressRecord{Action: action, Target: recordTarget(target), Version: version, Steps: stepsFor(action, target, slot), Started: s.o.Clock.Now().UTC()}
+	s.progress.rec = &progressRecord{Action: action, Target: recordTarget(target), Version: version, Steps: stepsFor(action, target, slot, s.o.ProductUp != nil), Started: s.o.Clock.Now().UTC()}
 	s.o.Logger.Info("osadmin: update progress begins", log.F("action", action), log.F("target", recordTarget(target)), log.F("version", version))
 }
 
@@ -263,6 +272,10 @@ func (s *Server) setStep(id, detail string) {
 				r.BootID, r.RebootAt = s.o.BootID, s.o.Clock.Now().UTC()
 			}
 			r.Steps[i].State, r.Steps[i].Detail = stateActive, detail
+		case r.Steps[i].State == stateActive:
+			// The product came up to a later step and went back (a pod
+			// fell over): the later step waits again.
+			r.Steps[i].State, r.Steps[i].Detail = statePending, ""
 		}
 	}
 	s.saveProgressLocked()

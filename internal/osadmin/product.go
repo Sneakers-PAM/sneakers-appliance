@@ -269,6 +269,9 @@ func (s *Server) switchProduct(ctx context.Context, switchSlots func() error) er
 		return err
 	}
 	s.finishSteps(stepRestart)
+	if s.o.ProductUp != nil {
+		s.startProductUp()
+	}
 	return nil
 }
 
