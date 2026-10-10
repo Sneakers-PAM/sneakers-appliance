@@ -15,7 +15,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -53,6 +52,17 @@ var Steps = []string{StepK0s, StepImages, StepManifests, StepPods, StepHealth, S
 type Result struct {
 	Step   string
 	Detail string
+	// Timeout is how long the step may take, for a phase step (its
+	// product.yaml timeout); 0 is no bound of its own.
+	Timeout time.Duration
+	// Failed is a phase that can't come up whatever the wait: a pod of it
+	// waits for a reason no retry clears (its image isn't on the box, its
+	// spec is wrong). Detail names it.
+	Failed bool
+	// Held is a phased product held after the phase its import names
+	// while an import is open (productspec.Import.After): the phases
+	// through it run, the later ones wait, and the box says maintenance.
+	Held bool
 }
 
 // StackLabel is the label k0s's manifest applier puts on every object of a
@@ -82,8 +92,12 @@ type Probe struct {
 	HTTP *http.Client
 	// SwitchDir holds the product's switch settings
 	// (/var/lib/sneakers/platform); a stack whose switch is off isn't
-	// applied, so it isn't waited for.
+	// applied, so it isn't waited for. The phase loop keeps PlacedFile
+	// there.
 	SwitchDir string
+	// Manifests is k0s's manifests directory (/var/lib/k0s/manifests),
+	// where a phased product's phase loop places each phase's stacks.
+	Manifests string
 }
 
 // askTimeout bounds each command and the edge request.
@@ -118,6 +132,9 @@ func (p *Probe) kubectl(ctx context.Context, args ...string) ([]byte, error) {
 // rolled out, no old pod may still be stopping, and the product's own
 // health check must answer before it counts.
 func (p *Probe) Check(ctx context.Context) (Result, error) {
+	if spec := p.spec(); len(spec.Phases) > 0 {
+		return p.checkPhased(ctx, spec)
+	}
 	if _, err := p.kubectl(ctx, "get", "--raw", "/readyz"); err != nil {
 		return Result{Step: StepK0s, Detail: "The Kubernetes API doesn't answer yet."}, nil
 	}
@@ -307,9 +324,10 @@ func sameEnvFrom(a, b envSrc) bool {
 type workload struct {
 	Kind     string `json:"kind"`
 	Metadata struct {
-		Namespace  string `json:"namespace"`
-		Name       string `json:"name"`
-		Generation int64  `json:"generation"`
+		Namespace  string            `json:"namespace"`
+		Name       string            `json:"name"`
+		Generation int64             `json:"generation"`
+		Labels     map[string]string `json:"labels"`
 	} `json:"metadata"`
 	Spec struct {
 		Replicas *int64      `json:"replicas"`
@@ -342,6 +360,8 @@ var workloadKinds = []string{"Deployment", "StatefulSet", "DaemonSet"}
 type wanted struct {
 	kind, ns, name string
 	template       podTemplate
+	// replicas is what the slot's stack sets (1 when it sets none).
+	replicas int64
 }
 
 func (w wanted) key() string { return w.kind + " " + w.ns + "/" + w.name }
@@ -402,6 +422,7 @@ func readWorkloads(file string, values []boxvalues.Pair) ([]wanted, error) {
 				Name      string `yaml:"name"`
 			} `yaml:"metadata"`
 			Spec struct {
+				Replicas *int64      `yaml:"replicas"`
 				Template podTemplate `yaml:"template"`
 			} `yaml:"spec"`
 		}
@@ -419,7 +440,11 @@ func readWorkloads(file string, values []boxvalues.Pair) ([]wanted, error) {
 		if ns == "" {
 			ns = "default"
 		}
-		out = append(out, wanted{kind: doc.Kind, ns: ns, name: doc.Metadata.Name, template: doc.Spec.Template})
+		replicas := int64(1)
+		if doc.Spec.Replicas != nil {
+			replicas = *doc.Spec.Replicas
+		}
+		out = append(out, wanted{kind: doc.Kind, ns: ns, name: doc.Metadata.Name, template: doc.Spec.Template, replicas: replicas})
 	}
 }
 
@@ -437,16 +462,19 @@ func (p *Probe) rollout(ctx context.Context, stacks []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	out, err := p.kubectl(ctx, "get", "deployments,statefulsets,daemonsets", "--all-namespaces", "-l", StackLabel, "-o", "json")
+	live, err := p.liveWorkloads(ctx)
 	if err != nil {
 		return "", err
 	}
-	var l workloadList
-	if err := json.Unmarshal(out, &l); err != nil {
-		return "", fmt.Errorf("the workload list doesn't parse: %w", err)
-	}
+	return rolloutWith(want, live, func(workload) bool { return true }), nil
+}
+
+// rolloutWith is rollout's answer for want against the live workloads:
+// each of want must be there at the slot's template and rolled out, and so
+// must every other live workload include admits.
+func rolloutWith(want []wanted, items []workload, include func(workload) bool) string {
 	live := map[string]workload{}
-	for _, w := range l.Items {
+	for _, w := range items {
 		live[w.Kind+" "+w.Metadata.Namespace+"/"+w.Metadata.Name] = w
 	}
 	var waiting []string
@@ -471,9 +499,9 @@ func (p *Probe) rollout(ctx context.Context, stacks []string) (string, error) {
 			}
 		}
 	}
-	for _, w := range l.Items {
+	for _, w := range items {
 		key := w.Kind + " " + w.Metadata.Namespace + "/" + w.Metadata.Name
-		if seen[key] {
+		if seen[key] || !include(w) {
 			continue
 		}
 		seen[key] = true
@@ -483,9 +511,9 @@ func (p *Probe) rollout(ctx context.Context, stacks []string) (string, error) {
 		}
 	}
 	if len(waiting) == 0 {
-		return "", nil
+		return ""
 	}
-	return fmt.Sprintf("Rolling out (%d of %d ready): waiting for %s", total-len(waiting), total, waiting[0]), nil
+	return fmt.Sprintf("Rolling out (%d of %d ready): waiting for %s", total-len(waiting), total, waiting[0])
 }
 
 // rolledOut says why w hasn't rolled out yet, or "".
@@ -546,27 +574,43 @@ func (p *Probe) stacks(ctx context.Context, on []string) ([]string, error) {
 }
 
 type podList struct {
-	Items []struct {
-		Metadata struct {
-			Namespace         string  `json:"namespace"`
-			Name              string  `json:"name"`
-			DeletionTimestamp *string `json:"deletionTimestamp"`
-		} `json:"metadata"`
-		Status struct {
-			Phase      string `json:"phase"`
-			Conditions []struct {
-				Type   string `json:"type"`
-				Status string `json:"status"`
-			} `json:"conditions"`
-			ContainerStatuses []struct {
-				State struct {
-					Waiting *struct {
-						Reason string `json:"reason"`
-					} `json:"waiting"`
-				} `json:"state"`
-			} `json:"containerStatuses"`
-		} `json:"status"`
-	} `json:"items"`
+	Items []podItem `json:"items"`
+}
+
+type containerStatus struct {
+	Name  string `json:"name"`
+	State struct {
+		Waiting *struct {
+			Reason  string `json:"reason"`
+			Message string `json:"message"`
+		} `json:"waiting"`
+	} `json:"state"`
+	LastState struct {
+		Terminated *struct {
+			Reason   string `json:"reason"`
+			Message  string `json:"message"`
+			ExitCode int    `json:"exitCode"`
+		} `json:"terminated"`
+	} `json:"lastState"`
+	RestartCount int `json:"restartCount"`
+}
+
+type podItem struct {
+	Metadata struct {
+		Namespace         string            `json:"namespace"`
+		Name              string            `json:"name"`
+		DeletionTimestamp *string           `json:"deletionTimestamp"`
+		Labels            map[string]string `json:"labels"`
+	} `json:"metadata"`
+	Status struct {
+		Phase      string `json:"phase"`
+		Conditions []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+		InitContainerStatuses []containerStatus `json:"initContainerStatuses"`
+		ContainerStatuses     []containerStatus `json:"containerStatuses"`
+	} `json:"status"`
 }
 
 // pods counts the pods that should run and how many of them are ready,
@@ -575,16 +619,20 @@ type podList struct {
 // finished pod (a Job's) or one that failed for good (evicted) counts as
 // none of them: its controller has replaced it.
 func (p *Probe) pods(ctx context.Context) (ready, total, stopping int, why string, err error) {
-	out, err := p.kubectl(ctx, "get", "pods", "--all-namespaces", "-o", "json")
+	items, err := p.podItems(ctx)
 	if err != nil {
 		return 0, 0, 0, "", err
 	}
-	var l podList
-	if err := json.Unmarshal(out, &l); err != nil {
-		return 0, 0, 0, "", fmt.Errorf("the pod list doesn't parse: %w", err)
-	}
-	for _, it := range l.Items {
-		if it.Status.Phase == "Succeeded" || it.Status.Phase == "Failed" {
+	ready, total, stopping, why, _ = countPods(items, func(podItem) bool { return true })
+	return ready, total, stopping, why, nil
+}
+
+// countPods is pods for the pods include admits; never is whether the pod
+// why names waits for a reason no retry clears (neverStarts), and then why
+// carries the container's message too.
+func countPods(items []podItem, include func(podItem) bool) (ready, total, stopping int, why string, never bool) {
+	for _, it := range items {
+		if !include(it) || it.Status.Phase == "Succeeded" || it.Status.Phase == "Failed" {
 			continue
 		}
 		if it.Metadata.DeletionTimestamp != nil {
@@ -605,14 +653,22 @@ func (p *Probe) pods(ctx context.Context) (ready, total, stopping int, why strin
 		if why != "" {
 			continue
 		}
-		for _, cs := range it.Status.ContainerStatuses {
-			if w := cs.State.Waiting; w != nil && w.Reason != "" {
+		for _, cs := range append(append([]containerStatus(nil), it.Status.InitContainerStatuses...), it.Status.ContainerStatuses...) {
+			if w := cs.State.Waiting; w != nil && w.Reason != "" && w.Reason != "PodInitializing" {
 				why = it.Metadata.Namespace + "/" + it.Metadata.Name + " " + w.Reason
+				if neverStarts[w.Reason] {
+					never = true
+					if w.Message != "" {
+						why += ": " + w.Message
+					}
+				} else if t := cs.LastState.Terminated; t != nil && t.Message != "" {
+					why += ": " + t.Message
+				}
 				break
 			}
 		}
 	}
-	return ready, total, stopping, why, nil
+	return ready, total, stopping, why, never
 }
 
 // edgeAnswers is whether 443 answers with something other than edgefall's

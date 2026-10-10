@@ -38,6 +38,7 @@ on-demand-in: [firstboot]          # phases, among phases:, where it waits to be
 user: osadmin                      # a fixed unprivileged system account; default root
 capabilities: [net-bind-service]   # ambient capabilities kept with user:; only this one
 pre-start: [/usr/libexec/sneakers/platformd, prepare]
+pre-stop: [/usr/bin/sneakers-accessd, quiesce]  # before every stop, while it still runs
 stop-timeout: 2m                   # SIGTERM to SIGKILL; default 10s
 start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist first
 ```
@@ -64,6 +65,10 @@ start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist
   see [access.md](access.md#accessd)).
 - `pre-start` runs to completion before every start; a non-zero exit keeps the service from
   starting (`SERVICE_PRE_START`) and its restart policy decides whether it's tried again.
+- `pre-stop` runs before every stop (Services.Stop, a phase change, a drain) while the service
+  still runs, before its SIGTERM, and gets the entry's `stop-timeout`. One that fails or takes
+  longer is logged and the stop goes on. k0s's stops the product in order, latest phase first,
+  while the cluster still answers ([upgrades.md](upgrades.md#the-phases)).
 - A service that exits is restarted by its policy with a backoff from 1 to 30 seconds. Stopping
   sends SIGTERM, then SIGKILL after the entry's `stop-timeout` (10 seconds when unset). k0s sets
   a longer one so it can stop its workloads cleanly.

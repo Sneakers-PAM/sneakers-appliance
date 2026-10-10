@@ -76,6 +76,11 @@ import:
   setup: setup-token
   restart:
     - sneakers/deployment/sneakers-vault
+  # While an import is open the product holds after the services phase:
+  # the vault, the audit service, PostgreSQL and Kratos the import writes
+  # to run, and the gateway and the web apps (sign-in, the MCP) stay down
+  # until it's closed (docs/import.md).
+  after: services
 
 # The keys Sneakers' data can't be opened without: the vault's root key
 # and the identity service's TOTP key. The box seals each under
@@ -192,3 +197,33 @@ ready:
     service: sneakers/sneakers-gateway:http
     path: /readyz
   timeout: 15m
+
+# The order the product comes up in (docs/upgrades.md#the-phases): on every
+# boot, update and revert the box quiesces what an earlier run left, waits
+# for the cluster's DNS, network and edge, then places each phase's stacks
+# and waits until every workload in them runs this bundle's version and is
+# Ready before the next; it stops the product in the reverse order. The
+# render (build/tools/stack) puts each phase's workloads in its own stack
+# and refuses a workload no phase names. The vault's root key preflight
+# runs in the vault itself, so the identity phase is Ready only once it
+# passed. The MCP switch's stack (the MCP server and Hydra) comes with the
+# front phase, before the gateway and the staff web app that read its
+# ConfigMap.
+phases:
+  - name: data
+    label: Starting the database and the cache
+    stack: sneakers-data
+    workloads: [sneakers-postgres, sneakers-valkey]
+  - name: identity
+    label: Starting sign-in, identity and the vault
+    stack: sneakers-identity
+    workloads: [sneakers-kratos, sneakers-identity, sneakers-vault]
+  - name: services
+    label: Starting the services
+    stack: sneakers-services
+    workloads: [sneakers-workflow, sneakers-audit, sneakers-notify, sneakers-connector, sneakers-sshbroker]
+  - name: front
+    label: Starting the gateway and the web apps
+    stack: sneakers-front
+    workloads: [sneakers-gateway, sneakers-web-staff, sneakers-web-admin, sneakers-mcp, sneakers-hydra]
+    switch_stacks: [sneakers-mcp]

@@ -39,6 +39,10 @@ func (s *Server) phaseNow(ctx context.Context) edgefall.Phase {
 	running := s.productRunning(ctx)
 	st := s.boxState(s.Phase(), running)
 	p := edgefall.Phase{State: string(st), ProductRunning: running, ProductInstalled: s.slots().Status().Installed != ""}
+	if st == boxstate.Failed {
+		p.Step, p.Detail = s.productFailure()
+		return p
+	}
 	if st != boxstate.Updating {
 		return p
 	}

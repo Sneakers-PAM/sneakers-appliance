@@ -54,6 +54,10 @@ wait_for "product bundle installed" test -s "$product/bundle.json"
 wait_for "api up" k get --raw /readyz
 wait_for "node ready" k wait --for=condition=Ready node --all --timeout=10s
 wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l app=hello --timeout=10s
+# The lab product's phases (build/lab/product.yaml): each phased pod's
+# restarts, when it started and when it got Ready, for the suite to check
+# the order and that nothing restarted.
+say "phase pods: $(k get pods -A -l sneakers-appliance/phase -o jsonpath='{range .items[*]}{.metadata.labels.app} restarts={.status.containerStatuses[0].restartCount} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
 wait_for "edge pod ready" k -n sneakers-edge wait --for=condition=Ready pod -l app=edge --timeout=10s
 k get nodes -o wide
 k get pods -A -o wide

@@ -48,6 +48,14 @@ The migrate caller the vault and audit admit, and the NetworkPolicies that let t
 component reach them, PostgreSQL and the Kratos admin API, are in the product's main stack. With
 the import closed there is no `sneakers-migrate` service account, so nothing can run as that caller.
 
+While an import is open a phased product is held after the phase `import.after` names
+(`services` for Sneakers, [upgrades.md](upgrades.md#the-phases)): PostgreSQL, Kratos, the identity
+service, the vault and the audit service, which the import writes to, run; the gateway and the web
+apps (sign-in, the MCP) are scaled to 0, and the box state is `maintenance`, so 443 says the box is
+in maintenance and nobody signs in or writes while the import runs. A reboot with the import open
+comes back to the same hold. Verify counts the hold as ready. Closing the import brings the held
+phases back, and the box says running once they're Ready.
+
 There is no rollback: if an import is wrong, fix the cause and import again with **Re-import**
 (`--wipe-target`), which empties the product's data first. On an imported box it replaces the
 earlier import; a box whose data didn't come from an import is refused.

@@ -4,8 +4,11 @@
 # THROWAWAY, LAB ONLY: a hello-world workload that shows k0s runs on the
 # box, until sneakers-platformd deploys the real platform (#99), which
 # removes it. It ships in the lab product bundle (build/lab/stacks), and
-# k0s applies it from /var/lib/k0s/manifests/hello/. It answers "hello
-# from sneakers-appliance" on NodePort 30080, which the edge stack serves
+# k0s applies it from /var/lib/k0s/manifests/hello/. Its Deployment is
+# the lab product's front phase (build/lab/stacks/lab-front,
+# build/lab/product.yaml), which starts only once the data phase
+# (build/lab/stacks/lab-data) is Ready. It answers "hello from
+# sneakers-appliance" on NodePort 30080, which the edge stack serves
 # on 443 (build/lab/stacks/edge). The page loads the box-state poller
 # (/_box/poll.js), so an open tab shows the box-state page through a
 # reboot and comes back by itself (docs/edge-fallback.md).
@@ -25,58 +28,6 @@ data:
     <html lang="en"><head><meta charset="utf-8"><title>hello</title>
     <script src="/_box/poll.js" defer></script></head>
     <body><p>hello from sneakers-appliance</p></body></html>
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: hello
-  namespace: sneakers-hello
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: hello
-  template:
-    metadata:
-      labels:
-        app: hello
-    spec:
-      automountServiceAccountToken: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65534
-        runAsGroup: 65534
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: httpd
-          image: docker.io/library/busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
-          imagePullPolicy: Never
-          command: [httpd, -f, -p, "8080", -h, /www]
-          ports:
-            - containerPort: 8080
-          readinessProbe:
-            httpGet:
-              path: /
-              port: 8080
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop: [ALL]
-          resources:
-            requests:
-              cpu: 10m
-              memory: 16Mi
-            limits:
-              memory: 32Mi
-          volumeMounts:
-            - name: www
-              mountPath: /www
-      volumes:
-        - name: www
-          configMap:
-            name: hello
 ---
 apiVersion: v1
 kind: Service

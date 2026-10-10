@@ -10,8 +10,10 @@
 // has no product bundle. The lab product bundle is then installed through
 // the Updates API (upload, stage, apply), k0s starts from it with no
 // registry to reach, and the hello stack answers on https://<box>/ through
-// the interim edge, with 80 redirecting there. The lab image's hook
-// (build/lab/overlay) prints what it sees on the serial line.
+// the interim edge, with 80 redirecting there. The lab product comes up in
+// two phases, the hello page only once a late data stand-in is Ready, with
+// no restarts, on the install and again after a power loss. The lab image's
+// hook (build/lab/overlay) prints what it sees on the serial line.
 package k0s_test
 
 import (
@@ -110,6 +112,7 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	next.Expect(`lab-hook: api up`, 25*time.Minute)
 	next.Expect(`lab-hook: node ready`, 15*time.Minute)
 	next.Expect(`lab-hook: hello pod ready`, 15*time.Minute)
+	phasesInOrder(t, next.Expect(`lab-hook: phase pods: .*`, time.Minute), "the first install")
 	next.Expect(`lab-hook: edge pod ready`, 10*time.Minute)
 	next.Expect(`lab-hook: root shell kubectl works`, 2*time.Minute)
 	next.Expect(`lab-hook: root shell helm works`, 2*time.Minute)
@@ -176,6 +179,57 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	if n := len(k0sRestarted.FindAllString(next.Console(), -1)); n >= harness.CrashLoopRestarts {
 		t.Fatalf("k0s is crash-looping: restarted %d times", n)
 	}
+
+	// A power loss: nothing stops the product, and after the boot the
+	// kubelet restarts every container in its old pod at once. The box
+	// quiesces them and brings the phases up again in order, with new pods
+	// that never restarted (docs/upgrades.md#the-phases).
+	next.Stop()
+	after := harness.Boot(t, opts(next.Disk(0)))
+	after.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
+	after.Expect(`lab-hook: hello pod ready`, 25*time.Minute)
+	phasesInOrder(t, after.Expect(`lab-hook: phase pods: .*`, time.Minute), "after a power loss")
+}
+
+// phasePod is one phased pod as the lab hook prints it.
+type phasePod struct {
+	restarts       int
+	started, ready time.Time
+}
+
+var phasePodRE = regexp.MustCompile(`([\w-]+) restarts=(\d+) started=(\S+) ready=(\S+)`)
+
+// phasesInOrder checks the lab hook's phase pods line: every phased pod
+// is Ready with no restarts, and the front phase's pod started only once
+// the data phase's was Ready.
+func phasesInOrder(t *testing.T, line, when string) {
+	t.Helper()
+	pods := map[string]phasePod{}
+	for _, m := range phasePodRE.FindAllStringSubmatch(line, -1) {
+		var p phasePod
+		var err error
+		if _, err = fmt.Sscan(m[2], &p.restarts); err == nil {
+			if p.started, err = time.Parse(time.RFC3339, m[3]); err == nil {
+				p.ready, err = time.Parse(time.RFC3339, m[4])
+			}
+		}
+		if err != nil {
+			t.Fatalf("%s: %q doesn't read: %v", when, m[0], err)
+		}
+		if p.restarts != 0 {
+			t.Errorf("%s: the %s pod restarted %d times: %s", when, m[1], p.restarts, line)
+		}
+		pods[m[1]] = p
+	}
+	data, okD := pods["lab-db"]
+	front, okF := pods["hello"]
+	if !okD || !okF {
+		t.Fatalf("%s: the phase pods line names %v: %s", when, pods, line)
+	}
+	if front.started.Before(data.ready) {
+		t.Fatalf("%s: the front phase started at %s, before the data phase was Ready at %s", when, front.started, data.ready)
+	}
+	t.Logf("%s: data Ready at %s, front started at %s, no restarts", when, data.ready, front.started)
 }
 
 var k0sRestarted = regexp.MustCompile(`services: exited .*restart=true service=k0s\b`)

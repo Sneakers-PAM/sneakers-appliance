@@ -207,13 +207,23 @@ resolves the dependencies), over `charts/sneakers/examples/values-small-box.yaml
 
 | Stack | Holds |
 |---|---|
-| `sneakers` | the product, always on: the services, the web apps, PostgreSQL, Valkey and Kratos, in the `sneakers` namespace |
-| `sneakers-mcp` | what only the on render has (the MCP server and Hydra), and the `sneakers-mcp-switch` ConfigMap with the gateway and staff web settings the switch changes, which both load (`envFromConfigMaps`, optional); applied while the MCP switch is on |
+| `sneakers` | always on: the `sneakers` namespace and everything of the product that isn't a workload (Services, ConfigMaps, NetworkPolicies, RBAC, Ingresses) |
+| `sneakers-data` | the data phase: PostgreSQL and Valkey |
+| `sneakers-identity` | the identity phase: Kratos, the identity service and the vault |
+| `sneakers-services` | the services phase: workflow, audit, notify, connector and the SSH broker |
+| `sneakers-front` | the front phase: the gateway and the two web apps |
+| `sneakers-mcp` | what only the on render has (the MCP server and Hydra), and the `sneakers-mcp-switch` ConfigMap with the gateway and staff web settings the switch changes, which both load (`envFromConfigMaps`, optional); placed with the front phase, before its own stack, while the MCP switch is on |
 | `sneakers-import` | the migrate service account (`build/product/sneakers/import-stack.yaml`), applied while an import is open ([import.md](import.md)) |
 | `edge` | the interim edge on 443 (`build/lab/stacks/edge`) |
 
-The renders layer sneakers-release's `migrate/deploy/migrate-callers-values.yaml`, so the main stack
-lists the migrate caller in the vault and audit and admits it in the NetworkPolicies; the import's
+Each workload goes in its phase's own stack (`product.yaml` `phases`, below), labelled
+`sneakers-appliance/phase` and `sneakers-appliance/phase-order` on itself and its pods, and the
+tool refuses a workload no phase names, or a switch's workload whose phase doesn't place the
+switch's stack. The bundle check refuses a bundle without a phase's stack, or with a workload in
+it that its phase doesn't name or that lacks the labels.
+
+The renders layer sneakers-release's `migrate/deploy/migrate-callers-values.yaml`, so the vault
+and audit list the migrate caller and the NetworkPolicies admit it; the import's
 Job template goes into the bundle as `import/job.yaml` with the sneakers-migrate image the release
 built (`spec.jobs.migrate`). On the way every container gets the image `release.yaml` pins, by digest, and is never pulled; a
 volume claim becomes a hostPath under `/var/lib/sneakers-data`, owned by the pod's user; an Ingress
@@ -307,6 +317,29 @@ The box refuses a health check whose service isn't `<namespace>/<service>:<port>
 isn't a plain absolute path, and a timeout outside 1m to 2h. Without `ready` the box still waits for
 every workload in the stacks to roll out and for 443, with its own 10 minutes.
 
+It may declare its **phases**, the order it comes up in on every boot, update and revert, each
+Ready before the next ([upgrades.md](upgrades.md#the-phases)):
+
+```yaml
+phases:
+  - name: data                      # a lower-case word; the step is phase:data
+    label: Starting the database and the cache
+    stack: sneakers-data            # the phase's own stack; the render puts its workloads in it
+    workloads: [sneakers-postgres, sneakers-valkey]
+    timeout: 5m                     # from 1m to 1h; 5 minutes without it
+  - name: front
+    label: Starting the gateway and the web apps
+    stack: sneakers-front
+    workloads: [sneakers-gateway, sneakers-web-staff, sneakers-web-admin, sneakers-mcp, sneakers-hydra]
+    switch_stacks: [sneakers-mcp]   # switch-gated stacks placed with the phase, before its own
+```
+
+The box refuses a phase whose name isn't a lower-case word or comes twice, one without a label or
+workloads, a stack that another phase, a switch or the appliance has, a workload two phases name,
+a switch stack no switch gates (or the import's), and a timeout outside 1m to 1h. A slot records
+its phase stacks in `phase-stacks` for k0s-interim, which leaves them to the phase loop. Without
+`phases` the product comes up as before: every stack at once.
+
 It may also declare an **import**: the product takes an export of an earlier install from the
 Import page before its own first-run setup ([import.md](import.md)):
 
@@ -318,6 +351,7 @@ import:
   uid: 65532              # the Job's user, who owns the import directory
   setup: setup-token      # the one-time exposed value the product's own setup consumes
   restart: [sneakers/deployment/sneakers-vault]   # restarted after an import passes
+  after: services         # with phases: the phase the product holds after while an import is open
 ```
 
 The box refuses an import whose switch isn't declared, whose job isn't a `.yaml` path inside the
