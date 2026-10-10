@@ -5,6 +5,7 @@ package shell_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -204,6 +205,47 @@ func TestHistoryListsTheSessionsCommands(t *testing.T) {
 	}
 	if strings.Contains(listed, fakePassword) {
 		t.Errorf("history shows the password:\n%q", listed)
+	}
+	exitTerminal(t, sc, done)
+}
+
+// An answer typed at a command's prompt never comes back with Up at the
+// menu: Up brings the command line before it.
+func TestAPromptAnswerStaysOutOfRecall(t *testing.T) {
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: &recordingBackend{}, Product: sneakers}
+	sc, done := startTerminal(t, e, "alice@box1> ")
+	sc.send("reboot\r")
+	sc.waitFor("Type reboot to confirm: ")
+	sc.send("not-this-answer\r")
+	sc.waitFor("alice@box1> ")
+	sc.send("\x1b[A")
+	got := sc.waitFor("reboot")
+	if strings.Contains(got, "not-this-answer") {
+		t.Fatalf("Up brought back the prompt's answer:\n%q", got)
+	}
+	exitTerminal(t, sc, done)
+}
+
+// The root shell's code is read without echo and never enters recall.
+func TestTheRootShellCodeIsNotEchoedOrRecalled(t *testing.T) {
+	b := &recordingBackend{
+		reply: map[string]shell.Result{"rootshell.begin": {Text: "Paste K3M9-7QDA on :8443.", Data: map[string]string{"challenge": "K3M9-7QDA"}}},
+		err:   map[string]error{"rootshell.open": errors.New("refused")},
+	}
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, Product: sneakers,
+		RootShell: func(context.Context, string, string) error { return nil }}
+	sc, done := startTerminal(t, e, "alice@box1> ")
+	sc.send("shell\r")
+	sc.waitFor("Code: ")
+	sc.send("482913\r")
+	after := sc.waitFor("alice@box1> ")
+	if strings.Contains(after, "482913") {
+		t.Fatalf("the code was echoed:\n%q", after)
+	}
+	sc.send("\x1b[A")
+	got := sc.waitFor("shell")
+	if strings.Contains(got, "482913") {
+		t.Fatalf("Up brought back the code:\n%q", got)
 	}
 	exitTerminal(t, sc, done)
 }

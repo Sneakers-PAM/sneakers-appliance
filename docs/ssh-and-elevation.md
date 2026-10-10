@@ -177,7 +177,9 @@ blank line; `-o json` gives the error alone.
 
 `history` lists the command lines typed in this SSH session, numbered, oldest first; a password in a
 URL (an HTTPS proxy's) shows as `***`. The list ends with the session; nothing is written to disk,
-and the answers typed at a prompt (a root-shell code, a confirmation) aren't in it.
+and the answers typed at a prompt (a root-shell code, a confirmation) aren't in it. Up and Down
+recall the menu's command lines the same way: an answer typed at a command's prompt never comes
+back with Up.
 
 | Command | Console | SSH | In this release |
 |---|---|---|---|
@@ -300,7 +302,7 @@ closed shell:
    (`RootShellService.IssueRootShellCode`) and gets an 8-character code: the first 40 bits of the root
    key's ed25519 signature over the challenge, the admin, the SSH source and the expiry. It is bound
    to that login and works once.
-3. The admin types the code into the SSH session (`OpenRootShell`). Three wrong codes close the
+3. The admin types the code into the SSH session (`OpenRootShell`); it isn't echoed. Three wrong codes close the
    challenge, and they count toward the account's lockout. A right one gives a one-minute ticket.
 4. The shell connects to `/run/sneakers/rootshell.sock` with the ticket and the terminal size; accessd
    starts `/usr/libexec/sneakers-elevated` as root with the connection as its terminal and relays
