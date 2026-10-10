@@ -73,6 +73,10 @@ type Env struct {
 	// Values are the values the product exposes to this session's role,
 	// each a command in the product's section.
 	Values []Value
+	// Switches are the switches the product's product.yaml declares, so
+	// mcp's help and completion offer only those; nil when it wasn't read,
+	// and then they name every switch a product may declare.
+	Switches []string
 	// Role is the login's role, owner or admin; empty (the console) is an
 	// owner. help and Tab offer an admin no owner-only command; accessd
 	// still checks the role of every call.
@@ -194,13 +198,28 @@ type Value struct {
 	Name, Label string
 }
 
+// noMachineAPI reports switches read from a product.yaml that has no
+// machine-api switch.
+func noMachineAPI(switches []string) bool {
+	return switches != nil && !slices.Contains(switches, "machine-api")
+}
+
 // specsFor is the command table with p installed: the base's and p's
 // own commands, then one per value p exposes to this session.
-func specsFor(p productinfo.Info, values []Value) []spec {
-	if !p.Present() || len(values) == 0 {
+func specsFor(p productinfo.Info, values []Value, switches []string) []spec {
+	if !p.Present() || len(values) == 0 && !noMachineAPI(switches) {
 		return specs
 	}
 	out := slices.Clone(specs)
+	if noMachineAPI(switches) {
+		for i := range out {
+			if out[i].product && out[i].path == "mcp" {
+				out[i].use = "mcp [on|off]"
+				out[i].long = "Without arguments it shows the installed product's MCP switch. on or off sets it. It's the switch the product declares, the same one the MCP card on :8443 sets, under the same role and audit. This product declares no machine API switch, so its machine API stays on."
+				out[i].example = "  {product} mcp\n  {product} mcp on\n  {product} mcp off"
+			}
+		}
+	}
 	for _, v := range values {
 		short := v.Label
 		if short == "" {
@@ -292,7 +311,7 @@ func Names(o Origin) []string { return NamesFor(o, productinfo.Info{}) }
 // values are the product's exposed values this session may read.
 func NamesFor(o Origin, p productinfo.Info, values ...Value) []string {
 	var out []string
-	for _, s := range specsFor(p, values) {
+	for _, s := range specsFor(p, values, nil) {
 		if !slices.Contains(s.origins, o) {
 			continue
 		}
@@ -404,7 +423,7 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 		groups[e.Product.Name] = g
 		root.AddCommand(g)
 	}
-	all := specsFor(e.Product, e.Values)
+	all := specsFor(e.Product, e.Values, e.Switches)
 	for i := range all {
 		s := &all[i]
 		path := s.path

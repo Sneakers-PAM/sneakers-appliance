@@ -231,7 +231,10 @@ owners, and the change is audited as `upgrade.policy.set` like one made on :8443
 
 `<product> mcp` (`sneakers mcp`) shows the installed product's MCP switch and its machine API
 switch; `<product> mcp on` and `<product> mcp off` set it. The machine API keeps its setting unless
-the line names it: `sneakers mcp off machine-api=off` turns both off. The switches are the ones the
+the line names it: `<product> mcp off machine-api=off` turns both off, for a product that declares a
+machine API switch. The help, its examples and Tab offer only the switches the installed product
+declares: Sneakers declares `mcp` only, so `sneakers mcp` is offered without `machine-api=`, and
+naming it anyway answers `NOT_AVAILABLE`. The switches are the ones the
 product's `product.yaml` declares (`mcp` and `machine-api`), the same ones the MCP card on :8443
 sets: accessd runs `McpService.GetMcp` and `McpService.SetMcp` as the login's admin, so the role
 is the same (admin) and a change writes the same `mcp.set` audit entry, with the `ssh` surface.
@@ -300,7 +303,9 @@ sneakers-elevated warns a minute before the end.
 At its start the session says who it's for, that it's recorded and when it ends, and that `help`
 lists the commands that help troubleshoot the box. `help` comes from the shell's start file
 (`os/rootshell/rc.sh`, handed to ash through `ENV`): pods, logs, events, `k0s status`, the stacks
-k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. It
+k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. The
+disk lines suit busybox: `df -hP`, whose `-P` keeps each volume on one line for a script to read,
+and `ls -l --full-time` for a file's size and time, because busybox `stat` has no `-c`. It
 also says why `helm list -A` is empty: the product's stacks are k0s manifests the appliance applies
 from the installed bundle, not Helm releases, because the update slots and revert track the
 manifests directly and Helm's release state would sit outside them.
