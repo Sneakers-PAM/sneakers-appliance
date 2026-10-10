@@ -93,6 +93,16 @@ spec:
         dockerfile: Dockerfile
         context: .
         target: vault
+  jobs:
+    migrate:
+      image: ghcr.io/sneakers-pam/sneakers-migrate
+      version: 0.1.0
+      digest: sha256:TBD-at-release
+      build:
+        repository: Sneakers-PAM/sneakers-release
+        commit: 59056d56b316b32d768bebd608399d0a97b269ee
+        dockerfile: migrate/Dockerfile
+        context: .
   thirdParty:
     postgres:
       image: docker.io/library/postgres
@@ -106,7 +116,8 @@ func TestSourcesListsEveryServiceBuild(t *testing.T) {
 	if err := sources([]string{"--release", writeRelease(t, withBuilds)}, &out); err != nil {
 		t.Fatal(err)
 	}
-	want := "vault ghcr.io/sneakers-pam/sneakers-vault 0.1.0 Sneakers-PAM/sneakers-vault 2644629a50c138764f89d897bcc4b2e6c78e2924 Dockerfile . vault -\n" +
+	want := "migrate ghcr.io/sneakers-pam/sneakers-migrate 0.1.0 Sneakers-PAM/sneakers-release 59056d56b316b32d768bebd608399d0a97b269ee migrate/Dockerfile . - -\n" +
+		"vault ghcr.io/sneakers-pam/sneakers-vault 0.1.0 Sneakers-PAM/sneakers-vault 2644629a50c138764f89d897bcc4b2e6c78e2924 Dockerfile . vault -\n" +
 		"web-staff ghcr.io/sneakers-pam/sneakers-web-staff 0.1.0 Sneakers-PAM/sneakers-web 9c24045aaa1d4a1288176934d9ee9557aa250b32 Dockerfile . - APP=staff,EDGE=live\n"
 	if out.String() != want {
 		t.Fatalf("got\n%s\nwant\n%s", out.String(), want)

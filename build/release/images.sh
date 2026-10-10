@@ -7,7 +7,8 @@
 # build block: the repository, the full commit, the Dockerfile and its
 # context, the target and build args), with the repository's own
 # Dockerfile, for linux/amd64, and leaves each as an OCI layout,
-# OUT/<service>/. Nothing is pushed: the build job fills the digests into
+# OUT/<service>/, with the commit it was built from in build-commit (bundle
+# fill refuses an image from any other commit). Nothing is pushed: the build job fills the digests into
 # release.yaml (bundle fill), the sign job countersigns them and the publish
 # job pushes them by digest.
 #
@@ -62,6 +63,7 @@ while read -r name image version repo commit dockerfile context target buildargs
     || { tail -40 "$work/$name.log" >&2; echo "images: $name didn't build" >&2; exit 1; }
   mkdir -p "$OUT/$name"
   tar -xf "$work/$name.tar" -C "$OUT/$name"
+  printf '%s\n' "$commit" > "$OUT/$name/build-commit"
   rm -rf "$src" "$work/$name.tar"
   dgst="$(sed -n 's/.*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$OUT/$name/index.json" | head -1)"
   echo "images: $name $dgst in $(( $(date +%s) - start ))s"

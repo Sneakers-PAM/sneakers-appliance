@@ -36,8 +36,9 @@
 #
 # Output in $OUT: sneakers-<version>.efi (unsigned UKI), systemd-bootx64.efi
 # (unsigned), root-<version>.img, verity.json, release.yaml (with the built
-# digests), stacks/ (the product's k0s stacks) and product.yaml (the product
-# bundle's), 
+# digests), stacks/ (the product's k0s stacks), product.yaml (the product
+# bundle's), import-job.yaml and migrate-image (the import's Job template and
+# the sneakers-migrate image@digest it runs),
 # systemd-version, k0s and helm (checked against release.yaml's pins),
 # images.txt ("<image> <digest>" for every pinned image) with manifests/<hex>
 # (each image's manifest or index bytes, which hash to its digest, for the
@@ -107,6 +108,12 @@ chmod 0755 "$work/render-helm"
 rm -rf "$OUT/stacks"
 CHARTS="$CHARTS" RELEASE="$OUT/release.yaml" HELM="$work/render-helm" OUT="$OUT/stacks" bash "$root/build/product/sneakers/render.sh"
 install -m 0644 "$root/build/product/sneakers/product.yaml" "$OUT/product.yaml"
+# The import's Job template and the migrate image it runs, by the digest
+# release.yaml now pins (build/product/build.sh puts it at import/job.yaml).
+install -m 0644 "$root/build/product/sneakers/import-job.yaml" "$OUT/import-job.yaml"
+migrate="$(awk '$1 ~ /\/sneakers-migrate$/ { print $1 "@" $2 }' "$OUT/images.txt")"
+[ -n "$migrate" ] || { echo "release: release.yaml pins no sneakers-migrate image for the import" >&2; exit 1; }
+printf '%s\n' "$migrate" > "$OUT/migrate-image"
 
 pkg=github.com/Sneakers-PAM/sneakers-appliance/internal/release
 b64() { base64 -w0 < "$1"; }

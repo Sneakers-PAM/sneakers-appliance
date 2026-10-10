@@ -74,7 +74,10 @@ type Release struct {
 		Version string `yaml:"version"`
 	} `yaml:"metadata"`
 	Spec struct {
-		Services   map[string]Image `yaml:"services"`
+		Services map[string]Image `yaml:"services"`
+		// Jobs are images a product runs as one-off Jobs (sneakers-migrate
+		// for the Import page); bundled like the services.
+		Jobs       map[string]Image `yaml:"jobs"`
 		ThirdParty map[string]Image `yaml:"thirdParty"`
 		Platform   map[string]Image `yaml:"platform"`
 		Kubernetes struct {
@@ -133,7 +136,7 @@ func (r *Release) Images() (map[string]string, error) {
 		}
 		return nil
 	}
-	for group, m := range map[string]map[string]Image{"services": r.Spec.Services, "thirdParty": r.Spec.ThirdParty, "platform": r.Spec.Platform} {
+	for group, m := range map[string]map[string]Image{"services": r.Spec.Services, "jobs": r.Spec.Jobs, "thirdParty": r.Spec.ThirdParty, "platform": r.Spec.Platform} {
 		if err := add(group, m); err != nil {
 			return nil, err
 		}
@@ -146,6 +149,18 @@ func (r *Release) Images() (map[string]string, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// BuiltImages are the images the release builds from their sources (the
+// services and the Job images), by name.
+func (r *Release) BuiltImages() map[string]Image {
+	out := map[string]Image{}
+	for _, g := range []map[string]Image{r.Spec.Services, r.Spec.Jobs} {
+		for n, im := range g {
+			out[n] = im
+		}
+	}
+	return out
 }
 
 // K0sSHA256 is the pinned k0s binary's digest for arch.

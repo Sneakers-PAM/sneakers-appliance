@@ -5,8 +5,9 @@
 # The production product bundle's stacks, rendered by render.sh from
 # sneakers-release's charts, are complete and carry nothing of a lab build:
 #
-#   - every component product.yaml names is pinned in release.yaml, and
-#     every service image release.yaml pins runs in a stack;
+#   - every component product.yaml names is pinned in release.yaml, every
+#     service image release.yaml pins runs in a stack, the migrate Job image
+#     is pinned and the main stack lists the migrate caller;
 #   - every container runs an image pinned by digest, never pulled;
 #   - no stack carries a Secret (each box makes its own), and every
 #     Secret a workload reads is a box secret product.yaml declares
@@ -59,7 +60,7 @@ done < "$charts/manifest/release.yaml" > "$work/release.yaml"
 
 out="$work/stacks"
 CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > "$work/render.log"
-for st in sneakers sneakers-mcp edge; do
+for st in sneakers sneakers-mcp sneakers-import edge; do
   [ -s "$out/$st/$st.yaml" ] || fail "no $st stack"
 done
 echo "ok: rendered $(cd "$out" && echo */ | tr -d /)"
@@ -69,10 +70,13 @@ go run "$root/build/tools/bundle" images --release "$work/release.yaml" > "$work
 for c in $(sed -n 's/.*image: \([a-z0-9._-]*\)}.*/\1/p' "$here/product.yaml"); do
   grep -q "/$c sha256:" "$work/pinned" || fail "the component $c isn't pinned in release.yaml"
 done
-go run "$root/build/tools/bundle" sources --release "$charts/manifest/release.yaml" | while read -r _ image _; do
+# The migrate image runs as the import's Job (import/job.yaml), not in a stack.
+go run "$root/build/tools/bundle" sources --release "$charts/manifest/release.yaml" | grep -v '^migrate ' | while read -r _ image _; do
   grep -qh "image: $image@sha256:" "$out"/*/*.yaml || fail "no stack runs $image"
 done
-echo "ok: every component is pinned and every service image runs in a stack"
+grep -q '^ghcr.io/sneakers-pam/sneakers-migrate sha256:' "$work/pinned" || fail "the migrate Job image isn't pinned"
+grep -q 'sneakers/sneakers-migrate' "$out/sneakers/sneakers.yaml" || fail "the vault and audit don't list the migrate caller"
+echo "ok: every component is pinned, every service image runs in a stack, and the import's image and caller are in place"
 
 # Pinned by digest and never pulled.
 if grep -h '^ *image: ' "$out"/*/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}$' | grep -q .; then

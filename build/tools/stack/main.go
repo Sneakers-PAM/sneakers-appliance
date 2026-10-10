@@ -148,7 +148,7 @@ func render(o options, w io.Writer) error {
 // platform) to its digest.
 func pinned(rel *bundle.Release) (map[string]string, error) {
 	out := map[string]string{}
-	for _, g := range []map[string]bundle.Image{rel.Spec.Services, rel.Spec.ThirdParty, rel.Spec.Platform} {
+	for _, g := range []map[string]bundle.Image{rel.Spec.Services, rel.Spec.Jobs, rel.Spec.ThirdParty, rel.Spec.Platform} {
 		for name, im := range g {
 			if !strings.HasPrefix(im.Digest, "sha256:") || len(im.Digest) != 71 {
 				return nil, fmt.Errorf("release.yaml pins %s at %q, not a digest", name, im.Digest)

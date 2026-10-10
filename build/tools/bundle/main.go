@@ -189,7 +189,8 @@ func inRepo(p string) bool {
 	return wordRE.MatchString(p) && !strings.HasPrefix(p, "/") && !slices.Contains(strings.Split(p, "/"), "..")
 }
 
-// sources writes each service's build block, sorted by service: "<service>
+// sources writes the build block of each image the release builds (the
+// services and the Job images), sorted by service: "<service>
 // <image> <version> <repository> <commit> <dockerfile> <context> <target or -> <args
 // KEY=value,... or ->". It refuses a service without one, or with a field
 // a shell loop can't carry as one word.
@@ -203,14 +204,15 @@ func sources(args []string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	names := make([]string, 0, len(rel.Spec.Services))
-	for n := range rel.Spec.Services {
+	built := rel.BuiltImages()
+	names := make([]string, 0, len(built))
+	for n := range built {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	var lines []string
 	for _, n := range names {
-		svc := rel.Spec.Services[n]
+		svc := built[n]
 		b := svc.Build
 		switch {
 		case b == nil:
@@ -298,13 +300,14 @@ func push(args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	names := make([]string, 0, len(rel.Spec.Services))
-	for n := range rel.Spec.Services {
+	built := rel.BuiltImages()
+	names := make([]string, 0, len(built))
+	for n := range built {
 		names = append(names, n)
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		svc := rel.Spec.Services[n]
+		svc := built[n]
 		if err := bundle.PushBuilt(ctx, bundle.PushOptions{Layouts: *layouts, Image: svc.Image, Digest: svc.Digest, Tag: *tag,
 			Username: os.Getenv("REGISTRY_USERNAME"), Password: os.Getenv("REGISTRY_PASSWORD"), PlainHTTP: *plain}); err != nil {
 			return err

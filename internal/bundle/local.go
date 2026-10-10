@@ -40,11 +40,17 @@ type Build struct {
 	Args       map[string]string `yaml:"args"`
 }
 
+// BuildCommitFile, in a built image's layout, is the commit it was built
+// from (build/release/images.sh writes it); fill refuses an image whose
+// commit isn't the one its build block names.
+const BuildCommitFile = "build-commit"
+
 // built is one service image the release built: an OCI layout directory,
 // <layouts>/<service>, whose index names exactly one manifest.
 type built struct {
-	dir  string
-	desc ocispec.Descriptor
+	dir    string
+	desc   ocispec.Descriptor
+	commit string
 }
 
 // readBuilt reads every layout in layouts, by service name.
@@ -67,7 +73,8 @@ func readBuilt(layouts string) (map[string]built, error) {
 		if err := json.Unmarshal(b, &idx); err != nil || len(idx.Manifests) != 1 {
 			return nil, codes.New(codes.KitBundleMismatch, "the built image %s's layout doesn't name exactly one image", e.Name())
 		}
-		out[e.Name()] = built{dir: dir, desc: idx.Manifests[0]}
+		commit, _ := os.ReadFile(filepath.Join(dir, BuildCommitFile)) // #nosec G304 -- as above
+		out[e.Name()] = built{dir: dir, desc: idx.Manifests[0], commit: strings.TrimSpace(string(commit))}
 	}
 	return out, nil
 }
@@ -94,21 +101,33 @@ func Fill(relYAML []byte, layouts string) ([]byte, error) {
 		return nil, codes.New(codes.KitBundleMismatch, "release.yaml pins no services")
 	}
 	named := map[string]bool{}
-	for i := 0; i+1 < len(services.Content); i += 2 {
-		name := services.Content[i].Value
-		named[name] = true
-		dg := lookup(services.Content[i+1], "digest")
-		if dg == nil {
-			return nil, codes.New(codes.KitBundleMismatch, "release.yaml's services.%s has no digest", name)
+	for _, group := range []string{"services", "jobs"} {
+		m := lookup(&doc, "spec", group)
+		if m == nil || m.Kind != yaml.MappingNode {
+			continue
 		}
-		im, ok := images[name]
-		switch {
-		case dg.Value == Placeholder && !ok:
-			return nil, codes.New(codes.KitBundleMismatch, "services.%s is pinned at %s, and no image was built for it", name, Placeholder)
-		case dg.Value == Placeholder:
-			dg.Value = im.desc.Digest.String()
-		case ok && dg.Value != im.desc.Digest.String():
-			return nil, codes.New(codes.KitBundleMismatch, "services.%s pins %s, but the image built for it is %s", name, dg.Value, im.desc.Digest)
+		for i := 0; i+1 < len(m.Content); i += 2 {
+			name := m.Content[i].Value
+			if named[name] {
+				return nil, codes.New(codes.KitBundleMismatch, "release.yaml names %s twice among the images it builds", name)
+			}
+			named[name] = true
+			dg := lookup(m.Content[i+1], "digest")
+			if dg == nil {
+				return nil, codes.New(codes.KitBundleMismatch, "release.yaml's %s.%s has no digest", group, name)
+			}
+			im, ok := images[name]
+			if c := lookup(m.Content[i+1], "build", "commit"); ok && c != nil && im.commit != c.Value {
+				return nil, codes.New(codes.KitBundleMismatch, "%s.%s: the image built for it is from commit %q, not the build block's %s", group, name, im.commit, c.Value)
+			}
+			switch {
+			case dg.Value == Placeholder && !ok:
+				return nil, codes.New(codes.KitBundleMismatch, "%s.%s is pinned at %s, and no image was built for it", group, name, Placeholder)
+			case dg.Value == Placeholder:
+				dg.Value = im.desc.Digest.String()
+			case ok && dg.Value != im.desc.Digest.String():
+				return nil, codes.New(codes.KitBundleMismatch, "%s.%s pins %s, but the image built for it is %s", group, name, dg.Value, im.desc.Digest)
+			}
 		}
 	}
 	var stray []string

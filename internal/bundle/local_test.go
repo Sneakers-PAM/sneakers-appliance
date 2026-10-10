@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -53,6 +54,17 @@ func built(t *testing.T, dir string) (digest.Digest, digest.Digest) {
 	return md.Digest, ld.Digest
 }
 
+// builtFrom is built, recording the commit the image was built from, as
+// build/release/images.sh does.
+func builtFrom(t *testing.T, dir, commit string) digest.Digest {
+	t.Helper()
+	d, _ := built(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, bundle.BuildCommitFile), []byte(commit+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return d
+}
+
 const toFill = `# The pinned release (a comment the fill keeps).
 apiVersion: sneakers-pam/v1alpha1
 kind: Release
@@ -80,6 +92,15 @@ spec:
         context: .
         args:
           APP: staff
+  jobs:
+    migrate:
+      image: ghcr.io/sneakers-pam/sneakers-migrate
+      digest: sha256:TBD-at-release
+      build:
+        repository: Sneakers-PAM/sneakers-release
+        commit: 59056d56b316b32d768bebd608399d0a97b269ee
+        dockerfile: migrate/Dockerfile
+        context: .
   thirdParty:
     postgres:
       image: docker.io/library/postgres
@@ -90,8 +111,9 @@ spec:
 // placeholder digest, and keeps the rest of release.yaml as it is.
 func TestFillPutsTheBuiltDigestsInPlace(t *testing.T) {
 	layouts := t.TempDir()
-	vault, _ := built(t, filepath.Join(layouts, "vault"))
-	staff, _ := built(t, filepath.Join(layouts, "web-staff"))
+	vault := builtFrom(t, filepath.Join(layouts, "vault"), "2644629a50c138764f89d897bcc4b2e6c78e2924")
+	staff := builtFrom(t, filepath.Join(layouts, "web-staff"), "9c24045aaa1d4a1288176934d9ee9557aa250b32")
+	migrate := builtFrom(t, filepath.Join(layouts, "migrate"), "59056d56b316b32d768bebd608399d0a97b269ee")
 	out, err := bundle.Fill([]byte(toFill), layouts)
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +121,7 @@ func TestFillPutsTheBuiltDigestsInPlace(t *testing.T) {
 	if strings.Contains(string(out), "TBD") {
 		t.Fatalf("a placeholder is left:\n%s", out)
 	}
-	for _, want := range []string{"# The pinned release (a comment the fill keeps).", "digest: " + vault.String(), "digest: " + staff.String(),
+	for _, want := range []string{"# The pinned release (a comment the fill keeps).", "digest: " + vault.String(), "digest: " + staff.String(), "digest: " + migrate.String(),
 		"commit: 2644629a50c138764f89d897bcc4b2e6c78e2924", "APP: staff", "sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("no %q in\n%s", want, out)
@@ -109,8 +131,15 @@ func TestFillPutsTheBuiltDigestsInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rel.Images(); err != nil {
+	images, err := rel.Images()
+	if err != nil {
 		t.Fatal(err)
+	}
+	if images[migrate.Encoded()] != "ghcr.io/sneakers-pam/sneakers-migrate" {
+		t.Fatal("the bundle doesn't carry the migrate Job image")
+	}
+	if b := rel.BuiltImages(); len(b) != 3 || b["migrate"].Build == nil {
+		t.Fatalf("the images the release builds %v", b)
 	}
 	if b := rel.Spec.Services["web-staff"].Build; b == nil || b.Repository != "Sneakers-PAM/sneakers-web" || b.Args["APP"] != "staff" || b.Target != "" {
 		t.Fatalf("the build block %+v", b)
@@ -119,16 +148,25 @@ func TestFillPutsTheBuiltDigestsInPlace(t *testing.T) {
 
 func TestFillRefuses(t *testing.T) {
 	layouts := t.TempDir()
-	built(t, filepath.Join(layouts, "vault"))
+	builtFrom(t, filepath.Join(layouts, "vault"), "2644629a50c138764f89d897bcc4b2e6c78e2924")
 	// No image built for a placeholder.
 	if _, err := bundle.Fill([]byte(toFill), layouts); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "services.web-staff") {
 		t.Fatalf("a placeholder with no built image: %v", err)
 	}
-	built(t, filepath.Join(layouts, "web-staff"))
+	builtFrom(t, filepath.Join(layouts, "web-staff"), "9c24045aaa1d4a1288176934d9ee9557aa250b32")
+	builtFrom(t, filepath.Join(layouts, "migrate"), "59056d56b316b32d768bebd608399d0a97b269ee")
 	// A pinned digest the built image doesn't have.
 	pinned := strings.Replace(toFill, "sha256:TBD-at-release", "sha256:"+strings.Repeat("ab", 32), 1)
 	if _, err := bundle.Fill([]byte(pinned), layouts); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "services.vault") {
 		t.Fatalf("a built image that isn't the pinned digest: %v", err)
+	}
+	// An image built from another commit than its build block names.
+	stale := t.TempDir()
+	builtFrom(t, filepath.Join(stale, "vault"), strings.Repeat("0", 40))
+	builtFrom(t, filepath.Join(stale, "web-staff"), "9c24045aaa1d4a1288176934d9ee9557aa250b32")
+	builtFrom(t, filepath.Join(stale, "migrate"), "59056d56b316b32d768bebd608399d0a97b269ee")
+	if _, err := bundle.Fill([]byte(toFill), stale); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "services.vault") || !strings.Contains(err.Error(), "commit") {
+		t.Fatalf("an image built from another commit: %v", err)
 	}
 	// A built image release.yaml doesn't name.
 	built(t, filepath.Join(layouts, "stray"))

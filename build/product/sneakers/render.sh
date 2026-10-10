@@ -13,7 +13,16 @@
 #   OUT/sneakers-mcp/sneakers-mcp.yaml  the MCP server, Hydra and the
 #                                       sneakers-mcp-switch ConfigMap, applied
 #                                       while the MCP switch is on
+#   OUT/sneakers-import/sneakers-import.yaml
+#                                       the migrate service account, applied
+#                                       while an import is open (import-stack.yaml,
+#                                       docs/import.md)
 #   OUT/edge/edge.yaml                  the interim edge on 443 (build/lab/stacks/edge)
+#
+# The main stack lists the migrate caller in the vault and audit and admits
+# it in the NetworkPolicies (sneakers-release's
+# migrate/deploy/migrate-callers-values.yaml); with the import closed there is
+# no sneakers-migrate service account, so nothing runs as it.
 #
 # The stacks carry no secret value: every Secret they read is a box secret
 # product.yaml declares, made on each box (internal/boxsecrets).
@@ -47,7 +56,7 @@ echo "render: charts from $(git -C "$CHARTS" rev-parse HEAD 2>/dev/null || echo 
 # sneakers-release's own dependency build: the library into each service
 # chart, then the umbrella.
 PATH="$work/bin:$PATH" bash "$work/release/scripts/build-deps.sh" >/dev/null
-values=(-f "$chart/examples/values-small-box.yaml" -f "$here/values.yaml")
+values=(-f "$chart/examples/values-small-box.yaml" -f "$CHARTS/migrate/deploy/migrate-callers-values.yaml" -f "$here/values.yaml")
 [ -z "${EXTRA_VALUES:-}" ] || values+=(-f "$EXTRA_VALUES")
 "$helm" template sneakers "$chart" -n sneakers --skip-tests "${values[@]}" > "$work/off.yaml"
 "$helm" template sneakers "$chart" -n sneakers --skip-tests "${values[@]}" -f "$here/values-mcp-on.yaml" > "$work/on.yaml"
@@ -57,6 +66,8 @@ go run "$root/build/tools/stack" --release "$RELEASE" --product-yaml "$here/prod
   --namespace sneakers --stack sneakers --switch-stack sneakers-mcp \
   --switch-configmap sneakers-mcp-switch --switch-from sneakers-gateway,sneakers-web-staff \
   --data /var/lib/sneakers-data
+mkdir -p "$OUT/sneakers-import"
+install -m 0644 "$here/import-stack.yaml" "$OUT/sneakers-import/sneakers-import.yaml"
 mkdir -p "$OUT/edge"
 install -m 0644 "$root/build/lab/stacks/edge/edge.yaml" "$OUT/edge/edge.yaml"
 echo "render: stacks $(cd "$OUT" && echo */ | tr -d /)"
