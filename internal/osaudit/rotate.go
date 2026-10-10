@@ -453,3 +453,88 @@ func (l *Log) writeFlags(flags map[string]time.Time) {
 		l.o.Logger.Warn("os audit: the archive flags weren't saved", log.F("error", err.Error()))
 	}
 }
+
+// ActionPrune records a file removed for retention, once the archive held
+// it: detail.file, detail.sha256 and detail.lines (its bytes uncompressed),
+// detail.lastLineSha256 (its chain link: the hash the next file's first
+// line chains to), detail.reason, detail.archived (the copy's path) and
+// detail.copied (yes when this prune copied it, no when it was there).
+const ActionPrune = "os-audit.prune"
+
+// PruneBlock is a file past retention that stays, and why.
+type PruneBlock struct {
+	File, Reason string
+}
+
+// PruneBlocked are the files the last Prune kept because the archive
+// couldn't take them.
+func (l *Log) PruneBlocked() []PruneBlock {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]PruneBlock(nil), l.blocked...)
+}
+
+// pruneOne archives the file name, removes it and audits the removal; the
+// caller holds the locks.
+func (l *Log) pruneOne(name, reason string) error {
+	src := filepath.Join(l.dir, name)
+	raw, err := os.ReadFile(src) // #nosec G304 -- a file listed from the log directory
+	if err != nil {
+		return fmt.Errorf("os audit: %w", err)
+	}
+	plain, err := l.readFile(name)
+	if err != nil {
+		return err
+	}
+	dst, copied, err := l.archiveCopy(name, raw)
+	if err != nil {
+		return err
+	}
+	sum := sumOf(plain)
+	last := ""
+	if lines := bytes.Split(bytes.TrimRight(plain, "\n"), []byte("\n")); len(lines[len(lines)-1]) > 0 {
+		last = hashLine(lines[len(lines)-1])
+	}
+	if err := os.Remove(src); err != nil {
+		return fmt.Errorf("os audit: %w", err)
+	}
+	if name == keyOf(name) {
+		_ = os.Remove(src + gzSuffix)
+	}
+	syncDir(l.dir)
+	l.o.Logger.Info("os audit: pruned log file", log.F("file", name), log.F("archived", dst), log.F("copied", copied))
+	return l.appendLocked(Entry{Actor: selfActor, Action: ActionPrune, Target: "OS audit log file", Outcome: "ok", Detail: map[string]string{
+		"file": keyOf(name), "sha256": sum.sha, "lines": strconv.Itoa(sum.lines), "lastLineSha256": last,
+		"reason": reason, "archived": dst, "copied": map[bool]string{true: "yes", false: "no"}[copied],
+	}})
+}
+
+// archiveCopy makes sure the archive holds raw as name: there already, or
+// copied, synced and read back. A different file of that name there is an
+// error; nothing is overwritten.
+func (l *Log) archiveCopy(name string, raw []byte) (string, bool, error) {
+	if l.o.ArchiveDir == "" {
+		return "", false, errors.New("os audit: no archive directory is set")
+	}
+	dst := filepath.Join(l.o.ArchiveDir, name)
+	if have, err := os.ReadFile(dst); err == nil { // #nosec G304 -- the archive's copy of a log file
+		if !bytes.Equal(have, raw) {
+			return "", false, fmt.Errorf("os audit: the archive holds a different %s", name)
+		}
+		return dst, false, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return "", false, fmt.Errorf("os audit: %w", err)
+	}
+	if err := os.MkdirAll(l.o.ArchiveDir, 0o700); err != nil {
+		return "", false, fmt.Errorf("os audit: %w", err)
+	}
+	if err := writeSynced(dst, raw); err != nil {
+		return "", false, err
+	}
+	syncDir(l.o.ArchiveDir)
+	back, err := os.ReadFile(dst) // #nosec G304 -- the copy just written
+	if err != nil || !bytes.Equal(back, raw) {
+		return "", false, fmt.Errorf("os audit: the archive's copy of %s doesn't match", name)
+	}
+	return dst, true, nil
+}

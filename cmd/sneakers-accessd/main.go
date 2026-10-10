@@ -128,7 +128,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err := sshconfig.EnsurePrivsepDir(sshconfig.PrivsepDir); err != nil {
 		return err
 	}
-	audit, err := osaudit.Open(filepath.Join(c.state, "os-audit"), osaudit.Options{Logger: lg})
+	// A file past retention goes only once the archive on the backup
+	// volume holds it (docs/os-audit.md#retention).
+	audit, err := osaudit.Open(filepath.Join(c.state, "os-audit"), osaudit.Options{Logger: lg, ArchiveDir: auditArchiveDir(c.state)})
 	if err != nil {
 		return err
 	}

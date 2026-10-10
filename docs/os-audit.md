@@ -93,7 +93,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `disk.alert.start`, `disk.alert.clear` | accessd (the disk guard) | a volume reaches 80% (`detail.level` `warning`) or 90% (`critical`), or drops 5 points below the level (`detail.level` the level that cleared, `detail.now` the new one), with `detail.volume`, `detail.percent`, `detail.used` and `detail.total` ([disk-layout.md](disk-layout.md#alerts-and-warnings)) |
 | `disk.cleanup.run` | accessd (the disk guard) | every cleanup run, by itself (actor `disk-guard`) or for an admin: `detail.trigger` `timer`, `alert` or `admin`, `detail.freed` and `detail.freed.<step>`; outcome `partial` when a step failed (`detail.error.<step>`) |
 | `disk.cleanup` | accessd | an admin asks for the cleanup (Clean up now on :8443, or `disk cleanup`): `detail.freed` |
-| `os-audit.rotate`, `os-audit.archive.export` | the log itself | a file rolls over, or archived files move to the backup volume ([Rotation and the archive](#rotation-and-the-archive)) |
+| `os-audit.rotate`, `os-audit.archive.export`, `os-audit.prune` | the log itself | a file rolls over, archived files move to the backup volume ([Rotation and the archive](#rotation-and-the-archive)), or a file past retention is removed once archived ([Retention](#retention)) |
 | `clock.step` | netd | SNTP stepped the clock (`detail.server`, `detail.offsetMs`, `detail.at`: `boot` or `running`); small offsets are slewed and not audited ([network.md](network.md#dns-ntp-and-the-host-name)) |
 
 ## Reboot and shutdown
@@ -118,5 +118,14 @@ factory reset adds `power.factory-reset.arm`, `.cancel` and `.run` from init
 ## Retention
 
 The log keeps 400 days and recordings 90 days by default, both settable on the Logs and audit page.
-Pruning runs once a day; the oldest line left anchors the chain. Spec 4's retention applies to the
+Pruning runs once a day; the oldest line left anchors the chain. A log file is never dropped
+silently: before one past retention leaves the box's log directory, the archive on the backup
+volume (`backup/os-audit-archive/`) must hold it byte for byte. When it doesn't, the file is copied
+there, synced and read back first. Each removal is one `os-audit.prune` entry: `detail.file`,
+`detail.sha256` and `detail.lines` (its bytes uncompressed), `detail.lastLineSha256` (its chain
+link, the hash the next file's first line chains to), `detail.reason` (`retention: older than <n>
+days`), `detail.archived` (the copy) and `detail.copied` (`yes`, or `no` when the archive already
+had it). A file the archive can't take (the backup volume full or missing, or a different file of
+that name there) stays where it is, and Status warns (`WARNING_KIND_AUDIT_ARCHIVE`) until the next
+prune can archive it. Spec 4's retention applies to the
 copies in backups.

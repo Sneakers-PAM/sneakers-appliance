@@ -34,13 +34,17 @@ const (
 	tmpAge          = 7 * 24 * time.Hour
 )
 
+// auditArchiveDir is the OS audit archive on the backup volume, where
+// closed files move over the archive's cap and before a retention prune.
+func auditArchiveDir(state string) string { return filepath.Join(state, "backup", "os-audit-archive") }
+
 // diskGuard builds the disk guard: the volumes, the product's data paths
 // from the installed bundle's product.yaml, and the cleanup's steps.
 func diskGuard(state string, paths osadmin.Paths, audit *osaudit.Log, busy func() bool, lg log.Logger) *diskguard.Guard {
 	uploads := filepath.Join(paths.APIDir(), "uploads")
 	stage := filepath.Join(state, "image-stage")
 	watches := func() []diskguard.Watch { return dataWatches(lg) }
-	auditStep := &diskguard.AuditLog{Log: audit, Options: diskguard.ArchiveOptions(filepath.Join(state, "backup", "os-audit-archive"))}
+	auditStep := &diskguard.AuditLog{Log: audit, Options: diskguard.ArchiveOptions(auditArchiveDir(state))}
 	cleaner := &diskguard.Cleaner{
 		Safety: diskguard.Safety{
 			Allowed:   []string{podLogDir, uploads, stage, tmpDir},
@@ -69,12 +73,13 @@ func diskGuard(state string, paths osadmin.Paths, audit *osaudit.Log, busy func(
 			{Name: "data", Label: "Product data", Path: productspec.DataRoot},
 			{Name: "backup", Label: "Backup", Path: filepath.Join(state, "backup")},
 		},
-		Watches:   watches,
-		Cleaner:   cleaner,
-		Archive:   auditStep.Archive,
-		Audit:     audit,
-		StateFile: filepath.Join(paths.APIDir(), "disk-guard.json"),
-		Logger:    lg,
+		Watches:      watches,
+		Cleaner:      cleaner,
+		Archive:      auditStep.Archive,
+		PruneBlocked: audit.PruneBlocked,
+		Audit:        audit,
+		StateFile:    filepath.Join(paths.APIDir(), "disk-guard.json"),
+		Logger:       lg,
 	}
 }
 

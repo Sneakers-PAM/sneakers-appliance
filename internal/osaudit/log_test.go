@@ -121,7 +121,7 @@ func TestClockSteppedBackKeepsChain(t *testing.T) {
 func TestRetention(t *testing.T) {
 	dir := t.TempDir()
 	clk := &fakeClock{t: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
-	l, err := osaudit.Open(dir, osaudit.Options{Now: clk.Now})
+	l, err := osaudit.Open(dir, osaudit.Options{Now: clk.Now, ArchiveDir: t.TempDir()})
 	mustNoErr(t, err)
 	mustNoErr(t, l.Append(osaudit.Entry{Actor: "console", Action: "old"}))
 	oldRec := filepath.Join(dir, osaudit.SessionsDir, "E-OLD1.cast")
@@ -142,7 +142,9 @@ func TestRetention(t *testing.T) {
 	mustNoErr(t, l.Prune())
 	es, err := l.Entries()
 	mustNoErr(t, err)
-	if len(es) != 1 || es[0].Action != "new" {
+	// The pruned file went to the archive first, and its removal is an
+	// entry of its own.
+	if len(es) != 2 || es[0].Action != "new" || es[1].Action != osaudit.ActionPrune {
 		t.Fatalf("after a 30-day retention: %+v", es)
 	}
 	mustNoErr(t, l.Verify())
