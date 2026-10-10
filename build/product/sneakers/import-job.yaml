@@ -67,7 +67,7 @@ spec:
             - name: TARGET_TOTP_ENC_KEY
               valueFrom:
                 secretKeyRef:
-                  name: sneakers-identity-generated
+                  name: sneakers-box
                   key: TOTP_ENC_KEY
             - name: MIGRATE_PRINCIPAL
               value: system:sneakers-migrate
