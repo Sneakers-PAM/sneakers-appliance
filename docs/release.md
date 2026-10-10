@@ -250,6 +250,21 @@ removed them all), and only then restarts the workloads it names with the instal
 so a restarted workload reads the change; audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
 installed`.
 
+It may declare when it's **ready** after an install, an update or a revert
+([upgrades.md](upgrades.md#when-the-product-is-ready)):
+
+```yaml
+ready:
+  health:                   # a GET through the API server's service proxy; 2xx is ready
+    service: sneakers/sneakers-gateway:http
+    path: /readyz
+  timeout: 15m              # from 1m to 2h; without it the box waits 10 minutes
+```
+
+The box refuses a health check whose service isn't `<namespace>/<service>:<port>` or whose path
+isn't a plain absolute path, and a timeout outside 1m to 2h. Without `ready` the box still waits for
+every workload in the stacks to roll out and for 443, with its own 10 minutes.
+
 It may also declare an **import**: the product takes an export of an earlier install from the
 Import page before its own first-run setup ([import.md](import.md)):
 

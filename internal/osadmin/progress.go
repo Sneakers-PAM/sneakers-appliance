@@ -283,9 +283,9 @@ func (s *Server) setStep(id, detail string) {
 				r.BootID, r.RebootAt = s.o.BootID, s.o.Clock.Now().UTC()
 			}
 			r.Steps[i].State, r.Steps[i].Detail = stateActive, detail
-		case r.Steps[i].State == stateActive:
+		case r.Steps[i].State == stateActive || r.Steps[i].State == stateDone:
 			// The product came up to a later step and went back (a pod
-			// fell over): the later step waits again.
+			// fell over): the later steps wait again.
 			r.Steps[i].State, r.Steps[i].Detail = statePending, ""
 		}
 	}

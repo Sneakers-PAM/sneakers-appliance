@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -671,5 +672,48 @@ func TestTheSneakersBundleDeclaresItsDataPaths(t *testing.T) {
 	}
 	if len(s.Data) == 0 || !wal {
 		t.Fatalf("data %+v", s.Data)
+	}
+}
+
+// The ready section: the product's own health check and how long the box
+// waits for it; a bad service, path or timeout is refused.
+func TestTheReadySectionParses(t *testing.T) {
+	s, err := productspec.Parse([]byte("format: 2\nready:\n  health: {service: app/app-api:http, path: /readyz}\n  timeout: 15m\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Health()
+	if h == nil || h.Namespace() != "app" || h.ProxyName() != "app-api:http" || h.Path != "/readyz" || s.ReadyTimeout() != 15*time.Minute {
+		t.Fatalf("%+v %+v", h, s.ReadyTimeout())
+	}
+	if none, _ := productspec.Parse([]byte("format: 2\n")); none.Health() != nil || none.ReadyTimeout() != 0 {
+		t.Fatal("no ready section declares a health check or a timeout")
+	}
+	for _, doc := range []string{
+		"format: 2\nready:\n  health: {service: app-api, path: /readyz}\n",
+		"format: 2\nready:\n  health: {service: app/app-api:http, path: ../readyz}\n",
+		"format: 2\nready:\n  timeout: 10s\n",
+		"format: 2\nready:\n  timeout: 3h\n",
+		"format: 2\nready:\n  timeout: soon\n",
+	} {
+		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%q: %v", doc, err)
+		}
+	}
+}
+
+// The Sneakers bundle's product.yaml asks the gateway's readiness before an
+// install counts as done.
+func TestTheSneakersBundleDeclaresItsHealthCheck(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := s.Health(); h == nil || h.Service != "sneakers/sneakers-gateway:http" || h.Path != "/readyz" {
+		t.Fatalf("%+v", h)
 	}
 }

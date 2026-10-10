@@ -268,8 +268,9 @@ Installing the product 0.2.0. The box keeps running.
   [ok]  Starting k0s
   [ok]  Importing the images
   [ok]  Applying the product's stacks
-  [..]  Waiting for the pods to be ready
-        2 of 5 pods ready
+  [..]  Rolling out
+        Rolling out (12 of 14 ready): waiting for app/api, 0 of 1 updated, 1 running
+  [  ]  Checking the product's health
   [  ]  Opening the product on 443
 ```
 

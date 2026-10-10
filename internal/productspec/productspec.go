@@ -25,6 +25,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -106,6 +107,78 @@ type Spec struct {
 	// disk guard): each a directory under DataRoot, optionally with the
 	// write-ahead log under it and the size that's too big.
 	Data []DataPath `yaml:"data"`
+	// Ready, when set, says how the box knows the product is ready after
+	// an install, an update or a revert: the product's own health check,
+	// and how long the box waits for it (docs/upgrades.md).
+	Ready *Ready `yaml:"ready"`
+}
+
+// Ready is product.yaml's ready section.
+type Ready struct {
+	// Health is a GET through the API server's service proxy that answers
+	// 2xx once the product is ready (its readiness endpoint, say).
+	Health *HealthCheck `yaml:"health"`
+	// Timeout is how long an install, update or revert may take to be
+	// ready, a duration such as "15m" between MinReadyTimeout and
+	// MaxReadyTimeout; empty is the box's default.
+	Timeout string `yaml:"timeout"`
+}
+
+// HealthCheck is a GET of Path on Service through the service proxy.
+type HealthCheck struct {
+	// Service is <namespace>/<service>:<port name or number>.
+	Service string `yaml:"service"`
+	Path    string `yaml:"path"`
+}
+
+// The bounds of ready.timeout.
+const (
+	MinReadyTimeout = time.Minute
+	MaxReadyTimeout = 2 * time.Hour
+)
+
+// Namespace is the health check's namespace.
+func (h HealthCheck) Namespace() string { return Signal{Service: h.Service}.Namespace() }
+
+// ProxyName is the service and port as the service proxy names them.
+func (h HealthCheck) ProxyName() string { return Signal{Service: h.Service}.ProxyName() }
+
+// Health is the product's health check, or nil when it declares none.
+func (s Spec) Health() *HealthCheck {
+	if s.Ready == nil {
+		return nil
+	}
+	return s.Ready.Health
+}
+
+// ReadyTimeout is ready.timeout, or 0 when it isn't set.
+func (s Spec) ReadyTimeout() time.Duration {
+	if s.Ready == nil || s.Ready.Timeout == "" {
+		return 0
+	}
+	d, _ := time.ParseDuration(s.Ready.Timeout)
+	return d
+}
+
+func (s Spec) checkReady() error {
+	if s.Ready == nil {
+		return nil
+	}
+	if h := s.Ready.Health; h != nil {
+		if _, _, _, ok := (Signal{Service: h.Service}).parts(); !ok {
+			return bad("ready.health.service %q isn't <namespace>/<service>:<port>", h.Service)
+		}
+		if !sigPathRE.MatchString(h.Path) || path.Clean(h.Path) != h.Path || strings.Contains(h.Path, "..") {
+			return bad("ready.health.path %q isn't a plain absolute path", h.Path)
+		}
+	}
+	if t := s.Ready.Timeout; t != "" {
+		d, err := time.ParseDuration(t)
+		if err != nil || d < MinReadyTimeout || d > MaxReadyTimeout {
+			return bad("ready.timeout %q isn't a duration from %s to %s", t, MinReadyTimeout, MaxReadyTimeout)
+		}
+	}
+	return nil
 }
 
 // DataRoot is where a product's volumes live on the box: every volume
@@ -496,6 +569,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkData(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkReady(); err != nil {
 		return Spec{}, err
 	}
 	return s, nil

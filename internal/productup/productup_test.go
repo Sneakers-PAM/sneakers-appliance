@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,13 +31,20 @@ type fakeK0s struct {
 	// workloads is the stacks' Deployments, StatefulSets and DaemonSets as
 	// JSON; empty is none.
 	workloads string
-	calls     []string
+	// health is the product's health check's answer: nil is ready.
+	health error
+	calls  []string
 }
 
 func (f *fakeK0s) run(_ context.Context, name string, args ...string) ([]byte, error) {
 	line := strings.Join(args, " ")
 	f.calls = append(f.calls, filepath.Base(name)+" "+line)
 	switch {
+	case strings.Contains(line, "/proxy/"):
+		if f.health != nil {
+			return nil, f.health
+		}
+		return []byte("ok"), nil
 	case strings.Contains(line, "/readyz"):
 		if !f.apiUp {
 			return nil, errors.New("connection refused")
@@ -217,5 +225,156 @@ func TestAnUpdateWaitsForTheRolloutAndTheOldPods(t *testing.T) {
 	k.podsJSON = strings.Replace(twoPods, "%s", "True", 1)
 	if r := check(t, p); r.Step != "" {
 		t.Fatalf("rolled out and the old pods gone: %+v", r)
+	}
+}
+
+func writeSlot(t *testing.T, slot string, files map[string]string) {
+	t.Helper()
+	for p, body := range files {
+		if err := os.MkdirAll(filepath.Join(slot, filepath.Dir(p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(slot, p), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// The slot's hello stack: a Deployment at the new version, next to a
+// ConfigMap that isn't a workload.
+const helloStack = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hello
+  namespace: hello
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: hello
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait
+          image: example.org/wait@sha256:1111
+      containers:
+        - name: web
+          image: example.org/web@sha256:2222
+`
+
+// liveWeb is hello/web as the cluster has it, rolled out, with web's
+// image.
+const liveWeb = `{"items":[{"kind":"Deployment","metadata":{"namespace":"hello","name":"web","generation":4,"labels":{"k0s.k0sproject.io/stack":"hello"}},
+ "spec":{"replicas":1,"template":{"spec":{"initContainers":[{"name":"wait","image":"example.org/wait@sha256:1111"}],"containers":[{"name":"web","image":"%s"}]}}},
+ "status":{"observedGeneration":4,"replicas":1,"updatedReplicas":1,"availableReplicas":1,"readyReplicas":1}}]}`
+
+func readyProbe(t *testing.T, k *fakeK0s) *productup.Probe {
+	t.Helper()
+	e := edge(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	k.apiUp, k.images = true, "sha256:"+hexA+" sha256:"+hexB
+	k.stacks = map[string]bool{"edge": true, "hello": true}
+	k.podsJSON = strings.Replace(twoPods, "%s", "True", 1)
+	p := probe(t, k, e)
+	writeSlot(t, p.Slot, map[string]string{"manifests/hello/hello.yaml": helloStack})
+	return p
+}
+
+// Right after the restart k0s hasn't applied the new slot's stacks yet:
+// the old workloads have rolled out at their own generation and the old
+// pods answer. The workloads must run the slot's version before they
+// count, so the update isn't done until k0s has applied it and it has
+// rolled out.
+func TestAnUpdateWaitsUntilTheWorkloadsRunTheSlotsVersion(t *testing.T) {
+	k := &fakeK0s{workloads: strings.Replace(liveWeb, "%s", "example.org/web@sha256:0000", 1)}
+	p := readyProbe(t, k)
+	r := check(t, p)
+	if r.Step != productup.StepPods || !strings.HasPrefix(r.Detail, "Rolling out (0 of 1 ready)") || !strings.Contains(r.Detail, "hello/web") {
+		t.Fatalf("the old version still runs: %+v", r)
+	}
+	k.workloads = strings.Replace(liveWeb, "%s", "example.org/web@sha256:2222", 1)
+	if r := check(t, p); r.Step != "" {
+		t.Fatalf("the slot's version rolled out: %+v", r)
+	}
+}
+
+// A workload the slot adds isn't there until k0s creates it.
+func TestANewWorkloadIsWaitedFor(t *testing.T) {
+	k := &fakeK0s{}
+	p := readyProbe(t, k)
+	if r := check(t, p); r.Step != productup.StepPods || r.Detail != "Rolling out (0 of 1 ready): waiting for hello/web, not created yet" {
+		t.Fatalf("hello/web isn't there: %+v", r)
+	}
+}
+
+// The count covers every workload: the slot's and those k0s labels.
+func TestTheRolloutCountsEachWorkload(t *testing.T) {
+	k := &fakeK0s{}
+	p := readyProbe(t, k)
+	k.workloads = `{"items":[` + strings.TrimSuffix(strings.TrimPrefix(strings.Replace(liveWeb, "%s", "example.org/web@sha256:2222", 1), `{"items":[`), `]}`) + `,
+ {"kind":"StatefulSet","metadata":{"namespace":"hello","name":"db","generation":2},"spec":{"replicas":1},
+  "status":{"observedGeneration":2,"replicas":1,"updatedReplicas":1,"availableReplicas":0,"readyReplicas":0,"currentRevision":"db-1","updateRevision":"db-2"}}]}`
+	if r := check(t, p); r.Step != productup.StepPods || !strings.HasPrefix(r.Detail, "Rolling out (1 of 2 ready): waiting for hello/db") {
+		t.Fatalf("db still rolling: %+v", r)
+	}
+}
+
+const crashingPod = `{"items":[
+ {"metadata":{"namespace":"hello","name":"web-new"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"False"}],
+  "containerStatuses":[{"name":"web","ready":false,"state":{"waiting":{"reason":"CrashLoopBackOff"}}}]}},
+ {"metadata":{"namespace":"hello","name":"web-evicted"},"status":{"phase":"Failed","reason":"Evicted"}},
+ {"metadata":{"namespace":"hello","name":"db-0"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}}]}`
+
+// A pod that keeps failing holds the rollout, and the step says which pod
+// and why; a pod that has failed for good (evicted, say) is gone and isn't
+// waited for.
+func TestAFailingPodIsNamed(t *testing.T) {
+	k := &fakeK0s{workloads: strings.Replace(liveWeb, "%s", "example.org/web@sha256:2222", 1)}
+	p := readyProbe(t, k)
+	k.podsJSON = crashingPod
+	if r := check(t, p); r.Step != productup.StepPods || r.Detail != "1 of 2 pods ready: hello/web-new CrashLoopBackOff" {
+		t.Fatalf("a crash-looping pod: %+v", r)
+	}
+}
+
+const readyYAML = `format: 2
+ready:
+  health:
+    service: hello/web:http
+    path: /readyz
+  timeout: 4m
+`
+
+// With the workloads rolled out, the product's own health check, as its
+// product.yaml declares it, must answer before the edge counts.
+func TestTheProductsHealthCheckMustAnswer(t *testing.T) {
+	k := &fakeK0s{workloads: strings.Replace(liveWeb, "%s", "example.org/web@sha256:2222", 1)}
+	p := readyProbe(t, k)
+	writeSlot(t, p.Slot, map[string]string{"product.yaml": readyYAML})
+	k.health = errors.New("the server is currently unable to handle the request")
+	if r := check(t, p); r.Step != productup.StepHealth || r.Detail != "hello/web:http /readyz doesn't answer ready yet" {
+		t.Fatalf("not healthy: %+v", r)
+	}
+	if !slices.Contains(k.calls, "k0s kubectl --kubeconfig /var/lib/k0s/pki/admin.conf get --raw /api/v1/namespaces/hello/services/web:http/proxy/readyz") {
+		t.Fatalf("calls %q", k.calls)
+	}
+	k.health = nil
+	if r := check(t, p); r.Step != "" {
+		t.Fatalf("healthy: %+v", r)
+	}
+}
+
+// A stack that holds no workload (only a ServiceAccount, say) still counts
+// as applied once k0s has put its objects in.
+func TestAStackOfOtherKindsCountsAsApplied(t *testing.T) {
+	k := &fakeK0s{}
+	p := readyProbe(t, k)
+	k.workloads = strings.Replace(liveWeb, "%s", "example.org/web@sha256:2222", 1)
+	check(t, p)
+	for _, c := range k.calls {
+		if strings.Contains(c, productup.StackLabel+"=hello") && !strings.Contains(c, "serviceaccounts") {
+			t.Fatalf("the stack query leaves out service accounts: %q", c)
+		}
 	}
 }
