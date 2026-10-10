@@ -229,7 +229,10 @@ owners, and the change is audited as `upgrade.policy.set` like one made on :8443
 
 `<product> mcp` (`sneakers mcp`) shows the installed product's MCP switch and its machine API
 switch; `<product> mcp on` and `<product> mcp off` set it. The machine API keeps its setting unless
-the line names it: `sneakers mcp off machine-api=off` turns both off. The switches are the ones the
+the line names it: `<product> mcp off machine-api=off` turns both off, for a product that declares a
+machine API switch. The help, its examples and Tab offer only the switches the installed product
+declares: Sneakers declares `mcp` only, so `sneakers mcp` is offered without `machine-api=`, and
+naming it anyway answers `NOT_AVAILABLE`. The switches are the ones the
 product's `product.yaml` declares (`mcp` and `machine-api`), the same ones the MCP card on :8443
 sets: accessd runs `McpService.GetMcp` and `McpService.SetMcp` as the login's admin, so the role
 is the same (admin) and a change writes the same `mcp.set` audit entry, with the `ssh` surface.

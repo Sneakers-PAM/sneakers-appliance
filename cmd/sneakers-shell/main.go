@@ -90,6 +90,12 @@ func run() int {
 		// checks the role again on every read.
 		if spec, err := productspec.Load(filepath.Join(productinfo.Dir, "current")); err == nil {
 			e.Values = shell.ValuesFor(spec, b.Role)
+			// The switches it declares, so mcp's help and completion offer
+			// only those.
+			e.Switches = make([]string, 0, len(spec.Switches))
+			for _, w := range spec.Switches {
+				e.Switches = append(e.Switches, w.Name)
+			}
 		}
 	}
 	if tty {
