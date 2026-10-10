@@ -195,7 +195,9 @@ A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` an
 ("Not available in this release.") until their services are on the box. The accessd commands go to
 `/run/sneakers/access.sock`, which knows the login by its uid ([access.md](access.md#accesssock));
 `network set` takes `hostname`, `dns`, `search`, `ntp`, `allow-list` (comma-separated lists),
-`time-zone` and `https-proxy` on top of the current settings. `help network set` lists every key
+`time-zone` and `https-proxy` on top of the current settings. A change that can't cut anyone off
+(DNS, search domains, NTP, the time zone, the proxy) is kept at once, and `network set` says
+"Applied and kept; there's nothing to confirm." instead of asking. `help network set` lists every key
 with an example, from the same table the parser reads, and so do `network set` alone and `network
 set ?`; an unknown key answers `SHELL_PARSE` with the closest key ("did you mean time-zone?"). While accessd is down they answer
 `NOT_AVAILABLE` ("the appliance services are unavailable"), and `status` shows the last status

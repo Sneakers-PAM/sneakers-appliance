@@ -369,7 +369,7 @@ Example:
 
 Change network settings (reverts in 120 s unless confirmed).
 
-Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.
+Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.
 
 Offered over: SSH and console.
 
