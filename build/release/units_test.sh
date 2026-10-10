@@ -51,6 +51,12 @@ has publish 'sneakers-product-index\.json\.sigstore\.json' "attach the index sig
 has publish 'SHA256SUMS\.sigstore\.json' "attach the SHA256SUMS signature"
 has publish 'check-asset-sizes\.sh' "check every asset is under 2 GiB"
 has publish '--prerelease' "make an rc tag a prerelease"
+# A new install comes from the OVA the production kit writes from the
+# signed artifact, signed with the release key and attached with its sum.
+has sign 'sneakers-kit" build "\$RUNNER_TEMP/signed/artifact" --format ova' "build the OVA with the production kit"
+has sign 'bundle "\$f\.sigstore\.json"' "sign the OVA"
+has publish '"\$ova" "\$ova\.sha256" "\$ova\.sigstore\.json"' "attach the OVA, its sum and its signature"
+has lab 'sneakers-kit" build "\$lab/artifact" --format ova' "build the lab OVA the same way"
 
 for id in build sign publish; do
   if job "$id" | grep -qE 'sneakers-appliance-\$VERSION-amd64\.bin|--recipient keys/production/update.pub --version "\$VERSION" --arch amd64 --channel production --out'; then

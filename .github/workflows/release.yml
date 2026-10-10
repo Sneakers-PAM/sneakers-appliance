@@ -232,7 +232,7 @@ jobs:
       - name: Install the pinned signers
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q sbsigntool
+          sudo apt-get install -y -q sbsigntool qemu-utils
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Setup Go
@@ -457,6 +457,28 @@ jobs:
             for b in "$units"/*.bin; do echo "$(basename "$b") $(stat -c %s "$b") bytes, inputs $(cat "$b.inputs")"; done
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # The OVA for a new install, written by the production kit from the
+      # signed artifact the units carry (the kit verifies it first), with the
+      # vApp host name and domain properties; its .sha256 and a signature by
+      # the release key go beside it on the Release.
+      - name: Build and sign the OVA (release key)
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
+        run: |
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" ova="$RUNNER_TEMP/signed/ova"
+          "$in/sneakers-kit" build "$RUNNER_TEMP/signed/artifact" --format ova --arch amd64 --out "$ova"
+          f="$ova/sneakers-$VERSION-amd64.ova"
+          [ -f "$f" ] || { ls -l "$ova"; echo "the kit wrote no sneakers-$VERSION-amd64.ova" >&2; exit 1; }
+          (cd "$ova" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
+          umask 077
+          printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
+          trap 'rm -f "$keys/cosign.key"' EXIT
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$f.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$f" >/dev/null
+          cosign verify-blob --key keys/production/cosign.pub --bundle "$f.sigstore.json" --insecure-ignore-tlog=true "$f" >/dev/null
+          echo "### OVA: $(basename "$f") $(stat -c %s "$f") bytes" >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the keys
         if: always()
         run: |
@@ -516,6 +538,10 @@ jobs:
           verify "$in/release.yaml" "$cs/release.yaml.sigstore.json"
           verify "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
           verify "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json"
+          ova="$(find "$signed/ova" -maxdepth 1 -name "sneakers-$VERSION-amd64.ova")"
+          [ -n "$ova" ] || { echo "the signed build has no OVA" >&2; exit 1; }
+          (cd "$signed/ova" && sha256sum -c --quiet "$(basename "$ova").sha256")
+          verify "$ova" "$ova.sigstore.json"
           while read -r image dgst; do
             verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
           done < "$in/images.txt"
@@ -528,7 +554,7 @@ jobs:
           "$in/sneakers-kit" verify "$repo@$digest"
           cp "$in/release.yaml" "$cs/release.yaml"
           files=("$units"/*.bin "$units"/*.bin.inputs "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
-            "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json"
+            "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json" "$ova" "$ova.sha256" "$ova.sigstore.json"
             "$cs/release.yaml" "$cs/release.yaml.sigstore.json" "$cs"/image-sigs/*.sigstore.json)
           # GitHub takes no release asset of 2 GiB or more: refuse before
           # anything is uploaded.
@@ -580,7 +606,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
             efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
-            systemd-ukify systemd-boot-efi python3-pefile
+            systemd-ukify systemd-boot-efi python3-pefile qemu-utils
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Build the kernel
@@ -639,8 +665,13 @@ jobs:
           if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$product"; then
             echo "a lab product bundle verified as production" >&2; exit 1
           fi
+          # The OVA, written by the lab kit from the artifact the way the
+          # release job writes the production one.
+          "$lab/sneakers-kit" build "$lab/artifact" --format ova --arch amd64 --out "$work/ova"
+          ova="$work/ova/sneakers-$VERSION-amd64-LAB.ova"
+          [ -f "$ova" ] || { ls -l "$work/ova"; echo "the lab kit wrote no OVA" >&2; exit 1; }
           # The files a release would attach stay under GitHub's 2 GiB.
-          bash build/release/check-asset-sizes.sh "$bin" "$product"
+          bash build/release/check-asset-sizes.sh "$bin" "$product" "$ova"
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
           fi
