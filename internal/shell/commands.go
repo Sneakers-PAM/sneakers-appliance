@@ -73,6 +73,10 @@ type Env struct {
 	// Values are the values the product exposes to this session's role,
 	// each a command in the product's section.
 	Values []Value
+	// Role is the login's role, owner or admin; empty (the console) is an
+	// owner. help and Tab offer an admin no owner-only command; accessd
+	// still checks the role of every call.
+	Role string
 }
 
 type flagSpec struct {
@@ -102,7 +106,11 @@ type spec struct {
 	// it takes, listed in its help from the same table its parser reads.
 	long, example string
 	keys          []Key
-	run           func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
+	// owner marks a command only owners may run.
+	owner bool
+	// complete offers the values of the command's arguments.
+	complete func(ctx context.Context, e *Env, args []string, partial string) ([]string, cobra.ShellCompDirective)
+	run      func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
 }
 
 var both = []Origin{OriginSSH, OriginConsole}
@@ -116,13 +124,13 @@ var specs = []spec{
 	{path: "network show", short: "Show the network settings", action: "network.show", origins: both,
 		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.",
 		example: "  network show\n  network show -o json"},
-	{path: "network set", use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet,
+	{path: "network set", owner: true, use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet, complete: completeKeys(networkKeys),
 		long:    "Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.",
 		example: "  network set ?\n  network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org\n  network set time-zone=America/New_York\n  network set https-proxy="},
-	{path: "network confirm", use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
+	{path: "network confirm", owner: true, use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
 		long:    "Keeps the network change the token names, so it doesn't revert. network set and network allow-list reset print the token.",
 		example: "  network confirm 7K2Q-MX4D"},
-	{path: "network allow-list reset", short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset",
+	{path: "network allow-list reset", owner: true, short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset",
 		long:    "Sets the management allow-list back to the subnets the box is on, for when a wrong list locks SSH and :8443 out. Console only; type reset to confirm. It reverts in 120 seconds unless kept with network confirm.",
 		example: "  network allow-list reset"},
 	{path: "keys list", short: "List login keys", action: "keys.list", origins: both, flags: []flagSpec{{"admin", "the admin (owners only; default yourself)", ""}},
@@ -131,10 +139,10 @@ var specs = []spec{
 	{path: "admins list", short: "List the admins", action: "admins.list", origins: both,
 		long:    "Lists the admins with their role (owner or admin) and how many login keys each has. Admins are added and removed on :8443.",
 		example: "  admins list\n  admins list -o json"},
-	{path: "recovery-key add", short: "Add a recovery key, read from standard input (up to three)", action: "recovery.add", origins: []Origin{OriginConsole}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
+	{path: "recovery-key add", owner: true, short: "Add a recovery key, read from standard input (up to three)", action: "recovery.add", origins: []Origin{OriginConsole}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
 		long:    "Adds a recovery key, an SSH public key read from standard input, and writes a new escrow file. Console only; a box keeps up to three.",
 		example: "  recovery-key add --label \"offline safe\""},
-	{path: "setup recovery-key", short: "Set a recovery key during setup, read from standard input", action: "setup.recovery", origins: []Origin{OriginSSH}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
+	{path: "setup recovery-key", owner: true, short: "Set a recovery key during setup, read from standard input", action: "setup.recovery", origins: []Origin{OriginSSH}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
 		long:    "Sets the first recovery key during setup: an SSH public key read from standard input. Over SSH, first boot only; it writes a new escrow file.",
 		example: "  ssh -t admin@box1.sneakers.example.org setup recovery-key --label safe < recovery.pub"},
 	{path: "shell", short: "Open the root shell (root operators): a challenge, then the code :8443 gives for it", action: "rootshell.begin", origins: []Origin{OriginSSH}, run: runRootShell,
@@ -147,13 +155,13 @@ var specs = []spec{
 	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Makes and lists backups. Not available in this release.",
 		example: "  backup"},
-	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true,
+	{path: "restore", owner: true, use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Restores the box from a backup. Not available in this release.",
 		example: "  restore"},
 	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Stages and applies updates from the shell. Not available in this release; updates are done on :8443.",
 		example: "  upgrade status"},
-	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp,
+	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp, complete: completeMcp,
 		long:    "Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit.",
 		example: "  {product} mcp\n  {product} mcp on\n  {product} mcp off machine-api=off"},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true,
@@ -379,6 +387,7 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return codes.Wrap(codes.ShellParse, err) })
 	root.PersistentFlags().StringP("output", "o", "text", "output format: text or json")
+	_ = root.RegisterFlagCompletionFunc("output", cobra.FixedCompletions([]string{"json", "text"}, cobra.ShellCompDirectiveNoFileComp))
 	root.AddGroup(&cobra.Group{ID: groupBase, Title: "Appliance commands:"})
 	root.SetHelpCommandGroupID(groupBase)
 	groups := map[string]*cobra.Command{"": root}
@@ -501,7 +510,7 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 		Short:   s.short,
 		Long:    long,
 		Example: strings.ReplaceAll(s.example, "{product}", e.Product.Name),
-		Hidden:  !slices.Contains(s.origins, e.Origin),
+		Hidden:  !slices.Contains(s.origins, e.Origin) || s.owner && e.Role == "admin",
 		Args: func(_ *cobra.Command, args []string) error {
 			lo, hi := s.nargs[0], s.nargs[1]
 			if len(args) < lo || hi >= 0 && len(args) > hi {
@@ -548,6 +557,17 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 	}
 	for _, f := range s.flags {
 		cmd.Flags().String(f.name, f.def, f.usage)
+		if f.name == "admin" {
+			_ = cmd.RegisterFlagCompletionFunc(f.name, func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+				return adminNames(ctx, e), cobra.ShellCompDirectiveNoFileComp
+			})
+		}
+	}
+	cmd.ValidArgsFunction = func(_ *cobra.Command, args []string, partial string) ([]string, cobra.ShellCompDirective) {
+		if s.complete == nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return s.complete(ctx, e, args, partial)
 	}
 	return cmd
 }
