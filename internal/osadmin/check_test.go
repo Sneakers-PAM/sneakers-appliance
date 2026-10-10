@@ -207,3 +207,46 @@ func TestThePolicysSource(t *testing.T) {
 		t.Fatalf("none with a URL kept: %s %v", s, gapped)
 	}
 }
+
+// A Base OS release names the Base Web it ships with; the offer says so,
+// and, when the installed Base Web is older, that the box serves the
+// release's own pages after the reboot.
+func TestABaseOSOfferNamesTheBaseWebItShipsWith(t *testing.T) {
+	wb := newWebBox(t)
+	alice := wb.browser()
+	alice.signIn("alice")
+	id, _ := alice.upload(t, wb.webBin(t, web("0.1.2")))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyWeb(wb.box, alice); err != nil {
+		t.Fatal(err)
+	}
+	var idx updatepkg.Index
+	osNext := updatepkg.Header{Name: updatepkg.Name, Unit: updatepkg.UnitBaseOS, Version: "0.1.3", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction,
+		Includes: map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: "0.1.3"}}
+	osOld := osNext
+	osOld.Version, osOld.Includes = "0.1.1", nil
+	idx.Add(osNext, 33<<20)
+	idx.Add(osOld, 33<<20)
+	b, _ := json.Marshal(idx)
+	wb.mirrorFiles[updatepkg.IndexName] = b
+	if err := setPolicy(t, alice, &osadminv1.UpgradePolicy{Source: osadmin.SourceManual, MirrorUrl: wb.mirror.URL}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := checkNow(alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	offers := map[string]*osadminv1.UnitOffer{}
+	for _, o := range c.GetBaseOs() {
+		offers[o.GetVersion()] = o
+	}
+	next, old := offers["0.1.3"], offers["0.1.1"]
+	if next.GetIncludesBaseWeb() != "0.1.3" || !strings.Contains(next.GetNote(), "serves Base Web 0.1.3, which this release includes, in place of the installed Base Web 0.1.2") {
+		t.Fatalf("0.1.3: %v", next)
+	}
+	if old.GetIncludesBaseWeb() != "" || strings.Contains(old.GetNote(), "includes") {
+		t.Fatalf("0.1.1, from before the rule: %v", old)
+	}
+}
