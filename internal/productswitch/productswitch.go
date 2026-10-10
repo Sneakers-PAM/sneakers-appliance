@@ -23,6 +23,7 @@ import (
 
 	log "github.com/Bugs5382/go-log"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
@@ -132,7 +133,8 @@ func (s *Switches) Set(ctx context.Context, spec productspec.Spec, name string, 
 	return errors.Join(errs...)
 }
 
-// place puts the slot's stack in front of k0s, or takes it away.
+// place puts the slot's stack in front of k0s, with the box's values in
+// place of the bundle's placeholders (package boxvalues), or takes it away.
 func (s *Switches) place(stack string, on bool) error {
 	dst := filepath.Join(s.Manifests, stack)
 	if err := os.RemoveAll(dst); err != nil {
@@ -149,11 +151,14 @@ func (s *Switches) place(stack string, on bool) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil { // #nosec G301 -- k0s's stack directory, as k0s-interim makes them
 		return fmt.Errorf("productswitch: %w", err)
 	}
+	kernel, _ := os.Hostname()
+	values := boxvalues.Table(s.Slot, boxvalues.Read(s.Dir), kernel)
 	for _, f := range files {
 		b, err := os.ReadFile(f) // #nosec G304 -- the installed slot's own stack
 		if err != nil {
 			return fmt.Errorf("productswitch: %w", err)
 		}
+		b = boxvalues.Substitute(b, values)
 		if err := os.WriteFile(filepath.Join(dst, filepath.Base(f)), b, 0o644); err != nil { // #nosec G306 G703 -- a stack of the installed slot that k0s reads, as k0s-interim copies them
 			return fmt.Errorf("productswitch: %w", err)
 		}

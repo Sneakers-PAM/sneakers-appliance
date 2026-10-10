@@ -164,6 +164,40 @@ certificates, `Status` and `Watch` stays the setting or the DHCP name, and is em
 offered the file names none, and the box still runs; k0s's cluster DNS falls back as
 [k0s.md](k0s.md#cluster-dns-with-no-dns-server) describes.
 
+### The host name
+
+The host name is never baked into the product bundle: one bundle fits every box, and each box gives
+the product its own name.
+
+- **At deploy.** The OVA offers two vApp properties, **Host name** (`hostname`) and **Domain**
+  (`domain`), which vCenter asks for when it deploys the OVA. vCenter hands them to the VM in an
+  `ovf-env.xml` on an ISO in its CD drive (the OVF `iso` transport); at first boot, while the box has
+  no network settings yet, netd reads it (`internal/ovfenv`) and the first-boot settings take the
+  name: a fully qualified host name as it is, a short one joined to the domain, or the box's own name
+  joined to the domain when only the domain is set. A short name with no domain isn't a host name
+  setting and is ignored (netd logs it). The first-boot screen starts from those settings, so setting
+  up keeps the name. Once the box has settings the properties are never read again. The ESXi host
+  client and other hypervisors have no vApp properties: the box then names itself
+  `sneakers-<8 hex>` until the host name is set.
+- **Later.** The console shows the host name, and the :8443 Network page's Hostname field edits it.
+  A host name change waits 120 s for its confirm like an address change, and reverts without one.
+- **The product.** The box's FQDN for the product (`box.fqdn`, `internal/boxvalues`) is the host name
+  above, else the first management address, else the box's own name. A product bundle's stacks
+  carry a placeholder where the host goes (product.yaml `box_values`,
+  [release.md](release.md#productyaml)); the box puts its FQDN in its place whenever it puts a stack
+  in front of k0s (`k0s-interim` at each k0s start, the MCP switch when it turns on). Each product
+  apply and revert records the FQDN in `/var/lib/sneakers/platform/box-values`. When the host name
+  changes, accessd applies the product again with the new FQDN once the change is kept (confirmed,
+  or a DHCP name), under the same maintenance gate as an update; the Updates history shows it as an
+  apply of the same version with `host name <fqdn>`, audited as `upgrade.apply` with the surface
+  `hostname`. A change that waits for its confirm doesn't reach the product, and a reverted one
+  never does. The Sneakers sign-in (Kratos's URLs and return URLs, the WebAuthn relying party),
+  the SSH websocket, and the MCP, OAuth and Hydra addresses all follow it.
+- **The 443 certificate** must cover the host name, not only an address: the product endpoint warns
+  (`names-not-covered`, and a Status warning on every :8443 page) when its certificate doesn't,
+  naming the host name and what the certificate covers. A wildcard for the host name's domain
+  (`*.example.org` for `sneakers.example.org`) covers it.
+
 The clock is kept by SNTP (`internal/timesync`, IPv4 and IPv6 servers, up to
 four): one bounded sync, then polls. The servers are the settings', else
 DHCP's, else the image's default pool (`0.pool.ntp.org` to `3.pool.ntp.org`), <!-- scrub:allow=fqdn -->

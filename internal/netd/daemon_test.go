@@ -520,3 +520,27 @@ func TestChecksWarnForAFamilyWithoutAnAddress(t *testing.T) {
 		t.Fatalf("address %+v", addr)
 	}
 }
+
+// At first boot, with no settings yet, the host name the deployment
+// offers (the OVA's vApp properties) is the one the box takes; it's in
+// the settings the first-boot screen starts from, so setting up keeps
+// it. Once there are settings, the offer is never read again.
+func TestFirstStartTakesTheOfferedHostName(t *testing.T) {
+	b := newBox(t)
+	asked := 0
+	b.offered = func() string { asked++; return "sneakers01.example.org" }
+	d := b.start()
+	if s, _ := d.Get(); s.Hostname != "sneakers01.example.org" {
+		t.Fatalf("settings %+v", s)
+	}
+	if b.sys.hostname != "sneakers01.example.org" || d.Status().Hostname != "sneakers01.example.org" {
+		t.Fatalf("kernel %q status %q", b.sys.hostname, d.Status().Hostname)
+	}
+
+	b2 := newBox(t)
+	b2.writeSettings("network.yaml", static("eth0"))
+	b2.offered = func() string { asked++; return "sneakers01.example.org" }
+	if s, _ := b2.start().Get(); s.Hostname != "appliance.sneakers.example.org" || asked != 1 {
+		t.Fatalf("settings %q, offer read %d times", s.Hostname, asked)
+	}
+}

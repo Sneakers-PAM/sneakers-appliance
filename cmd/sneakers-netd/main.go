@@ -10,6 +10,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ovfenv"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/timesync"
 )
 
@@ -47,6 +49,26 @@ func main() {
 		_, _ = fmt.Fprintln(os.Stderr, "sneakers-netd:", codes.Describe(err))
 		os.Exit(1)
 	}
+}
+
+// offeredHostname is the host name a VMware deployment set in the OVA's
+// vApp properties, from the OVF environment ISO in the CD drive; none
+// elsewhere.
+func offeredHostname(own string, lg log.Logger) string {
+	env, err := ovfenv.Read(ovfenv.Devices)
+	if errors.Is(err, ovfenv.ErrNone) {
+		lg.Info("netd: no OVF environment; the deployment offers no host name")
+		return ""
+	}
+	if err != nil {
+		lg.Warn("netd: the OVF environment can't be read; the deployment's host name is ignored", log.F("error", err.Error()))
+		return ""
+	}
+	h := env.Hostname(own)
+	if h == "" && (env[ovfenv.KeyHostname] != "" || env[ovfenv.KeyDomain] != "") {
+		lg.Warn("netd: the deployment's host name and domain make no fully qualified name; set one on Network", log.F("hostname", env[ovfenv.KeyHostname]), log.F("domain", env[ovfenv.KeyDomain]))
+	}
+	return h
 }
 
 // buildTime is the image's build time, the clock floor's starting point:
@@ -78,6 +100,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	}
 	d, err := netd.New(netd.Options{
 		Fallback: own,
+		Offered:  func() string { return offeredHostname(own, lg) },
 		StateDir: c.state, RunDir: c.run,
 		Sys:         netd.Linux{},
 		Workers:     netd.Clients{Logger: lg},

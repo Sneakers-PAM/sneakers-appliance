@@ -244,6 +244,21 @@ The appliance's Role may `get` those Secrets too. The box refuses a name that is
 word or is named twice, a secret that isn't `<namespace>/<name>` and a key that isn't a Secret data
 key.
 
+It also declares the **box values** its stacks read, each by a placeholder under the reserved
+`.invalid` domain, which never resolves:
+
+```yaml
+box_values:
+  - value: box.fqdn                    # the only box value so far
+    placeholder: sneakers.box.invalid  # what the stacks carry where the host goes; scrub:allow=fqdn
+```
+
+The box refuses a value it doesn't offer, one declared twice, or a placeholder that isn't a
+lower-case name under `.invalid`. It records them in the slot (`box-values`: placeholder, value), and
+puts its own value in place of each placeholder when a stack goes in front of k0s
+([network.md](network.md#the-host-name)). The Sneakers bundle's values set `global.host` to the
+placeholder, so every host-dependent setting carries it and no bundle names a box.
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,

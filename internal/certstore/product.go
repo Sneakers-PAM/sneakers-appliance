@@ -48,7 +48,21 @@ func (s *Store) productEndpoint(host string, addrs []string) Endpoint {
 	leaf := certs[0]
 	ep.Serving, ep.Expires = Fingerprint(leaf.Raw), leaf.NotAfter
 	ep.State, ep.Detail = endpointState(leaf, ep.Names, ep.Source == EndpointSelfSigned, s.o.Now(), "443")
+	// The product's sign-in, links and OAuth addresses name the box by
+	// its host name (package boxvalues), so covering only an address isn't
+	// enough here.
+	if host != "" && (ep.State == StateOK || ep.State == StateExpiring) && leaf.VerifyHostname(host) != nil {
+		ep.State, ep.Detail = StateNames, fmt.Sprintf("The 443 certificate doesn't cover the host name %s, which the product's sign-in, links and OAuth addresses use; it covers %s. Assign one that does (a wildcard for its domain covers it), or change the host name on Network.", host, strings.Join(sanList(leaf), ", "))
+	}
 	return ep
+}
+
+func sanList(leaf *x509.Certificate) []string {
+	out := append([]string(nil), leaf.DNSNames...)
+	for _, ip := range leaf.IPAddresses {
+		out = append(out, ip.String())
+	}
+	return out
 }
 
 // endpointState is an endpoint's state for leaf, as adminEndpoint words it.

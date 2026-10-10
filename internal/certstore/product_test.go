@@ -6,6 +6,7 @@ package certstore_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -160,4 +161,42 @@ func endpoint(s certstore.Snapshot, id string) certstore.Endpoint {
 		}
 	}
 	return certstore.Endpoint{}
+}
+
+// The product's sign-in, links and OAuth addresses use the box's host
+// name, so the 443 certificate must cover that name: one that covers only
+// an address is served, with a warning that names the host name, and a
+// host name change it doesn't cover warns the same way. A wildcard for
+// the host name's domain covers it.
+func TestTheProductCertificateIsCheckedAgainstTheHostName(t *testing.T) {
+	e := &fakeEdge{installed: true}
+	f := productFixture(t, e, func(context.Context, string) error { return nil })
+	ctx := context.Background()
+	importIt := func(names ...string) certstore.Certificate {
+		t.Helper()
+		l := f.ca.Issue(t, testpki.LeafOptions{Names: names})
+		c, _, err := f.s.Import(ctx, certstore.ImportRequest{CertificatePEM: string(l.PEM), ChainPEM: f.chain(), KeyPEM: string(l.KeyPEM)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	addrOnly := importIt(f.addrs[0])
+	ep, err := f.s.Assign(ctx, certstore.EndpointProduct, addrOnly.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.State != certstore.StateNames || !strings.Contains(ep.Detail, host) {
+		t.Fatalf("an address-only certificate: %s %q", ep.State, ep.Detail)
+	}
+
+	wild := importIt("*.sneakers.example.org")
+	if ep, err = f.s.Assign(ctx, certstore.EndpointProduct, wild.ID); err != nil || ep.State != certstore.StateOK {
+		t.Fatalf("the wildcard: %s %q %v", ep.State, ep.Detail, err)
+	}
+	f.host = "box2.other.example.org"
+	snap, _ := f.s.Snapshot(ctx)
+	if ep := endpoint(snap, certstore.EndpointProduct); ep.State != certstore.StateNames || !strings.Contains(ep.Detail, "box2.other.example.org") {
+		t.Fatalf("after the host name changed: %s %q", ep.State, ep.Detail)
+	}
 }

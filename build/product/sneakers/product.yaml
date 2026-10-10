@@ -88,3 +88,12 @@ escrow:
   - name: totp-key
     secret: sneakers/sneakers-identity-generated
     key: TOTP_ENC_KEY
+
+# The box's own host name, never baked into the bundle: the bundle's values
+# set global.host to this placeholder, so every host-dependent setting
+# (Kratos's URLs and return URLs, the WebAuthn relying party, the SSH
+# websocket, the MCP, OAuth and Hydra addresses) carries it, and the box
+# puts its FQDN in its place when it applies the stacks.
+box_values:
+  - value: box.fqdn
+    placeholder: sneakers.box.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved

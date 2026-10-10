@@ -340,6 +340,8 @@ type box struct {
 	clk     *clock.Fake
 	// fallback is the box's own name (Options.Fallback).
 	fallback string
+	// offered is the host name the deployment offers (Options.Offered).
+	offered func() string
 	// audit and logger, when set, are netd's audit log and logger.
 	audit  osaudit.Appender
 	logger log.Logger
@@ -362,7 +364,7 @@ func newBox(t *testing.T, links ...netd.Link) *box {
 
 func (b *box) start() *netd.Daemon {
 	b.t.Helper()
-	d, err := netd.New(netd.Options{StateDir: b.state, RunDir: b.run, Sys: b.sys, Workers: b.workers, NewTimeSync: b.time.New, Clock: b.clk, Fallback: b.fallback, Audit: b.audit, Logger: b.logger})
+	d, err := netd.New(netd.Options{StateDir: b.state, RunDir: b.run, Sys: b.sys, Workers: b.workers, NewTimeSync: b.time.New, Clock: b.clk, Fallback: b.fallback, Offered: b.offered, Audit: b.audit, Logger: b.logger})
 	if err != nil {
 		b.t.Fatal(err)
 	}

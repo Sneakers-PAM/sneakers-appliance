@@ -12,6 +12,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 )
@@ -160,5 +161,31 @@ func TestASwitchThatDoesntSettleStillRestarts(t *testing.T) {
 	}
 	if !slices.Equal(b.restarts, []string{"sneakers/deployment/sneakers-gateway"}) {
 		t.Fatalf("restarts %v", b.restarts)
+	}
+}
+
+// A stack a switch puts in front of k0s carries the box's own values in
+// place of the bundle's placeholders, as k0s-interim's do.
+func TestASwitchedOnStackCarriesTheBoxsValues(t *testing.T) {
+	b := newBox(t)
+	stack := "data:\n  MCP_URL: https://sneakers.box.invalid/mcp\n  HYDRA_ISSUER: https://hydra.sneakers.box.invalid/\n" // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	if err := os.WriteFile(filepath.Join(b.slot, "manifests", "sneakers-mcp", "mcp.yaml"), []byte(stack), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(b.slot, productspec.BoxValuesFile), []byte("sneakers.box.invalid box.fqdn\n"), 0o644); err != nil { // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		t.Fatal(err)
+	}
+	if err := boxvalues.Write(b.platform, map[string]string{productspec.BoxFQDN: "box1.example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.sw.Set(context.Background(), b.spec, "mcp", true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(filepath.Join(b.manifests, "sneakers-mcp", "mcp.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "data:\n  MCP_URL: https://box1.example.org/mcp\n  HYDRA_ISSUER: https://hydra.box1.example.org/\n"; string(got) != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }

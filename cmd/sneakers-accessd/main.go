@@ -46,6 +46,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
@@ -272,7 +273,20 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// The installed product's exposed values, read as the appliance's
 		// own service account (the admin kubeconfig only mints its token).
 		Exposed: &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount},
-		Logger:  lg,
+		// The box's FQDN the product's stacks take in place of the bundle's
+		// placeholder (docs/network.md#the-host-name).
+		BoxValues: &boxvalues.Box{
+			Dir: filepath.Join(c.state, "platform"),
+			Names: func(ctx context.Context) (string, []string, error) {
+				st, err := netd.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
+				if err != nil {
+					return "", nil, err
+				}
+				return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
+			},
+			Own: func() string { name, _ := boxname.Ensure(c.state); return name },
+		},
+		Logger: lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and
@@ -291,7 +305,13 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	d.Attach(store, api)
 	// The host certificates name the box's host name and addresses: a
 	// change re-renders sshd's files, which signs them again.
-	go watchNames(ctx, netdapi.NewClient(c.netdSock), lg, d.Rerender)
+	// The product follows a changed host name too, once the change is
+	// kept (osadmin.HostNameChanged); it looks once at start as well.
+	go api.HostNameChanged(ctx)
+	go watchNames(ctx, netdapi.NewClient(c.netdSock), lg, func() {
+		d.Rerender()
+		go api.HostNameChanged(ctx)
+	})
 	defer api.Close()
 
 	srv, err := listen(c.socket, d, lg)

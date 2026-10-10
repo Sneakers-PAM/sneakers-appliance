@@ -86,6 +86,11 @@ type Spec struct {
 	// vault's root key, say). The box seals each under KeyCustody, so the
 	// recovery escrow carries them for a restore onto another box.
 	Escrow []EscrowKey `yaml:"escrow"`
+	// BoxValues are the values of the box itself the product's stacks
+	// read, such as its host name: each stack carries a placeholder that
+	// the box replaces with its own value when it puts the stack in front
+	// of k0s, so no bundle names a box (package boxvalues).
+	BoxValues []BoxValue `yaml:"box_values"`
 }
 
 // EscrowKey is one Secret key the recovery escrow carries.
@@ -188,6 +193,24 @@ func (s Spec) checkImport() error {
 		}
 	}
 	return nil
+}
+
+// BoxValuesFile is written into the slot next to the bundle: one line per
+// box value the stacks read, "<placeholder> <value>", for k0s-interim and
+// productswitch.
+const BoxValuesFile = "box-values"
+
+// BoxFQDN is the box's fully qualified host name (package boxvalues says
+// where it comes from). It is the only box value so far.
+const BoxFQDN = "box.fqdn"
+
+// BoxValue is one box value a product's stacks read, by placeholder.
+type BoxValue struct {
+	Value string `yaml:"value"`
+	// Placeholder is a name under the reserved .invalid top-level domain
+	// (RFC 6761), which never resolves and so can't be mistaken for a real
+	// host if one is ever left in place.
+	Placeholder string `yaml:"placeholder"`
 }
 
 // Component is one part of the product the bundle must carry.
@@ -333,6 +356,25 @@ func (s Spec) checkParts() error {
 			if _, _, _, ok := w.RestartRef(j); !ok {
 				return bad("switches[%d]: %q isn't <namespace>/<deployment|statefulset|daemonset>/<name>", i, w.Restart[j])
 			}
+		}
+	}
+	return s.checkBoxValues()
+}
+
+var placeholderRE = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+invalid$`)
+
+func (s Spec) checkBoxValues() error {
+	seen := map[string]bool{}
+	for i, v := range s.BoxValues {
+		if v.Value != BoxFQDN {
+			return bad("box_values[%d]: %q isn't a box value this appliance offers (%s)", i, v.Value, BoxFQDN)
+		}
+		if seen[v.Value] {
+			return bad("box_values[%d]: %s is declared twice", i, v.Value)
+		}
+		seen[v.Value] = true
+		if !placeholderRE.MatchString(v.Placeholder) {
+			return bad("box_values[%d]: the placeholder %q isn't a lower-case name under .invalid", i, v.Placeholder)
 		}
 	}
 	return nil
@@ -550,13 +592,17 @@ func quoted(names []string) string {
 
 // WriteRBAC renders the RBAC for the product.yaml in slot dir into
 // dir/RBACFile (a bundle that exposes nothing gets none), and the
-// stacks its switches gate into dir/SwitchStacksFile.
+// stacks its switches gate into dir/SwitchStacksFile, and the box values
+// its stacks read into dir/BoxValuesFile.
 func WriteRBAC(dir string) error {
 	s, err := Load(dir)
 	if err != nil {
 		return err
 	}
 	if err := writeSwitchStacks(dir, s); err != nil {
+		return err
+	}
+	if err := writeBoxValues(dir, s); err != nil {
 		return err
 	}
 	p := filepath.Join(dir, RBACFile)
@@ -567,6 +613,24 @@ func WriteRBAC(dir string) error {
 		return nil
 	}
 	if err := os.WriteFile(p, RBAC(s), 0o644); err != nil { // #nosec G306 -- RBAC, nothing secret; k0s reads the slot as root
+		return fmt.Errorf("productspec: %w", err)
+	}
+	return nil
+}
+
+func writeBoxValues(dir string, s Spec) error {
+	p := filepath.Join(dir, BoxValuesFile)
+	if len(s.BoxValues) == 0 {
+		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("productspec: %w", err)
+		}
+		return nil
+	}
+	var b strings.Builder
+	for _, v := range s.BoxValues {
+		fmt.Fprintf(&b, "%s %s\n", v.Placeholder, v.Value)
+	}
+	if err := os.WriteFile(p, []byte(b.String()), 0o644); err != nil { // #nosec G306 -- placeholder names, nothing secret
 		return fmt.Errorf("productspec: %w", err)
 	}
 	return nil

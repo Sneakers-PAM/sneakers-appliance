@@ -56,6 +56,11 @@ type Options struct {
 	// name while neither the settings nor DHCP give one. It is never
 	// reported as the host name, so certificates don't take it.
 	Fallback string
+	// Offered is the host name the deployment offers (internal/ovfenv:
+	// the OVA's vApp properties), read only at first boot, while there are
+	// no settings: the defaults take it, so the first-boot screen and the
+	// settings it saves carry it. Nil, or an empty answer, offers none.
+	Offered func() string
 }
 
 // Daemon is netd's state and logic.
@@ -214,7 +219,20 @@ func (d *Daemon) load() (network.Settings, bool, error) {
 		return network.Settings{}, false, nil
 	}
 	lg.Info("netd: no settings yet; DHCP and SLAAC on the first NIC", log.F("nic", nic))
-	return network.Defaults(nic), false, nil
+	return d.defaults(nic), false, nil
+}
+
+// defaults are the first-boot settings on nic, with the host name the
+// deployment offers.
+func (d *Daemon) defaults(nic string) network.Settings {
+	s := network.Defaults(nic)
+	if d.o.Offered != nil {
+		if h := d.o.Offered(); h != "" {
+			s.Hostname = h
+			d.o.Logger.Info("netd: the deployment offers a host name; the defaults take it", log.F("hostname", h))
+		}
+	}
+	return s
 }
 
 // firstNIC is the first NIC in bus order with a link, else the first in
@@ -941,7 +959,7 @@ func (d *Daemon) watchKernel(ctx context.Context, notices <-chan struct{}) {
 		if waiting {
 			if nic, err := d.firstNIC(); err == nil && nic != "" {
 				d.o.Logger.Info("netd: an interface appeared; running the defaults on it", log.F("nic", nic))
-				if err := d.applyAndSave(network.Defaults(nic), false); err != nil {
+				if err := d.applyAndSave(d.defaults(nic), false); err != nil {
 					d.o.Logger.Error(err, "netd: the defaults didn't apply fully")
 				}
 				continue
