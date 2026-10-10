@@ -121,6 +121,7 @@ jobs:
           bash build/release/environments_test.sh
           bash build/release/units_test.sh
           bash build/ci/pinned_actions_test.sh
+          bash build/ci/image_e2e_runs_test.sh
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/
       - name: Lab keys never silently regenerate an existing set
