@@ -38,6 +38,7 @@ Troubleshooting this box (every key in this shell is recorded):
   ls -l --full-time <file>            a file's size and time (busybox stat has no -c)
   dmesg | tail -n 50                  the kernel's latest messages
   ls /var/lib/sneakers/os-audit       the OS audit log
+  history                             this session's commands, numbered (kept for the session only)
 
 helm list -A is empty, and that's by design: the product's stacks are k0s
 manifests the appliance applies from the installed bundle, not Helm

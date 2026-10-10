@@ -194,6 +194,24 @@ Example:
   help keys list
 ```
 
+## `history`
+
+List this session's commands.
+
+Lists the command lines typed in this session, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list ends with the session.
+
+Offered over: SSH.
+
+```text
+history
+```
+
+Example:
+
+```text
+  history
+```
+
 ## `keys`
 
 Login keys.
