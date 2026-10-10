@@ -98,8 +98,9 @@ bundled fails with `ErrImageNeverPull` instead of reaching for a registry.
 
 Each `manifests/<stack>/` goes to `/var/lib/k0s/manifests/<stack>/`, which k0s applies, with the
 box's own values in place of the placeholders the bundle declares (`<slot>/box-values`, from
-product.yaml `box_values`): the FQDN recorded in `/var/lib/sneakers/platform/box-values`, else the
-kernel's host name ([network.md](network.md#the-host-name)). When the
+product.yaml `box_values`): the values recorded in `/var/lib/sneakers/platform/box-values` (the FQDN,
+else the kernel's host name, and the Base OS and Base Web versions init records at boot;
+[release.md](release.md#productyaml)) ([network.md](network.md#the-host-name)). When the
 bundle exposes values ([release.md](release.md#productyaml)), the slot also holds the RBAC the box
 rendered for them, `exposed-rbac.yaml`, and `prepare` puts it in the stack
 `sneakers-appliance-exposed`; with none, that stack goes and k0s deletes what it held.

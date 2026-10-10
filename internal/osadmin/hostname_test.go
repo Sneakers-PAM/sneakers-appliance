@@ -76,6 +76,20 @@ func TestAProductApplyRecordsTheBoxsFQDN(t *testing.T) {
 	}
 }
 
+// A product apply records the box's Base OS and Base Web versions too.
+func TestAProductApplyRecordsTheBoxsVersions(t *testing.T) {
+	b := newBox(t, false, withBoxValues, func(_ *box, o *osadmin.Options) {
+		o.BoxValues.(*boxvalues.Box).Versions = func() (string, string) { return "0.1.0-m", "0.1.0-m2" }
+	})
+	alice := b.browser()
+	alice.signIn("alice")
+	alice.installProduct(t, "0.2.0")
+	got := boxvalues.Read(filepath.Join(b.state, "platform"))
+	if got[productspec.BoxOSVersion] != "0.1.0-m" || got[productspec.BoxWebVersion] != "0.1.0-m2" || got[productspec.BoxFQDN] != "box1.sneakers.example.org" {
+		t.Fatalf("recorded %v", got)
+	}
+}
+
 // A host name change re-applies the product with the new FQDN, but only
 // once the change is kept: while it waits for its confirm (120 s) the
 // product stays as it is, and it follows when the window is over.

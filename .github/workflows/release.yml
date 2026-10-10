@@ -169,11 +169,12 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: bash build/kernel/build.sh amd64
-      - name: Build the static cryptsetup, mke2fs and sgdisk
+      - name: Build the static cryptsetup, mke2fs, sgdisk and watch
         run: |
           bash build/static/cryptsetup.sh amd64
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
+          bash build/static/procps.sh amd64
       - name: Build the static OpenSSH and busybox
         run: |
           bash build/busybox/build.sh out/static
@@ -538,11 +539,12 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: bash build/kernel/build.sh amd64
-      - name: Build the static cryptsetup, mke2fs and sgdisk
+      - name: Build the static cryptsetup, mke2fs, sgdisk and watch
         run: |
           bash build/static/cryptsetup.sh amd64
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
+          bash build/static/procps.sh amd64
       - name: Build the static OpenSSH and busybox
         run: |
           bash build/busybox/build.sh out/static

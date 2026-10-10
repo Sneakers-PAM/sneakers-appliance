@@ -32,6 +32,7 @@ owner.
 | `/etc/{passwd,group,shadow}` | links into `/run/sneakers/accounts/`, which accessd renders |
 | `/etc/resolv.conf` | a link to `/run/sneakers/resolv.conf` |
 | `/usr/sbin/{cryptsetup,veritysetup,mkfs.ext4,sgdisk}` | the static tools, when `STATIC` is given |
+| `/usr/bin/watch`, `/usr/share/terminfo/` | the root shell's static `watch` (procps-ng, `build/static/procps.sh`) and the terminal descriptions it draws with: the `TERMINFO_ENTRIES` in `build/ci/versions.env` (xterm, PuTTY, screen, tmux, the VT and Linux consoles) |
 
 `build/root/build.sh` takes its inputs from the environment (the header lists them): the version,
 the architecture, `release.yaml`, the OpenSSH directory, busybox and the release pins

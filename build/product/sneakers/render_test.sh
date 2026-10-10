@@ -78,6 +78,27 @@ grep -q '^ghcr.io/sneakers-pam/sneakers-migrate sha256:' "$work/pinned" || fail 
 grep -q 'sneakers/sneakers-migrate' "$out/sneakers/sneakers.yaml" || fail "the vault and audit don't list the migrate caller"
 echo "ok: every component is pinned, every service image runs in a stack, and the import's image and caller are in place"
 
+# The product's About: the release's version, and the box's placeholders
+# for its Base OS, Base Web and FQDN, each one product.yaml declares.
+# The chart puts each service's settings in its ConfigMap, a "NAME: value" line each.
+env_value() { sed -n "s/^ *$1: //p" "$out/sneakers/sneakers.yaml" | tr -d "\"'" | head -1; }
+release_version="$(go run "$root/build/tools/bundle" version --release "$work/release.yaml")"
+want=(
+  "SNEAKERS_PRODUCT_VERSION $release_version"
+  "SNEAKERS_APPLIANCE_VERSION baseos-version.invalid"      # scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+  "SNEAKERS_APPLIANCE_WEB_VERSION baseweb-version.invalid" # scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+  "SNEAKERS_APPLIANCE_FQDN sneakers.box.invalid"           # scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+)
+for kv in "${want[@]}"; do
+  read -r name value <<<"$kv"
+  got="$(env_value "$name")"
+  [ "$got" = "$value" ] || fail "the gateway's $name is \"$got\", want $value"
+done
+for ph in $(sed -n 's/^ *placeholder: \([a-z0-9.-]*\).*/\1/p' "$here/product.yaml"); do
+  grep -qF "$ph" "$out/sneakers/sneakers.yaml" || fail "no stack carries the placeholder $ph"
+done
+echo "ok: the gateway gets the product version $release_version and the box's placeholders"
+
 # Pinned by digest and never pulled.
 if grep -h '^ *image: ' "$out"/*/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}$' | grep -q .; then
   fail "an image isn't pinned by digest: $(grep -h '^ *image: ' "$out"/*/*.yaml | grep -v '@sha256:' | head -1)"

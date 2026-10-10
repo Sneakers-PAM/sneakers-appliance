@@ -170,13 +170,20 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
 | `<product> mcp [on\|off] [machine-api=on\|off]` (`sneakers mcp ...`) | no | yes | accessd; only while a product is installed; see [The MCP switch](#the-mcp-switch) |
 
+Every command's help (`help <command>`) gives its purpose, its usage, its flags and keys, and an
+example. The full reference, [cli.md](cli.md), is generated from the same command tree with
+`go run ./build/tools/clidoc`; the shell's tests fail while the committed file is out of date, and
+while any command lacks a description or an example.
+
 A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` and isn't listed by
 `help` or completed. `-o json` prints a command's result, or its error as
 `{"error": {"code", "number", "message"}}`. The commands of later specs answer `NOT_AVAILABLE`
 ("Not available in this release.") until their services are on the box. The accessd commands go to
 `/run/sneakers/access.sock`, which knows the login by its uid ([access.md](access.md#accesssock));
 `network set` takes `hostname`, `dns`, `search`, `ntp`, `allow-list` (comma-separated lists),
-`time-zone` and `https-proxy` on top of the current settings. While accessd is down they answer
+`time-zone` and `https-proxy` on top of the current settings. `help network set` lists every key
+with an example, from the same table the parser reads, and so do `network set` alone and `network
+set ?`; an unknown key answers `SHELL_PARSE` with the closest key ("did you mean time-zone?"). While accessd is down they answer
 `NOT_AVAILABLE` ("the appliance services are unavailable"), and `status` shows the last status
 accessd kept, with the time it was taken.
 
@@ -273,6 +280,10 @@ With a product installed, `kubectl` and `helm` work in the root shell against it
 `KUBECONFIG` is k0s's admin kubeconfig ([k0s.md](k0s.md#kubectl-and-helm-in-the-root-shell)).
 Without one, the shell says so once at its start, and `kubectl`, `helm` and `k0s` each answer "No
 product is installed yet" instead of a bare "not found".
+
+`watch` (procps-ng, static) re-runs a command on an interval, such as `watch -n 2 kubectl get pods
+-A`. The root carries the terminal descriptions it needs for xterm (OpenSSH, MobaXterm), PuTTY,
+screen, tmux and the VT and Linux consoles; with another `TERM`, run it as `TERM=xterm watch ...`.
 
 Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
 Removing an admin's key ends a root shell it opened.

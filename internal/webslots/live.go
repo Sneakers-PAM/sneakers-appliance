@@ -58,6 +58,16 @@ func ReadServed(p string) (Served, error) {
 	return s, nil
 }
 
+// ServedVersion is the Base Web version the status file at p records: the
+// served slot's, or builtin (the running Base OS's own pages) when the
+// built-in pages serve or nothing is recorded.
+func ServedVersion(p, builtin string) string {
+	if s, err := ReadServed(p); err == nil && s.Source == SourceSlot && s.Version != "" {
+		return s.Version
+	}
+	return builtin
+}
+
 // Live is the page set :8443 serves, swapped in one step. The set it
 // replaced stays answerable for files the new one lacks (an open page's
 // hashed assets) until the next swap.

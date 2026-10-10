@@ -210,9 +210,17 @@ func (s Spec) checkImport() error {
 // productswitch.
 const BoxValuesFile = "box-values"
 
-// BoxFQDN is the box's fully qualified host name (package boxvalues says
-// where it comes from). It is the only box value so far.
-const BoxFQDN = "box.fqdn"
+// The box values the box offers (package boxvalues says where each comes
+// from): its fully qualified host name, and the versions of the Base OS it
+// runs and the Base Web it serves.
+const (
+	BoxFQDN       = "box.fqdn"
+	BoxOSVersion  = "box.os.version"
+	BoxWebVersion = "box.web.version"
+)
+
+// boxValuesOffered are the box values a bundle may declare.
+var boxValuesOffered = []string{BoxFQDN, BoxOSVersion, BoxWebVersion}
 
 // BoxValue is one box value a product's stacks read, by placeholder.
 type BoxValue struct {
@@ -454,8 +462,8 @@ var placeholderRE = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+
 func (s Spec) checkBoxValues() error {
 	seen := map[string]bool{}
 	for i, v := range s.BoxValues {
-		if v.Value != BoxFQDN {
-			return bad("box_values[%d]: %q isn't a box value this appliance offers (%s)", i, v.Value, BoxFQDN)
+		if !slices.Contains(boxValuesOffered, v.Value) {
+			return bad("box_values[%d]: %q isn't a box value this appliance offers (%s)", i, v.Value, strings.Join(boxValuesOffered, ", "))
 		}
 		if seen[v.Value] {
 			return bad("box_values[%d]: %s is declared twice", i, v.Value)
@@ -463,6 +471,14 @@ func (s Spec) checkBoxValues() error {
 		seen[v.Value] = true
 		if !placeholderRE.MatchString(v.Placeholder) {
 			return bad("box_values[%d]: the placeholder %q isn't a lower-case name under .invalid", i, v.Placeholder)
+		}
+	}
+	// Each placeholder is replaced as plain text, so none may hold another.
+	for i, a := range s.BoxValues {
+		for j, b := range s.BoxValues {
+			if i != j && strings.Contains(a.Placeholder, b.Placeholder) {
+				return bad("box_values[%d]: the placeholder %q holds box_values[%d]'s %q", i, a.Placeholder, j, b.Placeholder)
+			}
 		}
 	}
 	return nil

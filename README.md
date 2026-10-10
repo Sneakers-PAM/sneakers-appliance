@@ -38,6 +38,8 @@ sneakers-kit build sneakers-os:0.1.0 --format ova --out ./out
   the box, and why a reset can't leave it unbootable.
 - [docs/ssh-and-elevation.md](docs/ssh-and-elevation.md): key-only SSH, sshd's rendered config and
   elevation.
+- [docs/cli.md](docs/cli.md): every closed-shell command with its usage, flags, keys and examples,
+  generated from the shell's command tree.
 - [docs/console.md](docs/console.md): the console's large font, first boot's info screens, the
   status screen and Recover access.
 - [docs/building.md](docs/building.md), [docs/root-image.md](docs/root-image.md),
