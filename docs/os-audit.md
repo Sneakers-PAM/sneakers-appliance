@@ -71,7 +71,8 @@ line left anchors the chain, as after retention pruning.
 An elevated session is recorded in full, both directions, as asciicast v2 in
 `sessions/<request id>.cast`. As the file grows, the SHA-256 of every 64 KiB is written to the log
 (`recording.chunk`, with the chunk's index, size and hash), and `recording.end` closes it with the
-chunk count. Both name the recording by admin and start time and carry the request id in
+chunk count and why the session ended (`detail.reason`). Both have the outcome `ok`, like every
+entry that isn't a refusal. Both name the recording by admin and start time and carry the request id in
 `detail.recording`, which is what verification matches on. A session killed mid-way still leaves a prefix that verifies; a recording with more
 than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can view recordings.
 

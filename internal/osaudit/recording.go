@@ -121,9 +121,10 @@ func (r *Recorder) emit(b []byte) {
 
 func (r *Recorder) logChunk(final bool) {
 	e := Entry{
-		Actor:  "sneakers-elevated",
-		Action: ActionRecordingChunk,
-		Target: r.name,
+		Actor:   "sneakers-elevated",
+		Action:  ActionRecordingChunk,
+		Target:  r.name,
+		Outcome: "ok",
 		Detail: map[string]string{
 			"recording": r.id,
 			"n":         strconv.Itoa(r.chunks),
@@ -156,8 +157,8 @@ func (r *Recorder) Close(reason string) error {
 	if r.err != nil {
 		return r.err
 	}
-	return r.log.Append(Entry{Actor: "sneakers-elevated", Action: ActionRecordingEnd, Target: r.name, Outcome: reason,
-		Detail: map[string]string{"recording": r.id, "chunks": strconv.Itoa(r.chunks)}})
+	return r.log.Append(Entry{Actor: "sneakers-elevated", Action: ActionRecordingEnd, Target: r.name, Outcome: "ok",
+		Detail: map[string]string{"recording": r.id, "chunks": strconv.Itoa(r.chunks), "reason": reason}})
 }
 
 // VerifyRecording checks data, a recording's bytes, against the chunk
