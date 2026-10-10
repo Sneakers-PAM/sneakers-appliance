@@ -378,3 +378,81 @@ func TestAStackOfOtherKindsCountsAsApplied(t *testing.T) {
 		}
 	}
 }
+
+// The slot's edge stack: the same image as before, with a new argument,
+// an environment value from the box's values, and a config checksum on
+// the pod template.
+const specStack = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: edge
+  namespace: edge
+spec:
+  template:
+    metadata:
+      annotations:
+        checksum/config: abc123
+    spec:
+      containers:
+        - name: traefik
+          image: example.org/traefik@sha256:3333
+          command: [/bin/sh, -c]
+          args:
+            - --entryPoints.websecure.address=:443
+            - --entryPoints.websecure.http.middlewares=box-gate@file
+          env:
+            - name: BOX_FQDN
+              value: __BOX_FQDN__
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+`
+
+// liveEdge is edge/edge as the cluster has it, rolled out, with the
+// given args, BOX_FQDN and checksum.
+func liveEdge(args, fqdn, sum string) string {
+	return `{"items":[{"kind":"Deployment","metadata":{"namespace":"edge","name":"edge","generation":3,"labels":{"k0s.k0sproject.io/stack":"edge"}},
+ "spec":{"replicas":1,"template":{"metadata":{"annotations":{"checksum/config":"` + sum + `","kubectl.kubernetes.io/restartedAt":"2026-10-10T10:00:00Z"}},
+ "spec":{"containers":[{"name":"traefik","image":"example.org/traefik@sha256:3333","command":["/bin/sh","-c"],"args":` + args + `,
+ "env":[{"name":"BOX_FQDN","value":"` + fqdn + `"},{"name":"POD_NAMESPACE","valueFrom":{"fieldRef":{"apiVersion":"v1","fieldPath":"metadata.namespace"}}}]}]}}},
+ "status":{"observedGeneration":3,"replicas":1,"updatedReplicas":1,"availableReplicas":1,"readyReplicas":1}}]}`
+}
+
+func specProbe(t *testing.T, k *fakeK0s) *productup.Probe {
+	t.Helper()
+	p := readyProbe(t, k)
+	p.SwitchDir = t.TempDir()
+	writeSlot(t, p.Slot, map[string]string{
+		"manifests/hello/hello.yaml": "",
+		"manifests/edge/edge.yaml":   specStack,
+		"box-values":                 "__BOX_FQDN__ box.fqdn\n",
+	})
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "box-values"), []byte("box.fqdn box1.example.org\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// A change that keeps the image but changes the spec (an argument, an
+// environment value, the config a checksum names) isn't rolled out until
+// the live pod template is the slot's: right after the restart the old
+// spec is fully rolled out at its own generation.
+func TestASpecOnlyChangeIsWaitedFor(t *testing.T) {
+	gated := `["--entryPoints.websecure.address=:443","--entryPoints.websecure.http.middlewares=box-gate@file"]`
+	for name, live := range map[string]string{
+		"an argument":      liveEdge(`["--entryPoints.websecure.address=:443"]`, "box1.example.org", "abc123"),
+		"an env value":     liveEdge(gated, "box0.example.org", "abc123"),
+		"the config's sum": liveEdge(gated, "box1.example.org", "old999"),
+	} {
+		k := &fakeK0s{workloads: live}
+		p := specProbe(t, k)
+		if r := check(t, p); r.Step != productup.StepPods || r.Detail != "Rolling out (0 of 1 ready): waiting for edge/edge, the new version isn't applied yet" {
+			t.Fatalf("%s differs: %+v", name, r)
+		}
+	}
+	k := &fakeK0s{workloads: liveEdge(gated, "box1.example.org", "abc123")}
+	if r := check(t, specProbe(t, k)); r.Step != "" {
+		t.Fatalf("the slot's spec, with the box's own values put in, rolled out: %+v", r)
+	}
+}
