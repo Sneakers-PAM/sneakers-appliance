@@ -32,6 +32,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -112,7 +113,8 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	next.Expect(`lab-hook: api up`, 25*time.Minute)
 	next.Expect(`lab-hook: node ready`, 15*time.Minute)
 	next.Expect(`lab-hook: hello pod ready`, 15*time.Minute)
-	phasesInOrder(t, next.Expect(`lab-hook: phase pods: .*`, time.Minute), "the first install")
+	next.Expect(`lab-hook: box running`, 15*time.Minute)
+	installed := phasesInOrder(t, next.Expect(`lab-hook: phase pods: .*`, time.Minute), "the first install")
 	next.Expect(`lab-hook: edge pod ready`, 10*time.Minute)
 	next.Expect(`lab-hook: root shell kubectl works`, 2*time.Minute)
 	next.Expect(`lab-hook: root shell helm works`, 2*time.Minute)
@@ -188,7 +190,12 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	after := harness.Boot(t, opts(next.Disk(0)))
 	after.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
 	after.Expect(`lab-hook: hello pod ready`, 25*time.Minute)
-	phasesInOrder(t, after.Expect(`lab-hook: phase pods: .*`, time.Minute), "after a power loss")
+	after.Expect(`lab-hook: box running`, 25*time.Minute)
+	again := phasesInOrder(t, after.Expect(`lab-hook: phase pods: .*`, time.Minute), "after a power loss")
+	t.Logf("after a power loss: %s", after.Expect(`lab-hook: scaling events: .*`, time.Minute))
+	if old := oldPods(installed, again); len(old) > 0 {
+		t.Fatalf("after a power loss: %v are the first install's pods, restarted in place, not quiesced", old)
+	}
 	// With every container restarting at once, no pod's network is set up
 	// twice at the same time (the CNI plugin's "exec: already started").
 	if bad := sandboxErrors(after.Expect(`lab-hook: sandbox events: .*`, time.Minute)); len(bad) > 0 {
@@ -226,8 +233,8 @@ func readPhasePods(line string) (map[string]phasePod, error) {
 
 // phasesInOrder checks the lab hook's phase pods line: every phased pod
 // is Ready with no restarts, and the front phase's pod started only once
-// the data phase's was Ready.
-func phasesInOrder(t *testing.T, line, when string) {
+// the data phase's was Ready. It answers the pods.
+func phasesInOrder(t *testing.T, line, when string) map[string]phasePod {
 	t.Helper()
 	pods, err := readPhasePods(line)
 	if err != nil {
@@ -247,6 +254,20 @@ func phasesInOrder(t *testing.T, line, when string) {
 		t.Fatalf("%s: the front phase started at %s, before the data phase was Ready at %s", when, front.started, data.ready)
 	}
 	t.Logf("%s: data Ready at %s, front started at %s, no restarts", when, data.ready, front.started)
+	return pods
+}
+
+// oldPods are the pods of after that before already had: the same name
+// and start time, so restarted in place rather than made new.
+func oldPods(before, after map[string]phasePod) []string {
+	var out []string
+	for name, p := range after {
+		if b, ok := before[name]; ok && b.started.Equal(p.started) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // sandboxErrors are the FailedCreatePodSandBox event messages in the lab
