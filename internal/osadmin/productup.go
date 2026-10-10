@@ -34,6 +34,7 @@ var productUpSteps = []progressStep{
 	{ID: productup.StepK0s, Label: "Starting k0s", State: statePending},
 	{ID: productup.StepImages, Label: "Importing the images", State: statePending},
 	{ID: productup.StepManifests, Label: "Applying the product's stacks", State: statePending},
+	{ID: productup.StepClusterDNS, Label: "Waiting for the pod network and cluster DNS", State: statePending},
 	{ID: productup.StepPods, Label: "Rolling out", State: statePending},
 	{ID: productup.StepHealth, Label: "Checking the product's health", State: statePending},
 	{ID: productup.StepEdge, Label: "Opening the product on 443", State: statePending},

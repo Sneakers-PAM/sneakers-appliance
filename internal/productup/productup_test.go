@@ -33,6 +33,9 @@ type fakeK0s struct {
 	workloads string
 	// health is the product's health check's answer: nil is ready.
 	health error
+	// system is kube-system's DaemonSets and Deployments as JSON; empty is
+	// kube-router and CoreDNS ready.
+	system string
 	calls  []string
 }
 
@@ -59,6 +62,11 @@ func (f *fakeK0s) run(_ context.Context, name string, args ...string) ([]byte, e
 			}
 		}
 		return nil, nil
+	case strings.Contains(line, "get daemonsets,deployments --namespace kube-system"):
+		if f.system == "" {
+			return []byte(systemReady), nil
+		}
+		return []byte(f.system), nil
 	case strings.Contains(line, "get pods"):
 		return []byte(f.podsJSON), nil
 	case strings.Contains(line, "get deployments,statefulsets,daemonsets"):
@@ -104,6 +112,11 @@ func check(t *testing.T, p *productup.Probe) productup.Result {
 	}
 	return r
 }
+
+const systemReady = `{"items":[
+ {"kind":"DaemonSet","metadata":{"name":"kube-router"},"status":{"desiredNumberScheduled":1,"numberReady":1}},
+ {"kind":"DaemonSet","metadata":{"name":"kube-proxy"},"status":{"desiredNumberScheduled":1,"numberReady":1}},
+ {"kind":"Deployment","metadata":{"name":"coredns"},"spec":{"replicas":2},"status":{"readyReplicas":2}}]}`
 
 const twoPods = `{"items":[
  {"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}},
@@ -454,5 +467,38 @@ func TestASpecOnlyChangeIsWaitedFor(t *testing.T) {
 	k := &fakeK0s{workloads: liveEdge(gated, "box1.example.org", "abc123")}
 	if r := check(t, specProbe(t, k)); r.Step != "" {
 		t.Fatalf("the slot's spec, with the box's own values put in, rolled out: %+v", r)
+	}
+}
+
+// After a reboot the product's pods start with everything else, so a
+// product whose services need cluster DNS waits for it first: the pod
+// network (kube-router, whose installer the CNI plugins come from) and
+// CoreDNS must be ready before the rollout counts, and the detail names
+// which of them holds it, which is what a timeout reports.
+func TestTheProbeWaitsForThePodNetworkAndClusterDNS(t *testing.T) {
+	e := edge(t, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	k := &fakeK0s{apiUp: true, images: "sha256:" + hexA + " sha256:" + hexB, stacks: map[string]bool{"edge": true, "hello": true}, podsJSON: strings.Replace(twoPods, "%s", "True", 1)}
+	p := probe(t, k, e)
+	for _, c := range []struct{ system, detail string }{
+		{`{"items":[]}`, "The pod network isn't ready: kube-router isn't there yet"},
+		{`{"items":[{"kind":"DaemonSet","metadata":{"name":"kube-router"},"status":{"desiredNumberScheduled":1,"numberReady":0}},
+		  {"kind":"Deployment","metadata":{"name":"coredns"},"spec":{"replicas":2},"status":{"readyReplicas":2}}]}`, "The pod network isn't ready: kube-router 0 of 1 ready"},
+		{`{"items":[{"kind":"DaemonSet","metadata":{"name":"kube-router"},"status":{"desiredNumberScheduled":1,"numberReady":1}}]}`, "Cluster DNS isn't ready: CoreDNS isn't there yet"},
+		{`{"items":[{"kind":"DaemonSet","metadata":{"name":"kube-router"},"status":{"desiredNumberScheduled":1,"numberReady":1}},
+		  {"kind":"Deployment","metadata":{"name":"coredns"},"spec":{"replicas":2},"status":{"readyReplicas":0}}]}`, "Cluster DNS isn't ready: CoreDNS 0 of 2 ready"},
+	} {
+		k.system = c.system
+		if r := check(t, p); r.Step != productup.StepClusterDNS || r.Detail != c.detail {
+			t.Errorf("%s: got %+v; want %s %q", c.system, r, productup.StepClusterDNS, c.detail)
+		}
+	}
+	// One ready CoreDNS answers; the second may still be starting.
+	k.system = `{"items":[{"kind":"DaemonSet","metadata":{"name":"kube-router"},"status":{"desiredNumberScheduled":1,"numberReady":1}},
+	  {"kind":"Deployment","metadata":{"name":"coredns"},"spec":{"replicas":2},"status":{"readyReplicas":1}}]}`
+	if r := check(t, p); r.Step != "" {
+		t.Fatalf("DNS and the pod network ready: %+v", r)
+	}
+	if i, j := slices.Index(productup.Steps, productup.StepClusterDNS), slices.Index(productup.Steps, productup.StepPods); i < 0 || i+1 != j {
+		t.Errorf("the cluster DNS step isn't right before the rollout: %v", productup.Steps)
 	}
 }

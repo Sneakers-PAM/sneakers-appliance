@@ -268,6 +268,7 @@ Installing the product 0.2.0. The box keeps running.
   [ok]  Starting k0s
   [ok]  Importing the images
   [ok]  Applying the product's stacks
+  [ok]  Waiting for the pod network and cluster DNS
   [..]  Rolling out
         Rolling out (12 of 14 ready): waiting for app/api, 0 of 1 updated, 1 running
   [  ]  Checking the product's health
