@@ -196,7 +196,20 @@ grep -q "HYDRA_ISSUER: https://$host/oauth\$" "$sw" || fail "the gateway doesn't
 grep -q "OAUTH_PUBLIC_URL: https://$host\$" "$sw" || fail "the root authorization server moved: $(grep OAUTH_PUBLIC_URL "$sw")"
 awk -v RS='---\n' '/kind: NetworkPolicy/ && /\n    name: sneakers-hydra\n/' "$mcp" | grep -q 'cidr: 198.18.0.1/32' || fail "Hydra's public port doesn't take the edge"
 grep -A3 'oauth-prefix:' "$out/edge/edge.yaml" | grep -q 'prefixes: \["/oauth"\]' || fail "the edge has no oauth-prefix middleware"
+# The MCP server's protected-resource metadata (RFC 9728) names the
+# resource at the box's own name and its authorization server, so an OAuth
+# MCP client finds sign-in from /.well-known/oauth-protected-resource; the
+# server serves none without MCP_RESOURCE_URL.
+mcm=""
+for f in "$work"/mcpdocs/*.yaml; do
+  grep -q '^kind: ConfigMap$' "$f" && grep -q '^    name: sneakers-mcp$' "$f" && mcm="$f"
+done
+[ -n "$mcm" ] || fail "no sneakers-mcp ConfigMap"
+grep -q "MCP_RESOURCE_URL: https://$host/mcp\$" "$mcm" || fail "the MCP server's resource isn't https://<fqdn>/mcp: $(grep MCP_RESOURCE_URL "$mcm" || echo unset)"
+grep -q "MCP_AUTHORIZATION_SERVER: https://$host\$" "$mcm" || fail "the MCP server's authorization server isn't https://<fqdn>: $(grep MCP_AUTHORIZATION_SERVER "$mcm" || echo unset)"
+awk -v RS='---\n' '/kind: Ingress/ && /\n    name: sneakers-mcp\n/' "$mcp" | grep -q 'path: /.well-known/oauth-protected-resource$' || fail "the edge doesn't route /.well-known/oauth-protected-resource to the MCP server"
 echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ routes, and /oauth/consent stays the staff app's"
+echo "ok: the MCP server's protected-resource metadata names https://<fqdn>/mcp and https://<fqdn>"
 
 # The mail relay comes only from the box (the Email page): the identity
 # service, which sends the product's mail, loads the sneakers-email

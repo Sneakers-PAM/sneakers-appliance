@@ -43,8 +43,11 @@ type CertInfo struct {
 // EnsureCert loads :8443's certificate from dir. While a store certificate
 // is assigned (certstore.AssignedMarker) it is served as it is. Otherwise
 // the box's own self-signed ECDSA P-256 one is kept, or made new when
-// there is none, it expires within 30 days, or its names aren't hostname
-// and addrs. The key never leaves dir.
+// there is none, it expires within 30 days, it names another host, or it
+// doesn't name one of addrs. A certificate that names more addresses than
+// addrs is kept: after a boot the addresses come back one at a time, and
+// the fingerprint an admin checked on the console must not change with
+// each. The key never leaves dir.
 func EnsureCert(dir, hostname string, addrs []string, now time.Time) (tls.Certificate, CertInfo, error) {
 	if certstore.AssignedID(dir) != "" {
 		if c, info, err := loadCert(dir); err == nil {
@@ -56,10 +59,9 @@ func EnsureCert(dir, hostname string, addrs []string, now time.Time) (tls.Certif
 			return tls.Certificate{}, CertInfo{}, fmt.Errorf("tls: %w", err)
 		}
 	}
-	want := sanList(hostname, addrs)
 	if c, info, err := loadCert(dir); err == nil {
 		leaf := c.Leaf
-		if slices.Equal(sanList(firstOr(leaf.DNSNames), ipStrings(leaf.IPAddresses)), want) && now.Add(certstore.RenewBefore).Before(leaf.NotAfter) {
+		if covers(leaf, hostname, addrs) && now.Add(certstore.RenewBefore).Before(leaf.NotAfter) {
 			return c, info, nil
 		}
 	}
@@ -174,6 +176,21 @@ func (c *CertSource) stat() string {
 		fmt.Fprintf(&b, "%d:%d:%d;", ino, fi.Size(), fi.ModTime().UnixNano())
 	}
 	return b.String()
+}
+
+// covers reports whether leaf names hostname as its host and every one of
+// addrs.
+func covers(leaf *x509.Certificate, hostname string, addrs []string) bool {
+	if firstOr(leaf.DNSNames) != hostname {
+		return false
+	}
+	have := ipStrings(leaf.IPAddresses)
+	for _, a := range sanList(hostname, addrs)[1:] {
+		if !slices.Contains(have, a) {
+			return false
+		}
+	}
+	return true
 }
 
 func sanList(hostname string, addrs []string) []string {

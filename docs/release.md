@@ -299,8 +299,15 @@ switch named `mcp` (and `machine-api` when the product declares one; without it 
 stays on): `SetMcp` keeps the setting, puts the switch's stacks in front of k0s or takes them away
 (k0s removes their objects), waits up to 90 s until k0s has applied every object in them (or
 removed them all), and only then restarts the workloads it names with the installed bundle's k0s,
-so a restarted workload reads the change; audited as `mcp.set`. `GetMcp` answers `state` `on`, `off`, `not in this product` or `not
-installed`.
+so a restarted workload reads the change. Then it waits, up to 90 s (inside the 2 minutes :8443 and
+the closed shell wait), until the product is ready with the change, as an apply's progress counts it:
+every workload in the stacks that are on has rolled out, with the restarted ones, and the product's
+health answers. It answers ok only then; a stack, a restart or a product that isn't ready in time
+fails the call (`PRODUCT_NOT_READY`, with what it still waits for), and the setting stays saved.
+Audited as `mcp.set`, with that outcome. `GetMcp` answers `state` `on`, `off`, `not in this product`
+or `not installed` (the setting) and, while it's on, `readiness`: `starting` with `detail` (what the
+product waits for), `ready`, or `failed` with `detail` (why the last switch-on gave up, until the
+product is ready).
 
 It may declare when it's **ready** after an install, an update or a revert
 ([upgrades.md](upgrades.md#when-the-product-is-ready)):

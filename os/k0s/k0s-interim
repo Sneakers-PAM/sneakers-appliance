@@ -43,6 +43,29 @@ kubelet_resolv() {
   mv "$2.new" "$2"
 }
 
+# cni_plugins <installed> <copy>: the box's own copy of the CNI plugins,
+# which containerd runs (containerd.toml bin_dirs, ahead of /opt/cni/bin).
+# kube-router's install-cni-bins rewrites every plugin in /opt/cni/bin in
+# place each time its pod starts, and after a reboot containerd is already
+# running them for the other pods: an exec of a plugin open for writing
+# fails with ETXTBSY, and libcni v1.3's retry of it with "exec: already
+# started", a FailedCreatePodSandBox. Nothing writes the copy while k0s
+# runs; a changed plugin goes in by rename at the next start. busybox has
+# no cmp, so a plugin is compared by its SHA-256.
+cni_plugins() {
+  mkdir -p "$2"
+  for f in "$1"/*; do
+    [ -f "$f" ] || continue
+    n="$(basename "$f")"
+    if [ -f "$2/$n" ] && [ "$(sha256sum < "$f")" = "$(sha256sum < "$2/$n")" ]; then
+      continue
+    fi
+    cp "$f" "$2/$n.new"
+    chmod 0755 "$2/$n.new"
+    mv "$2/$n.new" "$2/$n"
+  done
+}
+
 # exposed_rbac <slot> <stack dir>: the RBAC the appliance rendered for the
 # values the bundle's product.yaml exposes (internal/productspec) as its
 # own stack, so the appliance's service account may get exactly those
@@ -204,6 +227,9 @@ prepare() {
   # The root's /etc/cni and /opt are links to these, where kube-router
   # installs the CNI config and plugins.
   mkdir -p /var/lib/cni-conf/net.d /var/lib/opt/cni/bin
+  # containerd runs this copy, never the installer's files (cni_plugins).
+  cni_plugins /var/lib/opt/cni/bin /var/lib/sneakers/k0s/cni-bin
+  say "the CNI plugins containerd runs: $(ls /var/lib/sneakers/k0s/cni-bin | tr '\n' ' ')"
   # /var/log leads here (pod logs).
   mkdir -p /var/lib/log
   # netd writes the host's resolver file; until it has, an empty one. The
