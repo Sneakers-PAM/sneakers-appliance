@@ -26,7 +26,7 @@ the names below (`build/release/check-names.sh`, run by the sign, publish and la
 
 A file name carries the release and nothing else: the version on production (`0.1.0-rc.1`, and
 `0.1.0` for the stable release), and `lab-<build label>` on lab, where the label is the build's
-letter and rebuild number (`lab-n3`) or the product's own lab label (`lab-sneakers.10`). The build
+letter and rebuild number (`lab-n3`), with `w<n>` for a Base Web-only hotfix on that build (`lab-n5w1`), or the product's own lab label (`lab-sneakers.10`). The build
 date, the build time and the commit are never in a name; they stay in the signed header and the
 index (`version`, `commit`), where the box and the :8443 pages read them. `<arch>` is `amd64` or
 `arm64`; in the table, `<v>` stands for the version or `lab-<label>`.
