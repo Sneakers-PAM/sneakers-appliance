@@ -54,7 +54,8 @@
     rebooting: ["Sneakers-PAM is rebooting", "It comes back by itself. This page reloads when it's ready."],
     "shutting-down": ["Sneakers-PAM is shutting down", "It powers off by itself. Power it on again to use it."],
     updating: ["Sneakers-PAM is updating", "It comes back by itself when the update is done. This page reloads when it's ready."],
-    maintenance: ["Sneakers-PAM is in maintenance", "It comes back when the maintenance is over. This page reloads when it's ready."]
+    maintenance: ["Sneakers-PAM is in maintenance", "It comes back when the maintenance is over. This page reloads when it's ready."],
+    failed: ["Sneakers-PAM failed to start", "The box's administrator can revert or reapply the update on the admin pages. This page reloads when it's back."]
   };
   var OFF = ["Sneakers-PAM has shut down", "Power it on again to use it. This page reloads when it's back."];
   var UNREACHABLE = ["Sneakers-PAM can't be reached", "This page reloads when it's back."];

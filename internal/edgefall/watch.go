@@ -152,8 +152,13 @@ func (w *Watcher) apply(announced boxstate.State, p Phase, err error) {
 		}
 		w.state = s
 		w.going = w.going || boxstate.Going(s) || announced != ""
-		w.kind, w.step, w.detail = kindOf(w.state, p.Kind), p.Step, p.Detail
-		if w.state != boxstate.Updating {
+		keep := w.state == boxstate.Failed && prev == boxstate.Failed && p.Detail == ""
+		if !keep {
+			// A poll's answer (GetPhase) carries no detail; a failure's
+			// came with accessd's push and holds while the box stays failed.
+			w.kind, w.step, w.detail = kindOf(w.state, p.Kind), p.Step, p.Detail
+		}
+		if w.state != boxstate.Updating && w.state != boxstate.Failed {
 			w.step, w.detail = "", ""
 		}
 		w.installed = p.ProductInstalled
@@ -189,6 +194,14 @@ func (w *Watcher) State() boxstate.State {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.state
+}
+
+// Detail is what accessd says of a failed product (the phase and the
+// reason) or of an update's step; "" otherwise.
+func (w *Watcher) Detail() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.detail
 }
 
 // Claim is whether edgefall should hold 80 and 443.

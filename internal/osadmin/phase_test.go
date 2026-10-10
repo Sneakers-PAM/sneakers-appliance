@@ -269,10 +269,10 @@ func TestThePhaseSaysStartingUntilTheProductIsReady(t *testing.T) {
 	b.waitState(boxstate.Running)
 }
 
-// A product that isn't ready within its ready bound doesn't keep the box
-// on the box-state page for good: the state goes to running, so what
-// works can be reached.
-func TestThePhaseStopsWaitingForTheProductAfterTheBound(t *testing.T) {
+// A product that isn't ready within its ready bound isn't served half
+// started: the state goes to failed, and 443 stays on the box-state page,
+// which says why.
+func TestThePhaseSaysFailedAfterTheBound(t *testing.T) {
 	p := &fakeProbe{step: productup.StepPods, detail: "4 of 5 pods ready"}
 	b := newBox(t, false, withProbe(p))
 	b.finishSetup()
@@ -282,7 +282,7 @@ func TestThePhaseStopsWaitingForTheProductAfterTheBound(t *testing.T) {
 		t.Fatalf("not ready yet: %q", got)
 	}
 	b.clk.Advance(osadmin.ProductUpBound + time.Second)
-	b.waitState(boxstate.Running)
+	b.waitState(boxstate.Failed)
 }
 
 // From a product apply's restart until the product is ready the box says

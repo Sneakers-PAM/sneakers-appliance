@@ -7,13 +7,15 @@
 #
 #   - every component product.yaml names is pinned in release.yaml, every
 #     service image release.yaml pins runs in a stack, the migrate Job image
-#     is pinned and the main stack lists the migrate caller;
+#     is pinned and the vault and audit list the migrate caller;
 #   - every container runs an image pinned by digest, never pulled;
 #   - no stack carries a Secret (each box makes its own), and every
 #     Secret a workload reads is a box secret product.yaml declares
 #     (build/tools/stack refuses otherwise);
 #   - no lab value: no lab registry or host, no debug or console logging, no
 #     dev-only switch, no "lab" in a name or value;
+#   - every workload is in its phase's own stack, labelled with the phase,
+#     and the always-on stack holds none;
 #   - render.sh refuses a non-empty OUT, and a values overlay that brings
 #     a Secret no box makes.
 #
@@ -65,6 +67,20 @@ for st in sneakers sneakers-mcp sneakers-import edge; do
 done
 echo "ok: rendered $(cd "$out" && echo */ | tr -d /)"
 
+# Phased: each phase's own stack holds its workloads, labelled with the
+# phase on the workload and its pods, and the always-on stack holds none
+# (build/tools/stack refuses a workload no phase names).
+for st in $(sed -n 's/^    stack: \(sneakers-[a-z-]*\)$/\1/p' "$here/product.yaml"); do
+  [ -s "$out/$st/$st.yaml" ] || fail "no phase stack $st"
+  grep -q '^kind: \(Deployment\|StatefulSet\)$' "$out/$st/$st.yaml" || fail "the phase stack $st holds no workload"
+  [ "$(grep -c 'sneakers-appliance/phase-order:' "$out/$st/$st.yaml")" -ge 2 ] || fail "the phase stack $st's workloads carry no phase labels"
+done
+if grep -q '^kind: \(Deployment\|StatefulSet\|DaemonSet\)$' "$out/sneakers/sneakers.yaml"; then
+  fail "the always-on stack holds a workload: every workload starts in its phase"
+fi
+grep -q 'sneakers-appliance/phase: front' "$out/sneakers-mcp/sneakers-mcp.yaml" || fail "the MCP switch's workloads aren't in the front phase"
+echo "ok: every workload is in its phase's stack"
+
 # Complete: every component pinned, every service run.
 go run "$root/build/tools/bundle" images --release "$work/release.yaml" > "$work/pinned"
 for c in $(sed -n 's/.*image: \([a-z0-9._-]*\)}.*/\1/p' "$here/product.yaml"); do
@@ -75,7 +91,8 @@ go run "$root/build/tools/bundle" sources --release "$charts/manifest/release.ya
   grep -qh "image: $image@sha256:" "$out"/*/*.yaml || fail "no stack runs $image"
 done
 grep -q '^ghcr.io/sneakers-pam/sneakers-migrate sha256:' "$work/pinned" || fail "the migrate Job image isn't pinned"
-grep -q 'sneakers/sneakers-migrate' "$out/sneakers/sneakers.yaml" || fail "the vault and audit don't list the migrate caller"
+grep -q 'sneakers/sneakers-migrate' "$out/sneakers-identity/sneakers-identity.yaml" || fail "the vault doesn't list the migrate caller"
+grep -q 'sneakers/sneakers-migrate' "$out/sneakers-services/sneakers-services.yaml" || fail "the audit service doesn't list the migrate caller"
 echo "ok: every component is pinned, every service image runs in a stack, and the import's image and caller are in place"
 
 # The import's Job reads only box secrets product.yaml declares, key and all

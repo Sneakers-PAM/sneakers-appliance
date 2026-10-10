@@ -373,7 +373,8 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 
 // checkSpec checks product.yaml, when there is one, and that the bundle
 // carries what it names: an image for every component (matched by the
-// image's last path element) and every stack a switch gates.
+// image's last path element), every stack a switch gates and every
+// phase's own stack, its workloads labelled with their phase.
 func checkSpec(fsys fs.FS, rel *Release) error {
 	if err := productspec.Check(fsys); err != nil {
 		return err
@@ -408,6 +409,9 @@ func checkSpec(fsys fs.FS, rel *Release) error {
 				return codes.New(codes.KitBundleMismatch, "the product bundle has no stack %s, which the switch %s turns on", st, w.Name)
 			}
 		}
+	}
+	if err := checkPhaseStacks(fsys, spec); err != nil {
+		return err
 	}
 	if im := spec.Import; im != nil {
 		job, err := fs.ReadFile(fsys, im.Job)
