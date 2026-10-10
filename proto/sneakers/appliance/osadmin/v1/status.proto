@@ -154,7 +154,9 @@ message GetPhaseResponse {
   // shows it: running (the product runs), starting (it doesn't run yet,
   // or setup isn't done), rebooting, shutting-down (init has announced
   // the reboot or the power-off), updating (an update is being applied or
-  // reverted) or maintenance.
+  // reverted), maintenance (an open import holds a phased product) or
+  // failed (the product failed to start; failed_phase and failed_reason
+  // say where and why).
   string state = 2;
   // product_running: the product's service (k0s) runs, so its edge holds
   // 80 and 443; while it doesn't, sneakers-edgefall answers there.
@@ -166,6 +168,14 @@ message GetPhaseResponse {
   // just ended, for the restart page before anyone signs in again: the
   // steps' ids, labels and states only, with no version, detail or code.
   UpgradeProgress upgrade_progress = 5;
+  // failed_phase is the step a failed product stopped at, such as
+  // phase:identity, while state is failed; empty otherwise.
+  string failed_phase = 6;
+  // failed_reason is what the box-state page shows under its words while
+  // state is failed: the step's label and why, "<label>: <why>"; empty
+  // otherwise. It is the same text sneakers-edgefall is pushed, so a
+  // restarted edgefall serves it from its first ask.
+  string failed_reason = 7;
 }
 
 message GetStatusRequest {}

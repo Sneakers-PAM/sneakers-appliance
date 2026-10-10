@@ -42,11 +42,18 @@ func (s *Server) Phase() string {
 func (h *status) GetPhase(ctx context.Context, _ *connect.Request[osadminv1.GetPhaseRequest]) (*connect.Response[osadminv1.GetPhaseResponse], error) {
 	p := h.s.Phase()
 	running := h.s.productRunning(ctx)
-	return connect.NewResponse(&osadminv1.GetPhaseResponse{
-		Phase: p, State: string(h.s.boxState(p, running)), ProductRunning: running,
+	st := h.s.boxState(p, running)
+	res := &osadminv1.GetPhaseResponse{
+		Phase: p, State: string(st), ProductRunning: running,
 		ProductInstalled: h.s.slots().Status().Installed != "",
 		UpgradeProgress:  h.s.publicProgress(),
-	}), nil
+	}
+	// A failed product's phase and why, as edgefall is pushed them, so an
+	// edgefall that restarted while the box is failed serves them at once.
+	if st == boxstate.Failed {
+		res.FailedPhase, res.FailedReason = h.s.productFailure()
+	}
+	return connect.NewResponse(res), nil
 }
 
 // boxState is what the box is doing, as the product edge's box-state page

@@ -11,6 +11,7 @@ import (
 
 	log "github.com/Bugs5382/go-log"
 
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 )
 
@@ -23,12 +24,25 @@ type Phase struct {
 	// Kind is what an updating box is doing: KindUpdate or
 	// KindProductApply; empty is an update.
 	Kind string `json:"kind,omitempty"`
-	// Step is the update's active step id, Detail its words.
+	// Step is the update's active step id, Detail its words; for a
+	// failed box the phase it stopped at and why.
 	Step   string `json:"step,omitempty"`
 	Detail string `json:"detail,omitempty"`
 	// Reset, on a push, drops a reboot or a shutdown seen before: accessd
 	// says it was refused, so the box isn't going after all.
 	Reset bool `json:"reset,omitempty"`
+}
+
+// PhaseOf is what edgefall uses of a GetPhase answer: the state, whether
+// the product runs and is installed, and for a failed box the phase and
+// the reason, so an edgefall that started while the box is failed serves
+// them before any push.
+func PhaseOf(res *osadminv1.GetPhaseResponse) Phase {
+	p := Phase{State: res.GetState(), ProductRunning: res.GetProductRunning(), ProductInstalled: res.GetProductInstalled()}
+	if p.State == string(boxstate.Failed) {
+		p.Step, p.Detail = res.GetFailedPhase(), res.GetFailedReason()
+	}
+	return p
 }
 
 // Source asks accessd's GetPhase.
@@ -154,8 +168,9 @@ func (w *Watcher) apply(announced boxstate.State, p Phase, err error) {
 		w.going = w.going || boxstate.Going(s) || announced != ""
 		keep := w.state == boxstate.Failed && prev == boxstate.Failed && p.Detail == ""
 		if !keep {
-			// A poll's answer (GetPhase) carries no detail; a failure's
-			// came with accessd's push and holds while the box stays failed.
+			// GetPhase carries a failure's phase and reason; one that
+			// answers none (an accessd from before it did) keeps the
+			// pushed one while the box stays failed.
 			w.kind, w.step, w.detail = kindOf(w.state, p.Kind), p.Step, p.Detail
 		}
 		if w.state != boxstate.Updating && w.state != boxstate.Failed {
