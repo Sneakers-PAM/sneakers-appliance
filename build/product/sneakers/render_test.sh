@@ -152,7 +152,13 @@ for f in "$work"/mcpdocs/*.yaml; do
   grep -q '^kind: ConfigMap$' "$f" && grep -q '^    name: sneakers-mcp-switch$' "$f" && sw="$f"
 done
 [ -n "$ing" ] || fail "no Ingress for Hydra's public port in the sneakers-mcp stack"
-grep -q 'path: /oauth/$' "$ing" || fail "Hydra's Ingress isn't on /oauth/: $(grep 'path:' "$ing")"
+# Only Hydra's own paths: the staff app serves the MCP consent page at
+# /oauth/consent (the gateway's /oauth2/authorize sends the browser there),
+# so a route on all of /oauth/ would hide it.
+for p in /oauth/.well-known/ /oauth/oauth2/ /oauth/userinfo; do
+  grep -q "path: $p\$" "$ing" || fail "Hydra's Ingress has no $p route: $(grep 'path:' "$ing" | tr -s ' ')"
+done
+if grep -h 'path: ' "$out"/*/*.yaml | grep -qE 'path: /oauth/?$'; then fail "a route takes all of /oauth/, which hides the staff app's /oauth/consent"; fi
 grep -q 'router.middlewares: .*oauth-prefix@file' "$ing" || fail "Hydra's Ingress doesn't strip /oauth"
 grep -q 'router.middlewares: .*box-page@file' "$ing" || fail "Hydra's Ingress lacks the box-state page"
 [ -n "$hcm" ] || fail "no Hydra config"
@@ -163,7 +169,7 @@ grep -q "HYDRA_ISSUER: https://$host/oauth\$" "$sw" || fail "the gateway doesn't
 grep -q "OAUTH_PUBLIC_URL: https://$host\$" "$sw" || fail "the root authorization server moved: $(grep OAUTH_PUBLIC_URL "$sw")"
 awk -v RS='---\n' '/kind: NetworkPolicy/ && /\n    name: sneakers-hydra\n/' "$mcp" | grep -q 'cidr: 198.18.0.1/32' || fail "Hydra's public port doesn't take the edge"
 grep -A3 'oauth-prefix:' "$out/edge/edge.yaml" | grep -q 'prefixes: \["/oauth"\]' || fail "the edge has no oauth-prefix middleware"
-echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ route"
+echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ routes, and /oauth/consent stays the staff app's"
 
 # The mail relay comes only from the box (the Email page): the identity
 # service, which sends the product's mail, loads the sneakers-email

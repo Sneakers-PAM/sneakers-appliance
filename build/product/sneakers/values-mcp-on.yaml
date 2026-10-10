@@ -21,11 +21,13 @@ mcp:
       - ipBlock:
           cidr: 10.244.0.1/32  # scrub:allow=private-ip -- k0s's default pod network gateway
 # Hydra's issuer is https://<fqdn>/oauth, on the box's one name and
-# certificate (docs/network.md#the-host-name): the edge routes /oauth/ to
-# Hydra's public port and strips the prefix (the edge stack's oauth-prefix
-# middleware), and Hydra builds its discovery and
-# endpoint URLs from urls.self.public. The path has its trailing slash so
-# the route never takes the gateway's /oauth2/ paths.
+# certificate (docs/network.md#the-host-name): the edge routes Hydra's own
+# paths under /oauth/ (discovery, the OAuth 2.0 endpoints and userinfo) to
+# its public port and strips the prefix (the edge stack's oauth-prefix
+# middleware), and Hydra builds its discovery and endpoint URLs from
+# urls.self.public. Each path has its trailing slash so no route takes the
+# gateway's /oauth2/ paths, and none takes all of /oauth/: the staff app
+# serves the MCP consent page at /oauth/consent.
 hydra:
   enabled: true
   ingress:
@@ -39,8 +41,12 @@ hydra:
       hosts:
         - host: '{{ .Values.global.host }}'
           paths:
-            - path: /oauth/
+            - path: /oauth/.well-known/
               pathType: Prefix
+            - path: /oauth/oauth2/
+              pathType: Prefix
+            - path: /oauth/userinfo
+              pathType: Exact
   hydra:
     config:
       urls:

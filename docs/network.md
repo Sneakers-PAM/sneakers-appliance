@@ -198,13 +198,16 @@ the product its own name.
   never does. The Sneakers sign-in (Kratos's URLs and return URLs, the WebAuthn relying party),
   the SSH websocket, and the MCP, OAuth and Hydra addresses all follow it.
 - **The OAuth issuer** is `https://<fqdn>/oauth`, on the same name and certificate as everything
-  else on 443; no `hydra.<fqdn>` name is needed. The edge routes `/oauth/` to Ory Hydra's public
-  port and strips the prefix (its `oauth-prefix` middleware), and Hydra builds its URLs from
+  else on 443; no `hydra.<fqdn>` name is needed. The edge routes Hydra's own paths under `/oauth/`
+  (`/oauth/.well-known/`, `/oauth/oauth2/` and `/oauth/userinfo`) to Ory Hydra's public port and
+  strips the prefix (its `oauth-prefix` middleware), and Hydra builds its URLs from
   `https://<fqdn>/oauth/`: discovery at `/oauth/.well-known/openid-configuration`, its keys at
   `/oauth/.well-known/jwks.json` and tokens at `/oauth/oauth2/token`. The gateway checks a machine
   token's issuer against `https://<fqdn>/oauth`. The MCP's own sign-in stays at the root: the
   gateway's `/.well-known/oauth-authorization-server` (issuer `https://<fqdn>`) and `/oauth2/`,
-  which the `/oauth/` route never takes. All of it runs only while the MCP switch is on.
+  which the `/oauth/` routes never take. Nor do they take `/oauth/consent`, the staff app's MCP
+  consent page, where the gateway's `/oauth2/authorize` sends the browser. All of it runs only
+  while the MCP switch is on.
 - **The 443 certificate** must cover the host name, not only an address: the product endpoint warns
   (`names-not-covered`, and a Status warning on every :8443 page) when its certificate doesn't,
   naming the host name and what the certificate covers. A wildcard for the host name's domain
