@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 )
@@ -51,5 +52,34 @@ func TestAFailedBoxSaysWhichPhaseAndWhy(t *testing.T) {
 	w.Poll(context.Background())
 	if w.Detail() != "" {
 		t.Fatalf("a starting box keeps the failure's detail %q", w.Detail())
+	}
+}
+
+// An edgefall that restarts while the box is failed has no push to go
+// on: its first ask of GetPhase gives the phase and the reason, and it
+// serves them on the page and the stream at once.
+func TestARestartedEdgefallServesTheFailureFromItsFirstAsk(t *testing.T) {
+	reason := "Starting sign-in, identity and the vault: sneakers/sneakers-vault-7c9 CrashLoopBackOff"
+	res := &osadminv1.GetPhaseResponse{Phase: "normal", State: "failed", ProductRunning: true, ProductInstalled: true,
+		FailedPhase: "phase:identity", FailedReason: reason}
+	w := edgefall.NewWatcher(func(context.Context) (edgefall.Phase, error) { return edgefall.PhaseOf(res), nil }, t.TempDir()+"/box-state", nil)
+	w.Poll(context.Background())
+	if w.State() != boxstate.Failed || w.Detail() != reason {
+		t.Fatalf("state %q detail %q", w.State(), w.Detail())
+	}
+	if ev := w.Events().Current(); ev.State != "failed" || ev.Step != "phase:identity" || ev.Detail != reason {
+		t.Fatalf("the stream's event %+v", ev)
+	}
+	s := edgefall.NewServer(w.State)
+	s.SetDetail(w.Detail)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if !strings.Contains(rec.Body.String(), reason) {
+		t.Fatalf("the page: %s", rec.Body.String())
+	}
+	// A box that isn't failed carries no reason, even if one were sent.
+	res = &osadminv1.GetPhaseResponse{Phase: "normal", State: "starting", ProductRunning: true, ProductInstalled: true, FailedReason: "stale"}
+	if p := edgefall.PhaseOf(res); p.Step != "" || p.Detail != "" {
+		t.Fatalf("a starting phase %+v", p)
 	}
 }

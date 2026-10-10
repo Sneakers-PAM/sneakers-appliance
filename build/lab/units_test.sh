@@ -38,6 +38,45 @@ echo 'kernel 2' > "$work/bzImage"
 echo 'image: sha256:2' >> "$work/release.yaml"
 [ "$(product)" != "$p1" ] || { echo "FAIL: a new image digest didn't change the product digest" >&2; exit 1; }
 
+# Every other file the bundle is built from (build/product/build.sh) moves
+# the product digest too: product.yaml, the import Job's template and the
+# brand, each on its own, and none of them moves another unit's.
+mkdir -p "$work/brand"
+echo 'format: 2' > "$work/product.yaml"
+echo 'kind: Job' > "$work/import-job.yaml"
+echo 'name: Lab' > "$work/brand/brand.yaml"
+full() { RELEASE="$work/release.yaml" STACKS="$work/stacks" PRODUCT_YAML="$work/product.yaml" IMPORT_JOB="$work/import-job.yaml" BRAND="$work/brand" bash "$here/units.sh" inputs product; }
+o2="$(os)" w2="$(web)" f1="$(full)"
+hex "$f1" product
+[ "$f1" = "$(full)" ] || { echo "FAIL: the full product digest isn't stable" >&2; exit 1; }
+[ "$f1" != "$(product)" ] || { echo "FAIL: product.yaml, the import Job and the brand didn't count" >&2; exit 1; }
+moved() { # what file
+  local before
+  before="$(full)"
+  echo "changed" >> "$2"
+  [ "$(full)" != "$before" ] || { echo "FAIL: a changed $1 didn't change the product digest" >&2; exit 1; }
+  [ "$(os)" = "$o2" ] && [ "$(web)" = "$w2" ] || { echo "FAIL: a changed $1 moved another unit's digest" >&2; exit 1; }
+}
+moved product.yaml "$work/product.yaml"
+moved "import Job" "$work/import-job.yaml"
+moved brand "$work/brand/brand.yaml"
+echo 'logo' > "$work/brand/logo.svg"
+[ "$(full)" != "$f1" ] || { echo "FAIL: a new brand file didn't change the product digest" >&2; exit 1; }
+# The same bytes under another role are another input: product.yaml's
+# content as the import Job isn't the same bundle.
+cp "$work/product.yaml" "$work/swap.yaml"
+a="$(RELEASE="$work/release.yaml" STACKS="$work/stacks" PRODUCT_YAML="$work/swap.yaml" bash "$here/units.sh" inputs product)"
+b="$(RELEASE="$work/release.yaml" STACKS="$work/stacks" PRODUCT_YAML="$work/release.yaml" IMPORT_JOB="$work/swap.yaml" bash "$here/units.sh" inputs product)"
+[ "$a" != "$b" ] || { echo "FAIL: a file's role doesn't count" >&2; exit 1; }
+# The lab build's own product.yaml counts by default, with the lab stacks.
+lab1="$(RELEASE="$work/release.yaml" bash "$here/units.sh" inputs product)"
+lab2="$(RELEASE="$work/release.yaml" PRODUCT_YAML="$work/product.yaml" bash "$here/units.sh" inputs product)"
+[ "$lab1" != "$lab2" ] || { echo "FAIL: the lab product.yaml isn't the default" >&2; exit 1; }
+# A named file that isn't there is refused, never left out.
+if RELEASE="$work/release.yaml" STACKS="$work/stacks" PRODUCT_YAML="$work/nothing.yaml" bash "$here/units.sh" inputs product >/dev/null 2>&1; then
+  echo "FAIL: a missing product.yaml passed" >&2; exit 1
+fi
+
 if bash "$here/units.sh" inputs nothing >/dev/null 2>&1; then echo "FAIL: an unknown unit passed" >&2; exit 1; fi
 if bash "$here/units.sh" >/dev/null 2>&1; then echo "FAIL: no OUT passed" >&2; exit 1; fi
 

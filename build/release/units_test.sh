@@ -34,6 +34,8 @@ has build 'bundle images --release' "check the pinned release.yaml before the lo
 has sign 'release\.yaml\.sigstore\.json' "countersign release.yaml"
 has sign 'image-sigs' "countersign the pinned images"
 has sign 'build/product/build\.sh' "build the product bundle"
+# The product's input digest counts every file the bundle is built from.
+has sign 'PRODUCT_YAML="\$in/product\.yaml" IMPORT_JOB="\$in/import-job\.yaml" bash build/lab/units\.sh inputs product' "count product.yaml and the import Job in the product's input digest"
 has sign 'CHANNEL=production .*build/lab/units\.sh|build/lab/units\.sh.*CHANNEL=production' "seal the units with build/lab/units.sh on the production channel"
 has publish 'gh release upload' "attach the files to the Release"
 has publish '"\$units"/\*\.bin ' "attach the units"

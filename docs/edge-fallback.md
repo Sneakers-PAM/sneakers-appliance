@@ -29,7 +29,8 @@ the same ask moves it on to its next phase. A product that isn't ready within it
 leaves the box `failed`: 443 stays on the box-state page, which says "Sneakers-PAM failed to
 start" and, under it, the phase and the reason accessd pushed ("Starting sign-in, identity and the
 vault: ..."), so a half-started product is never served. The reason comes with accessd's push and
-holds while the box stays failed; GetPhase's answer carries none.
+in GetPhase's answer (`failed_phase` and `failed_reason`), so an edgefall that restarts while the
+box is failed serves it from its first ask; it holds while the box stays failed.
 
 Init writes the announcement to `/run/sneakers/box-state` (mode 0644, a tmpfs, so every boot starts
 without one) when it accepts a reboot or a shutdown, before the drain and before the screen

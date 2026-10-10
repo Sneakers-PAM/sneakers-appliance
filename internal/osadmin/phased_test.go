@@ -204,3 +204,35 @@ func TestOpeningAndClosingAnImportAsksTheProductAgain(t *testing.T) {
 	p.set(productup.Result{})
 	b.waitState(boxstate.Running)
 }
+
+// GetPhase names a failed product's phase and why, the same text the edge
+// is pushed, so a restarted edgefall serves them from its first ask; a box
+// that isn't failed answers neither.
+func TestGetPhaseNamesTheFailedPhaseAndWhy(t *testing.T) {
+	p := &phasedProbe{res: productup.Result{Step: "phase:data", Detail: "0 of 1 pods ready: app/db-0 ErrImageNeverPull", Timeout: time.Hour, Failed: true}}
+	b := newBox(t, false, withPhased(p))
+	b.finishSetup()
+	b.installProduct("0.1.0")
+	b.setRunning(true)
+	if got := b.phase(); got.GetFailedPhase() != "" || got.GetFailedReason() != "" {
+		t.Fatalf("a starting box names a failure: %q %q", got.GetFailedPhase(), got.GetFailedReason())
+	}
+	b.waitState(boxstate.Failed)
+	got := b.phase()
+	if got.GetFailedPhase() != "phase:data" {
+		t.Fatalf("failed phase %q", got.GetFailedPhase())
+	}
+	if r := got.GetFailedReason(); !strings.HasPrefix(r, "Starting the database: ") || !strings.Contains(r, "app/db-0 ErrImageNeverPull") {
+		t.Fatalf("failed reason %q", r)
+	}
+	b.setRunning(false)
+	if got := b.phase(); got.GetState() != string(boxstate.Starting) || got.GetFailedReason() != "" {
+		t.Fatalf("k0s stopped: %q %q", got.GetState(), got.GetFailedReason())
+	}
+	p.set(productup.Result{})
+	b.setRunning(true)
+	b.waitState(boxstate.Running)
+	if got := b.phase(); got.GetFailedPhase() != "" || got.GetFailedReason() != "" {
+		t.Fatalf("a running box names a failure: %q %q", got.GetFailedPhase(), got.GetFailedReason())
+	}
+}

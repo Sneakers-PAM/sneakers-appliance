@@ -193,7 +193,7 @@ func phaseSource(sock string) edgefall.Source {
 		if err != nil {
 			return edgefall.Phase{}, err
 		}
-		return edgefall.Phase{State: res.Msg.GetState(), ProductRunning: res.Msg.GetProductRunning(), ProductInstalled: res.Msg.GetProductInstalled()}, nil
+		return edgefall.PhaseOf(res.Msg), nil
 	}
 }
 

@@ -877,7 +877,9 @@ type GetPhaseResponse struct {
 	// shows it: running (the product runs), starting (it doesn't run yet,
 	// or setup isn't done), rebooting, shutting-down (init has announced
 	// the reboot or the power-off), updating (an update is being applied or
-	// reverted) or maintenance.
+	// reverted), maintenance (an open import holds a phased product) or
+	// failed (the product failed to start; failed_phase and failed_reason
+	// say where and why).
 	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
 	// product_running: the product's service (k0s) runs, so its edge holds
 	// 80 and 443; while it doesn't, sneakers-edgefall answers there.
@@ -889,8 +891,16 @@ type GetPhaseResponse struct {
 	// just ended, for the restart page before anyone signs in again: the
 	// steps' ids, labels and states only, with no version, detail or code.
 	UpgradeProgress *UpgradeProgress `protobuf:"bytes,5,opt,name=upgrade_progress,json=upgradeProgress,proto3" json:"upgrade_progress,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// failed_phase is the step a failed product stopped at, such as
+	// phase:identity, while state is failed; empty otherwise.
+	FailedPhase string `protobuf:"bytes,6,opt,name=failed_phase,json=failedPhase,proto3" json:"failed_phase,omitempty"`
+	// failed_reason is what the box-state page shows under its words while
+	// state is failed: the step's label and why, "<label>: <why>"; empty
+	// otherwise. It is the same text sneakers-edgefall is pushed, so a
+	// restarted edgefall serves it from its first ask.
+	FailedReason  string `protobuf:"bytes,7,opt,name=failed_reason,json=failedReason,proto3" json:"failed_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPhaseResponse) Reset() {
@@ -956,6 +966,20 @@ func (x *GetPhaseResponse) GetUpgradeProgress() *UpgradeProgress {
 		return x.UpgradeProgress
 	}
 	return nil
+}
+
+func (x *GetPhaseResponse) GetFailedPhase() string {
+	if x != nil {
+		return x.FailedPhase
+	}
+	return ""
+}
+
+func (x *GetPhaseResponse) GetFailedReason() string {
+	if x != nil {
+		return x.FailedReason
+	}
+	return ""
 }
 
 type GetStatusRequest struct {
@@ -1741,13 +1765,15 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\x12\x1b\n" +
 	"\twal_bytes\x18\x05 \x01(\x04R\bwalBytes\x12$\n" +
 	"\x0ewal_warn_bytes\x18\x06 \x01(\x04R\fwalWarnBytes\"\x11\n" +
-	"\x0fGetPhaseRequest\"\xef\x01\n" +
+	"\x0fGetPhaseRequest\"\xb7\x02\n" +
 	"\x10GetPhaseResponse\x12\x14\n" +
 	"\x05phase\x18\x01 \x01(\tR\x05phase\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12'\n" +
 	"\x0fproduct_running\x18\x03 \x01(\bR\x0eproductRunning\x12+\n" +
 	"\x11product_installed\x18\x04 \x01(\bR\x10productInstalled\x12Y\n" +
-	"\x10upgrade_progress\x18\x05 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\"\x12\n" +
+	"\x10upgrade_progress\x18\x05 \x01(\v2..sneakers.appliance.osadmin.v1.UpgradeProgressR\x0fupgradeProgress\x12!\n" +
+	"\ffailed_phase\x18\x06 \x01(\tR\vfailedPhase\x12#\n" +
+	"\rfailed_reason\x18\a \x01(\tR\ffailedReason\"\x12\n" +
 	"\x10GetStatusRequest\"}\n" +
 	"\aWarning\x12>\n" +
 	"\x04kind\x18\x01 \x01(\x0e2*.sneakers.appliance.osadmin.v1.WarningKindR\x04kind\x12\x16\n" +

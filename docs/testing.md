@@ -52,8 +52,11 @@ rebuilt from the base artifact with the box's own code (`sneakers-artifact patch
 rebuilt layout verified by both builds' kits. Each `.bin` has its input digest beside it
 (`<file>.inputs`, also in its signed header): `units.sh inputs baseOS` (the appliance tree and the
 components in `KERNEL`, `VERITYSETUP`, `OPENSSH`, `BUSYBOX` and `STATIC`), `inputs baseWeb` (the
-built pages, `PAGES`) and `inputs product` (`RELEASE`, the image digests and pins, and `STACKS`),
-for a release job to compare with the last published release. `build/lab/units_test.sh` checks the
+built pages, `PAGES`) and `inputs product` (every file `build/product/build.sh` makes the bundle
+from: `RELEASE`, the image digests and pins, `STACKS`, `PRODUCT_YAML`, which defaults to
+`build/lab/product.yaml`, `IMPORT_JOB` and `BRAND`; a named file that isn't there is refused),
+for a release job to compare with the last published release. The product bundle's `.inputs` is
+read from its own header (`sneakers-artifact bin-inputs`), so it's the digest it was built with. `build/lab/units_test.sh` checks the
 digests. From build m the root image is an uncompressed SquashFS (`build/root/build.sh`), so a
 delta between two roots stays small; the `.bin` payload isn't compressed yet, so a Base OS full
 file carries the root at its full size.

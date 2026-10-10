@@ -349,7 +349,7 @@ jobs:
           chmod +x "$in/k0s"
           helm=()
           if [ -f "$in/helm" ]; then chmod +x "$in/helm"; helm=(HELM="$in/helm"); fi
-          inputs="$(RELEASE="$in/release.yaml" STACKS="$in/stacks" bash build/lab/units.sh inputs product)"
+          inputs="$(RELEASE="$in/release.yaml" STACKS="$in/stacks" PRODUCT_YAML="$in/product.yaml" IMPORT_JOB="$in/import-job.yaml" bash build/lab/units.sh inputs product)"
           env "${helm[@]}" VERSION="$VERSION" ARCH=amd64 CHANNEL=production MIN_BASE="$VERSION" BASES="$VERSION" \
             RELEASE="$in/release.yaml" RELEASE_KEY=keys/production/cosign.pub SIGNATURES="$cs/image-sigs" \
             K0S="$in/k0s" RECIPIENT=keys/production/update.pub INPUTS="$inputs" OUT="$work/product" \
