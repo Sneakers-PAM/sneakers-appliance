@@ -67,8 +67,10 @@ func newKey(t *testing.T) sshKey {
 // fakeInit is init's API as osadmin sees it.
 type fakeInit struct {
 	initv1connect.UnimplementedKeyCustodyServiceHandler
-	mu         sync.Mutex
-	level      initv1.ProtectionLevel
+	mu    sync.Mutex
+	level initv1.ProtectionLevel
+	// reason is the reduced level's reason; empty means no-tpm.
+	reason     string
 	escrowFor  []string
 	escrowErr  error
 	secureBoot *bool
@@ -150,6 +152,9 @@ func (f *fakeInit) Protection(context.Context, *connect.Request[initv1.Protectio
 	r := &initv1.ProtectionResponse{Level: f.level}
 	if f.level == initv1.ProtectionLevel_PROTECTION_LEVEL_REDUCED {
 		r.Reason = "no-tpm"
+		if f.reason != "" {
+			r.Reason = f.reason
+		}
 	}
 	return connect.NewResponse(r), nil
 }
