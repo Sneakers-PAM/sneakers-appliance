@@ -315,3 +315,32 @@ func TestABaseWebRevertPastTheBuiltInPagesEndsOnThem(t *testing.T) {
 		t.Fatalf("after the revert: %v", st)
 	}
 }
+
+// When the box's own pages are newer than both web slots, the built-in
+// pages serve and a revert can't change that: it isn't offered, and asked
+// for anyway it's refused without moving the links.
+func TestABaseWebRevertThatCantTakeEffectIsntOffered(t *testing.T) {
+	wb := newWebBox(t)
+	alice := wb.browser()
+	alice.signIn("alice")
+	for _, v := range []string{"0.1.2", "0.1.4"} {
+		id, _ := alice.upload(t, wb.webBin(t, web(v)))
+		if err := stage(alice, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := applyWeb(wb.box, alice); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after := newWebBoxOn(t, wb.webDir, "0.1.5")
+	bob := after.browser()
+	bob.signIn("alice")
+	st := webStatus(t, bob)
+	if st.GetSource() != webslots.SourceBuiltIn || st.GetPreviousVersion() != "0.1.2" || st.GetCanRevert() {
+		t.Fatalf("before the revert: %v", st)
+	}
+	symbolIn(t, revertWeb(after.box, bob), connect.CodeFailedPrecondition, "UPGRADE_NO_PREVIOUS")
+	if st := webStatus(t, bob); st.GetCurrentVersion() != "0.1.4" || st.GetPreviousVersion() != "0.1.2" {
+		t.Fatalf("a refused revert moved the links: %v", st)
+	}
+}
