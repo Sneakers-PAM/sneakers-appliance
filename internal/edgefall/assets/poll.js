@@ -1,16 +1,20 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The box-state poller (docs/edge-fallback.md). A product page loads it
-// from /_box/poll.js. It asks /_box/state about every 45 seconds while the
-// box runs, and every second while it doesn't, can't be reached, or one of
-// the page's own requests just failed; a hidden tab doesn't ask. While the
-// box isn't running or doesn't answer, it lays the branded box-state page over
-// the product, in the installed product's colours and logo when its
-// bundle carries a brand (the state answer names them). It never navigates while the box is away, so the tab never
-// shows a browser error page; once the box answers running and the page
-// itself answers again, it reloads. On the edge fallback's own page it
-// updates the words in place and reloads the same way.
+// The box-state client (docs/edge-fallback.md). A product page loads it
+// from /_box/poll.js. Where the browser has EventSource it follows the
+// box's state events on /_box/events: an event switches the page at once,
+// and it asks /_box/state only once at load (for the brand) and, slowly,
+// while the stream can't open. Without EventSource it asks /_box/state
+// about every 45 seconds while the box runs, and every second while it
+// doesn't, can't be reached, or one of the page's own requests just
+// failed. A hidden tab doesn't ask. While the box isn't running or doesn't
+// answer, it lays the branded box-state page over the product, in the
+// installed product's colours and logo when its bundle carries a brand
+// (the state answer names them). It never navigates while the box is away,
+// so the tab never shows a browser error page; once the box is running and
+// the page itself answers again, it reloads. On the edge fallback's own
+// page it updates the words in place and reloads the same way.
 (function () {
   "use strict";
   if (window.__sneakersBox) return;
@@ -36,6 +40,14 @@
   // checks a certificate that changed.
   var SLOW_MS = 10 * 60 * 1000;
   var STATE_HEADER = "Sneakers-Box-State";
+  // The state events. A dropped stream is tried again after 1, 2, 4 and
+  // then 10 seconds at most; while the box runs the first retry is at once,
+  // and after this many failures in a row the client asks /_box/state
+  // before it says the box can't be reached.
+  var EVENTS_URL = "/_box/events";
+  var RETRY_MAX_MS = 10000;
+  var STREAM_FAILURES = 3;
+  var Events = window.EventSource;
 
   var WORDS = {
     starting: ["Sneakers-PAM is starting", "This page reloads by itself when it's ready."],
@@ -58,6 +70,11 @@
   var timer = null;
   var realFetch = window.fetch.bind(window);
   var reloading = false;
+  var stream = null;
+  var streamUp = false;
+  var failures = 0;
+  var retryTimer = null;
+  var backing = false;
   var ui = null;
   // The base look; the state answer's brand replaces it.
   var look = { background: "#14212b", text: "#f4f7fa", accent: "#8fb3d9", muted: "#c9d4de", track: "#2f4252" };
@@ -187,14 +204,21 @@
     return seen === "running" && !ui && !onPage && misses === 0 && Date.now() - alertAt >= ALERT_MS;
   }
 
+  function slow() {
+    return Math.round(STEADY_MS - JITTER_MS + Math.random() * 2 * JITTER_MS);
+  }
+
+  // With the state events the poll is only the fallback while the stream
+  // can't open, and always slow.
   function delay() {
-    return steady() ? Math.round(STEADY_MS - JITTER_MS + Math.random() * 2 * JITTER_MS) : FAST_MS;
+    if (Events) return slow();
+    return steady() ? slow() : FAST_MS;
   }
 
   function schedule(ms) {
     if (timer !== null) clearTimeout(timer);
     timer = null;
-    if (document.hidden || reloading) return;
+    if (document.hidden || reloading || streamUp) return;
     timer = setTimeout(function () { timer = null; tick(); }, ms);
   }
 
@@ -202,6 +226,11 @@
   // all: ask now, and every second for a while.
   function alert() {
     alertAt = Date.now();
+    if (streamUp) return;
+    if (Events && retryTimer !== null) {
+      clearTimeout(retryTimer);
+      connect();
+    }
     if (!busy) schedule(0);
   }
 
@@ -217,8 +246,95 @@
 
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) schedule(0);
-    else if (!busy) tick();
+    else if (!busy && !streamUp) tick();
   });
+
+  // The box runs again: keep asking for the page itself every second
+  // until it answers, then reload.
+  function backSoon() {
+    if (backing || reloading) return;
+    backing = true;
+    back().then(function () {
+      backing = false;
+      if (!reloading && seen === "running" && (ui || onPage)) setTimeout(backSoon, FAST_MS);
+    });
+  }
+
+  // apply takes a state, from an event or an answer to an ask.
+  function apply(j) {
+    misses = 0;
+    if (j) brand(j.brand);
+    var state = j && typeof j.state === "string" ? j.state : "";
+    if (state === "unreachable") {
+      show(last, false);
+      return;
+    }
+    seen = state;
+    if (state === "running") {
+      if (ui || onPage) {
+        if (Events) backSoon();
+        else return back();
+      }
+      return;
+    }
+    if (!WORDS[state]) return;
+    last = state;
+    show(state, true);
+  }
+
+  function connect() {
+    retryTimer = null;
+    if (reloading) return;
+    var es;
+    try {
+      es = new Events(EVENTS_URL);
+    } catch (e) {
+      dropped();
+      return;
+    }
+    stream = es;
+    var up = function () {
+      if (stream !== es) return;
+      streamUp = true;
+      failures = 0;
+      if (timer !== null) clearTimeout(timer);
+      timer = null;
+    };
+    es.addEventListener("open", up);
+    es.addEventListener("state", function (ev) {
+      if (stream !== es) return;
+      var j;
+      try { j = JSON.parse(ev.data); } catch (e) { return; }
+      up();
+      apply(j);
+    });
+    es.addEventListener("error", function () {
+      if (stream !== es) return;
+      es.close();
+      stream = null;
+      streamUp = false;
+      dropped();
+    });
+  }
+
+  // The stream dropped or wouldn't open. While the box isn't running that
+  // is the box restarting: the box-state page stays up and the stream is
+  // tried again with backoff. While it runs the first retry is at once, and
+  // after a few failures an ask of /_box/state decides whether the box
+  // can't be reached. Meanwhile the slow poll is the fallback.
+  function dropped() {
+    failures++;
+    var wait;
+    if (seen !== "running") {
+      show(last, false);
+      wait = Math.min(1000 * Math.pow(2, failures - 1), RETRY_MAX_MS);
+    } else {
+      wait = failures === 1 ? 0 : Math.min(1000 * Math.pow(2, failures - 2), RETRY_MAX_MS);
+      if (failures === STREAM_FAILURES && !busy) tick();
+    }
+    retryTimer = setTimeout(connect, wait);
+    if (!busy && timer === null) schedule(delay());
+  }
 
   function tick() {
     if (busy || reloading) return;
@@ -228,24 +344,12 @@
         if (!res.ok) throw new Error("state " + res.status);
         return res.json();
       })
-      .then(function (j) {
-        misses = 0;
-        if (j) brand(j.brand);
-        var state = j && typeof j.state === "string" ? j.state : "";
-        seen = state;
-        if (state === "running") {
-          if (ui || onPage) return back();
-          return;
-        }
-        if (!WORDS[state]) return;
-        last = state;
-        show(state, true);
-      }, function () {
+      .then(apply, function () {
         // A browser holds back a hidden tab's requests and timers, so an
         // ask that fails while hidden says nothing about the box.
         if (document.hidden) return;
         misses++;
-        if (ui || onPage || misses >= MISSES || WORDS[last]) show(last, false);
+        if (ui || onPage || misses >= MISSES || WORDS[last] || failures >= STREAM_FAILURES) show(last, false);
       })
       .finally(function () {
         busy = false;
@@ -254,4 +358,5 @@
   }
 
   tick();
+  if (Events) connect();
 })();
