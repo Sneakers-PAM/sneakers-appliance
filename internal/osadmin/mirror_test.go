@@ -234,7 +234,7 @@ func TestAnHTTPSMirrorWithAPrivateCA(t *testing.T) {
 
 	// The private CA is the mirror's only: the release source isn't
 	// trusted through it.
-	directFiles.put("direct/download/v0.2.0/"+mirrorBin, good)
+	directFiles.put("direct/latest/download/"+mirrorBin, good)
 	mb.policy(t, alice, "", true)
 	_, err = fetchBin(alice)
 	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_UPLOAD")

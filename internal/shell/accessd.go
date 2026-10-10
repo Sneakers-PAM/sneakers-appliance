@@ -61,7 +61,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -111,6 +111,10 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.mcpShow(ctx)
 	case "mcp.set":
 		res, err = s.mcpSet(ctx, r.Args[0] == "on", r.Flags["machine-api"])
+	case "updates.show":
+		res, err = s.updatesShow(ctx)
+	case "updates.set":
+		res, err = s.updatesSet(ctx, r.Flags)
 	default:
 		return Result{}, false, nil
 	}
@@ -177,6 +181,52 @@ func (s *Services) mcpSet(ctx context.Context, on bool, api string) (Result, err
 	}
 	word := map[bool]string{true: "on", false: "off"}
 	return Result{Text: fmt.Sprintf("MCP is %s; the machine API is %s.", word[on], word[machine]), Data: map[string]any{"mcp": on, "machineApi": machine}}, nil
+}
+
+// updatesShow prints the GitHub update source's channel, repository and
+// the release last picked.
+func (s *Services) updatesShow(ctx context.Context) (Result, error) {
+	out, err := s.Access.GetUpdateChannel(ctx, connect.NewRequest(&accessv1.GetUpdateChannelRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	m := out.Msg.GetMirrorStatus()
+	channel := Printable(m.GetReleaseChannel())
+	if m.GetReleaseChannelDefault() {
+		channel += " (the default for this build)"
+	}
+	repo, tag := Printable(m.GetReleaseRepo()), Printable(m.GetReleaseTag())
+	if repo == "" {
+		repo = "none (this build has no GitHub source)"
+	}
+	if tag == "" {
+		tag = "none picked yet"
+	}
+	text := fmt.Sprintf("%-12s %s\n%-12s %s\n%-12s %s\n%-12s %s\n", "source", Printable(out.Msg.GetPolicy().GetSource()), "channel", channel, "repository", repo, "release", tag)
+	if t := m.GetRateLimitedUntil(); t != nil {
+		text += fmt.Sprintf("%-12s used up until %s UTC\n", "rate limit", t.AsTime().UTC().Format("15:04:05"))
+	}
+	return Result{Text: text, Data: map[string]any{"source": out.Msg.GetPolicy().GetSource(), "channel": m.GetReleaseChannel(), "channelDefault": m.GetReleaseChannelDefault(),
+		"repo": m.GetReleaseRepo(), "release": m.GetReleaseTag()}}, nil
+}
+
+// updatesSet sets the channel or the repository override, whichever the
+// flags carry; the rest of the policy is kept.
+func (s *Services) updatesSet(ctx context.Context, flags map[string]string) (Result, error) {
+	req := &accessv1.SetUpdateChannelRequest{}
+	text := ""
+	if v, ok := flags["channel"]; ok {
+		req.ReleaseChannel = &v
+		text = "The update channel is " + map[bool]string{true: "the default", false: v}[v == ""] + "."
+	}
+	if v, ok := flags["repo"]; ok {
+		req.ReleaseRepo = &v
+		text = "The GitHub repository is " + map[bool]string{true: "the build's own", false: v}[v == ""] + "."
+	}
+	if _, err := s.Access.SetUpdateChannel(ctx, connect.NewRequest(req)); err != nil {
+		return Result{}, err
+	}
+	return Result{Text: text, Data: flags}, nil
 }
 
 func (s *Services) rootShell(ctx context.Context, r Request) (Result, error) {

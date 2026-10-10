@@ -7,9 +7,12 @@ name: Release
 # Production (push of a v tag): guard -> images (every Sneakers service
 # image, built from the source the pinned release.yaml names; no keys) ->
 # build (no keys, no environment) -> sign (the production environment, the
-# only job that reads its secrets) -> publish (verify, push the service
-# images and sneakers-os to GHCR by digest, attach the units, the index and
-# the countersignatures to the tag's GitHub Release).
+# only job that reads its secrets; it also makes the Base OS patch from the
+# previous release on the tag's channel and signs the index and SHA256SUMS)
+# -> publish (verify, push the service images and sneakers-os to GHCR by
+# digest, attach the units, the patch, the signed index and the
+# countersignatures to the tag's GitHub Release, a prerelease for an rc
+# tag). The Releases are the boxes' built-in update source (docs/upgrades.md).
 #
 # Lab (workflow_dispatch): one job with keys made for that run only, never
 # the production environment, and nothing published or uploaded.
@@ -229,7 +232,7 @@ jobs:
       - name: Install the pinned signers
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q sbsigntool
+          sudo apt-get install -y -q sbsigntool qemu-utils
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Setup Go
@@ -353,15 +356,39 @@ jobs:
             STACKS="$in/stacks" PRODUCT_YAML="$in/product.yaml" LAYOUTS="$RUNNER_TEMP/service-images" \
             IMPORT_JOB="$in/import-job.yaml" MIGRATE_IMAGE="$(cat "$in/migrate-image")" \
             bash build/product/build.sh
-      # The three units, sealed by build/lab/units.sh on the production
-      # channel, from the layout a lab build leaves: the signed artifact, the
-      # signed UKI, the pages, release.yaml and the sealed product bundle.
-      # The first production release is full units only: no bridge, no patch.
+      # The previous published release on this tag's channel (a box on the
+      # channel runs it now; an rc's may be a stable release), whose Base OS
+      # the patch below starts from. None for the first release.
+      - name: Find the previous release on the channel
+        id: previous
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" > "$RUNNER_TEMP/releases.json"
+          prev="$("$RUNNER_TEMP/sneakers-artifact" release-previous --releases "$RUNNER_TEMP/releases.json" --tag "$TAG")"
+          echo "tag=$prev" >> "$GITHUB_OUTPUT"
+          if [ -z "$prev" ]; then echo "no earlier release on the channel: full units only"; exit 0; fi
+          mkdir -p "$RUNNER_TEMP/previous"
+          gh release download "$prev" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/previous" \
+            --pattern 'sneakers-appliance-baseOS-[0-9]*.bin'
+          [ "$(find "$RUNNER_TEMP/previous" -name '*.bin' | wc -l)" -eq 1 ] || { ls -l "$RUNNER_TEMP/previous"; echo "want the one Base OS full release of $prev" >&2; exit 1; }
+          echo "patching from $prev"
+      # The units, sealed by build/lab/units.sh on the production channel,
+      # from the layout a lab build leaves: the signed artifact, the signed
+      # UKI, the pages, release.yaml and the sealed product bundle, and a
+      # Base OS patch from the previous release on the channel (its Base OS
+      # verified with the production key and opened with the update key;
+      # units.sh rebuilds the target from it and checks it before the patch
+      # is kept). The index and SHA256SUMS are signed with the release key,
+      # so a box takes the index from the Release only when it verifies.
       - name: Seal the units (release key)
         env:
           VERSION: ${{ needs.guard.outputs.version }}
+          PREVIOUS: ${{ steps.previous.outputs.tag }}
           RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
           COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
+          UPDATE_AGE_KEY: ${{ secrets.UPDATE_AGE_KEY }}
         run: |
           keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" rel="$RUNNER_TEMP/work/release"
           mkdir -p "$rel/work" "$rel/product"
@@ -373,14 +400,29 @@ jobs:
           cp keys/production/cosign.pub keys/production/update.pub "$keys/"
           umask 077
           printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
-          trap 'rm -f "$keys/cosign.key"' EXIT
+          printf '%s\n' "$UPDATE_AGE_KEY" > "$keys/update.key"
+          trap 'rm -f "$keys/cosign.key" "$keys/update.key"' EXIT
           umask 022
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/product/bin/header.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$work/product/bin/header.json" >/dev/null
           "$RUNNER_TEMP/sneakers-artifact" bin-seal --work "$work/product/bin" \
             --bundle "$work/product/bin/header.sigstore.json" --out "$rel/product" >/dev/null
+          patch_from=""
+          if [ -n "$PREVIOUS" ]; then
+            prev="$work/previous-base"
+            "$RUNNER_TEMP/sneakers-artifact" bin-verify --release-key keys/production/cosign.pub --channel production \
+              --identity "$keys/update.key" --extract "$prev/artifact" "$RUNNER_TEMP"/previous/sneakers-appliance-baseOS-*.bin
+            printf '%s\n' "${PREVIOUS#v}" > "$prev/version"
+            patch_from="$prev"
+          fi
           CHANNEL=production COMMIT="$GITHUB_SHA" BASEOS_INPUTS="$(cat "$in/inputs-baseOS")" STACKS="$in/stacks" \
+            PATCH_FROM="$patch_from" UPDATE_KEY="$keys/update.key" \
             OUT="$rel" KEYS="$keys" UNITS="$RUNNER_TEMP/signed/units" bash build/lab/units.sh
+          units="$RUNNER_TEMP/signed/units"
+          for f in sneakers-product-index.json SHA256SUMS; do
+            cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$units/$f.sigstore.json" \
+              --tlog-upload=false --use-signing-config=false "$units/$f" >/dev/null
+          done
       - name: Verify the units
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -388,7 +430,11 @@ jobs:
           in="$RUNNER_TEMP/unsigned" work="$RUNNER_TEMP/work" units="$RUNNER_TEMP/signed/units"
           tool="$RUNNER_TEMP/sneakers-artifact"
           chmod +x "$in/sneakers-kit"
-          [ "$(find "$units" -maxdepth 1 -name '*.bin' | wc -l)" -eq 3 ] || { ls -l "$units"; echo "want three units" >&2; exit 1; }
+          [ "$(find "$units" -maxdepth 1 -name '*.bin' ! -name 'sneakers-appliance-baseOS-patch-*' | wc -l)" -eq 3 ] || { ls -l "$units"; echo "want three units" >&2; exit 1; }
+          [ "$(find "$units" -maxdepth 1 -name 'sneakers-appliance-baseOS-patch-*.bin' | wc -l)" -le 1 ] || { ls -l "$units"; echo "want at most one patch" >&2; exit 1; }
+          verify() { cosign verify-blob --key keys/production/cosign.pub --bundle "$2" --insecure-ignore-tlog=true "$1" >/dev/null; }
+          verify "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
+          verify "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json"
           # The box's path for each: verify, decrypt with the key in the signed
           # UKI and unpack; the production kit checks the Base OS layout, and
           # the product bundle gets the box's bundle check.
@@ -397,6 +443,7 @@ jobs:
             "$tool" bin-verify --release-key keys/production/cosign.pub --channel production \
               --identity-uki "$work/sneakers-$VERSION.efi" --extract "$check" "$b"
             case "$(basename "$b")" in
+              sneakers-appliance-baseOS-patch-*) ;; # units.sh rebuilt and checked it
               sneakers-appliance-baseOS-*) "$in/sneakers-kit" verify "$check" ;;
             esac
             if "$tool" bin-verify --release-key keys/production/cosign.pub --channel lab "$b" 2>/dev/null; then
@@ -421,6 +468,28 @@ jobs:
             for b in "$units"/*.bin; do echo "$(basename "$b") $(stat -c %s "$b") bytes, inputs $(cat "$b.inputs")"; done
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      # The OVA for a new install, written by the production kit from the
+      # signed artifact the units carry (the kit verifies it first), with the
+      # vApp host name and domain properties; its .sha256 and a signature by
+      # the release key go beside it on the Release.
+      - name: Build and sign the OVA (release key)
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
+        run: |
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" ova="$RUNNER_TEMP/signed/ova"
+          "$in/sneakers-kit" build "$RUNNER_TEMP/signed/artifact" --format ova --arch amd64 --out "$ova"
+          f="$ova/sneakers-$VERSION-amd64.ova"
+          [ -f "$f" ] || { ls -l "$ova"; echo "the kit wrote no sneakers-$VERSION-amd64.ova" >&2; exit 1; }
+          (cd "$ova" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
+          umask 077
+          printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
+          trap 'rm -f "$keys/cosign.key"' EXIT
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$f.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$f" >/dev/null
+          cosign verify-blob --key keys/production/cosign.pub --bundle "$f.sigstore.json" --insecure-ignore-tlog=true "$f" >/dev/null
+          echo "### OVA: $(basename "$f") $(stat -c %s "$f") bytes" >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the keys
         if: always()
         run: |
@@ -478,6 +547,12 @@ jobs:
           done
           verify() { cosign verify-blob --key keys/production/cosign.pub --bundle "$2" --insecure-ignore-tlog=true "$1" >/dev/null; }
           verify "$in/release.yaml" "$cs/release.yaml.sigstore.json"
+          verify "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
+          verify "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json"
+          ova="$(find "$signed/ova" -maxdepth 1 -name "sneakers-$VERSION-amd64.ova")"
+          [ -n "$ova" ] || { echo "the signed build has no OVA" >&2; exit 1; }
+          (cd "$signed/ova" && sha256sum -c --quiet "$(basename "$ova").sha256")
+          verify "$ova" "$ova.sigstore.json"
           while read -r image dgst; do
             verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
           done < "$in/images.txt"
@@ -488,15 +563,25 @@ jobs:
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sneakers-os"
           digest="$("$in/sneakers-artifact" push --layout "$signed/artifact" --repo "$repo" --tag "$VERSION")"
           "$in/sneakers-kit" verify "$repo@$digest"
-          # The Release the owner made for the tag (a draft is fine); a draft
-          # is made when there's none. Nothing here publishes it.
-          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" \
-              --notes "Sneakers appliance $VERSION. Draft made by the release workflow; the owner publishes it."
-          fi
           cp "$in/release.yaml" "$cs/release.yaml"
-          files=("$units"/*.bin "$units"/*.bin.inputs "$units/sneakers-product-index.json" "$units/SHA256SUMS"
+          files=("$units"/*.bin "$units"/*.bin.inputs "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
+            "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json" "$ova" "$ova.sha256" "$ova.sigstore.json"
             "$cs/release.yaml" "$cs/release.yaml.sigstore.json" "$cs"/image-sigs/*.sigstore.json)
+          # GitHub takes no release asset of 2 GiB or more: refuse before
+          # anything is uploaded.
+          bash build/release/check-asset-sizes.sh "${files[@]}"
+          # The Release the owner made for the tag (a draft is fine); a draft
+          # is made when there's none. Nothing here publishes it. An rc tag
+          # (v<x.y.z>-rc.<n>) is a prerelease, which boxes on the rc channel
+          # take and boxes on stable never do.
+          pre=()
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then pre=(--prerelease); fi
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$TAG" "${pre[@]}" \
+              --notes "Sneakers appliance $VERSION. Draft made by the release workflow; the owner publishes it."
+          elif [ "${#pre[@]}" -gt 0 ]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease
+          fi
           gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
           {
             echo "### Published $VERSION"
@@ -532,7 +617,7 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
             efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
-            systemd-ukify systemd-boot-efi python3-pefile
+            systemd-ukify systemd-boot-efi python3-pefile qemu-utils
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Build the kernel
@@ -591,6 +676,13 @@ jobs:
           if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$product"; then
             echo "a lab product bundle verified as production" >&2; exit 1
           fi
+          # The OVA, written by the lab kit from the artifact the way the
+          # release job writes the production one.
+          "$lab/sneakers-kit" build "$lab/artifact" --format ova --arch amd64 --out "$work/ova"
+          ova="$work/ova/sneakers-$VERSION-amd64-LAB.ova"
+          [ -f "$ova" ] || { ls -l "$work/ova"; echo "the lab kit wrote no OVA" >&2; exit 1; }
+          # The files a release would attach stay under GitHub's 2 GiB.
+          bash build/release/check-asset-sizes.sh "$bin" "$product" "$ova"
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
           fi

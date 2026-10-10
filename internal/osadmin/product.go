@@ -12,7 +12,9 @@ package osadmin
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -39,53 +41,55 @@ const ProductService = "k0s"
 var ProductPorts = []uint32{80, 443}
 
 // source is one place the box fetches from: its name (mirror, builtin or
-// direct), the file's URL, and the base URL it's under.
-type source struct{ name, url, base string }
+// direct), the file's URL, and the base URL it's under. A GitHub source
+// (direct) names the file: its URL is the release picked's, filled in by
+// resolve when it's fetched.
+type source struct {
+	name, url, base string
+	direct          bool
+	file            string
+}
 
 // sources lists, in order, where file is fetched from (spec 7, Section
 // 2.1): with the built-in source, each entry of the built-in list (a flat
 // mirror, or the release source's tag path); with the manual source, the
 // mirror URL; with none, nothing. A policy from before the source keeps
-// its order: the mirror, then the release source when direct is on.
-// direct is the path under the release source (the index's or the
-// file's).
-func (s *Server) sources(file, direct string) []source {
+// its order: the mirror, then the release source when direct is on. A
+// lab build with a GitHub repository override has that repository alone
+// as its built-in list.
+func (s *Server) sources(file string) []source {
 	p := s.policy()
+	_, web, _ := s.releaseURLs(p)
+	direct := source{name: "direct", base: web, direct: true, file: file}
 	var out []source
 	switch p.Source {
 	case SourceBuiltIn:
+		if s.labOverride(p) {
+			return []source{direct}
+		}
 		for _, u := range s.o.Upgrade.BuiltinMirrors {
 			b := strings.TrimRight(u, "/")
-			out = append(out, source{SourceBuiltIn, b + "/" + file, b})
+			out = append(out, source{name: SourceBuiltIn, url: b + "/" + file, base: b})
 		}
-		if d := s.o.Upgrade.DirectURL; d != "" {
-			out = append(out, source{"direct", d + "/" + direct, d})
+		if web != "" {
+			out = append(out, direct)
 		}
 		return out
 	case SourceManual:
 		if p.MirrorURL != "" {
-			out = append(out, source{"mirror", p.MirrorURL + "/" + file, p.MirrorURL})
+			out = append(out, source{name: "mirror", url: p.MirrorURL + "/" + file, base: p.MirrorURL})
 		}
 		return out
 	case SourceNone:
 		return nil
 	}
 	if p.MirrorURL != "" {
-		out = append(out, source{"mirror", p.MirrorURL + "/" + file, p.MirrorURL})
+		out = append(out, source{name: "mirror", url: p.MirrorURL + "/" + file, base: p.MirrorURL})
 	}
-	if d := s.o.Upgrade.DirectURL; p.Direct && d != "" {
-		out = append(out, source{"direct", d + "/" + direct, d})
+	if p.Direct && web != "" {
+		out = append(out, direct)
 	}
 	return out
-}
-
-// directPath is where the release source keeps a .bin: the tag's assets.
-func directPath(file string) string {
-	v, ok := updatepkg.ReleaseOf(file)
-	if !ok {
-		return ""
-	}
-	return "download/v" + v + "/" + file
 }
 
 func (s *Server) slots() product.Slots {
@@ -134,7 +138,7 @@ func (s *Server) productSlots(ctx context.Context) *osadminv1.ProductSlots {
 // source, and offers what fits this box.
 func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request[osadminv1.ListProductVersionsRequest]) (*connect.Response[osadminv1.ListProductVersionsResponse], error) {
 	s := h.s
-	srcs := s.sources(updatepkg.IndexName, "latest/download/"+updatepkg.IndexName)
+	srcs := s.sources(updatepkg.IndexName)
 	if len(srcs) == 0 {
 		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the product bundle instead")
 	}
@@ -145,13 +149,13 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 	installed := s.slots().Status().Installed
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src)
+		idx, err := s.fetchIndex(ctx, src, false)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 		out := &osadminv1.ListProductVersionsResponse{BaseVersion: base}
-		for _, e := range idx.Offer(s.arch(), s.o.Upgrade.Channel, base, installed) {
+		for _, e := range idx.OfferProducts(s.box(base), installed) {
 			out.Versions = append(out.Versions, &osadminv1.ProductVersion{Version: e.Version, Arch: e.Arch, Channel: e.Channel, Bases: e.Bases, FileName: e.File, Size: e.Size, Source: src.name, MinBase: e.MinBase, MaxBase: e.MaxBase})
 		}
 		s.o.Logger.Info("osadmin: product versions listed", log.F("source", src.name), log.F("base", base), log.F("installed", installed), log.F("offered", len(out.Versions)))
@@ -165,7 +169,7 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 // fit this box, marking those outside the installed product's base range.
 func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[osadminv1.ListBaseVersionsRequest]) (*connect.Response[osadminv1.ListBaseVersionsResponse], error) {
 	s := h.s
-	srcs := s.sources(updatepkg.IndexName, "latest/download/"+updatepkg.IndexName)
+	srcs := s.sources(updatepkg.IndexName)
 	if len(srcs) == 0 {
 		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the base release instead")
 	}
@@ -176,7 +180,7 @@ func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[os
 	inst, hasProduct := s.slots().Installed()
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src)
+		idx, err := s.fetchIndex(ctx, src, false)
 		if err != nil {
 			lastErr = err
 			continue
@@ -195,11 +199,25 @@ func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[os
 	return nil, lastErr
 }
 
-func (s *Server) fetchIndex(ctx context.Context, src source) (idx updatepkg.Index, err error) {
+// fetchIndex reads src's index; force asks the GitHub API again for the
+// release to read it from (Check now). The GitHub source's index must be
+// signed by the release key.
+func (s *Server) fetchIndex(ctx context.Context, src source, force bool) (idx updatepkg.Index, err error) {
 	started := time.Now()
-	resp, peer, err := s.open(ctx, src, "product index")
+	var (
+		resp *http.Response
+		peer *x509.Certificate
+	)
+	src, err = s.resolve(ctx, src, force)
 	if err == nil {
-		idx, err = updatepkg.ReadIndex(resp.Body)
+		resp, peer, err = s.open(ctx, src, "product index")
+	}
+	if err == nil {
+		if src.direct {
+			idx, err = s.readSignedIndex(ctx, src, resp.Body)
+		} else {
+			idx, err = updatepkg.ReadIndex(resp.Body)
+		}
 		_ = resp.Body.Close()
 	}
 	s.fetched(ctx, src, "product index", peer, started, 0, err)

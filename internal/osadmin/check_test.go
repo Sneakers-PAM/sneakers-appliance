@@ -186,7 +186,9 @@ func TestThePolicysSource(t *testing.T) {
 	}
 	symbolIn(t, setPolicy(t, alice, &osadminv1.UpgradePolicy{Source: osadmin.SourceManual}), connect.CodeInvalidArgument, "ACCESS_CONFIRM")
 	symbolIn(t, setPolicy(t, alice, &osadminv1.UpgradePolicy{Source: "ftp"}), connect.CodeInvalidArgument, "ACCESS_CONFIRM")
-	b.mirrorFiles["direct/latest/download/"+updatepkg.IndexName] = unitsIndex(t)
+	idx := unitsIndex(t)
+	b.mirrorFiles["direct/latest/download/"+updatepkg.IndexName] = idx
+	b.mirrorFiles["direct/latest/download/"+updatepkg.IndexName+".sigstore.json"] = b.sign.BlobBundle(t, idx)
 	if err := setPolicy(t, alice, &osadminv1.UpgradePolicy{Source: osadmin.SourceBuiltIn}); err != nil {
 		t.Fatal(err)
 	}

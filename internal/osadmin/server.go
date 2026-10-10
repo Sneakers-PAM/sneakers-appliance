@@ -171,6 +171,7 @@ type Server struct {
 	resets   resets
 	upgrades upgrades
 	mirror   mirrorCheck
+	github   githubState
 	checks   checks
 	progress progress
 	// revertMu guards revertAudited, the last network change whose revert
@@ -255,13 +256,14 @@ type Handlers struct {
 	Elevation osadminv1connect.ElevationServiceHandler
 	Product   osadminv1connect.ProductServiceHandler
 	Mcp       osadminv1connect.McpServiceHandler
+	Upgrade   osadminv1connect.UpgradeServiceHandler
 }
 
 // Handlers returns the handlers.
 func (s *Server) Handlers() Handlers {
 	return Handlers{
 		Status: &status{s: s}, Setup: &setup{s: s}, Access: &accessSvc{s: s}, Network: &networkSvc{s: s},
-		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s}, Mcp: &mcpSvc{s: s},
+		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s}, Mcp: &mcpSvc{s: s}, Upgrade: &upgradeSvc{s: s},
 	}
 }
 

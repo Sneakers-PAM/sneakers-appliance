@@ -363,3 +363,33 @@ func TestABaseOSNamesTheBaseWebItShipsWith(t *testing.T) {
 		t.Fatalf("the index entry includes %q", got)
 	}
 }
+
+// A production box following the rc channel is offered an rc of each
+// unit; on the stable channel it isn't, as before.
+func TestAnRCBoxIsOfferedRCs(t *testing.T) {
+	idx := indexOf(t, baseOS("0.2.0-rc.2", release.ChannelProduction), patch("0.2.0-rc.2", "0.2.0-rc.1", release.ChannelProduction),
+		baseWeb("0.2.0-rc.2", release.ChannelProduction))
+	prod := productHeader(release.ChannelProduction, "0.2.0-rc.1")
+	prod.Version = "0.2.0-rc.2"
+	prod.Name = updatepkg.NameProduct
+	idx.Add(prod, 1000)
+	box := updatepkg.Box{Arch: "amd64", Channel: release.ChannelProduction, BaseOS: "0.2.0-rc.1", BaseWeb: "0.2.0-rc.1"}
+	if got := idx.OfferBaseOS(box); len(got) != 0 {
+		t.Fatalf("a stable box offered an rc Base OS: %+v", got)
+	}
+	if got := idx.OfferProducts(box, ""); len(got) != 0 {
+		t.Fatalf("a stable box offered an rc product: %+v", got)
+	}
+	box.Prerelease = true
+	os := idx.OfferBaseOS(box)
+	if len(os) != 2 || os[0].Kind != "patch" || os[0].Version != "0.2.0-rc.2" || os[1].Kind != "full" {
+		t.Fatalf("an rc box's Base OS offer %+v", os)
+	}
+	if got := idx.OfferProducts(box, "0.2.0-rc.1"); len(got) != 1 || got[0].Version != "0.2.0-rc.2" {
+		t.Fatalf("an rc box's product offer %+v", got)
+	}
+	box.BaseOS = "0.2.0-rc.2"
+	if got := idx.OfferBaseWeb(box); len(got) != 1 || got[0].Version != "0.2.0-rc.2" {
+		t.Fatalf("an rc box's Base Web offer %+v", got)
+	}
+}

@@ -9,8 +9,10 @@ in [upgrades.md](upgrades.md#an-internal-mirror).
 - **One source, in the policy.** The source is a setting of the update policy (owner,
   `UpgradePolicy.source`), not a choice made per download:
   - `builtin`: the list compiled into the signed root for the build's channel, walked in order.
-    A production build's list is the release download location; a lab build's is the lab mirror
-    the build names (`release.Mirrors`), then the release source when the build has one.
+    A production build's list is the project's GitHub Releases, read for the box's channel
+    ([upgrades.md](upgrades.md#the-github-source)); a lab build's is the lab mirror the build
+    names (`release.Mirrors`), or the test repository its policy names (`release_repo`, lab
+    builds only).
   - `manual`: the mirror URL (`mirror_url`).
   - `none`: upload only. The box never makes a network fetch (`UPGRADE_AIR_GAPPED`).
 

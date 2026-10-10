@@ -337,7 +337,7 @@ uid is refused before a byte is read.
 | Peer | Gets | As |
 |---|---|---|
 | root | every method of `AccessService`, `NetworkService`, `SetupService` (with `GetConsoleInfo`, the `WatchConsoleInfo` stream, `ResetSetupCode` and the Recover access code) and `ElevationService`, and `LocalService` | the console (an owner named `console`), firstboot, or `sneakers-elevated` |
-| an admin uid (a closed-shell login) | `SshLoginService` (the TOTP check, first) and the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, `BeginRootShell`, `OpenRootShell`, the product's exposed values and MCP switch (`GetExposedValue`, `GetMcp`, `SetMcp`), and `LocalService` | that admin, with that admin's role |
+| an admin uid (a closed-shell login) | `SshLoginService` (the TOTP check, first) and the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, `BeginRootShell`, `OpenRootShell`, the product's exposed values and MCP switch (`GetExposedValue`, `GetMcp`, `SetMcp`), the update channel (`GetUpdateChannel`, `SetUpdateChannel`), and `LocalService` | that admin, with that admin's role |
 | `osadmin` | the :8443 API (`sneakers.appliance.osadmin.v1`), the upload and the audit export, and `BindingService` | the signed-in admin (or the code session) each call carries |
 | `edgefall` | the public `StatusService.GetPhase` only; anything else answers `permission_denied` | nobody: it's a public call ([edge-fallback.md](edge-fallback.md)) |
 

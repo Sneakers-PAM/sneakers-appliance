@@ -120,13 +120,23 @@ func ReadIndex(r io.Reader) (Index, error) {
 // counts), newer than installed (empty before the first install), and
 // named the way FileName names it. Newest first.
 func (idx Index) Offer(arch, channel, base, installed string) []IndexEntry {
+	return idx.offerProducts(arch, channel, base, installed, false)
+}
+
+// OfferProducts is Offer for b, which on a production box following the
+// rc channel (b.Prerelease) takes pre-release bundles too.
+func (idx Index) OfferProducts(b Box, installed string) []IndexEntry {
+	return idx.offerProducts(b.Arch, b.Channel, b.BaseOS, installed, b.Prerelease)
+}
+
+func (idx Index) offerProducts(arch, channel, base, installed string, pre bool) []IndexEntry {
 	var out []IndexEntry
 	for _, e := range idx.Products {
 		h := Header{Format: Format, Name: NameProduct, Version: e.Version, Arch: e.Arch, Kind: KindProduct, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel}
 		switch {
 		case h.check() != nil, e.Arch != arch, e.Channel != channel, e.File != FileName(h):
 		case h.AppliesTo(base) != nil:
-		case channel == release.ChannelProduction && semver.Prerelease("v"+e.Version) != "":
+		case channel == release.ChannelProduction && !pre && semver.Prerelease("v"+e.Version) != "":
 		case installed != "" && semver.Compare("v"+e.Version, "v"+installed) <= 0:
 		default:
 			out = append(out, e)
@@ -165,12 +175,15 @@ func (idx *Index) AddBridge(h Header, size int64) {
 
 // Box is what a box runs, for the units' offers. BaseWeb is the Base Web
 // it serves (its built-in pages' version when none is installed);
-// RootSHA256 is its running root image's, when it's known.
+// RootSHA256 is its running root image's, when it's known. Prerelease
+// is set on a production box that follows the rc channel: it's offered
+// pre-release units too.
 type Box struct {
 	Arch, Channel   string
 	Epoch           int
 	BaseOS, BaseWeb string
 	RootSHA256      string
+	Prerelease      bool
 }
 
 func (b Box) epoch() int {
@@ -188,7 +201,7 @@ func (b Box) offerable(e IndexEntry, u Unit, name func(Header) string) (Header, 
 	switch {
 	case h.check() != nil, e.Arch != b.Arch, e.Channel != b.Channel, e.File != name(h):
 	case h.EpochOf() != b.epoch():
-	case b.Channel == release.ChannelProduction && semver.Prerelease("v"+e.Version) != "":
+	case b.Channel == release.ChannelProduction && !b.Prerelease && semver.Prerelease("v"+e.Version) != "":
 	default:
 		return h, true
 	}

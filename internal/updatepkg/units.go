@@ -107,8 +107,8 @@ func (r Range) check(what string) error {
 
 // DefaultRange is what a unit needs of another when its release says
 // nothing more: the same major.minor, from X.Y.0 to before X.(Y+1).0. A lab
-// range takes pre-releases at both ends (lab versions are pre-releases of
-// 0.0.0).
+// range, and a pre-release's (an rc), takes pre-releases at both ends (lab
+// versions are pre-releases of 0.0.0, and 0.2.0-rc.1 comes before 0.2.0).
 func DefaultRange(version, channel string) Range {
 	mm := semver.MajorMinor("v" + version)
 	if mm == "" {
@@ -117,7 +117,7 @@ func DefaultRange(version, channel string) Range {
 	var major, minor int
 	_, _ = fmt.Sscanf(mm, "v%d.%d", &major, &minor)
 	r := Range{Min: fmt.Sprintf("%d.%d.0", major, minor), Before: fmt.Sprintf("%d.%d.0", major, minor+1)}
-	if channel == release.ChannelLab {
+	if channel == release.ChannelLab || semver.Prerelease("v"+version) != "" {
 		r.Min += "-0"
 		r.Before += "-0"
 	}
