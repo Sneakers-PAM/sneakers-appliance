@@ -9,14 +9,15 @@ import (
 )
 
 var (
-	datedBuildRE = regexp.MustCompile(`(?:^|\.)[0-9]{8}([a-z][0-9]*)(?:$|[.-])`)
+	datedBuildRE = regexp.MustCompile(`(?:^|\.)[0-9]{8}([a-z][0-9]*(?:w[0-9]+)?)(?:$|[.-])`)
 	buildTimeRE  = regexp.MustCompile(`\.r[0-9]{14}`)
 	commitTailRE = regexp.MustCompile(`-g[0-9a-f]{7,40}$`)
 )
 
 // NameVersion is the part of a file name that stands for a release: the
 // version on production (0.1.0-rc.1), and lab-<label> on lab, where the
-// label is the build's letter and rebuild number (lab-n3) or the
+// label is the build's letter and rebuild number (lab-n3), with w<n> for
+// a Base Web-only hotfix on that build (lab-n5w1), or the
 // product's own lab label (lab-sneakers.10). The build date, the build
 // time and the commit never go in a name; the signed header and the index
 // carry the full version.
