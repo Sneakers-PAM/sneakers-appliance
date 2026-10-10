@@ -34,7 +34,8 @@ Troubleshooting this box (every key in this shell is recorded):
   ip addr; ip route                   the box's addresses and routes
   cat /etc/resolv.conf                the DNS servers the box uses
   nslookup <name>; nc -zv <host> <port>   name and port checks
-  df -h /var/lib; free -m; top        disk, memory and processes
+  df -hP /var/lib; free -m; top       disk, memory and processes (-P keeps each volume on one line)
+  ls -l --full-time <file>            a file's size and time (busybox stat has no -c)
   dmesg | tail -n 50                  the kernel's latest messages
   ls /var/lib/sneakers/os-audit       the OS audit log
 
