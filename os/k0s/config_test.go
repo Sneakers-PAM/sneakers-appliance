@@ -164,6 +164,12 @@ func TestTheLabStacksUseOnlyBundledImages(t *testing.T) {
 			t.Fatal(err)
 		}
 		images := regexp.MustCompile(`(?m)^\s*image:\s*(\S+)@(sha256:[0-9a-f]{64})\s*$`).FindAllStringSubmatch(string(b), -1)
+		// A stack of the lab product's phases keeps its workload in the
+		// phase's stack; the always-on part (a namespace, a page, a
+		// Service) runs no image.
+		if len(images) == 0 && !regexp.MustCompile(`(?m)^kind: (Deployment|StatefulSet|DaemonSet)$`).Match(b) {
+			continue
+		}
 		if len(images) == 0 {
 			t.Fatalf("%s names no image by digest", f)
 		}
