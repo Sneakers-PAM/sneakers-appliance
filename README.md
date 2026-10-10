@@ -31,6 +31,7 @@ sneakers-kit build sneakers-os:0.1.0 --format ova --out ./out
   [docs/upgrades.md](docs/upgrades.md): how the release and the box work.
 - [docs/access.md](docs/access.md), [docs/osadmin-api.md](docs/osadmin-api.md): who gets in, and the
   :8443 appliance admin, its factory reset quorum and update flows.
+- [docs/product-email.md](docs/product-email.md): the Email page, the product's mail relay.
 - [docs/import.md](docs/import.md): the Import page, which brings an earlier install's export into
   the product before its own setup (imported-users mode).
 - [docs/factory-reset.md](docs/factory-reset.md): how init reboots, shuts down and factory resets

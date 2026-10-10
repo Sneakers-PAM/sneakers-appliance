@@ -321,6 +321,14 @@ can't be made, the apply stops before k0s is touched. The keys `escrow` names (t
 root key and TOTP key, in `sneakers-box`) also go into the recovery escrow. INTERIM: platformd seals
 all of them through KeyCustody when it lands (#100).
 
+A box secret key may also be a `setting` (`{key: SMTP_PASS, setting: email.password}`): one of
+the settings an admin sets on :8443. The product declares the non-secret ones as **box
+settings**, ConfigMaps the box writes into the same stack (`box_settings`), and says it reads the
+box's email settings with an `email` section, which also names the workloads restarted after a
+change. A secret setting in a ConfigMap, an unknown setting, a key that's more than one of
+generated, value and setting, and settings with no `email` section are refused. See
+[product-email.md](product-email.md).
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,

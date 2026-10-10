@@ -131,6 +131,27 @@ awk -v RS='---\n' '/kind: NetworkPolicy/ && /\n    name: sneakers-hydra\n/' "$mc
 grep -A3 'oauth-prefix:' "$out/edge/edge.yaml" | grep -q 'prefixes: \["/oauth"\]' || fail "the edge has no oauth-prefix middleware"
 echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ route"
 
+# The mail relay comes only from the box (the Email page): the identity
+# service, which sends the product's mail, loads the sneakers-email
+# ConfigMap and reads SMTP_PASS from the sneakers-email Secret, both of
+# which the box writes (product.yaml box_settings and box_secrets). No
+# stack carries an SMTP value of its own, and no ConfigMap the password.
+mkdir -p "$work/docs"
+awk -v d="$work/docs" 'BEGIN{n=0; f=d"/0.yaml"} /^---$/{n++; f=d"/"n".yaml"; next} {print > f}' "$out"/sneakers*/*.yaml
+ident=""
+for f in "$work"/docs/*.yaml; do
+  if grep -q '^kind: ConfigMap$' "$f"; then
+    if grep -qE 'SMTP_PASS|smtpConnectionURI|smtps?://' "$f"; then fail "a ConfigMap carries the relay password or URI: $(grep -m1 -E '^    name:' "$f")"; fi
+    if grep -q '^    name: sneakers-identity$' "$f" && grep -q 'SMTP_' "$f"; then fail "the identity service's own ConfigMap sets SMTP values: $(grep SMTP_ "$f" | head -2)"; fi
+  fi
+  if grep -q '^kind: Deployment$' "$f" && grep -q '^    name: sneakers-identity$' "$f"; then ident="$f"; fi
+done
+[ -n "$ident" ] || fail "no sneakers-identity Deployment"
+grep -A1 'configMapRef:' "$ident" | grep -q 'name: sneakers-email' || fail "the identity service doesn't load the sneakers-email ConfigMap"
+grep -A4 -- '- name: SMTP_PASS' "$ident" | grep -q 'name: sneakers-email' || fail "the identity service doesn't read SMTP_PASS from the sneakers-email Secret"
+if grep -nE 'smtp\.example\.org|smtp-[a-z]+\.box\.invalid' "$out"/*/*.yaml "$here/values.yaml" "$here/product.yaml"; then fail "an SMTP placeholder or example relay is left"; fi
+echo "ok: the mail relay comes only from the box, and the password never from a ConfigMap"
+
 # Refusals.
 if CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > /dev/null 2>&1; then
   fail "rendered into a non-empty OUT"

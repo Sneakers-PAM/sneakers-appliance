@@ -11,8 +11,11 @@
 package boxsecrets
 
 import (
+	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +29,7 @@ import (
 	log "github.com/Bugs5382/go-log"
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
@@ -39,7 +43,26 @@ type Store struct {
 	Dir string
 	// Manifests is k0s's manifests directory (/var/lib/k0s/manifests).
 	Manifests string
-	Logger    log.Logger
+	// Settings are the box's settings an admin sets on :8443
+	// (boxsettings.Store on the box); nil gives every setting its default.
+	Settings Settings
+	Logger   log.Logger
+}
+
+// Settings are the box's settings by name (productspec.IsSetting).
+type Settings interface {
+	Values() (map[string]string, error)
+}
+
+// RevisionAnnotation is on every object of the stack: a digest of what the
+// stack carries, so the box can tell when k0s has applied a change.
+const RevisionAnnotation = "sneakers-appliance/revision"
+
+func (s *Store) settings() (map[string]string, error) {
+	if s.Settings == nil {
+		return boxsettings.DefaultEmail().Values(), nil
+	}
+	return s.Settings.Values()
 }
 
 func (s *Store) logger() log.Logger {
@@ -58,7 +81,7 @@ func (s *Store) Ensure(slot string) error {
 		return err
 	}
 	stack := filepath.Join(s.Manifests, productspec.BoxSecretsStack)
-	if len(spec.BoxSecrets) == 0 {
+	if len(spec.BoxSecrets) == 0 && len(spec.BoxSettings) == 0 {
 		if err := os.RemoveAll(stack); err != nil {
 			return fmt.Errorf("boxsecrets: %w", err)
 		}
@@ -89,7 +112,11 @@ func (s *Store) Ensure(slot string) error {
 			return err
 		}
 	}
-	doc, err := Render(spec, values)
+	settings, err := s.settings()
+	if err != nil {
+		return err
+	}
+	doc, err := RenderAll(spec, values, settings)
 	if err != nil {
 		return err
 	}
@@ -103,34 +130,86 @@ func (s *Store) Ensure(slot string) error {
 	return nil
 }
 
-// Render is the stack for spec's box secrets with values: each namespace
-// they live in, then each Secret with its keys in order.
+// Render is the stack for spec's box secrets with values and the box's
+// settings at their defaults.
 func Render(spec productspec.Spec, values map[string]string) ([]byte, error) {
-	var docs []any
+	return RenderAll(spec, values, boxsettings.DefaultEmail().Values())
+}
+
+// RenderAll is the stack for spec's box secrets with values, and its box
+// settings with settings: each namespace they live in, then each Secret
+// and each ConfigMap with its keys in order. Every object carries the
+// stack's revision.
+func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byte, error) {
+	var nsOrder []string
 	nss := map[string]bool{}
-	for _, b := range spec.BoxSecrets {
-		if !nss[b.Namespace()] {
-			nss[b.Namespace()] = true
-			docs = append(docs, map[string]any{"apiVersion": "v1", "kind": "Namespace", "metadata": map[string]any{"name": b.Namespace()}})
+	addNS := func(ns string) {
+		if !nss[ns] {
+			nss[ns] = true
+			nsOrder = append(nsOrder, ns)
 		}
 	}
 	for _, b := range spec.BoxSecrets {
-		data := yaml.Node{Kind: yaml.MappingNode}
+		addNS(b.Namespace())
+	}
+	for _, b := range spec.BoxSettings {
+		addNS(b.Namespace())
+	}
+	type object struct {
+		kind, ns, name, field string
+		data                  *yaml.Node
+	}
+	var objs []object
+	digest := sha256.New()
+	pair := func(data *yaml.Node, k, v string) {
+		data.Content = append(data.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Value: k},
+			&yaml.Node{Kind: yaml.ScalarNode, Value: v, Style: yaml.DoubleQuotedStyle})
+		_, _ = fmt.Fprintf(digest, "%d:%s%d:%s", len(k), k, len(v), v)
+	}
+	for _, b := range spec.BoxSecrets {
+		data := &yaml.Node{Kind: yaml.MappingNode}
+		_, _ = fmt.Fprintf(digest, "Secret/%s\n", b.Secret)
 		for _, k := range b.Keys {
-			v, err := value(b, k, values)
+			v, err := value(b, k, values, settings)
 			if err != nil {
 				return nil, err
 			}
-			data.Content = append(data.Content,
-				&yaml.Node{Kind: yaml.ScalarNode, Value: k.Key},
-				&yaml.Node{Kind: yaml.ScalarNode, Value: v, Style: yaml.DoubleQuotedStyle})
+			pair(data, k.Key, v)
 		}
-		docs = append(docs, map[string]any{
-			"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
-			"metadata": map[string]any{"name": b.SecretName(), "namespace": b.Namespace(),
-				"labels": map[string]string{"app.kubernetes.io/managed-by": "sneakers-appliance"}},
-			"stringData": &data,
-		})
+		objs = append(objs, object{"Secret", b.Namespace(), b.SecretName(), "stringData", data})
+	}
+	for _, b := range spec.BoxSettings {
+		data := &yaml.Node{Kind: yaml.MappingNode}
+		_, _ = fmt.Fprintf(digest, "ConfigMap/%s\n", b.ConfigMap)
+		for _, k := range b.Keys {
+			v, ok := settings[k.Setting]
+			if !ok {
+				return nil, fmt.Errorf("boxsecrets: %s/%s reads the setting %s, which has no value", b.ConfigMap, k.Key, k.Setting)
+			}
+			pair(data, k.Key, v)
+		}
+		objs = append(objs, object{"ConfigMap", b.Namespace(), b.ConfigMapName(), "data", data})
+	}
+	rev := hex.EncodeToString(digest.Sum(nil))[:16]
+	meta := func(name, ns string) map[string]any {
+		m := map[string]any{"name": name, "annotations": map[string]string{RevisionAnnotation: rev},
+			"labels": map[string]string{"app.kubernetes.io/managed-by": "sneakers-appliance"}}
+		if ns != "" {
+			m["namespace"] = ns
+		}
+		return m
+	}
+	var docs []any
+	for _, ns := range nsOrder {
+		docs = append(docs, map[string]any{"apiVersion": "v1", "kind": "Namespace", "metadata": meta(ns, "")})
+	}
+	for _, o := range objs {
+		d := map[string]any{"apiVersion": "v1", "kind": o.kind, "metadata": meta(o.name, o.ns), o.field: o.data}
+		if o.kind == "Secret" {
+			d["type"] = "Opaque"
+		}
+		docs = append(docs, d)
 	}
 	var out strings.Builder
 	for i, d := range docs {
@@ -146,9 +225,39 @@ func Render(spec productspec.Spec, values map[string]string) ([]byte, error) {
 	return []byte(out.String()), nil
 }
 
-func value(b productspec.BoxSecret, k productspec.BoxKey, values map[string]string) (string, error) {
+// StackRevision is the revision the stack file at p carries.
+func StackRevision(p string) (string, error) {
+	b, err := os.ReadFile(p) // #nosec G304 -- the box's own stack
+	if err != nil {
+		return "", fmt.Errorf("boxsecrets: %w", err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var o struct {
+			Metadata struct {
+				Annotations map[string]string `yaml:"annotations"`
+			} `yaml:"metadata"`
+		}
+		if err := dec.Decode(&o); err != nil {
+			break
+		}
+		if r := o.Metadata.Annotations[RevisionAnnotation]; r != "" {
+			return r, nil
+		}
+	}
+	return "", fmt.Errorf("boxsecrets: %s carries no revision", filepath.Base(p))
+}
+
+func value(b productspec.BoxSecret, k productspec.BoxKey, values, settings map[string]string) (string, error) {
 	if k.Generate != "" {
 		return values[b.Secret+"/"+k.Key], nil
+	}
+	if k.Setting != "" {
+		v, ok := settings[k.Setting]
+		if !ok {
+			return "", fmt.Errorf("boxsecrets: %s/%s reads the setting %s, which has no value", b.Secret, k.Key, k.Setting)
+		}
+		return v, nil
 	}
 	parts, refs, err := b.Refs(k.Value)
 	if err != nil {
