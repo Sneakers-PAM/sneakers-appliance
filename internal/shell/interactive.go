@@ -19,15 +19,27 @@ import (
 // command words.
 func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) error {
 	t := term.NewTerminal(rw, prompt)
+	// Tab completes the word before the cursor; a second Tab that can't
+	// complete any further lists the candidates, and the prompt and the
+	// line are drawn again under them.
+	lastTab := ""
+	tabbed := false
 	t.AutoCompleteCallback = func(line string, pos int, key rune) (string, int, bool) {
 		if key != '\t' {
+			tabbed = false
 			return "", 0, false
 		}
-		done := CompleteFor(e.Origin, e.Product, line[:pos], e.Values...)
-		if done == line[:pos] {
-			return "", 0, false
+		head := line[:pos]
+		done, options := Completions(e, head)
+		if done != head {
+			tabbed = false
+			return done + line[pos:], len(done), true
 		}
-		return done + line[pos:], len(done), true
+		if tabbed && lastTab == head && len(options) > 1 {
+			_, _ = io.WriteString(t, listing(options))
+		}
+		tabbed, lastTab = true, head
+		return "", 0, false
 	}
 	session := *e
 	session.Out, session.Err = t, t
@@ -91,53 +103,26 @@ func Complete(o Origin, typed string) string { return CompleteFor(o, productinfo
 
 // CompleteFor is Complete with product p's commands too.
 func CompleteFor(o Origin, p productinfo.Info, typed string, values ...Value) string {
-	words := strings.Fields(typed)
-	trailing := strings.HasSuffix(typed, " ") || typed == ""
-	if !trailing && len(words) > 0 {
-		words = words[:len(words)-1]
-	}
-	partial := ""
-	if !trailing {
-		f := strings.Fields(typed)
-		partial = f[len(f)-1]
-	}
-	seen := map[string]bool{}
-	var next []string
-	for _, name := range append(NamesFor(o, p, values...), "help", "exit") {
-		p := strings.Fields(name)
-		if len(p) <= len(words) || !hasPrefixWords(p, words) {
-			continue
-		}
-		w := p[len(words)]
-		if strings.HasPrefix(w, partial) && !seen[w] {
-			seen[w] = true
-			next = append(next, w)
-		}
-	}
-	if len(next) == 0 {
-		return typed
-	}
-	common := next[0]
-	for _, w := range next[1:] {
-		common = commonPrefix(common, w)
-	}
-	if len(next) == 1 {
-		common += " "
-	}
-	base := strings.Join(words, " ")
-	if base != "" {
-		base += " "
-	}
-	return base + common
+	line, _ := Completions(&Env{Origin: o, Product: p, Values: values}, typed)
+	return line
 }
 
-func hasPrefixWords(p, words []string) bool {
-	for i, w := range words {
-		if p[i] != w {
-			return false
+// listing is the candidates a second Tab shows, in columns.
+func listing(options []string) string {
+	w := 0
+	for _, o := range options {
+		w = max(w, len(o))
+	}
+	var b strings.Builder
+	for i, o := range options {
+		b.WriteString("  " + o)
+		if (i+1)%4 == 0 || i == len(options)-1 {
+			b.WriteString("\n")
+		} else {
+			b.WriteString(strings.Repeat(" ", w-len(o)))
 		}
 	}
-	return true
+	return b.String()
 }
 
 func commonPrefix(a, b string) string {
