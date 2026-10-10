@@ -60,6 +60,11 @@ type Service struct {
 	// PreStart runs to completion before every start; a non-zero exit
 	// keeps the service from starting.
 	PreStart []string `yaml:"pre-start"`
+	// PreStop runs before every stop, while the service still runs, and
+	// before its SIGTERM: k0s's stops the product in order while the
+	// cluster still answers. It gets the stop-timeout; one that fails or
+	// takes longer is logged and the stop goes on.
+	PreStop []string `yaml:"pre-stop"`
 	// StopTimeout is how long the service gets after SIGTERM before
 	// SIGKILL; zero means the supervisor's default. k0s needs longer than
 	// most to stop its workloads cleanly.
@@ -175,6 +180,8 @@ func parse(name string, b []byte) (*Service, error) {
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: stop-timeout %v", name, s.StopTimeout)
 	case len(s.PreStart) > 0 && !path.IsAbs(s.PreStart[0]):
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: pre-start %q must be an absolute path", name, s.PreStart[0])
+	case len(s.PreStop) > 0 && !path.IsAbs(s.PreStop[0]):
+		return nil, codes.New(codes.ServiceTableInvalid, "%s: pre-stop %q must be an absolute path", name, s.PreStop[0])
 	case len(s.OnDemandIn) > 0 && s.Start != StartAlways:
 		return nil, codes.New(codes.ServiceTableInvalid, "%s: on-demand-in needs start: always", name)
 	case len(s.StartWhen) > 0 && s.Start != StartAlways:
