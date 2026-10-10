@@ -61,7 +61,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -107,6 +107,10 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.rootShell(ctx, r)
 	case "product.value":
 		res, err = s.productValue(ctx, r.Args[0])
+	case "mcp.show":
+		res, err = s.mcpShow(ctx)
+	case "mcp.set":
+		res, err = s.mcpSet(ctx, r.Args[0] == "on", r.Flags["machine-api"])
 	default:
 		return Result{}, false, nil
 	}
@@ -145,6 +149,34 @@ func (s *Services) productValue(ctx context.Context, name string) (Result, error
 		b.WriteString("It works once; after that it's removed.\n")
 	}
 	return Result{Text: b.String(), Data: map[string]any{"name": e.GetName(), "consumed": false, "value": m.GetValue(), "link": e.GetLink()}}, nil
+}
+
+func (s *Services) mcpShow(ctx context.Context) (Result, error) {
+	out, err := s.Access.GetMcp(ctx, connect.NewRequest(&accessv1.GetMcpRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	m := out.Msg.GetMcp()
+	word := map[bool]string{true: "on", false: "off"}
+	text := fmt.Sprintf("%-12s %s\n%-12s %s\n", "MCP", Printable(m.GetState()), "machine API", word[m.GetMachineApiEnabled()])
+	return Result{Text: text, Data: map[string]any{"state": m.GetState(), "mcp": m.GetMcpEnabled(), "machineApi": m.GetMachineApiEnabled()}}, nil
+}
+
+// mcpSet sets the switch; an empty api keeps the machine API as it is.
+func (s *Services) mcpSet(ctx context.Context, on bool, api string) (Result, error) {
+	cur, err := s.Access.GetMcp(ctx, connect.NewRequest(&accessv1.GetMcpRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	machine := cur.Msg.GetMcp().GetMachineApiEnabled()
+	if api != "" {
+		machine = api == "on"
+	}
+	if _, err := s.Access.SetMcp(ctx, connect.NewRequest(&accessv1.SetMcpRequest{McpEnabled: on, MachineApiEnabled: machine})); err != nil {
+		return Result{}, err
+	}
+	word := map[bool]string{true: "on", false: "off"}
+	return Result{Text: fmt.Sprintf("MCP is %s; the machine API is %s.", word[on], word[machine]), Data: map[string]any{"mcp": on, "machineApi": machine}}, nil
 }
 
 func (s *Services) rootShell(ctx context.Context, r Request) (Result, error) {

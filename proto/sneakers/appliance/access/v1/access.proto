@@ -25,6 +25,7 @@ import "google/protobuf/timestamp.proto";
 import "sneakers/appliance/netd/v1/netd.proto";
 import "sneakers/appliance/osadmin/v1/access.proto";
 import "sneakers/appliance/osadmin/v1/elevation.proto";
+import "sneakers/appliance/osadmin/v1/mcp.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/product.proto";
 import "sneakers/appliance/osadmin/v1/setup.proto";
@@ -63,6 +64,14 @@ service AccessService {
   // ProductService.GetExposedValue run as the login's admin, so the shell
   // reads exactly what :8443 would, under the same allow-list and audit.
   rpc GetExposedValue(GetExposedValueRequest) returns (GetExposedValueResponse);
+  // GetMcp and SetMcp are the closed shell's "<product> mcp": osadmin's
+  // McpService run as the login's admin, so the shell drives the same
+  // product.yaml switches as the MCP card on :8443, under the same role
+  // and audit.
+  rpc GetMcp(GetMcpRequest) returns (GetMcpResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SetMcp(SetMcpRequest) returns (SetMcpResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -723,3 +732,16 @@ message GetExposedValueRequest {
 message GetExposedValueResponse {
   sneakers.appliance.osadmin.v1.GetExposedValueResponse value = 1;
 }
+
+message GetMcpRequest {}
+
+message GetMcpResponse {
+  sneakers.appliance.osadmin.v1.GetMcpResponse mcp = 1;
+}
+
+message SetMcpRequest {
+  bool mcp_enabled = 1;
+  bool machine_api_enabled = 2;
+}
+
+message SetMcpResponse {}

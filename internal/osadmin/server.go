@@ -243,13 +243,14 @@ type Handlers struct {
 	Network   osadminv1connect.NetworkServiceHandler
 	Elevation osadminv1connect.ElevationServiceHandler
 	Product   osadminv1connect.ProductServiceHandler
+	Mcp       osadminv1connect.McpServiceHandler
 }
 
 // Handlers returns the handlers.
 func (s *Server) Handlers() Handlers {
 	return Handlers{
 		Status: &status{s: s}, Setup: &setup{s: s}, Access: &accessSvc{s: s}, Network: &networkSvc{s: s},
-		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s},
+		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s}, Mcp: &mcpSvc{s: s},
 	}
 }
 
