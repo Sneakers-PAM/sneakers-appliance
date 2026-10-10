@@ -20,6 +20,7 @@ func TestTheNameVersion(t *testing.T) {
 		{"0.0.0-lab.20261010n.r20261010105645-ga8df881", release.ChannelLab, "lab-n"},
 		{"0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab, "lab-m"},
 		{"0.0.0-lab.20261012m1-g1a2b3c4", release.ChannelLab, "lab-m1"},
+		{"0.0.0-lab.20261010n5w1.r20261010163323-g433866c", release.ChannelLab, "lab-n5w1"},
 		{"0.1.0-lab.sneakers.10", release.ChannelLab, "lab-sneakers.10"},
 		{"0.0.0-lab.1-g1a2b3c4", release.ChannelLab, "lab-1"},
 		{"0.2.0", release.ChannelLab, "lab-0.2.0"},
