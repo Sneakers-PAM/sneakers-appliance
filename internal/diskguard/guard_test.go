@@ -288,3 +288,18 @@ func TestAuditArchiveWarning(t *testing.T) {
 		t.Fatalf("%+v", r.Warnings)
 	}
 }
+
+// Files past retention that the archive can't take stay, with a warning.
+func TestPruneBlockedWarning(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 40}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	g.PruneBlocked = func() []osaudit.PruneBlock {
+		return []osaudit.PruneBlock{{File: "log-2025-01-02.jsonl.gz", Reason: "os audit: no space left on device"}}
+	}
+	r := g.Tick(context.Background())
+	if len(r.Warnings) != 1 || r.Warnings[0].Kind != diskguard.WarnAuditArchive || !strings.Contains(r.Warnings[0].Detail, "past their retention stay") || !strings.Contains(r.Warnings[0].Detail, "no space left") {
+		t.Fatalf("%+v", r.Warnings)
+	}
+}

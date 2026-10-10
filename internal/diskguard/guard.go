@@ -110,7 +110,10 @@ type Guard struct {
 	Cleaner *Cleaner
 	// Archive reports the OS audit archive's state, for its warning.
 	Archive func() *osaudit.ArchiveReport
-	Audit   osaudit.Appender
+	// PruneBlocked names the OS audit files past retention the archive
+	// couldn't take, which stay, for their warning.
+	PruneBlocked func() []osaudit.PruneBlock
+	Audit        osaudit.Appender
 	// StateFile keeps the levels and samples across restarts.
 	StateFile   string
 	Statfs      func(string) (Usage, error)
@@ -450,6 +453,13 @@ func (g *Guard) build(now time.Time, vols []VolumeReport) Report {
 			r.Warnings = append(r.Warnings, Warning{Kind: WarnAuditArchive, Detail: fmt.Sprintf(
 				"The OS audit archive is over its cap: %d closed files (%s, from %s) move to the backup volume after %s UTC. Export the audit log from Logs and audit first to keep a copy elsewhere.",
 				len(a.Flagged), Bytes(a.FlaggedBytes), dayOfFile(a.Flagged[0]), a.ExportAfter.UTC().Format("2006-01-02 15:04"))})
+		}
+	}
+	if g.PruneBlocked != nil {
+		if b := g.PruneBlocked(); len(b) > 0 {
+			r.Warnings = append(r.Warnings, Warning{Kind: WarnAuditArchive, Detail: fmt.Sprintf(
+				"%d OS audit files past their retention stay on the state volume: the archive on the backup volume can't take them (%s). Free space on the backup volume; nothing is removed until they are archived.",
+				len(b), strings.TrimPrefix(b[0].Reason, "os audit: "))})
 		}
 	}
 	return r

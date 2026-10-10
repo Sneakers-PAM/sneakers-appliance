@@ -106,8 +106,9 @@ none declared, every directory under `/var/lib/sneakers-data`). Status warns whe
 - a volume is at its warning or critical level (`WARNING_KIND_DISK_SPACE`, `critical` set at 90%);
 - a volume would fill within a week at the last day's rate (`WARNING_KIND_DISK_GROWTH`);
 - a data path's write-ahead log is over its `wal_warn` (`WARNING_KIND_DATA_WAL`);
-- the OS audit archive has files flagged to move to the backup volume
-  (`WARNING_KIND_AUDIT_ARCHIVE`).
+- the OS audit archive has files flagged to move to the backup volume, or files past their
+  retention stay because the backup volume's archive can't take them (`WARNING_KIND_AUDIT_ARCHIVE`,
+  [os-audit.md](os-audit.md#retention)).
 
 The warnings show on :8443 Status and on the console's status screen (a critical one in the alert
 colour). Status also carries each volume with its level (`volumes`), the data paths with their size,

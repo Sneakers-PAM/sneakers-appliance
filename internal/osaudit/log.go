@@ -69,7 +69,11 @@ type Options struct {
 	// MaxFileSize is the size a file rolls over at to the day's next part;
 	// 0 is DefaultMaxFileSize.
 	MaxFileSize int64
-	Logger      log.Logger
+	// ArchiveDir is the archive on another volume (the backup volume's
+	// os-audit-archive on the box). Prune removes a file past retention
+	// only once it is there; with none set, Prune keeps every file.
+	ArchiveDir string
+	Logger     log.Logger
 }
 
 // Log is the chained log in one directory.
@@ -85,6 +89,9 @@ type Log struct {
 	// different length means another process (init and osadmin both
 	// write) appended since, so the head is read again.
 	size int64
+	// blocked are the files the last Prune kept because the archive
+	// couldn't take them.
+	blocked []PruneBlock
 }
 
 // lockName is the file every writer holds an flock on while it appends.
@@ -280,27 +287,40 @@ func (l *Log) SetRetention(logs, recordings time.Duration) {
 }
 
 // Prune removes log files whose day is older than the log retention and
-// recordings older than the recording retention.
+// recordings older than the recording retention. A log file is never
+// dropped silently: it goes only once the archive holds it byte for byte
+// (copied there first when it doesn't), and each removal is an
+// os-audit.prune entry with the file's hash, its chain link and why. A file
+// the archive can't take stays, and PruneBlocked names it.
 func (l *Log) Prune() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	unlock, err := l.lock()
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := l.refresh(); err != nil {
+		return err
+	}
 	now := l.o.Now()
 	files, err := l.files()
 	if err != nil {
 		return err
 	}
 	cut := now.Add(-l.o.LogRetention).UTC().Format(dayLayout)
+	reason := fmt.Sprintf("retention: older than %d days", int(l.o.LogRetention.Hours()/24))
+	var blocked []PruneBlock
 	for _, name := range files {
-		if dayOf(name) < cut && name != l.newest {
-			if err := os.Remove(filepath.Join(l.dir, name)); err != nil {
-				return fmt.Errorf("os audit: %w", err)
-			}
-			if name == keyOf(name) {
-				_ = os.Remove(filepath.Join(l.dir, name+gzSuffix))
-			}
-			l.o.Logger.Info("os audit: pruned log file", log.F("file", name))
+		if dayOf(name) >= cut || name == l.newest {
+			continue
+		}
+		if err := l.pruneOne(name, reason); err != nil {
+			blocked = append(blocked, PruneBlock{File: name, Reason: err.Error()})
+			l.o.Logger.Warn("os audit: a file past retention stays; the archive can't take it", log.F("file", name), log.F("error", err.Error()))
 		}
 	}
+	l.blocked = blocked
 	sessions, err := os.ReadDir(filepath.Join(l.dir, SessionsDir))
 	if err != nil {
 		return fmt.Errorf("os audit: %w", err)
