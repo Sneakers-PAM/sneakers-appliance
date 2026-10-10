@@ -22,9 +22,10 @@
 #                  ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX        the static busybox (build/busybox/build.sh)
 #   STATIC         directory with cryptsetup-<arch>, veritysetup-<arch>,
-#                  mke2fs-<arch>, sgdisk-<arch> and their stamps
-#                  (build/static); first boot can't make the state volumes
-#                  without them
+#                  mke2fs-<arch>, sgdisk-<arch>, watch-<arch>,
+#                  terminfo-<arch>/ and their stamps (build/static); first
+#                  boot can't make the state volumes without the first four,
+#                  and the root shell's watch draws with the terminfo entries
 #   SERVICES       the service table (default os/rootfs/services.d)
 #   OSADMIN_ASSETS the :8443 static pages (sneakers-web apps/appliance-admin;
 #                  optional, the directory stays empty without them)
@@ -60,17 +61,22 @@ for b in sshd sshd-session sshd-auth ssh-keygen; do
   [ -f "$OPENSSH/$b" ] || { echo "root: $OPENSSH/$b is missing (build/openssh/build.sh)" >&2; exit 1; }
 done
 [ -f "$BUSYBOX" ] || { echo "root: $BUSYBOX is missing (build/busybox/build.sh)" >&2; exit 1; }
-for b in cryptsetup veritysetup mke2fs sgdisk; do
+for b in cryptsetup veritysetup mke2fs sgdisk watch; do
   [ -f "$STATIC/$b-$arch" ] || { echo "root: $STATIC/$b-$arch is missing (build/static)" >&2; exit 1; }
+done
+# shellcheck source=/dev/null
+TERMINFO_ENTRIES="$(source "$root/build/ci/versions.env" && printf '%s' "$TERMINFO_ENTRIES")"
+for t in $TERMINFO_ENTRIES; do
+  [ -f "$STATIC/terminfo-$arch/${t:0:1}/$t" ] || { echo "root: terminfo entry $t is missing (build/static/procps.sh)" >&2; exit 1; }
 done
 # shellcheck source=build/lib/stamp.sh
 source "$root/build/lib/stamp.sh"
 stamp_check "$(dirname "$BUSYBOX")/busybox.stamp" "$(busybox_stamp)" busybox || exit 1
 stamp_check "$OPENSSH/openssh.stamp" "$(openssh_stamp)" OpenSSH || exit 1
-for t in cryptsetup e2fsprogs gptfdisk; do
+for t in cryptsetup e2fsprogs gptfdisk procps; do
   stamp_check "$STATIC/$t-$arch.stamp" "$(static_stamp "$t" "$arch")" "static $t" || exit 1
 done
-for f in "$RELEASE" "$BUSYBOX" "$OPENSSH"/{sshd,sshd-session,sshd-auth,ssh-keygen} "$STATIC"/{cryptsetup,veritysetup,mke2fs,sgdisk}-"$arch"; do
+for f in "$RELEASE" "$BUSYBOX" "$OPENSSH"/{sshd,sshd-session,sshd-auth,ssh-keygen} "$STATIC"/{cryptsetup,veritysetup,mke2fs,sgdisk,watch}-"$arch"; do
   echo "root: input $f sha256 $(sha256sum "$f" | cut -d' ' -f1)"
 done
 
@@ -107,6 +113,11 @@ install -m 0755 "$STATIC/cryptsetup-$arch" "$tree/usr/sbin/cryptsetup"
 install -m 0755 "$STATIC/veritysetup-$arch" "$tree/usr/sbin/veritysetup"
 install -m 0755 "$STATIC/mke2fs-$arch" "$tree/usr/sbin/mkfs.ext4"
 install -m 0755 "$STATIC/sgdisk-$arch" "$tree/usr/sbin/sgdisk"
+# The root shell's watch, and the terminal descriptions it draws with.
+install -m 0755 "$STATIC/watch-$arch" "$tree/usr/bin/watch"
+for t in $TERMINFO_ENTRIES; do
+  install -D -m 0644 "$STATIC/terminfo-$arch/${t:0:1}/$t" "$tree/usr/share/terminfo/${t:0:1}/$t"
+done
 
 # What the base OS gives k0s, which itself comes with the product bundle
 # (docs/k0s.md): its config template, containerd's config (k0s would

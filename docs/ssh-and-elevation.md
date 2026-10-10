@@ -281,5 +281,9 @@ With a product installed, `kubectl` and `helm` work in the root shell against it
 Without one, the shell says so once at its start, and `kubectl`, `helm` and `k0s` each answer "No
 product is installed yet" instead of a bare "not found".
 
+`watch` (procps-ng, static) re-runs a command on an interval, such as `watch -n 2 kubectl get pods
+-A`. The root carries the terminal descriptions it needs for xterm (OpenSSH, MobaXterm), PuTTY,
+screen, tmux and the VT and Linux consoles; with another `TERM`, run it as `TERM=xterm watch ...`.
+
 Every step is audited (`rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end`).
 Removing an admin's key ends a root shell it opened.

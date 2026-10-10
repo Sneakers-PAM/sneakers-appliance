@@ -14,7 +14,8 @@
 #                ssh-keygen (build/openssh/build.sh)
 #   BUSYBOX      the static busybox (build/busybox/build.sh)
 #   STATIC       directory with cryptsetup-amd64, veritysetup-amd64,
-#                mke2fs-amd64 and sgdisk-amd64 and their stamps
+#                mke2fs-amd64, sgdisk-amd64, watch-amd64 and terminfo-amd64/
+#                and their stamps
 #                (build/static), which go into the root; first boot needs
 #                cryptsetup and mkfs.ext4 to make the state volumes. Required
 #   KEYS         a directory for the lab keys (CI passes a fresh tmpfs one

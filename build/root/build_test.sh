@@ -24,12 +24,15 @@ mkdir -p "$work/openssh"
 for b in sshd sshd-session sshd-auth ssh-keygen; do printf '#!/bin/false\n# %s\n' "$b" > "$work/openssh/$b"; done
 printf '#!/bin/false\n# busybox\n' > "$work/busybox"
 mkdir -p "$work/static"
-for b in cryptsetup veritysetup mke2fs sgdisk; do printf '#!/bin/false\n# %s\n' "$b" > "$work/static/$b-amd64"; done
+for b in cryptsetup veritysetup mke2fs sgdisk watch; do printf '#!/bin/false\n# %s\n' "$b" > "$work/static/$b-amd64"; done
+# shellcheck source=/dev/null
+source "$here/../ci/versions.env"
+for t in $TERMINFO_ENTRIES; do mkdir -p "$work/static/terminfo-amd64/${t:0:1}" && printf '%s\n' "$t" > "$work/static/terminfo-amd64/${t:0:1}/$t"; done
 # shellcheck source=build/lib/stamp.sh
 source "$here/../lib/stamp.sh"
 busybox_stamp > "$work/busybox.stamp"
 openssh_stamp > "$work/openssh/openssh.stamp"
-for t in cryptsetup e2fsprogs gptfdisk; do static_stamp "$t" amd64 > "$work/static/$t-amd64.stamp"; done
+for t in cryptsetup e2fsprogs gptfdisk procps; do static_stamp "$t" amd64 > "$work/static/$t-amd64.stamp"; done
 printf '#!/bin/false\n# k0s\n' > "$work/k0s"
 cat > "$work/release.yaml" <<YAML
 apiVersion: sneakers-pam/v1alpha1
@@ -85,6 +88,11 @@ refused "sshd is missing (build/openssh" OPENSSH="$work/nothing"
 refused "is missing (build/busybox" BUSYBOX="$work/nothing"
 refused "no service table" SERVICES="$work/openssh"
 refused "cryptsetup-amd64 is missing (build/static)" STATIC="$work/nothing"
+mkdir -p "$work/nowatch" "$work/noterm"
+cp -r "$work/static/." "$work/nowatch/" && mv "$work/nowatch/watch-amd64" "$work/nowatch/watch-amd64.away"
+refused "watch-amd64 is missing (build/static)" STATIC="$work/nowatch"
+cp -r "$work/static/." "$work/noterm/" && mv "$work/noterm/terminfo-amd64/x/xterm" "$work/noterm/terminfo-amd64/x/xterm.away"
+refused "terminfo entry xterm is missing (build/static/procps.sh)" STATIC="$work/noterm"
 mkdir -p "$work/stale"
 cp "$work/busybox" "$work/stale/busybox"
 printf 'busybox 1.0.0 0000\n' > "$work/stale/busybox.stamp"
@@ -99,4 +107,4 @@ mkdir -p "$work/overlay/etc/k0s"
 printf 'x\n' > "$work/overlay/etc/k0s/k0s.yaml.tmpl"
 refused "LAB_OVERLAY is for lab builds only" LAB_OVERLAY="$work/overlay"
 refused "LAB_OVERLAY would replace /etc/k0s/k0s.yaml.tmpl" PINS_LDFLAGS="-X example.org/pins.Channel=lab" LAB_OVERLAY="$work/overlay"
-echo "ok: k0s or images, missing OpenSSH, busybox or static tools, a stale stamp, a program the root lacks, an empty service table and a misused lab overlay are refused"
+echo "ok: k0s or images, missing OpenSSH, busybox, static tools or terminfo entries, a stale stamp, a program the root lacks, an empty service table and a misused lab overlay are refused"
