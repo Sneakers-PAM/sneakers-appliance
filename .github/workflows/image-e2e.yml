@@ -73,21 +73,25 @@ jobs:
       # First boot formats the state volumes with cryptsetup and mkfs.ext4,
       # so the root carries the static tools (build/root/build.sh installs
       # all four).
-      - name: Cache the static e2fsprogs and gptfdisk
+      - name: Cache the static e2fsprogs, gptfdisk and watch
         id: fstools
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
           path: |
             build/out/mke2fs-amd64
             build/out/sgdisk-amd64
+            build/out/watch-amd64
+            build/out/terminfo-amd64
             build/out/e2fsprogs-amd64.stamp
             build/out/gptfdisk-amd64.stamp
-          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/ci/versions.env', 'build/lib/**') }}
-      - name: Build the static e2fsprogs and gptfdisk
+            build/out/procps-amd64.stamp
+          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/static/procps.sh', 'build/ci/versions.env', 'build/lib/**') }}
+      - name: Build the static e2fsprogs, gptfdisk and watch
         if: steps.fstools.outputs.cache-hit != 'true'
         run: |
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
+          bash build/static/procps.sh amd64
       # The same cache key as the Static tools workflow, so a run of either
       # restores what the other built.
       - name: Cache the static OpenSSH and busybox

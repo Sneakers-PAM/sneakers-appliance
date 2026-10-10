@@ -62,3 +62,4 @@ k get pods -A -o wide
 export KUBECONFIG=/var/lib/k0s/pki/admin.conf HELM_CACHE_HOME=/tmp/helm/cache HELM_CONFIG_HOME=/tmp/helm/config HELM_DATA_HOME=/tmp/helm/data
 if /usr/bin/kubectl get nodes; then say "root shell kubectl works"; else say "root shell kubectl failed"; fi
 if /usr/bin/helm list -A; then say "root shell helm works"; else say "root shell helm failed"; fi
+if /usr/bin/watch --version && [ -f /usr/share/terminfo/x/xterm ] && [ -f /usr/share/terminfo/p/putty ]; then say "root shell watch works"; else say "root shell watch failed"; fi

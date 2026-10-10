@@ -10,6 +10,7 @@ builder containers by tag.
 | cryptsetup, veritysetup (static, musl) | `build/static/cryptsetup.sh amd64` | `build/out/{cryptsetup,veritysetup}-amd64` |
 | mke2fs (static) | `build/static/e2fsprogs.sh amd64` | `build/out/mke2fs-amd64` |
 | sgdisk (static) | `build/static/gptfdisk.sh amd64` | `build/out/sgdisk-amd64` |
+| watch (static, procps-ng) and its terminfo entries | `build/static/procps.sh amd64` | `build/out/watch-amd64`, `build/out/terminfo-amd64/` |
 | OpenSSH, busybox (static, musl) | `build/openssh/build.sh`, `build/busybox/build.sh` | `out/static/{sshd,sshd-session,sshd-auth,ssh-keygen,busybox}` |
 | Airgap bundle | `build/bundle/build.sh` | `<hex>.tar` and its signature per pinned image ([root-image.md](root-image.md)) |
 | Root image | `build/root/build.sh` | `root-<version>.img` (SquashFS with the verity tree) and `verity.json` ([root-image.md](root-image.md)) |
@@ -40,7 +41,7 @@ Docker. Each script fails if its output has a dynamic loader.
 The root build takes OpenSSH, busybox and the static tools as prebuilt inputs, and all of them are
 required (`STATIC` too: first boot can't make the state volumes without cryptsetup and
 mkfs.ext4). Each build script writes a stamp next to its output (`busybox.stamp`,
-`openssh.stamp`, `<cryptsetup|e2fsprogs|gptfdisk>-<arch>.stamp`): the tool, its pinned version and
+`openssh.stamp`, `<cryptsetup|e2fsprogs|gptfdisk|procps>-<arch>.stamp`): the tool, its pinned version and
 the SHA-256 of everything that decides the build, the pins, the busybox config and the build script
 itself (`build/lib/stamp.sh`). The root build works the same stamp out from the tree it runs in and
 refuses an input whose stamp is missing or different ("stale or unstamped busybox: ... build it

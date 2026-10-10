@@ -66,15 +66,16 @@ jobs:
         with:
           path: build/out
           key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env', 'build/lib/**') }}
-      - name: Build cryptsetup, veritysetup, mke2fs and sgdisk
+      - name: Build cryptsetup, veritysetup, mke2fs, sgdisk and watch
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           bash build/static/cryptsetup.sh amd64
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
+          bash build/static/procps.sh amd64
       - name: Record the digests
         run: |
           {
             echo "### Static tools"
-            for f in build/out/*-amd64; do echo "- $(basename "$f"): $(sha256sum "$f" | cut -d' ' -f1)"; done
+            for f in build/out/*-amd64; do [ -f "$f" ] || continue; echo "- $(basename "$f"): $(sha256sum "$f" | cut -d' ' -f1)"; done
           } >> "$GITHUB_STEP_SUMMARY"
