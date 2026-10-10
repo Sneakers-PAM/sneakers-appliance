@@ -126,9 +126,12 @@ func (l *Live) note(reason, wantSlot, wantVersion string, at time.Time) {
 
 // Watcher keeps Live on the current slot. At start, and whenever the
 // current link or its header changes, it loads the slot (Load, with the
-// release key in the running root) and serves it when it passes and fits
-// the running Base OS; otherwise it keeps what it serves (at start, the
-// built-in pages) and says why. It writes what it serves to StatusFile.
+// release key in the running root) and serves it when it passes, fits the
+// running Base OS and isn't older than the built-in pages; otherwise it
+// keeps what it serves (at start, the built-in pages) and says why. A Base
+// OS always ships with its Base Web, and its built-in pages are that Base
+// Web, so after a Base OS update the box serves its own newer pages, and
+// after a Base OS revert the installed Base Web again. It writes what it serves to StatusFile.
 type Watcher struct {
 	Slots   Slots
 	Key     *ecdsa.PublicKey
@@ -197,6 +200,16 @@ func (w *Watcher) Sync() {
 		if need := p.Manifest.NeedsBaseOS(w.Channel); !need.Contains(w.BaseOS) {
 			err = codes.New(codes.UpgradeCompat, "Base Web %s needs Base OS %s; this box runs Base OS %s", p.Manifest.Version, need.Text(), w.BaseOS)
 		}
+	}
+	if err == nil && Newer(w.BuiltinVersion, p.Manifest.Version) {
+		why := "the Base OS's own pages, Base Web " + w.BuiltinVersion + ", are newer than Base Web " + p.Manifest.Version + " in slot " + slot
+		if w.Live.Served().Source != SourceBuiltIn {
+			w.Live.swap(w.Builtin, Served{Version: w.BuiltinVersion, Source: SourceBuiltIn})
+		}
+		lg.Info("osadmin: serving the built-in pages, newer than the installed Base Web", log.F("builtin", w.BuiltinVersion), log.F("slot", slot), log.F("version", p.Manifest.Version))
+		w.Live.note(why, slot, h.Version, w.now())
+		w.write()
+		return
 	}
 	if err != nil {
 		why := codes.Describe(err)

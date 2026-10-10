@@ -62,6 +62,7 @@ func binPackCmd() *cobra.Command {
 		h                      updatepkg.Header
 		kind, unit             string
 		needMin, needBefore    string
+		includesWeb            string
 		patchSpecPath          string
 		layout, recipient, out string
 	)
@@ -92,6 +93,9 @@ func binPackCmd() *cobra.Command {
 			}
 			if needMin != "" || needBefore != "" {
 				h.Requires = map[updatepkg.Unit]updatepkg.Range{updatepkg.UnitBaseOS: {Min: needMin, Before: needBefore}}
+			}
+			if includesWeb != "" {
+				h.Includes = map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: includesWeb}
 			}
 			h, err = updatepkg.Encrypt(&payload, h, r, ct)
 			if cerr := ct.Close(); err == nil {
@@ -128,6 +132,7 @@ func binPackCmd() *cobra.Command {
 	f.StringVar(&h.Inputs, "inputs", "", "the SHA-256 of the unit's build inputs (units.sh inputs)")
 	f.StringVar(&needMin, "requires-baseos-min", "", "a Base Web package: the oldest Base OS it fits (default: its own major.minor)")
 	f.StringVar(&needBefore, "requires-baseos-before", "", "a Base Web package: the first Base OS it no longer fits")
+	f.StringVar(&includesWeb, "includes-baseweb", "", "a Base OS release: the version of the Base Web it ships with (spec 7, Section 4.4)")
 	f.StringVar(&patchSpecPath, "patch-spec", "", "a Base OS patch: the "+patchSpecFile+" patch-make wrote (sets --kind patch and the base)")
 	f.StringVar(&out, "out", "", "the work directory for header.json and payload.age")
 	for _, req := range []string{"layout", "recipient", "version", "out"} {

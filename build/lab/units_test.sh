@@ -58,4 +58,14 @@ refused "COMMIT" CHANNEL=production COMMIT=xyz
 refused "BASEOS_INPUTS" CHANNEL=production COMMIT=1a2b3c4 BASEOS_INPUTS=nothex
 refused "BRIDGE is for lab builds only" CHANNEL=production COMMIT=1a2b3c4 BRIDGE=1
 refused "doesn't end with -g<commit>" CHANNEL=lab
+
+# A Base OS always ships with its Base Web (spec 7, Section 4.4): a build
+# without the :8443 pages is refused before anything is sealed.
+mkdir -p "$work/nopages"
+echo 0.0.0-lab.1-g1a2b3c4 > "$work/nopages/version"
+if out="$(OUT="$work/nopages" KEYS="$work/keys" bash "$here/units.sh" 2>&1)"; then echo "FAIL: a build without pages passed" >&2; exit 1; fi
+grep -q "a Base OS always ships with its Base Web" <<<"$out" || { echo "FAIL: no pages said: $out" >&2; exit 1; }
+[ ! -e "$work/nopages/units" ] && [ ! -e "$work/nopages/work" ] || { echo "FAIL: a build without pages wrote output" >&2; exit 1; }
+
 echo "units: ok"
+

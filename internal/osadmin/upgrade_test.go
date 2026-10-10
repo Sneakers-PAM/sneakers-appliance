@@ -546,3 +546,25 @@ func TestThePreviousReleaseIsReportedWithItsSlot(t *testing.T) {
 		}
 	}
 }
+
+// A staged Base OS says which Base Web it ships with, in the stage's
+// answer and in GetUpgrades until it's applied.
+func TestAStagedBaseOSNamesItsBaseWeb(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	h := full(release.ChannelProduction)
+	h.Unit, h.Includes = updatepkg.UnitBaseOS, map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: "0.2.0"}
+	id, _ := alice.upload(t, bin(t, b.sign, b.enc, h))
+	res, err := alice.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Msg.GetPackage().GetIncludesBaseWeb() != "0.2.0" {
+		t.Fatalf("stage answer %v", res.Msg.GetPackage())
+	}
+	g, err := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
+	if err != nil || g.Msg.GetStagedVersion() != "0.2.0" || g.Msg.GetStagedIncludesBaseWeb() != "0.2.0" {
+		t.Fatalf("GetUpgrades %v %v", g.Msg, err)
+	}
+}
