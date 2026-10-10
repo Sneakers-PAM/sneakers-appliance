@@ -105,6 +105,11 @@ data:
             status: ["502-504"]
             service: box
             query: /_box/page
+        # The OAuth issuer lives at https://<fqdn>/oauth; Hydra serves
+        # its paths from the root, so the prefix comes off on the way in.
+        oauth-prefix:
+          stripPrefix:
+            prefixes: ["/oauth"]
       services:
         box:
           loadBalancer:

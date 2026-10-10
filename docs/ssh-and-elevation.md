@@ -168,7 +168,7 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
-| `<product> mcp ...` (`sneakers mcp ...`) | no | yes | Only while a product is installed; Not available in this release |
+| `<product> mcp [on\|off] [machine-api=on\|off]` (`sneakers mcp ...`) | no | yes | accessd; only while a product is installed; see [The MCP switch](#the-mcp-switch) |
 
 A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` and isn't listed by
 `help` or completed. `-o json` prints a command's result, or its error as
@@ -188,8 +188,29 @@ product adds its own commands in a group named after it, listed by `help` under 
 product's name from the current product slot's header (`/var/lib/sneakers/product/current/bundle.json`,
 the `<name>-product` header name without `-product`) when the login starts. With no product
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
-`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, which answers
-`NOT_AVAILABLE` until the product's MCP switch lands, and the product's exposed values.
+`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp` and the product's exposed
+values.
+
+### The MCP switch
+
+`<product> mcp` (`sneakers mcp`) shows the installed product's MCP switch and its machine API
+switch; `<product> mcp on` and `<product> mcp off` set it. The machine API keeps its setting unless
+the line names it: `sneakers mcp off machine-api=off` turns both off. The switches are the ones the
+product's `product.yaml` declares (`mcp` and `machine-api`), the same ones the MCP card on :8443
+sets: accessd runs `McpService.GetMcp` and `McpService.SetMcp` as the login's admin, so the role
+is the same (admin) and a change writes the same `mcp.set` audit entry, with the `ssh` surface.
+
+```text
+> sneakers mcp
+MCP          off
+machine API  on
+> sneakers mcp on
+MCP is on; the machine API is on.
+```
+
+A product that declares no MCP switch shows `not in this product`, and setting it answers
+`NOT_AVAILABLE`. Anything but `on` or `off`, or a second word other than `machine-api=on|off`, is
+`SHELL_PARSE`.
 
 ### Product values
 

@@ -53,7 +53,7 @@ var stack = strings.ReplaceAll(`env:
   - name: OAUTH_PUBLIC_URL
     value: https://PH
   - name: HYDRA_ISSUER
-    value: https://hydra.PH/
+    value: https://PH/oauth
   - name: SMTP_FROM
     value: no-reply@PH
 `, "PH", placeholder)
@@ -68,7 +68,7 @@ func TestSubstituteReplacesEveryPlaceholder(t *testing.T) {
   - name: OAUTH_PUBLIC_URL
     value: https://box1.example.org
   - name: HYDRA_ISSUER
-    value: https://hydra.box1.example.org/
+    value: https://box1.example.org/oauth
   - name: SMTP_FROM
     value: no-reply@box1.example.org
 `

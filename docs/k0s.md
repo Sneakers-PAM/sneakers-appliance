@@ -156,6 +156,8 @@ Lab product bundles only (`build/lab/stacks`), applied by k0s from `/var/lib/k0s
   has priority 1, so a product Ingress for `/` wins over it whenever one exists. Traefik reaches
   the pods from the host network, from the node address: a product NetworkPolicy must admit it by
   `ipBlock` (a `namespaceSelector` doesn't match host-network traffic).
+- The edge's `oauth-prefix` middleware strips `/oauth` from the paths the product's OAuth issuer
+  route (Hydra's Ingress on `/oauth/`) forwards ([network.md](network.md#the-host-name)).
 - The edge routes `/_box/` (priority 1000, ahead of the hello route and the Ingresses) to sneakers-edgefall on
   `127.0.0.1:9180`, and the hello route's `box-page` middleware serves edgefall's box-state page for
   `502` to `504`. The hello page loads `/_box/poll.js`, so an open tab shows "Sneakers-PAM is

@@ -54,7 +54,7 @@ func TestTheBaseShellHasNoProductCommands(t *testing.T) {
 // An installed product's commands sit in a group named after it.
 func TestAnInstalledProductAddsItsOwnGroup(t *testing.T) {
 	_, stderr, err := runProduct(t, sneakers, "sneakers mcp off")
-	if !codes.Is(err, codes.NotAvailable) || !strings.Contains(stderr, "Not available in this release") {
+	if !codes.Is(err, codes.NotAvailable) || strings.Contains(stderr, "Not available in this release") || !strings.Contains(stderr, "unavailable") {
 		t.Fatalf("sneakers mcp off: %v %q", err, stderr)
 	}
 	_, _, err = runProduct(t, sneakers, "mcp off")

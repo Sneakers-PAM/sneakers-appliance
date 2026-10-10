@@ -20,13 +20,47 @@ mcp:
           cidr: 198.18.0.1/32
       - ipBlock:
           cidr: 10.244.0.1/32  # scrub:allow=private-ip -- k0s's default pod network gateway
+# Hydra's issuer is https://<fqdn>/oauth, on the box's one name and
+# certificate (docs/network.md#the-host-name): the edge routes /oauth/ to
+# Hydra's public port and strips the prefix (the edge stack's oauth-prefix
+# middleware), and Hydra builds its discovery and
+# endpoint URLs from urls.self.public. The path has its trailing slash so
+# the route never takes the gateway's /oauth2/ paths.
 hydra:
   enabled: true
+  ingress:
+    public:
+      enabled: true
+      className: traefik
+      annotations:
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+        traefik.ingress.kubernetes.io/router.tls: 'true'
+        traefik.ingress.kubernetes.io/router.middlewares: box-page@file,oauth-prefix@file
+      hosts:
+        - host: '{{ .Values.global.host }}'
+          paths:
+            - path: /oauth/
+              pathType: Prefix
+  hydra:
+    config:
+      urls:
+        self:
+          issuer: 'https://{{ .Values.global.host }}/oauth'
+          public: 'https://{{ .Values.global.host }}/oauth/'
+# The edge reaches Hydra's public port from the host network, like the other
+# product routes.
+bundledNetworkPolicies:
+  hydraPublicFrom:
+    - namespaceSelector: {}
+    - ipBlock:
+        cidr: 198.18.0.1/32
+    - ipBlock:
+        cidr: 10.244.0.1/32  # scrub:allow=private-ip -- k0s's default pod network gateway
 gateway:
   env:
     MCP_HEALTH_URL: http://sneakers-mcp:9101/livez
     HYDRA_ENABLED: 'true'
-    HYDRA_ISSUER: https://hydra.sneakers.box.invalid/  # scrub:allow=fqdn -- as values.yaml
+    HYDRA_ISSUER: https://{{ .Values.global.host }}/oauth
     MCP_ENABLED: 'true'
     OAUTH_PUBLIC_URL: https://{{ .Values.global.host }}
 web-staff:
