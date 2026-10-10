@@ -170,6 +170,7 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | Command | Console | SSH | In this release |
 |---|---|---|---|
 | `status` | yes | yes | accessd |
+| `disk cleanup` | yes | yes | accessd; runs the disk cleanup now and prints what each step freed ([disk-layout.md](disk-layout.md#the-cleanup)) |
 | `network show`, `network set key=value...`, `network confirm <token>` | yes | yes | accessd; `set` reverts in 120 s unless kept |
 | `network allow-list reset` | yes | no | accessd; typed `reset` |
 | `keys list` | yes | yes | accessd; keys are issued on :8443 |

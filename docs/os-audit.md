@@ -5,7 +5,9 @@ OS layer keeps its own log in `/var/lib/sneakers/os-audit/` on the encrypted sta
 
 ## The log
 
-One file per UTC day, `log-<YYYY-MM-DD>.jsonl`, mode 0600. Each line is one entry:
+One file per UTC day, `log-<YYYY-MM-DD>.jsonl`, mode 0600, rolling over to the day's next part
+(`log-<YYYY-MM-DD>.p0001.jsonl`, `.p0002` and so on) when a file reaches 16 MiB
+([Rotation and the archive](#rotation-and-the-archive)). Each line is one entry:
 
 | Field | Meaning |
 |---|---|
@@ -40,6 +42,30 @@ line breaks the chain at the next line. The newest line has no successor on the 
 platform is up, spec 3 forwards new entries to sneakers-audit and records the last forwarded hash,
 which covers it.
 
+## Rotation and the archive
+
+Rotation never breaks the chain. A part's first line is `os-audit.rotate`, written by the log
+itself (actor `os-audit`): `detail.previous` names the file before it, `detail.previousLines` and
+`detail.previousSha256` are that file's line count and the SHA-256 of its bytes (uncompressed). It
+chains to the file before it like any line, and verification also checks the recorded count and
+hash against that file while it's on the box, so a file cut down to its last line, which would
+still chain, fails too.
+
+The disk cleanup ([disk-layout.md](disk-layout.md#keeping-the-disk-from-filling)) compresses every
+closed file (all but the newest) to `.jsonl.gz`: written beside it, read back and compared, then the
+plain file goes. A file there both ways (a compress cut off before the plain one went) is read
+plain, and the next run redoes it. Verification, the Logs page and the export read the compressed
+files as they were written.
+
+Nothing is dropped without a warning first. The archive (the closed files) is held to 5% of the
+state volume, at least 512 MiB, and 2000 files. When it's over, its oldest files are flagged (in
+`.archive-flags.json`), and Status warns (`WARNING_KIND_AUDIT_ARCHIVE`) with how many, from which
+day and when they move, so an admin can export the log first. A day after a file was flagged it is
+copied to the backup volume's `os-audit-archive/`, synced and compared byte for byte, and only then
+removed here; the move is one `os-audit.archive.export` entry (`detail.files`, `detail.bytes`,
+`detail.first`, `detail.last`, `detail.to`). A file that can't move stays, still flagged. The oldest
+line left anchors the chain, as after retention pruning.
+
 ## Session recordings
 
 An elevated session is recorded in full, both directions, as asciicast v2 in
@@ -64,6 +90,10 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end; `rootshell.end` is `ok` with how it ended in `detail.reason` (`exit`, `idle`, `time-box`, `terminated`) |
 | `product.value.read` | accessd | an admin reads a value the product exposes (`<product> <name>` or `ProductService.GetExposedValue`): `detail.name`, `detail.state` `shown` or `consumed`; never the value ([ssh-and-elevation.md](ssh-and-elevation.md#product-values)) |
 | `mcp.set` | accessd | an admin sets the product's MCP and machine API switches (the MCP card on :8443, or `<product> mcp on\|off` with the `ssh` surface): `detail.mcp`, `detail.machineApi` `on` or `off` ([ssh-and-elevation.md](ssh-and-elevation.md#the-mcp-switch)) |
+| `disk.alert.start`, `disk.alert.clear` | accessd (the disk guard) | a volume reaches 80% (`detail.level` `warning`) or 90% (`critical`), or drops 5 points below the level (`detail.level` the level that cleared, `detail.now` the new one), with `detail.volume`, `detail.percent`, `detail.used` and `detail.total` ([disk-layout.md](disk-layout.md#alerts-and-warnings)) |
+| `disk.cleanup.run` | accessd (the disk guard) | every cleanup run, by itself (actor `disk-guard`) or for an admin: `detail.trigger` `timer`, `alert` or `admin`, `detail.freed` and `detail.freed.<step>`; outcome `partial` when a step failed (`detail.error.<step>`) |
+| `disk.cleanup` | accessd | an admin asks for the cleanup (Clean up now on :8443, or `disk cleanup`): `detail.freed` |
+| `os-audit.rotate`, `os-audit.archive.export` | the log itself | a file rolls over, or archived files move to the backup volume ([Rotation and the archive](#rotation-and-the-archive)) |
 | `clock.step` | netd | SNTP stepped the clock (`detail.server`, `detail.offsetMs`, `detail.at`: `boot` or `running`); small offsets are slewed and not audited ([network.md](network.md#dns-ntp-and-the-host-name)) |
 
 ## Reboot and shutdown

@@ -355,6 +355,25 @@ change. A secret setting in a ConfigMap, an unknown setting, a key that's more t
 generated, value and setting, and settings with no `email` section are refused. See
 [product-email.md](product-email.md).
 
+And it may declare its **data paths**, which the box's disk guard samples for growth
+([disk-layout.md](disk-layout.md#alerts-and-warnings)):
+
+```yaml
+data:
+  - name: database             # a lower-case word
+    label: The database        # what Status shows
+    path: postgres             # under /var/lib/sneakers-data, where the stacks' volumes are
+    wal: pgdata/pg_wal         # optional: the write-ahead log, under path
+    wal_warn: 1GiB             # with wal: the size Status warns past (KiB, MiB, GiB or TiB)
+```
+
+The box refuses a name that isn't a word or is declared twice, a missing label, a path that is
+absolute, unclean or leaves the data root, a `wal` that leaves its path, and a `wal` without a
+`wal_warn` or the other way round. The box never removes a WAL file: the product keeps its own
+within its settings. With no `data`, the guard samples every directory under the data root. The
+section is new in this release: an appliance older than it refuses a `product.yaml` that has one,
+so the base goes first.
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,
@@ -365,7 +384,9 @@ default, whose `sneakers-import` stack (`build/product/sneakers/import-stack.yam
 migrate service account, and the import, with its Job template in
 `build/product/sneakers/import-job.yaml`. Its box secrets are every Secret the
 Sneakers stacks read: the bundled PostgreSQL, Valkey, Kratos and Hydra credentials, the vault root
-key and TOTP key (`sneakers-box`) and the setup token it exposes.
+key and TOTP key (`sneakers-box`) and the setup token it exposes. Its data path is the database's
+(`postgres`, its WAL warned past 1 GiB), and its values hold PostgreSQL's WAL to `max_wal_size`
+512MB.
 
 - **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it

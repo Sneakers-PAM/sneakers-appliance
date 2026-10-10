@@ -202,7 +202,10 @@ and the like, but not the ones with their own line: reduced protection, the cloc
 self-signed certificate), an upgrade staged, reverted by an admin ("Reverted from 0.1.1 by alice at
 14:05 UTC", in the plain colour) or rolled back by boot counting, a factory reset waiting for approval or
 counting down (with **C** to cancel it), a Recover access code that's out, a service that isn't
-answering, and accessd itself not answering. Without a management address the screen offers **N**,
+answering, and accessd itself not answering. The disk guard's warnings are among Status's: a volume
+80% full, one growing fast, a write-ahead log over its limit and audit files about to move
+([disk-layout.md](disk-layout.md#alerts-and-warnings)); a critical one (90% full) is in the alert
+colour. Without a management address the screen offers **N**,
 the network editor. A failed update step is a warning for a day ("The update to 0.1.1 failed.",
 then the step and why), from Status's `upgrade_progress`. A reboot that never came is one: after
 10 minutes on the same boot the update fails at Rebooting with `UPGRADE_NO_REBOOT` and the
