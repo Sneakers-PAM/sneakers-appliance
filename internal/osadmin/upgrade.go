@@ -280,6 +280,31 @@ func (s *Server) endMaintenance() {
 
 func (s *Server) ownPath(name string) string { return filepath.Join(s.o.Paths.APIDir(), name) }
 
+// stagedIncludesFile records the Base Web the staged Base OS ships with,
+// "<version> <base web>", for GetUpgrades: init's status names only the
+// staged version.
+const stagedIncludesFile = "staged-includes"
+
+func (s *Server) saveStagedIncludes(version, web string) {
+	if err := os.WriteFile(s.ownPath(stagedIncludesFile), []byte(version+" "+web+"\n"), 0o600); err != nil { // #nosec G306 -- osadmin's own file
+		s.o.Logger.Warn("osadmin: the staged Base OS's Base Web wasn't recorded", log.F("version", version), log.F("error", err.Error()))
+	}
+}
+
+// stagedIncludes is the Base Web the staged Base OS ships with, when the
+// record is for that version.
+func (s *Server) stagedIncludes(staged string) string {
+	b, err := os.ReadFile(s.ownPath(stagedIncludesFile)) // #nosec G304 -- osadmin's own file
+	if err != nil || staged == "" {
+		return ""
+	}
+	v, web, _ := strings.Cut(strings.TrimSpace(string(b)), " ")
+	if v != staged {
+		return ""
+	}
+	return web
+}
+
 func (s *Server) policy() Policy {
 	p := DefaultPolicy()
 	if b, err := os.ReadFile(s.ownPath(policyFile)); err == nil { // #nosec G304 -- osadmin's own file
@@ -643,7 +668,8 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 		out.PreviousVersion, out.PreviousSlot = h.s.previous(st.Msg)
 		out.NextStageRemoves = st.Msg.GetNextStageRemoves()
 		out.UpgradeProgress = h.s.progressToWire(st.Msg)
-		out.BaseOsNote = h.s.baseOSNote(st.Msg.GetStagedVersion())
+		out.StagedIncludesBaseWeb = h.s.stagedIncludes(st.Msg.GetStagedVersion())
+		out.BaseOsNote = h.s.baseOSNote(st.Msg.GetStagedVersion(), out.StagedIncludesBaseWeb)
 	} else {
 		out.UpgradeProgress = h.s.progressToWire(nil)
 	}
@@ -956,6 +982,7 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 	if h.Target != nil {
 		pkg.FullBin = h.Target.FullBin
 	}
+	pkg.IncludesBaseWeb, _ = h.IncludesBaseWeb()
 	s.setVersion(h.Version)
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
@@ -1014,7 +1041,8 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 		return pkg, nil, err
 	}
 	s.removeUpload(path)
-	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version), log.F("removed", strings.Join(res.Msg.GetRemovedVersions(), ",")))
+	s.saveStagedIncludes(h.Version, pkg.GetIncludesBaseWeb())
+	s.o.Logger.Info("osadmin: update staged", log.F("version", h.Version), log.F("includesBaseWeb", pkg.GetIncludesBaseWeb()), log.F("removed", strings.Join(res.Msg.GetRemovedVersions(), ",")))
 	return pkg, res.Msg.GetRemovedVersions(), nil
 }
 

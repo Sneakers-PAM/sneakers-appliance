@@ -164,6 +164,16 @@ func CheckEpoch(h Header, epoch int) error {
 	return codes.New(codes.UpgradeEpoch, "the %s %s is for key epoch %d; this box takes epoch %d. A new major needs its entitlement and a full .bin of every unit", UnitOf(h).Title(), h.Version, h.EpochOf(), epoch)
 }
 
+// IncludesBaseWeb is the Base Web a Base OS release ships with, when its
+// header names one.
+func (h Header) IncludesBaseWeb() (string, bool) {
+	if UnitOf(h) != UnitBaseOS {
+		return "", false
+	}
+	v, ok := h.Includes[UnitBaseWeb]
+	return v, ok
+}
+
 // NeedsBaseOS is the Base OS range a Base Web package needs: the one its
 // header names, or the default for its version. Other units report false:
 // the Base OS needs nothing, and a product's range is its min_base and
@@ -241,6 +251,14 @@ func (h Header) checkUnit() error {
 		return codes.New(codes.UpgradeFormat, "the inputs digest %q isn't a SHA-256", h.Inputs)
 	case h.Epoch < 0:
 		return codes.New(codes.UpgradeFormat, "the epoch %d isn't a key epoch", h.Epoch)
+	}
+	for k, v := range h.Includes {
+		if u != UnitBaseOS || k != UnitBaseWeb {
+			return codes.New(codes.UpgradeFormat, "a %s names no includes.%s (a Base OS names includes.%s)", u.Title(), k, UnitBaseWeb)
+		}
+		if !versionRE.MatchString(v) {
+			return codes.New(codes.UpgradeFormat, "includes.%s is %q, which isn't a release version", k, v)
+		}
 	}
 	for k, r := range h.Requires {
 		if u != UnitBaseWeb || k != UnitBaseOS {

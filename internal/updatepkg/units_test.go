@@ -326,6 +326,44 @@ func TestTheReleaseOfAFileName(t *testing.T) {
 	}
 }
 
+// A Base OS release, full or patch, names the Base Web it ships with
+// (spec 7, Section 4.4): only a Base OS may, only a Base Web, and only by
+// a release version. The index carries it, so the box can say so before
+// the stage.
+func TestABaseOSNamesTheBaseWebItShipsWith(t *testing.T) {
+	ks := newKeySet(t)
+	full := baseOS("0.3.1", release.ChannelLab)
+	full.Includes = map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: "0.3.1"}
+	p := patch("0.3.1", "0.3.0", release.ChannelLab)
+	p.Includes = map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: "0.3.1"}
+	for name, h := range map[string]updatepkg.Header{"a full Base OS": full, "a Base OS patch": p} {
+		if _, err := updatepkg.Encrypt(strings.NewReader("x"), h, ks.enc.Recipient(), &bytes.Buffer{}); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+		if got, ok := h.IncludesBaseWeb(); !ok || got != "0.3.1" {
+			t.Errorf("%s: includes %q %v", name, got, ok)
+		}
+	}
+	onWeb := baseWeb("0.3.1", release.ChannelLab)
+	onWeb.Includes = map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: "0.3.1"}
+	product := baseOS("0.3.1", release.ChannelLab)
+	product.Includes = map[updatepkg.Unit]string{updatepkg.UnitProduct: "0.1.0"}
+	badVersion := baseOS("0.3.1", release.ChannelLab)
+	badVersion.Includes = map[updatepkg.Unit]string{updatepkg.UnitBaseWeb: "latest"}
+	for name, h := range map[string]updatepkg.Header{"a Base Web that includes one": onWeb, "a Base OS that includes a product": product, "a version that isn't one": badVersion} {
+		if _, err := updatepkg.Encrypt(strings.NewReader("x"), h, ks.enc.Recipient(), &bytes.Buffer{}); !codes.Is(err, codes.UpgradeFormat) {
+			t.Errorf("%s: want UPGRADE_FORMAT, got %v", name, err)
+		}
+	}
+	if _, ok := baseOS("0.3.0", release.ChannelLab).IncludesBaseWeb(); ok {
+		t.Fatal("a Base OS from before the rule names a Base Web")
+	}
+	idx := indexOf(t, full)
+	if got := idx.BaseOS[0].Includes[updatepkg.UnitBaseWeb]; got != "0.3.1" {
+		t.Fatalf("the index entry includes %q", got)
+	}
+}
+
 // A production box following the rc channel is offered an rc of each
 // unit; on the stable channel it isn't, as before.
 func TestAnRCBoxIsOfferedRCs(t *testing.T) {

@@ -103,6 +103,11 @@ type Header struct {
 	// Inputs is the SHA-256 of the unit's build inputs, which a release job
 	// compares to decide whether the unit changed.
 	Inputs string `json:"inputs,omitempty"`
+	// Includes names the other units a release ships with, by version: a
+	// Base OS release names its Base Web (spec 7, Section 4.4), whose
+	// pages are also the Base OS's own built-in pages. Absent on releases
+	// from before the rule.
+	Includes map[Unit]string `json:"includes,omitempty"`
 	// Method, Base and Target describe a patch (spec 5, Section 2.10.1).
 	Method string       `json:"method,omitempty"`
 	Base   *PatchBase   `json:"base,omitempty"`
