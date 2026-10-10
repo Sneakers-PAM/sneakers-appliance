@@ -458,3 +458,19 @@ func TestTheIndexListsEachFileByItsName(t *testing.T) {
 		t.Fatal("a file under another build's name was indexed")
 	}
 }
+
+// bin-inputs prints the input digest a .bin's header carries, so the
+// .inputs beside a unit is always the one it was built with; a .bin with
+// none is refused rather than given an empty sidecar.
+func TestBinInputsPrintsTheHeadersDigest(t *testing.T) {
+	tmp := t.TempDir()
+	inputs := strings.Repeat("d", 64)
+	bin := sealUnit(t, tmp, nil, "--unit", "baseOS", "--version", "0.0.0-lab.20261010n6-g1a2b3c4", "--commit", "1a2b3c4", "--inputs", inputs)
+	if got, err := runCmd(t, "bin-inputs", bin); err != nil || got != inputs {
+		t.Fatalf("bin-inputs %q %v", got, err)
+	}
+	none := sealUnit(t, filepath.Join(tmp, "none"), nil, "--unit", "baseOS", "--version", "0.0.0-lab.20261010n6-g1a2b3c4", "--commit", "1a2b3c4")
+	if got, err := runCmd(t, "bin-inputs", none); err == nil {
+		t.Fatalf("a .bin without inputs printed %q", got)
+	}
+}

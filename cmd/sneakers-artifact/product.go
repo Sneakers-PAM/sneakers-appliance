@@ -167,6 +167,28 @@ func binNameCmd() *cobra.Command {
 	return cmd
 }
 
+// binInputsCmd prints the input digest a .bin's header carries
+// (build/lab/units.sh inputs), so the .inputs written beside it is the one
+// it was built with, never one worked out again.
+func binInputsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "bin-inputs <file.bin>",
+		Short: "Print the input digest a .bin's header carries",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			h, _, err := indexHeader(args[0])
+			if err != nil {
+				return err
+			}
+			if h.Inputs == "" {
+				return fmt.Errorf("%s carries no input digest", args[0])
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), h.Inputs)
+			return err
+		},
+	}
+}
+
 func indexHeader(p string) (updatepkg.Header, int64, error) {
 	f, err := os.Open(p) // #nosec G304 -- a build output
 	if err != nil {

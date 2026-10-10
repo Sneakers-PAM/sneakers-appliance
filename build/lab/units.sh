@@ -50,6 +50,12 @@
 #              (the components aren't there when the units are sealed)
 #   STACKS     the product's stacks, for its input digest (default the lab
 #              stacks, build/lab/stacks)
+#   PRODUCT_YAML, IMPORT_JOB, BRAND
+#              the rest of what the product bundle is built from, for
+#              `inputs product`, as build/product/build.sh takes them
+#              (PRODUCT_YAML defaults to the lab's build/lab/product.yaml;
+#              set it empty for none). The sealed product's .inputs is read
+#              from its header (sneakers-artifact bin-inputs)
 #   UNITS      the output directory (default $OUT/units)
 #   BRIDGE     1 also writes the Base OS file under its old name and lists it
 #              in the index's legacy base section, for boxes before the units
@@ -105,17 +111,34 @@ inputs_baseweb() { # pages
   files "$1" | digest
 }
 
-# inputs_product: the release's pins (k0s, helm and every image digest)
-# and the stacks it applies.
-inputs_product() { # release.yaml stacks
-  { printf 'release %s\n' "$(sha256sum < "$1" | cut -d' ' -f1)"; files "$2" | sed 's|^|stacks/|'; } | digest
+# inputs_product: every file build/product/build.sh makes the bundle
+# from: the release's pins (k0s, helm and every image digest, the migrate
+# image among them), the stacks it applies, product.yaml, the import Job's
+# template and the brand. The image countersignatures aren't inputs: they
+# sign the digests release.yaml already pins. A file named but missing is
+# refused, so it's never silently left out.
+inputs_product() { # release.yaml stacks product.yaml import-job brand
+  local f
+  for f in "$1" "$3" "$4"; do
+    [ -z "$f" ] || [ -f "$f" ] || { echo "units: $f, a product input, isn't there" >&2; return 1; }
+  done
+  [ -z "$5" ] || [ -d "$5" ] || { echo "units: the brand $5 isn't a directory" >&2; return 1; }
+  {
+    printf 'release %s\n' "$(sha256sum < "$1" | cut -d' ' -f1)"
+    files "$2" | sed 's|^|stacks/|'
+    if [ -n "$3" ]; then printf 'product.yaml %s\n' "$(sha256sum < "$3" | cut -d' ' -f1)"; fi
+    if [ -n "$4" ]; then printf 'import-job %s\n' "$(sha256sum < "$4" | cut -d' ' -f1)"; fi
+    if [ -n "$5" ]; then files "$5" | sed 's|^|brand/|'; fi
+  } | digest
 }
 
 if [ "${1:-}" = inputs ]; then
   case "${2:-}" in
     baseOS) inputs_baseos ;;
     baseWeb) : "${PAGES:?PAGES is the built pages}"; inputs_baseweb "$PAGES" ;;
-    product) : "${RELEASE:?RELEASE is the release.yaml}"; inputs_product "$RELEASE" "${STACKS:-$here/stacks}" ;;
+    product)
+      : "${RELEASE:?RELEASE is the release.yaml}"
+      inputs_product "$RELEASE" "${STACKS:-$here/stacks}" "${PRODUCT_YAML-$here/product.yaml}" "${IMPORT_JOB:-}" "${BRAND:-}" ;;
     *) echo "units: inputs takes baseOS, baseWeb or product" >&2; exit 2 ;;
   esac
   exit 0
@@ -234,7 +257,9 @@ for b in ${CHECK_FROM:-}; do patch "$b" "$units/checked-only"; done
 for p in "$OUT"/product/sneakers-product-*.bin; do
   [ -f "$p" ] || continue
   cp "$p" "$units/"
-  printf '%s\n' "$(inputs_product "$OUT/work/release.yaml" "${STACKS:-$here/stacks}")" > "$units/$(basename "$p").inputs"
+  # The digest the bundle was built with, from its header: one worked out
+  # again here could miss an input the build had (its brand, say).
+  "$tool" bin-inputs "$p" > "$units/$(basename "$p").inputs"
 done
 
 # Each unit under its new name is checked; on lab it's also linked under

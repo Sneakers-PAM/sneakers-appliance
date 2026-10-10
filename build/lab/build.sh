@@ -197,7 +197,7 @@ done
 # The bundle fits the base built here and newer, unless PRODUCT_MIN_BASE and
 # PRODUCT_MAX_BASE say otherwise; BASES keeps it installable on boxes that
 # predate the range.
-product_inputs="$(RELEASE="$work/release.yaml" STACKS="$here/stacks" bash "$here/units.sh" inputs product)"
+product_inputs="$(RELEASE="$work/release.yaml" STACKS="$here/stacks" PRODUCT_YAML="$here/product.yaml" BRAND="${BRAND:-}" bash "$here/units.sh" inputs product)"
 INPUTS="$product_inputs" VERSION="$version" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
   SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" PRODUCT_YAML="$here/product.yaml" OUT="$work/product" \
   BRAND="${BRAND:-}" bash "$root/build/product/build.sh"

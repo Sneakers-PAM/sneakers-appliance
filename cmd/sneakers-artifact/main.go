@@ -36,7 +36,7 @@ func main() {
 
 func root() *cobra.Command {
 	r := &cobra.Command{Use: "sneakers-artifact", Short: "Assemble the sneakers-os artifact, attach its signature and pack the update package", SilenceUsage: true}
-	r.AddCommand(assembleCmd(), indexBlobCmd(), attachCmd(), labUpdateKeyCmd(), ukiAddKeyCmd(), binPackCmd(), binSealCmd(), binVerifyCmd(), productCheckCmd(), productIndexCmd(), binNameCmd(), pushCmd(), patchMakeCmd(), patchCheckCmd(), webPackCmd(), webCheckCmd(), releasePreviousCmd())
+	r.AddCommand(assembleCmd(), indexBlobCmd(), attachCmd(), labUpdateKeyCmd(), ukiAddKeyCmd(), binPackCmd(), binSealCmd(), binVerifyCmd(), productCheckCmd(), productIndexCmd(), binNameCmd(), binInputsCmd(), pushCmd(), patchMakeCmd(), patchCheckCmd(), webPackCmd(), webCheckCmd(), releasePreviousCmd())
 	return r
 }
 
