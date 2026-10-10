@@ -50,6 +50,35 @@ func TestEnsureCert(t *testing.T) {
 	}
 }
 
+// After a reboot the management addresses come back one at a time (the
+// IPv4 lease, then the IPv6 one), and sneakers-osadmin calls EnsureCert
+// for each set it sees. The certificate an admin checked on the console
+// keeps its fingerprint: a set the certificate already covers keeps it,
+// and only a name it doesn't cover makes a new one.
+func TestARebootsAddressesComingBackKeepTheCertificate(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 10, 10, 12, 0, 0, 0, time.UTC)
+	host, v4, v6 := "box1.sneakers.example.org", "192.0.2.10", "2001:db8::10"
+	_, first, err := osadmin.EnsureCert(dir, host, []string{v4, v6}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, addrs := range [][]string{{v4}, {v4, v6}, {v6}} {
+		_, got, err := osadmin.EnsureCert(dir, host, addrs, now.Add(time.Minute))
+		if err != nil || got.Fingerprint != first.Fingerprint {
+			t.Fatalf("addresses %v: fingerprint %s, want the one the box had, %s (%v)", addrs, got.Fingerprint, first.Fingerprint, err)
+		}
+		on, err := osadmin.ReadCertInfo(dir)
+		if err != nil || on.Fingerprint != first.Fingerprint {
+			t.Fatalf("addresses %v: Status names %s, want %s (%v)", addrs, on.Fingerprint, first.Fingerprint, err)
+		}
+	}
+	_, moved, err := osadmin.EnsureCert(dir, host, []string{v4, "192.0.2.20"}, now.Add(time.Minute))
+	if err != nil || moved.Fingerprint == first.Fingerprint {
+		t.Fatal("an address the certificate doesn't name makes a new one")
+	}
+}
+
 // accessd describes the certificate for Status without reading the key,
 // and doesn't follow a link sneakers-osadmin could plant.
 func TestReadCertInfo(t *testing.T) {
