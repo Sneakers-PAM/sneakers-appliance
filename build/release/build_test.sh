@@ -3,13 +3,14 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # build.sh refuses, before it fetches or builds anything, without the pinned
-# release.yaml and the sneakers-web checkout, and on a release.yaml that
-# pins an image by a placeholder instead of a digest, and says why.
+# release.yaml, the sneakers-web and sneakers-release checkouts and the
+# built service images, and on a release.yaml that pins a service by a
+# placeholder no image was built for, and says why.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-mkdir -p "$work/web"
+mkdir -p "$work/web" "$work/charts" "$work/images"
 cat > "$work/release.yaml" <<'YAML'
 apiVersion: sneakers-pam/v1alpha1
 kind: Release
@@ -31,7 +32,10 @@ refused() { # message env...
   grep -q "$msg" <<<"$out" || { echo "FAIL: $* said: $out" >&2; exit 1; }
   [ ! -e "$work/out" ] || { echo "FAIL: $* wrote $work/out before refusing" >&2; exit 1; }
 }
-refused "RELEASE" -u RELEASE WEB="$work/web"
-refused "WEB" -u WEB RELEASE="$work/release.yaml"
-refused "services.vault" RELEASE="$work/release.yaml" WEB="$work/web"
-echo "ok: refused without the pinned sources and on a placeholder digest"
+srcs=(WEB="$work/web" CHARTS="$work/charts" SERVICE_IMAGES="$work/images")
+refused "RELEASE" -u RELEASE "${srcs[@]}"
+refused "WEB" -u WEB RELEASE="$work/release.yaml" CHARTS="$work/charts" SERVICE_IMAGES="$work/images"
+refused "CHARTS" -u CHARTS RELEASE="$work/release.yaml" WEB="$work/web" SERVICE_IMAGES="$work/images"
+refused "SERVICE_IMAGES" -u SERVICE_IMAGES RELEASE="$work/release.yaml" WEB="$work/web" CHARTS="$work/charts"
+refused "services.vault" RELEASE="$work/release.yaml" "${srcs[@]}"
+echo "ok: refused without the pinned sources and the built images, and on a placeholder with no image built"

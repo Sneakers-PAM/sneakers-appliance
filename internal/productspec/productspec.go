@@ -91,6 +91,10 @@ type Spec struct {
 	// the box replaces with its own value when it puts the stack in front
 	// of k0s, so no bundle names a box (package boxvalues).
 	BoxValues []BoxValue `yaml:"box_values"`
+	// BoxSecrets are the Secrets the box makes for itself on the box
+	// (package boxsecrets): no bundle carries their values, so every box
+	// has its own, kept across updates and reverts.
+	BoxSecrets []BoxSecret `yaml:"box_secrets"`
 }
 
 // EscrowKey is one Secret key the recovery escrow carries.
@@ -213,6 +217,75 @@ type BoxValue struct {
 	Placeholder string `yaml:"placeholder"`
 }
 
+// BoxSecretsStack is the k0s stack the box secrets go into; a bundle may
+// not carry a stack of that name.
+const BoxSecretsStack = "sneakers-appliance-secrets"
+
+// The generators a box secret key may name.
+const (
+	// GeneratePassword is 32 letters and digits.
+	GeneratePassword = "password"
+	// GenerateKey32 is 32 random bytes, standard base64.
+	GenerateKey32 = "key32"
+	// GenerateToken is 32 random bytes, URL-safe base64 without padding.
+	GenerateToken = "token"
+)
+
+// BoxSecret is one Secret the box makes.
+type BoxSecret struct {
+	// Secret is <namespace>/<name>.
+	Secret string   `yaml:"secret"`
+	Keys   []BoxKey `yaml:"keys"`
+}
+
+// BoxKey is one key of a box secret: generated once (Generate), or a value
+// (Value) that may name generated keys as {key} (this Secret's) or
+// {secret/key} (another box secret's in the same namespace).
+type BoxKey struct {
+	Key      string `yaml:"key"`
+	Generate string `yaml:"generate"`
+	Value    string `yaml:"value"`
+}
+
+// Namespace is the Secret's namespace.
+func (b BoxSecret) Namespace() string { ns, _, _ := strings.Cut(b.Secret, "/"); return ns }
+
+// SecretName is the Secret's name.
+func (b BoxSecret) SecretName() string { _, n, _ := strings.Cut(b.Secret, "/"); return n }
+
+// Refs splits a box key's value into literal text and references, in
+// order: each reference is resolved to <namespace>/<secret>/<key>.
+func (b BoxSecret) Refs(value string) (parts []string, refs []bool, err error) {
+	for value != "" {
+		i := strings.IndexAny(value, "{}")
+		if i < 0 {
+			parts, refs = append(parts, value), append(refs, false)
+			break
+		}
+		if value[i] == '}' {
+			return nil, nil, errors.New("a } without a {")
+		}
+		if i > 0 {
+			parts, refs = append(parts, value[:i]), append(refs, false)
+		}
+		j := strings.IndexByte(value[i:], '}')
+		if j < 0 {
+			return nil, nil, errors.New("a { without a }")
+		}
+		ref := value[i+1 : i+j]
+		secret, key, other := strings.Cut(ref, "/")
+		if !other {
+			secret, key = b.SecretName(), ref
+		}
+		if !secretRE.MatchString(secret) || !keyRE.MatchString(key) {
+			return nil, nil, fmt.Errorf("{%s} isn't {key} or {secret/key}", ref)
+		}
+		parts, refs = append(parts, b.Namespace()+"/"+secret+"/"+key), append(refs, true)
+		value = value[i+j+1:]
+	}
+	return parts, refs, nil
+}
+
 // Component is one part of the product the bundle must carry.
 type Component struct {
 	Name  string `yaml:"name"`
@@ -312,6 +385,9 @@ func Parse(b []byte) (Spec, error) {
 	if err := s.checkParts(); err != nil {
 		return Spec{}, err
 	}
+	if err := s.checkBoxSecrets(); err != nil {
+		return Spec{}, err
+	}
 	seen := map[string]bool{}
 	for i, v := range s.ExposedValues {
 		if err := v.check(); err != nil {
@@ -375,6 +451,62 @@ func (s Spec) checkBoxValues() error {
 		seen[v.Value] = true
 		if !placeholderRE.MatchString(v.Placeholder) {
 			return bad("box_values[%d]: the placeholder %q isn't a lower-case name under .invalid", i, v.Placeholder)
+		}
+	}
+	return nil
+}
+
+func (s Spec) checkBoxSecrets() error {
+	generated := map[string]bool{}
+	secrets := map[string]bool{}
+	for i, b := range s.BoxSecrets {
+		ns, name, ok := strings.Cut(b.Secret, "/")
+		if !ok || !dnsRE.MatchString(ns) || !secretRE.MatchString(name) {
+			return bad("box_secrets[%d]: the secret %q isn't <namespace>/<name>", i, b.Secret)
+		}
+		if ns == Namespace {
+			return bad("box_secrets[%d]: %s is the appliance's own namespace", i, ns)
+		}
+		if secrets[b.Secret] {
+			return bad("box_secrets[%d]: %s is declared twice", i, b.Secret)
+		}
+		secrets[b.Secret] = true
+		if len(b.Keys) == 0 {
+			return bad("box_secrets[%d]: %s has no keys", i, b.Secret)
+		}
+		keys := map[string]bool{}
+		for j, k := range b.Keys {
+			if !keyRE.MatchString(k.Key) || keys[k.Key] {
+				return bad("box_secrets[%d].keys[%d]: %q isn't a Secret data key, or is declared twice", i, j, k.Key)
+			}
+			keys[k.Key] = true
+			switch {
+			case k.Generate != "" && k.Value != "", k.Generate == "" && k.Value == "":
+				return bad("box_secrets[%d].keys[%d]: %s is generated or a value, one of them", i, j, k.Key)
+			case k.Generate != "":
+				switch k.Generate {
+				case GeneratePassword, GenerateKey32, GenerateToken:
+				default:
+					return bad("box_secrets[%d].keys[%d]: the generator %q isn't %s, %s or %s", i, j, k.Generate, GeneratePassword, GenerateKey32, GenerateToken)
+				}
+				generated[b.Secret+"/"+k.Key] = true
+			}
+		}
+	}
+	for i, b := range s.BoxSecrets {
+		for j, k := range b.Keys {
+			if k.Value == "" {
+				continue
+			}
+			parts, refs, err := b.Refs(k.Value)
+			if err != nil {
+				return bad("box_secrets[%d].keys[%d]: %s: %v", i, j, k.Key, err)
+			}
+			for n, p := range parts {
+				if refs[n] && !generated[p] {
+					return bad("box_secrets[%d].keys[%d]: %s names %s, which isn't a generated box secret key", i, j, k.Key, p)
+				}
+			}
 		}
 	}
 	return nil

@@ -478,3 +478,106 @@ func TestABoxValueIsRefusedWhenItBreaksARule(t *testing.T) {
 		}
 	}
 }
+
+const withBoxSecrets = `format: 2
+box_secrets:
+  - secret: sneakers/sneakers-bundled
+    keys:
+      - {key: password, generate: password}
+      - {key: valkey-password, generate: password}
+      - {key: redis-url, value: "redis://:{valkey-password}@sneakers-valkey:6379/0"}
+  - secret: sneakers/sneakers-kratos
+    keys:
+      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-postgres:5432/k"}
+      - {key: smtpConnectionURI, value: "smtp://smtp.example.org:25/"}
+      - {key: cipher, generate: password}
+  - secret: sneakers/sneakers-box
+    keys:
+      - {key: VAULT_ROOT_KEK, generate: key32}
+      - {key: SETUP_TOKEN, generate: token}
+`
+
+// box_secrets are the Secrets the box makes for itself, once, on the box:
+// generated values and values built from them.
+func TestBoxSecretsParse(t *testing.T) {
+	s, err := productspec.Parse([]byte(withBoxSecrets))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.BoxSecrets) != 3 || s.BoxSecrets[0].Namespace() != "sneakers" || s.BoxSecrets[0].SecretName() != "sneakers-bundled" {
+		t.Fatalf("%+v", s.BoxSecrets)
+	}
+	k := s.BoxSecrets[0].Keys[2]
+	if k.Key != "redis-url" || k.Generate != "" || !strings.Contains(k.Value, "{valkey-password}") {
+		t.Fatalf("%+v", k)
+	}
+}
+
+func TestBoxSecretsAreRefusedWhenTheyBreakARule(t *testing.T) {
+	cases := map[string]string{
+		"no namespace":          "{secret: s, keys: [{key: a, generate: password}]}",
+		"no keys":               "{secret: ns/s, keys: []}",
+		"a bad key":             "{secret: ns/s, keys: [{key: 'a b', generate: password}]}",
+		"an unknown generator":  "{secret: ns/s, keys: [{key: a, generate: rot13}]}",
+		"neither":               "{secret: ns/s, keys: [{key: a}]}",
+		"both":                  "{secret: ns/s, keys: [{key: a, generate: password, value: x}]}",
+		"a key twice":           "{secret: ns/s, keys: [{key: a, generate: password}, {key: a, generate: token}]}",
+		"a ref to nothing":      "{secret: ns/s, keys: [{key: a, value: 'x{b}'}]}",
+		"a ref to a value":      "{secret: ns/s, keys: [{key: b, value: lit}, {key: a, value: 'x{b}'}]}",
+		"an unclosed brace":     "{secret: ns/s, keys: [{key: b, generate: password}, {key: a, value: 'x{b'}]}",
+		"a ref to another ns":   "{secret: ns/s, keys: [{key: a, value: '{other/b}'}]}",
+		"an unknown field":      "{secret: ns/s, keys: [{key: a, generate: password, length: 9}]}",
+		"the appliance's stack": "{secret: sneakers-appliance/s, keys: [{key: a, generate: password}]}",
+	}
+	for name, doc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := productspec.Parse([]byte("format: 2\nbox_secrets:\n  - " + doc + "\n")); !codes.Is(err, codes.KitBundleMismatch) {
+				t.Fatalf("err %v", err)
+			}
+		})
+	}
+	twice := "format: 2\nbox_secrets:\n  - {secret: ns/s, keys: [{key: a, generate: password}]}\n  - {secret: ns/s, keys: [{key: b, generate: password}]}\n"
+	if _, err := productspec.Parse([]byte(twice)); !codes.Is(err, codes.KitBundleMismatch) {
+		t.Fatalf("a secret twice: err %v", err)
+	}
+}
+
+// The Sneakers bundle declares every Secret its stacks read as a box
+// secret, so no value is baked into the bundle: the bundled pieces', the
+// vault root key and TOTP key, and the setup token it exposes.
+func TestTheSneakersBundleDeclaresItsBoxSecrets(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, bs := range s.BoxSecrets {
+		for _, k := range bs.Keys {
+			have[bs.Secret+"/"+k.Key] = true
+		}
+	}
+	for _, want := range []string{
+		"sneakers/sneakers-bundled/password", "sneakers/sneakers-bundled/postgres-password", "sneakers/sneakers-bundled/valkey-password", "sneakers/sneakers-bundled/redis-url",
+		"sneakers/sneakers-kratos/dsn", "sneakers/sneakers-kratos/secretsDefault", "sneakers/sneakers-kratos/secretsCookie", "sneakers/sneakers-kratos/secretsCipher", "sneakers/sneakers-kratos/smtpConnectionURI",
+		"sneakers/sneakers-hydra/dsn", "sneakers/sneakers-hydra/secretsSystem", "sneakers/sneakers-hydra/secretsCookie",
+		"sneakers/sneakers-box/VAULT_ROOT_KEK", "sneakers/sneakers-box/TOTP_ENC_KEY", "sneakers/sneakers-setup-token/SETUP_TOKEN",
+	} {
+		if !have[want] {
+			t.Errorf("no box secret %s", want)
+		}
+	}
+	v, _ := s.Find("setup-token")
+	if !have[v.Secret+"/"+v.Key] {
+		t.Errorf("the exposed setup token %s/%s isn't a box secret", v.Secret, v.Key)
+	}
+	// The keys the escrow carries are the ones the box made.
+	for _, e := range s.Escrow {
+		if !have[e.Secret+"/"+e.Key] {
+			t.Errorf("the escrow key %s (%s/%s) isn't a box secret", e.Name, e.Secret, e.Key)
+		}
+	}
+}
