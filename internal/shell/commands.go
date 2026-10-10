@@ -97,7 +97,12 @@ type spec struct {
 	// and only while a product is installed. The base shell never names
 	// one.
 	product bool
-	run     func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
+	// long and example are the command's help; {product} in an example
+	// is the installed product's name. keys are the key=value settings
+	// it takes, listed in its help from the same table its parser reads.
+	long, example string
+	keys          []Key
+	run           func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
 }
 
 var both = []Origin{OriginSSH, OriginConsole}
@@ -105,27 +110,67 @@ var both = []Origin{OriginSSH, OriginConsole}
 // The commands of later specs (later: true) answer NOT_AVAILABLE until
 // their services exist.
 var specs = []spec{
-	{path: "status", short: "Show the appliance status", action: "status", origins: both},
-	{path: "network show", short: "Show the network settings", action: "network.show", origins: both},
-	{path: "network set", use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{1, -1}, run: runNetworkSet},
-	{path: "network confirm", use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1}},
-	{path: "network allow-list reset", short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset"},
-	{path: "keys list", short: "List login keys", action: "keys.list", origins: both, flags: []flagSpec{{"admin", "the admin (owners only; default yourself)", ""}}},
-	{path: "admins list", short: "List the admins", action: "admins.list", origins: both},
-	{path: "recovery-key add", short: "Add a recovery key, read from standard input (up to three)", action: "recovery.add", origins: []Origin{OriginConsole}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}}},
-	{path: "setup recovery-key", short: "Set a recovery key during setup, read from standard input", action: "setup.recovery", origins: []Origin{OriginSSH}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}}},
+	{path: "status", short: "Show the appliance status", action: "status", origins: both,
+		long:    "Shows the host name, the version (and any staged one), the phase, the disk protection, the management addresses, NTP and the health of each service, with any warnings. While the appliance services are down it shows the last status they kept, with its time.",
+		example: "  status\n  status -o json"},
+	{path: "network show", short: "Show the network settings", action: "network.show", origins: both,
+		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.",
+		example: "  network show\n  network show -o json"},
+	{path: "network set", use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet,
+		long:    "Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.",
+		example: "  network set ?\n  network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org\n  network set time-zone=America/New_York\n  network set https-proxy="},
+	{path: "network confirm", use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
+		long:    "Keeps the network change the token names, so it doesn't revert. network set and network allow-list reset print the token.",
+		example: "  network confirm 7K2Q-MX4D"},
+	{path: "network allow-list reset", short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset",
+		long:    "Sets the management allow-list back to the subnets the box is on, for when a wrong list locks SSH and :8443 out. Console only; type reset to confirm. It reverts in 120 seconds unless kept with network confirm.",
+		example: "  network allow-list reset"},
+	{path: "keys list", short: "List login keys", action: "keys.list", origins: both, flags: []flagSpec{{"admin", "the admin (owners only; default yourself)", ""}},
+		long:    "Lists an admin's SSH login keys: fingerprint, type and comment. Without --admin it lists your own; an owner may name any admin. Keys are issued on :8443.",
+		example: "  keys list\n  keys list --admin alice"},
+	{path: "admins list", short: "List the admins", action: "admins.list", origins: both,
+		long:    "Lists the admins with their role (owner or admin) and how many login keys each has. Admins are added and removed on :8443.",
+		example: "  admins list\n  admins list -o json"},
+	{path: "recovery-key add", short: "Add a recovery key, read from standard input (up to three)", action: "recovery.add", origins: []Origin{OriginConsole}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
+		long:    "Adds a recovery key, an SSH public key read from standard input, and writes a new escrow file. Console only; a box keeps up to three.",
+		example: "  recovery-key add --label \"offline safe\""},
+	{path: "setup recovery-key", short: "Set a recovery key during setup, read from standard input", action: "setup.recovery", origins: []Origin{OriginSSH}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
+		long:    "Sets the first recovery key during setup: an SSH public key read from standard input. Over SSH, first boot only; it writes a new escrow file.",
+		example: "  ssh -t admin@box1.sneakers.example.org setup recovery-key --label safe < recovery.pub"},
 	{path: "shell", short: "Open the root shell (root operators): a challenge, then the code :8443 gives for it", action: "rootshell.begin", origins: []Origin{OriginSSH}, run: runRootShell,
-		flags: []flagSpec{{"reason", "why, for the audit log", ""}}},
-	{path: "tls show", short: "Show the TLS certificates", action: "tls.show", origins: both, later: true},
-	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true},
-	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true},
-	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true},
-	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp},
-	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true},
-	{path: "logs export", short: "Stream the logs as an archive to standard output", action: "logs.export", origins: []Origin{OriginSSH}, later: true},
-	{path: "support-bundle", short: "Stream a support bundle to standard output", action: "support.bundle", origins: []Origin{OriginSSH}, later: true},
-	{path: "reboot", short: "Reboot the appliance", action: "power.reboot", origins: both, confirm: "reboot"},
-	{path: "poweroff", short: "Shut the appliance down", action: "power.off", origins: both, confirm: "poweroff"},
+		flags:   []flagSpec{{"reason", "why, for the audit log", ""}},
+		long:    "Opens the root shell, for root operators. It prints a challenge; paste it on the Root shell page on :8443, give a fresh authenticator code there, and type the code that page gives you here. The session is time-boxed, recorded and audited. Needs a terminal (ssh -t).",
+		example: "  shell --reason \"check the k0s pods\""},
+	{path: "tls show", short: "Show the TLS certificates", action: "tls.show", origins: both, later: true,
+		long:    "Shows the TLS certificates the box serves. Not available in this release.",
+		example: "  tls show"},
+	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true,
+		long:    "Makes and lists backups. Not available in this release.",
+		example: "  backup"},
+	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true,
+		long:    "Restores the box from a backup. Not available in this release.",
+		example: "  restore"},
+	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true,
+		long:    "Stages and applies updates from the shell. Not available in this release; updates are done on :8443.",
+		example: "  upgrade status"},
+	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp,
+		long:    "Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit.",
+		example: "  {product} mcp\n  {product} mcp on\n  {product} mcp off machine-api=off"},
+	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true,
+		long:    "Shows and sets the resources the product may use. Not available in this release.",
+		example: "  resources"},
+	{path: "logs export", short: "Stream the logs as an archive to standard output", action: "logs.export", origins: []Origin{OriginSSH}, later: true,
+		long:    "Streams the box's logs as an archive to standard output, to save on your side. Over SSH only. Not available in this release.",
+		example: "  ssh admin@box1.sneakers.example.org logs export > logs.tar"},
+	{path: "support-bundle", short: "Stream a support bundle to standard output", action: "support.bundle", origins: []Origin{OriginSSH}, later: true,
+		long:    "Streams a support bundle (status, logs and settings, with no secrets) to standard output. Over SSH only. Not available in this release.",
+		example: "  ssh admin@box1.sneakers.example.org support-bundle > support.tar"},
+	{path: "reboot", short: "Reboot the appliance", action: "power.reboot", origins: both, confirm: "reboot",
+		long:    "Reboots the box gracefully: the services stop first. Type reboot to confirm.",
+		example: "  reboot"},
+	{path: "poweroff", short: "Shut the appliance down", action: "power.off", origins: both, confirm: "poweroff",
+		long:    "Shuts the box down gracefully: the services stop first. Type poweroff to confirm.",
+		example: "  poweroff"},
 }
 
 // Value is one value the installed product exposes to this session (its
@@ -147,7 +192,9 @@ func specsFor(p productinfo.Info, values []Value) []spec {
 		if short == "" {
 			short = p.Title + "'s " + v.Name
 		}
-		out = append(out, spec{path: v.Name, short: short + " (shown to the roles the product names)", action: "product.value", origins: []Origin{OriginSSH}, product: true, run: runValue(v.Name)})
+		out = append(out, spec{path: v.Name, short: short + " (shown to the roles the product names)", action: "product.value", origins: []Origin{OriginSSH}, product: true, run: runValue(v.Name),
+			long:    "Shows " + short + ", a value the installed product exposes to your role, with the link that takes it. A one-time value is removed once it has been used; after that this says so. Over SSH only.",
+			example: "  {product} " + v.Name})
 	}
 	return out
 }
@@ -324,6 +371,8 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "sneakers-shell",
 		Short:         "The appliance's closed shell",
+		Long:          "The appliance's closed shell: the commands below, nothing else. help <command> shows a command's purpose, what it takes and an example; -o json prints a result, or an error, as JSON.",
+		Example:       "  help\n  help network set\n  status -o json",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -335,7 +384,8 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 	groups := map[string]*cobra.Command{"": root}
 	if e.Product.Present() {
 		root.AddGroup(&cobra.Group{ID: groupProduct, Title: e.Product.Title + " commands (the installed product):"})
-		g := &cobra.Command{Use: e.Product.Name, Short: e.Product.Title + " commands", GroupID: groupProduct}
+		g := &cobra.Command{Use: e.Product.Name, Short: e.Product.Title + " commands", GroupID: groupProduct,
+			Long: "The commands of " + e.Product.Title + ", the installed product. They're offered only while it's installed."}
 		groups[e.Product.Name] = g
 		root.AddCommand(g)
 	}
@@ -355,7 +405,11 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 			key := strings.Join(parts[:j+1], " ")
 			g, ok := groups[key]
 			if !ok {
-				g = &cobra.Command{Use: parts[j], Short: parts[j] + " commands"}
+				doc := groupDoc[key]
+				if doc[0] == "" {
+					doc[0] = parts[j] + " commands"
+				}
+				g = &cobra.Command{Use: parts[j], Short: doc[0], Long: doc[1]}
 				if j == 0 {
 					g.GroupID = groupBase
 				}
@@ -370,7 +424,60 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 		}
 		parent.AddCommand(c)
 	}
+	root.InitDefaultHelpCmd()
+	for _, c := range root.Commands() {
+		if c.Name() == "help" {
+			c.Long = "Shows the commands, or one command's purpose, usage, flags, keys and an example."
+			c.Example = "  help\n  help network set\n  help keys list"
+		}
+	}
+	documentGroups(root)
 	return root
+}
+
+// groupDoc is each command group's short and long description; a
+// group's example is its commands' first examples.
+var groupDoc = map[string][2]string{
+	"network":            {"Network settings", "The network settings: show them, change them (with an automatic revert) and keep a change."},
+	"network allow-list": {"The management allow-list", "The management allow-list, the networks that may reach SSH and :8443."},
+	"keys":               {"Login keys", "The admins' SSH login keys. Keys are issued on :8443."},
+	"admins":             {"Admins", "The admins of this box. They're added and removed on :8443."},
+	"recovery-key":       {"Recovery keys", "The recovery keys, which open the box when no admin can."},
+	"setup":              {"First boot setup", "The steps of first boot that are done over SSH."},
+	"tls":                {"TLS certificates", "The TLS certificates the box serves."},
+	"logs":               {"Logs", "The box's logs."},
+}
+
+func documentGroups(c *cobra.Command) {
+	for _, sub := range c.Commands() {
+		documentGroups(sub)
+	}
+	if c.Example != "" || !c.HasSubCommands() {
+		return
+	}
+	var ex []string
+	for _, sub := range c.Commands() {
+		if first, _, _ := strings.Cut(sub.Example, "\n"); first != "" && !sub.Hidden {
+			ex = append(ex, first)
+		}
+	}
+	if len(ex) == 0 {
+		for _, sub := range c.Commands() {
+			if first, _, _ := strings.Cut(sub.Example, "\n"); first != "" {
+				ex = append(ex, first)
+			}
+		}
+	}
+	c.Example = strings.Join(ex, "\n")
+	if c.Long == "" {
+		c.Long = c.Short + "."
+	}
+}
+
+// Tree is the command tree a session in origin o sees with product p
+// installed and values exposed to its role, for the docs and the tests.
+func Tree(o Origin, p productinfo.Info, values ...Value) *cobra.Command {
+	return newRoot(context.Background(), &Env{Origin: o, Product: p, Values: values})
 }
 
 // The help's sections: the base appliance's commands, then the installed
@@ -385,10 +492,16 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 	if use == "" {
 		use = name
 	}
+	long := s.long
+	if len(s.keys) > 0 {
+		long += "\n\nKeys:\n" + strings.TrimRight(keyList(s.keys), "\n")
+	}
 	cmd := &cobra.Command{
-		Use:    use,
-		Short:  s.short,
-		Hidden: !slices.Contains(s.origins, e.Origin),
+		Use:     use,
+		Short:   s.short,
+		Long:    long,
+		Example: strings.ReplaceAll(s.example, "{product}", e.Product.Name),
+		Hidden:  !slices.Contains(s.origins, e.Origin),
 		Args: func(_ *cobra.Command, args []string) error {
 			lo, hi := s.nargs[0], s.nargs[1]
 			if len(args) < lo || hi >= 0 && len(args) > hi {
@@ -504,6 +617,12 @@ func yes(e *Env, prompt string) bool {
 }
 
 func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags map[string]string) (Result, error) {
+	if len(args) == 0 || len(args) == 1 && args[0] == "?" {
+		return Result{Text: "network set takes key=value pairs, applied on top of the current settings:\n\n" + keyList(networkKeys) + "\nThe interfaces' addresses are set on :8443 or the console's network screen.", Data: keyData(networkKeys)}, nil
+	}
+	if _, err := parseKeys("network set", networkKeys, args); err != nil {
+		return Result{}, err
+	}
 	res, err := e.Backend.Call(ctx, Request{Action: "network.set", Args: args, Flags: flags})
 	if err != nil {
 		return Result{}, err
