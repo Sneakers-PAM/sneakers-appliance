@@ -274,9 +274,19 @@ OS, so no code from a Base Web ever runs on the box; switching one changes the p
 - **Open browsers.** The set that was replaced keeps answering for files the new one lacks (an
   open page's hashed assets) until the next switch, and every API answer carries the served
   version in `X-Sneakers-Web-Version`, so a page built as another version offers a reload.
-- **At start** sneakers-osadmin serves the `current` slot when it passes the checks and fits the
-  running Base OS, else the root's built-in pages, which every Base OS still carries. Updates says
-  which (`GetUpgrades.base_web`: the served version, `slot` or `built-in`, and why).
+- **At start** sneakers-osadmin serves the `current` slot when it passes the checks, fits the
+  running Base OS and isn't older than the root's built-in pages, else those built-in pages, which
+  every Base OS carries. Updates says which (`GetUpgrades.base_web`: the served version, `slot` or
+  `built-in`, and why).
+- **A Base OS always ships with its Base Web** (spec 7, Section 4.4). Every Base OS release, full or
+  patch, is built with a Base Web of its own version from the same pages its root carries, and its
+  header names it (`includes.baseWeb`). Applying the Base OS applies that Base Web with it: after the
+  reboot the box serves the release's own pages unless the installed Base Web is newer (a Base Web-only
+  hotfix), so a Base OS never runs with an older Base Web. Reverting the Base OS reverts the pages the
+  same way: the older root's own pages, or the installed Base Web when it's newer than them. A Base Web
+  revert past the root's own pages ends on them. Updates says so on the Base OS card ("Includes Base Web
+  <version>", from `UnitOffer.includes_base_web` and `GetUpgrades.staged_includes_base_web`), with
+  `note` or `base_os_note` when the installed Base Web stops serving after the reboot.
 - **A Base OS update first.** The Base OS never waits for a Base Web: after a Base OS update whose
   pages the installed Base Web doesn't fit, the box serves the new root's built-in pages until a
   fitting Base Web is installed.

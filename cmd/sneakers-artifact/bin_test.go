@@ -402,3 +402,22 @@ func TestTheBaseWebSteps(t *testing.T) {
 		t.Fatalf("sealed %s", bin)
 	}
 }
+
+// A Base OS .bin names the Base Web it ships with (--includes-baseweb),
+// and the index carries it.
+func TestBinPackNamesTheBaseWebABaseOSShipsWith(t *testing.T) {
+	tmp := t.TempDir()
+	bin := sealUnit(t, tmp, nil, "--unit", "baseOS", "--version", "0.3.2", "--commit", "1a2b3c4", "--includes-baseweb", "0.3.2")
+	idx := filepath.Join(tmp, "index.json")
+	if _, err := runCmd(t, "index", "--out", idx, bin); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(idx) // #nosec G304 -- the test's own output
+	if !strings.Contains(string(b), `"includes": {`) || !strings.Contains(string(b), `"baseWeb": "0.3.2"`) {
+		t.Fatalf("index:\n%s", b)
+	}
+	if _, err := runCmd(t, "bin-pack", "--layout", filepath.Join(tmp, "layout"), "--recipient", filepath.Join(tmp, "keys", "update.pub"),
+		"--unit", "baseWeb", "--version", "0.3.2", "--includes-baseweb", "0.3.2", "--out", filepath.Join(tmp, "web-work")); err == nil {
+		t.Fatal("a Base Web named a Base Web it includes")
+	}
+}

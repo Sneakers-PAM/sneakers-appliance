@@ -256,6 +256,9 @@ message UpdatePackage {
   string full_bin = 12;
   // source is where the file came from: upload, mirror or direct.
   string source = 13;
+  // includes_base_web is the Base Web a Base OS release ships with (spec 7,
+  // Section 4.4); empty for a release from before the rule.
+  string includes_base_web = 14;
 }
 
 // HeldUpload is a received or fetched .bin that hasn't been staged or
@@ -397,6 +400,9 @@ message GetUpgradesResponse {
   // base_os_note says, for a staged Base OS whose built-in pages the
   // installed Base Web doesn't fit, what the box serves after the reboot.
   string base_os_note = 23;
+  // staged_includes_base_web is the Base Web the staged Base OS ships with;
+  // empty with none staged, or for a release from before the rule.
+  string staged_includes_base_web = 24;
 }
 
 // FetchProgress is a fetch of one .bin from a source.
@@ -456,6 +462,10 @@ message UnitOffer {
   bool outside_product_range = 10;
   string product_range = 11;
   string commit = 12;
+  // includes_base_web is the Base Web a Base OS release ships with, which
+  // the box serves after the reboot unless the installed one is newer;
+  // empty for a release from before the rule.
+  string includes_base_web = 13;
 }
 
 message CheckUpdatesRequest {}

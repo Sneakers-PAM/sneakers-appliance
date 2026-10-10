@@ -60,6 +60,8 @@ type IndexEntry struct {
 	Commit   string         `json:"commit,omitempty"`
 	Requires map[Unit]Range `json:"requires,omitempty"`
 	Inputs   string         `json:"inputs,omitempty"`
+	// Includes is a Base OS release's Base Web, copied from the header.
+	Includes map[Unit]string `json:"includes,omitempty"`
 	// BaseRootSHA256 is a patch's base root image, so a box offers a patch
 	// only for the exact root it runs.
 	BaseRootSHA256 string `json:"base_root_sha256,omitempty"`
@@ -74,7 +76,7 @@ func EntryOf(h Header, size int64) IndexEntry {
 		kind = ""
 	}
 	e := IndexEntry{Kind: kind, Version: h.Version, Arch: h.Arch, Channel: h.Channel, Bases: slices.Clone(h.Bases), MinBase: h.MinBase, MaxBase: h.MaxBase, File: FileName(h), Size: size,
-		Epoch: h.Epoch, Commit: h.Commit, Requires: h.Requires, Inputs: h.Inputs}
+		Epoch: h.Epoch, Commit: h.Commit, Requires: h.Requires, Inputs: h.Inputs, Includes: h.Includes}
 	if h.Base != nil {
 		e.BaseRootSHA256 = h.Base.RootSHA256
 	}
@@ -89,7 +91,7 @@ func (e IndexEntry) header(u Unit) Header {
 		k = KindProduct
 	}
 	h := Header{Format: Format, Version: e.Version, Arch: e.Arch, Kind: k, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel,
-		Epoch: e.Epoch, Commit: e.Commit, Requires: e.Requires, Inputs: e.Inputs}
+		Epoch: e.Epoch, Commit: e.Commit, Requires: e.Requires, Inputs: e.Inputs, Includes: e.Includes}
 	if u == UnitBaseOS || u == UnitBaseWeb {
 		h.Unit = u
 	}

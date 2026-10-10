@@ -403,6 +403,17 @@ jobs:
             fi
           done
           (cd "$units" && sha256sum -c --quiet SHA256SUMS)
+          # A Base OS always ships with its Base Web (spec 7, Section 4.4):
+          # the Base OS names the Base Web of its own version, and it's here.
+          python3 - "$units/sneakers-product-index.json" "$VERSION" <<'PY'
+          import json, sys
+          idx, v = json.load(open(sys.argv[1])), sys.argv[2]
+          os_ = [e for e in idx.get("baseOS", []) if e["version"] == v]
+          web = [e["version"] for e in idx.get("baseWeb", [])]
+          assert os_ and all((e.get("includes") or {}).get("baseWeb") == v for e in os_), f"the Base OS {v} doesn't name Base Web {v}: {os_}"
+          assert v in web, f"Base Web {v} isn't in the release: {web}"
+          print(f"the Base OS {v} ships with Base Web {v}")
+          PY
           {
             echo "### Signed units ${VERSION} (amd64)"
             echo '```'

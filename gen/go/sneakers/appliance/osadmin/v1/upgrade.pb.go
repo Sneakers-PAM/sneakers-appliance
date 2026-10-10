@@ -644,9 +644,12 @@ type UpdatePackage struct {
 	// instead when the patch doesn't fit or doesn't rebuild.
 	FullBin string `protobuf:"bytes,12,opt,name=full_bin,json=fullBin,proto3" json:"full_bin,omitempty"`
 	// source is where the file came from: upload, mirror or direct.
-	Source        string `protobuf:"bytes,13,opt,name=source,proto3" json:"source,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Source string `protobuf:"bytes,13,opt,name=source,proto3" json:"source,omitempty"`
+	// includes_base_web is the Base Web a Base OS release ships with (spec 7,
+	// Section 4.4); empty for a release from before the rule.
+	IncludesBaseWeb string `protobuf:"bytes,14,opt,name=includes_base_web,json=includesBaseWeb,proto3" json:"includes_base_web,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpdatePackage) Reset() {
@@ -766,6 +769,13 @@ func (x *UpdatePackage) GetFullBin() string {
 func (x *UpdatePackage) GetSource() string {
 	if x != nil {
 		return x.Source
+	}
+	return ""
+}
+
+func (x *UpdatePackage) GetIncludesBaseWeb() string {
+	if x != nil {
+		return x.IncludesBaseWeb
 	}
 	return ""
 }
@@ -1258,9 +1268,12 @@ type GetUpgradesResponse struct {
 	FetchProgress *FetchProgress `protobuf:"bytes,22,opt,name=fetch_progress,json=fetchProgress,proto3" json:"fetch_progress,omitempty"`
 	// base_os_note says, for a staged Base OS whose built-in pages the
 	// installed Base Web doesn't fit, what the box serves after the reboot.
-	BaseOsNote    string `protobuf:"bytes,23,opt,name=base_os_note,json=baseOsNote,proto3" json:"base_os_note,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BaseOsNote string `protobuf:"bytes,23,opt,name=base_os_note,json=baseOsNote,proto3" json:"base_os_note,omitempty"`
+	// staged_includes_base_web is the Base Web the staged Base OS ships with;
+	// empty with none staged, or for a release from before the rule.
+	StagedIncludesBaseWeb string `protobuf:"bytes,24,opt,name=staged_includes_base_web,json=stagedIncludesBaseWeb,proto3" json:"staged_includes_base_web,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GetUpgradesResponse) Reset() {
@@ -1454,6 +1467,13 @@ func (x *GetUpgradesResponse) GetBaseOsNote() string {
 	return ""
 }
 
+func (x *GetUpgradesResponse) GetStagedIncludesBaseWeb() string {
+	if x != nil {
+		return x.StagedIncludesBaseWeb
+	}
+	return ""
+}
+
 // FetchProgress is a fetch of one .bin from a source.
 type FetchProgress struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -1643,8 +1663,12 @@ type UnitOffer struct {
 	OutsideProductRange bool   `protobuf:"varint,10,opt,name=outside_product_range,json=outsideProductRange,proto3" json:"outside_product_range,omitempty"`
 	ProductRange        string `protobuf:"bytes,11,opt,name=product_range,json=productRange,proto3" json:"product_range,omitempty"`
 	Commit              string `protobuf:"bytes,12,opt,name=commit,proto3" json:"commit,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// includes_base_web is the Base Web a Base OS release ships with, which
+	// the box serves after the reboot unless the installed one is newer;
+	// empty for a release from before the rule.
+	IncludesBaseWeb string `protobuf:"bytes,13,opt,name=includes_base_web,json=includesBaseWeb,proto3" json:"includes_base_web,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UnitOffer) Reset() {
@@ -1757,6 +1781,13 @@ func (x *UnitOffer) GetProductRange() string {
 func (x *UnitOffer) GetCommit() string {
 	if x != nil {
 		return x.Commit
+	}
+	return ""
+}
+
+func (x *UnitOffer) GetIncludesBaseWeb() string {
+	if x != nil {
+		return x.IncludesBaseWeb
 	}
 	return ""
 }
@@ -3096,7 +3127,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x04size\x18\x06 \x01(\x03R\x04size\x12\x16\n" +
 	"\x06source\x18\a \x01(\tR\x06source\x12\x19\n" +
 	"\bmin_base\x18\b \x01(\tR\aminBase\x12\x19\n" +
-	"\bmax_base\x18\t \x01(\tR\amaxBase\"\xf8\x02\n" +
+	"\bmax_base\x18\t \x01(\tR\amaxBase\"\xa4\x03\n" +
 	"\rUpdatePackage\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x12\n" +
@@ -3111,7 +3142,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	" \x01(\tR\aminBase\x12\x19\n" +
 	"\bmax_base\x18\v \x01(\tR\amaxBase\x12\x19\n" +
 	"\bfull_bin\x18\f \x01(\tR\afullBin\x12\x16\n" +
-	"\x06source\x18\r \x01(\tR\x06source\"\xaf\x01\n" +
+	"\x06source\x18\r \x01(\tR\x06source\x12*\n" +
+	"\x11includes_base_web\x18\x0e \x01(\tR\x0fincludesBaseWeb\"\xaf\x01\n" +
 	"\n" +
 	"HeldUpload\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1b\n" +
@@ -3151,7 +3183,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"started_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x14\n" +
-	"\x12GetUpgradesRequest\"\xb3\n" +
+	"\x12GetUpgradesRequest\"\xec\n" +
 	"\n" +
 	"\x13GetUpgradesResponse\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12%\n" +
@@ -3183,7 +3215,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"last_check\x18\x15 \x01(\v23.sneakers.appliance.osadmin.v1.CheckUpdatesResponseR\tlastCheck\x12S\n" +
 	"\x0efetch_progress\x18\x16 \x01(\v2,.sneakers.appliance.osadmin.v1.FetchProgressR\rfetchProgress\x12 \n" +
 	"\fbase_os_note\x18\x17 \x01(\tR\n" +
-	"baseOsNote\"\x83\x04\n" +
+	"baseOsNote\x127\n" +
+	"\x18staged_includes_base_web\x18\x18 \x01(\tR\x15stagedIncludesBaseWeb\"\x83\x04\n" +
 	"\rFetchProgress\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\x12C\n" +
 	"\x06target\x18\x02 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x14\n" +
@@ -3204,7 +3237,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\bverified\x18\v \x01(\bR\bverified\x12\x14\n" +
 	"\x05error\x18\f \x01(\tR\x05error\x12\x12\n" +
 	"\x04code\x18\r \x01(\tR\x04code\x12\x1b\n" +
-	"\tupload_id\x18\x0e \x01(\tR\buploadId\"\xfe\x02\n" +
+	"\tupload_id\x18\x0e \x01(\tR\buploadId\"\xaa\x03\n" +
 	"\tUnitOffer\x12C\n" +
 	"\x06target\x18\x01 \x01(\x0e2+.sneakers.appliance.osadmin.v1.UpdateTargetR\x06target\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x12\n" +
@@ -3218,7 +3251,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x15outside_product_range\x18\n" +
 	" \x01(\bR\x13outsideProductRange\x12#\n" +
 	"\rproduct_range\x18\v \x01(\tR\fproductRange\x12\x16\n" +
-	"\x06commit\x18\f \x01(\tR\x06commit\"\x15\n" +
+	"\x06commit\x18\f \x01(\tR\x06commit\x12*\n" +
+	"\x11includes_base_web\x18\r \x01(\tR\x0fincludesBaseWeb\"\x15\n" +
 	"\x13CheckUpdatesRequest\"\x90\x03\n" +
 	"\x14CheckUpdatesResponse\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x10\n" +

@@ -28,6 +28,7 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/webslots"
 )
 
 // The policy's sources.
@@ -264,14 +265,13 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 	roomForPatch := s.memAvailable() < 0 || s.memAvailable() >= s.patchMinFree()
 	preferred := ""
 	for _, e := range idx.OfferBaseOS(b) {
-		o := &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Bases: e.Bases, Commit: e.Commit}
+		o := &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Bases: e.Bases, Commit: e.Commit,
+			IncludesBaseWeb: e.Includes[updatepkg.UnitBaseWeb]}
 		if hasProduct && inst.HasRange() && !inst.InRange(e.Version) {
 			o.OutsideProductRange, o.ProductRange = true, inst.RangeText()
 		}
 		if hasWeb {
-			if need, _ := web.NeedsBaseOS(); !need.Contains(e.Version) {
-				o.Note = "After the reboot the box serves the built-in pages of " + e.Version + " until a Base Web that fits it is installed (the installed Base Web " + web.Version + " needs Base OS " + need.Text() + ")."
-			}
+			o.Note = webAfterBaseOS(web, e.Version, o.GetIncludesBaseWeb())
 		}
 		if preferred == "" && (e.Kind == string(updatepkg.KindFull) || roomForPatch) {
 			o.Preferred, preferred = true, e.Version
@@ -300,9 +300,25 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 	return out
 }
 
-// baseOSNote is GetUpgrades' note on a staged Base OS whose built-in
-// pages the installed Base Web doesn't fit.
-func (s *Server) baseOSNote(staged string) string {
+// webAfterBaseOS says what :8443 serves after a Base OS update to version,
+// which ships with Base Web includes ("" for a release from before the
+// rule), when the Base Web web is installed: the built-in pages of the
+// new Base OS when web doesn't fit it, or when the release's own Base Web
+// is newer than web (the box never serves an older Base Web than its own
+// pages); "" when web keeps serving.
+func webAfterBaseOS(web updatepkg.Header, version, includes string) string {
+	if need, _ := web.NeedsBaseOS(); !need.Contains(version) {
+		return "After the reboot the box serves the built-in pages of " + version + " until a Base Web that fits it is installed (the installed Base Web " + web.Version + " needs Base OS " + need.Text() + ")."
+	}
+	if includes != "" && webslots.Newer(includes, web.Version) {
+		return "After the reboot the box serves Base Web " + includes + ", which this release includes, in place of the installed Base Web " + web.Version + "."
+	}
+	return ""
+}
+
+// baseOSNote is GetUpgrades' note on a staged Base OS, which ships with
+// Base Web includes, when the installed Base Web won't serve after it.
+func (s *Server) baseOSNote(staged, includes string) string {
 	if staged == "" {
 		return ""
 	}
@@ -310,8 +326,5 @@ func (s *Server) baseOSNote(staged string) string {
 	if !ok {
 		return ""
 	}
-	if need, _ := web.NeedsBaseOS(); !need.Contains(staged) {
-		return "After the reboot the box serves the built-in pages of " + staged + " until a Base Web that fits it is installed (the installed Base Web " + web.Version + " needs Base OS " + need.Text() + ")."
-	}
-	return ""
+	return webAfterBaseOS(web, staged, includes)
 }

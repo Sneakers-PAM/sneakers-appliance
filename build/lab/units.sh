@@ -12,7 +12,7 @@
 #   sneakers-appliance-baseOS-<version>-amd64-LAB.bin   the Base OS full release
 #   sneakers-appliance-<version>-amd64-LAB.bin          its bridge copy (BRIDGE=1)
 #   sneakers-appliance-baseOS-patch-<v>-from-<b>-...    a Base OS patch from each PATCH_FROM build
-#   sneakers-appliance-baseWeb-<version>-amd64-LAB.bin  the Base Web (when the build made pages)
+#   sneakers-appliance-baseWeb-<version>-amd64-LAB.bin  the Base Web, always: every Base OS ships with one
 #   sneakers-product-<version>-amd64-LAB.bin            the product bundle, as the build made it
 #   sneakers-product-index.json                         the format 2 index over all of them
 #
@@ -125,6 +125,8 @@ esac
 if [ -n "${BASEOS_INPUTS:-}" ] && ! [[ "$BASEOS_INPUTS" =~ ^[0-9a-f]{64}$ ]]; then
   echo "units: BASEOS_INPUTS isn't a SHA-256" >&2; exit 1
 fi
+pages="$OUT/work/osadmin"
+[ -f "$pages/index.html" ] || { echo "units: a Base OS always ships with its Base Web, and $pages has no :8443 pages (build with WEB set)" >&2; exit 1; }
 export COSIGN_PASSWORD="${COSIGN_PASSWORD:-}"
 work="$OUT/work/units"
 rm -rf "$work"
@@ -157,8 +159,19 @@ seal() { # name layout dir inputs [bin-pack args...]
 }
 
 echo "units: $version"
+# The Base Web first: every Base OS release, full or patch, names the Base
+# Web it ships with (spec 7, Section 4.4), built from the same pages its
+# root carries, with a new version stamp even when the pages didn't change.
+webin="$(inputs_baseweb "$pages")"
+payload="$work/web-payload"
+rm -rf "$payload"
+manifest="$("$tool" web-pack --pages "$pages" --version "$version" --commit "$commit" --out "$payload" ${WEB_REQUIRES_MIN:+--requires-baseos-min "$WEB_REQUIRES_MIN"} ${WEB_REQUIRES_BEFORE:+--requires-baseos-before "$WEB_REQUIRES_BEFORE"})"
+sign_blob "$manifest" "$payload/web.yaml.sig"
+"$tool" web-check --dir "$payload" --release-key "$KEYS/cosign.pub"
+webbin="$(seal baseweb "$payload" "$units" "$webin" --unit baseWeb --version "$version" ${WEB_REQUIRES_MIN:+--requires-baseos-min "$WEB_REQUIRES_MIN"} ${WEB_REQUIRES_BEFORE:+--requires-baseos-before "$WEB_REQUIRES_BEFORE"})"
+echo "units: Base Web $(basename "$webbin") ($(stat -c %s "$webbin") bytes, inputs $webin)"
 osin="${BASEOS_INPUTS:-$(inputs_baseos)}"
-osbin="$(seal baseos "$OUT/artifact" "$units" "$osin" --unit baseOS --version "$version")"
+osbin="$(seal baseos "$OUT/artifact" "$units" "$osin" --unit baseOS --version "$version" --includes-baseweb "$version")"
 echo "units: Base OS $(basename "$osbin") ($(stat -c %s "$osbin") bytes, inputs $osin)"
 "$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel "$channel" --identity-uki "$OUT/work/sneakers-$version.efi" "$osbin"
 if [ "${BRIDGE:-}" = 1 ]; then
@@ -166,20 +179,6 @@ if [ "${BRIDGE:-}" = 1 ]; then
   cmp "$osbin" "$legacy" || { echo "units: the bridge copy isn't the same file" >&2; exit 1; }
   cp "$osbin.inputs" "$legacy.inputs"
   echo "units: bridge $(basename "$legacy")"
-fi
-
-pages="$OUT/work/osadmin"
-if [ -f "$pages/index.html" ]; then
-  webin="$(inputs_baseweb "$pages")"
-  payload="$work/web-payload"
-  rm -rf "$payload"
-  manifest="$("$tool" web-pack --pages "$pages" --version "$version" --commit "$commit" --out "$payload" ${WEB_REQUIRES_MIN:+--requires-baseos-min "$WEB_REQUIRES_MIN"} ${WEB_REQUIRES_BEFORE:+--requires-baseos-before "$WEB_REQUIRES_BEFORE"})"
-  sign_blob "$manifest" "$payload/web.yaml.sig"
-  "$tool" web-check --dir "$payload" --release-key "$KEYS/cosign.pub"
-  webbin="$(seal baseweb "$payload" "$units" "$webin" --unit baseWeb --version "$version" ${WEB_REQUIRES_MIN:+--requires-baseos-min "$WEB_REQUIRES_MIN"} ${WEB_REQUIRES_BEFORE:+--requires-baseos-before "$WEB_REQUIRES_BEFORE"})"
-  echo "units: Base Web $(basename "$webbin") ($(stat -c %s "$webbin") bytes, inputs $webin)"
-else
-  echo "units: the build made no :8443 pages (WEB unset); no Base Web"
 fi
 
 # patch makes a patch from base (a build output) into dir and checks it.
@@ -190,7 +189,7 @@ patch() { # base dir
   rm -rf "$w"
   "$tool" patch-make --base "$base/artifact" --target "$OUT/artifact" --out "$w" --zstd "${ZSTD:-zstd}"
   local pbin
-  pbin="$(seal "patch-$bv" "$w/payload" "$dir" "$osin" --unit baseOS --version "$version" --patch-spec "$w/patch-spec.json")"
+  pbin="$(seal "patch-$bv" "$w/payload" "$dir" "$osin" --unit baseOS --version "$version" --includes-baseweb "$version" --patch-spec "$w/patch-spec.json")"
   # Open it as a box on the base does, with the base's own UKI, rebuild the
   # target from the base, and verify the result with the base's kit.
   rm -rf "$w/rebuilt"

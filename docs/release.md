@@ -51,6 +51,8 @@ lays out the payload, `pages/` and `web.yaml` (with `--requires-baseos-min` and
 `--requires-baseos-before` for a range other than its own major.minor); the build signs
 `web.yaml` into `web.yaml.sig` with the release key, `web-check --dir <dir>` loads it the way
 :8443 does, and `bin-pack --unit baseWeb --layout <dir>` packs it, one file per architecture.
+Every Base OS release ships with one: `build/lab/units.sh` refuses a build without the pages, seals
+the Base Web first, and passes `bin-pack --includes-baseweb <version>` for the Base OS and each patch.
 
 **The bridge.** A box on build l fetches only the old names and can't apply a patch or a Base Web.
 The m release publishes its Base OS full file a second time under the old name (the same bytes;
@@ -76,6 +78,7 @@ The header:
 | `commit` | the short commit the file was built from; its name carries it |
 | `epoch` | the signing-key generation it needs; absent reads as 1. A box takes only units of its own epoch (`UPGRADE_EPOCH`); a patch never crosses one |
 | `requires` | a Base Web's `baseOS` range, `min` inclusive and `before` exclusive; absent, the same major.minor as its version (lab ranges take the lab pre-releases). A product's range stays `min_base` and `max_base` |
+| `includes` | a Base OS release's `baseWeb`: the version of the Base Web it ships with (the same version, from the same pages). `build/lab/units.sh` always seals the Base Web first and names it on the Base OS and its patches; the release job checks the pair. Absent on releases from before the rule |
 | `inputs` | the SHA-256 of the unit's build inputs, which the release job compares with the last published release to decide whether the unit changed (`build/lab/units.sh inputs`) |
 | `version`, `arch` | the release version (SemVer, pre-release identifiers may hold hyphens, as a lab build number does: `0.0.0-lab.20261007d-g1a2b3c4`), `amd64` or `arm64` |
 | `kind` | `full`, or `patch` for a Base OS delta |

@@ -139,8 +139,8 @@ func (s *Server) applyWeb(ctx context.Context, by osaudit.Entry) (string, error)
 	return h.Version, err
 }
 
-// revertWeb goes back to the previous web slot, or with none to the
-// built-in pages. A previous Base Web that doesn't fit the running Base
+// revertWeb goes back to the previous web slot, or with none (or one
+// older than the root's own pages) to the built-in pages. A previous Base Web that doesn't fit the running Base
 // OS is refused (UPGRADE_COMPAT).
 func (s *Server) revertWeb(ctx context.Context, by osaudit.Entry) (string, error) {
 	sl := s.webSlots()
@@ -158,6 +158,11 @@ func (s *Server) revertWeb(ctx context.Context, by osaudit.Entry) (string, error
 		if err = berr; err == nil {
 			err = updatepkg.FitsBaseOS(h, base, "")
 		}
+	}
+	if slot != "" && webslots.Newer(s.builtinWebVersion(), back) {
+		// The watcher never serves a Base Web older than the root's own
+		// pages, so the revert ends on those.
+		back, slot = s.builtinWebVersion(), ""
 	}
 	if err == nil {
 		s.beginProgress("revert", osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB, back, slot)

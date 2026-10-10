@@ -33,17 +33,24 @@ type webBox struct {
 
 func newWebBox(t *testing.T) *webBox {
 	t.Helper()
-	wb := &webBox{webDir: filepath.Join(t.TempDir(), "web"), served: filepath.Join(t.TempDir(), "web-served.json")}
+	return newWebBoxOn(t, filepath.Join(t.TempDir(), "web"), "0.1.0")
+}
+
+// newWebBoxOn is a web box on the web slots in webDir whose root's own
+// pages are builtin, as after a Base OS update.
+func newWebBoxOn(t *testing.T, webDir, builtinVersion string) *webBox {
+	t.Helper()
+	wb := &webBox{webDir: webDir, served: filepath.Join(t.TempDir(), "web-served.json")}
 	wb.box = newBox(t, false, func(_ *box, o *osadmin.Options) {
-		o.Upgrade.WebDir, o.Upgrade.WebServedFile, o.Upgrade.WebSwitchWait, o.Upgrade.BuiltinWebVersion = wb.webDir, wb.served, 3*time.Second, "0.1.0"
+		o.Upgrade.WebDir, o.Upgrade.WebServedFile, o.Upgrade.WebSwitchWait, o.Upgrade.BuiltinWebVersion = wb.webDir, wb.served, 3*time.Second, builtinVersion
 	})
 	key, err := sigbundle.ParsePublicKey(wb.sign.PublicPEM)
 	if err != nil {
 		t.Fatal(err)
 	}
 	builtin := fstest.MapFS{"index.html": {Data: []byte("built-in")}}
-	wb.live = webslots.NewLive(builtin, "0.1.0")
-	w := &webslots.Watcher{Slots: webslots.Slots{Dir: wb.webDir}, Key: key, Channel: release.ChannelProduction, BaseOS: "0.1.0", Builtin: builtin, BuiltinVersion: "0.1.0", Live: wb.live, StatusFile: wb.served}
+	wb.live = webslots.NewLive(builtin, builtinVersion)
+	w := &webslots.Watcher{Slots: webslots.Slots{Dir: wb.webDir}, Key: key, Channel: release.ChannelProduction, BaseOS: "0.1.0", Builtin: builtin, BuiltinVersion: builtinVersion, Live: wb.live, StatusFile: wb.served}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	go w.Run(ctx, 20*time.Millisecond)
@@ -275,5 +282,36 @@ func TestAStagedBaseOSSaysWhichPagesServeAfterTheReboot(t *testing.T) {
 	g, _ := alice.upgrade().GetUpgrades(context.Background(), connect.NewRequest(&osadminv1.GetUpgradesRequest{}))
 	if n := g.Msg.GetBaseOsNote(); !strings.Contains(n, "serves the built-in pages of 0.2.0") || !strings.Contains(n, "0.1.0 to before 0.2.0") {
 		t.Fatalf("note %q", n)
+	}
+}
+
+// After a Base OS update whose own pages are newer than the previous Base
+// Web slot, a Base Web revert ends on those built-in pages (the watcher
+// never serves an older Base Web than them) instead of waiting for the
+// older slot to serve.
+func TestABaseWebRevertPastTheBuiltInPagesEndsOnThem(t *testing.T) {
+	wb := newWebBox(t)
+	alice := wb.browser()
+	alice.signIn("alice")
+	for _, v := range []string{"0.1.2", "0.1.4"} {
+		id, _ := alice.upload(t, wb.webBin(t, web(v)))
+		if err := stage(alice, id); err != nil {
+			t.Fatal(err)
+		}
+		if err := applyWeb(wb.box, alice); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after := newWebBoxOn(t, wb.webDir, "0.1.3")
+	bob := after.browser()
+	bob.signIn("alice")
+	if st := webStatus(t, bob); st.GetRunningVersion() != "0.1.4" || st.GetPreviousVersion() != "0.1.2" {
+		t.Fatalf("before the revert: %v", st)
+	}
+	if err := revertWeb(after.box, bob); err != nil {
+		t.Fatal(err)
+	}
+	if st := webStatus(t, bob); st.GetSource() != webslots.SourceBuiltIn || st.GetRunningVersion() != "0.1.3" {
+		t.Fatalf("after the revert: %v", st)
 	}
 }

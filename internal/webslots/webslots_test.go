@@ -250,3 +250,44 @@ func TestTheWatcherServesTheCurrentSlotOrTheBuiltInPages(t *testing.T) {
 		t.Fatalf("a Base Web for another Base OS: %+v", s)
 	}
 }
+
+// A Base OS always ships with its Base Web, and its built-in pages are
+// that Base Web. So after a Base OS update the box serves the built-in
+// pages when they're newer than the installed Base Web, and the slot's
+// pages again once a Base OS revert makes the built-in ones older: a Base
+// OS never runs with an older Base Web than its own.
+func TestTheWatcherNeverServesAnOlderBaseWebThanTheBuiltInPages(t *testing.T) {
+	sign := testpki.ECDSA(t)
+	key, _ := sigbundle.ParsePublicKey(sign.PublicPEM)
+	sl := webslots.Slots{Dir: t.TempDir()}
+	builtin := fstest.MapFS{"index.html": {Data: []byte("built-in")}}
+	newWatcher := func(base string) *webslots.Watcher {
+		return &webslots.Watcher{Slots: sl, Key: key, Channel: release.ChannelProduction, BaseOS: base, Builtin: builtin, BuiltinVersion: base,
+			Live: webslots.NewLive(builtin, base), Now: func() time.Time { return time.Unix(0, 0) }}
+	}
+	if err := stageWeb(t, sl, sign, "0.3.1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := sl.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	newer := newWatcher("0.3.2")
+	newer.Sync()
+	s := newer.Live.Served()
+	if s.Source != webslots.SourceBuiltIn || s.Version != "0.3.2" || readFS(t, newer.Live, "index.html") != "built-in" {
+		t.Fatalf("Base OS 0.3.2 with Base Web 0.3.1 installed: %+v", s)
+	}
+	if !strings.Contains(s.Reason, "0.3.2") || !strings.Contains(s.Reason, "0.3.1") || s.WantedVersion != "0.3.1" {
+		t.Fatalf("the reason doesn't say which is newer: %+v", s)
+	}
+	reverted := newWatcher("0.3.0")
+	reverted.Sync()
+	if s := reverted.Live.Served(); s.Source != webslots.SourceSlot || s.Version != "0.3.1" {
+		t.Fatalf("after a Base OS revert to 0.3.0: %+v", s)
+	}
+	same := newWatcher("0.3.1")
+	same.Sync()
+	if s := same.Live.Served(); s.Source != webslots.SourceSlot || s.Version != "0.3.1" {
+		t.Fatalf("a Base Web as new as the built-in pages: %+v", s)
+	}
+}
