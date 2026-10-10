@@ -137,3 +137,51 @@ func TestTheBoxRecordsItsFQDN(t *testing.T) {
 		t.Fatalf("%v %q", err, b.Recorded())
 	}
 }
+
+// RecordVersions keeps the Base OS and Base Web versions next to the FQDN,
+// for the stacks k0s-interim and productswitch put in place; a version
+// that couldn't be used as stack text is left out, and the FQDN stays.
+func TestTheBoxRecordsItsVersions(t *testing.T) {
+	dir := t.TempDir()
+	if err := boxvalues.Write(dir, map[string]string{productspec.BoxFQDN: "box1.example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := boxvalues.RecordVersions(dir, "0.1.0-m", "0.1.0-m+web.2"); err != nil {
+		t.Fatal(err)
+	}
+	got := boxvalues.Read(dir)
+	if got[productspec.BoxFQDN] != "box1.example.org" || got[productspec.BoxOSVersion] != "0.1.0-m" || got[productspec.BoxWebVersion] != "0.1.0-m+web.2" {
+		t.Fatalf("%v", got)
+	}
+	for _, bad := range []string{"", "0.1.0 m", "0.1.0/m", "0.1.0&m", `0.1.0\m`, strings.Repeat("1", 65)} {
+		if err := boxvalues.RecordVersions(dir, bad, bad); err != nil {
+			t.Fatal(err)
+		}
+		got := boxvalues.Read(dir)
+		if _, ok := got[productspec.BoxOSVersion]; ok {
+			t.Fatalf("%q: recorded %v", bad, got)
+		}
+		if _, ok := got[productspec.BoxWebVersion]; ok {
+			t.Fatalf("%q: recorded %v", bad, got)
+		}
+		if got[productspec.BoxFQDN] != "box1.example.org" {
+			t.Fatalf("%q: the FQDN went: %v", bad, got)
+		}
+	}
+}
+
+// The box's versions go into a stack like its FQDN.
+func TestTheVersionsReachTheStacks(t *testing.T) {
+	slot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(slot, productspec.BoxValuesFile), []byte("baseos-version.invalid box.os.version\nbaseweb-version.invalid box.web.version\n"), 0o644); err != nil { // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := boxvalues.RecordVersions(dir, "0.1.0-m", "0.1.0-m"); err != nil {
+		t.Fatal(err)
+	}
+	out := boxvalues.Substitute([]byte("os: baseos-version.invalid\nweb: baseweb-version.invalid\n"), boxvalues.Table(slot, boxvalues.Read(dir), "sneakers-0a1b2c3d")) // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	if string(out) != "os: 0.1.0-m\nweb: 0.1.0-m\n" {
+		t.Fatalf("%q", out)
+	}
+}

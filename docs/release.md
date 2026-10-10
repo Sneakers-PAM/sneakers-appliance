@@ -278,15 +278,34 @@ It also declares the **box values** its stacks read, each by a placeholder under
 
 ```yaml
 box_values:
-  - value: box.fqdn                    # the only box value so far
-    placeholder: sneakers.box.invalid  # what the stacks carry where the host goes; scrub:allow=fqdn
+  - value: box.fqdn                       # the box's FQDN
+    placeholder: sneakers.box.invalid     # what the stacks carry where the host goes; scrub:allow=fqdn
+  - value: box.os.version                 # the Base OS version the box runs
+    placeholder: baseos-version.invalid   # scrub:allow=fqdn
+  - value: box.web.version                # the Base Web version the box serves
+    placeholder: baseweb-version.invalid  # scrub:allow=fqdn
 ```
 
-The box refuses a value it doesn't offer, one declared twice, or a placeholder that isn't a
-lower-case name under `.invalid`. It records them in the slot (`box-values`: placeholder, value), and
-puts its own value in place of each placeholder when a stack goes in front of k0s
-([network.md](network.md#the-host-name)). The Sneakers bundle's values set `global.host` to the
-placeholder, so every host-dependent setting carries it and no bundle names a box.
+The box offers three values:
+
+- **`box.fqdn`:** the box's FQDN ([network.md](network.md#the-host-name)), recorded at each product
+  apply and revert and when the host name changes.
+- **`box.os.version`:** the running Base OS's version, recorded by init at every boot, before any
+  service starts (so the k0s start after a Base OS update takes the new one), and at each product
+  apply and revert.
+- **`box.web.version`:** the Base Web version the box serves, recorded at the same times. It is the
+  slot osadmin last served, or the Base OS's own version for the built-in pages, so a Base Web
+  update reaches the product at the next boot or product apply.
+
+The box refuses a value it doesn't offer, one declared twice, a placeholder that isn't a lower-case
+name under `.invalid`, or one that holds another's (each is replaced as plain text). It records them
+in the slot (`box-values`: placeholder, value), and puts its own value in place of each placeholder
+when a stack goes in front of k0s; a value it hasn't recorded leaves its placeholder. The Sneakers
+bundle's values set `global.host` to the FQDN placeholder, so every host-dependent setting carries it
+and no bundle names a box, and give the gateway all three (`SNEAKERS_APPLIANCE_FQDN`,
+`SNEAKERS_APPLIANCE_VERSION`, `SNEAKERS_APPLIANCE_WEB_VERSION`) for the product's About and
+diagnostics. `render.sh` also gives it the release's own version (`metadata.version`, read with
+`bundle version`) as `SNEAKERS_PRODUCT_VERSION`.
 
 And it declares the **box secrets**, the Secrets every box makes for itself, so no bundle carries a
 secret value and no two boxes share one:
@@ -320,6 +339,14 @@ that declares it again. A bundle that declares none leaves no stack. No value is
 can't be made, the apply stops before k0s is touched. The keys `escrow` names (the Sneakers bundle's vault
 root key and TOTP key, in `sneakers-box`) also go into the recovery escrow. INTERIM: platformd seals
 all of them through KeyCustody when it lands (#100).
+
+A box secret key may also be a `setting` (`{key: SMTP_PASS, setting: email.password}`): one of
+the settings an admin sets on :8443. The product declares the non-secret ones as **box
+settings**, ConfigMaps the box writes into the same stack (`box_settings`), and says it reads the
+box's email settings with an `email` section, which also names the workloads restarted after a
+change. A secret setting in a ConfigMap, an unknown setting, a key that's more than one of
+generated, value and setting, and settings with no `email` section are refused. See
+[product-email.md](product-email.md).
 
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,

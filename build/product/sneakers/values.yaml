@@ -11,7 +11,7 @@
 # No secret value is set or generated here: every Secret the stacks read is
 # one product.yaml declares as a box secret, made on each box
 # (sneakers-bundled, sneakers-kratos, sneakers-hydra, sneakers-box and
-# sneakers-setup-token). The chart still renders its bundled Secrets, which
+# sneakers-setup-token, sneakers-email). The chart still renders its bundled Secrets, which
 # render.sh drops.
 global:
   # The box has no name of its own at build time; the edge serves every
@@ -24,9 +24,25 @@ global:
 bundledSecrets:
   enabled: true
 identity:
+  # The mail relay comes from the box (the Email page on :8443): the
+  # sneakers-email ConfigMap and Secret, both box settings product.yaml
+  # declares. The chart's own SMTP defaults are left out.
+  env:
+    SMTP_HOST: ''
+    SMTP_PORT: ''
+    SMTP_TLS: ''
+    SMTP_FROM: ''
+    SMTP_USER: ''
+  envFromConfigMaps:
+    - name: sneakers-email
+      optional: false
   secretEnv:
     TOTP_ENC_KEY:
       secretName: sneakers-box
+    SMTP_PASS:
+      secretName: sneakers-email
+      key: SMTP_PASS
+      required: true
 vault:
   secretEnv:
     VAULT_ROOT_KEK:
@@ -36,6 +52,13 @@ gateway:
     MCP_HEALTH_URL: ''
     OAUTH_PUBLIC_URL: ''
     MCP_ENABLED: 'false'
+    # The box for the product's About and diagnostics: the placeholders
+    # product.yaml's box_values declare, which the box replaces with its
+    # Base OS and Base Web versions and its FQDN. render.sh adds
+    # SNEAKERS_PRODUCT_VERSION, the release's own version.
+    SNEAKERS_APPLIANCE_VERSION: baseos-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+    SNEAKERS_APPLIANCE_WEB_VERSION: baseweb-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+    SNEAKERS_APPLIANCE_FQDN: sneakers.box.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
   secretEnv:
     SETUP_TOKEN:
       secretName: sneakers-setup-token

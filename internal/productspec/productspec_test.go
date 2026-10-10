@@ -243,7 +243,14 @@ func TestTheSneakersBundleExposesItsSetupToken(t *testing.T) {
 	}
 	// The box's own name reaches every host-dependent setting through the
 	// placeholder the bundle's values give global.host.
-	if len(s.BoxValues) != 1 || s.BoxValues[0].Value != productspec.BoxFQDN || s.BoxValues[0].Placeholder != "sneakers.box.invalid" { // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	// The box's Base OS and Base Web versions reach the product's About the
+	// same way.
+	want := []productspec.BoxValue{
+		{Value: productspec.BoxFQDN, Placeholder: "sneakers.box.invalid"},          // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		{Value: productspec.BoxOSVersion, Placeholder: "baseos-version.invalid"},   // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		{Value: productspec.BoxWebVersion, Placeholder: "baseweb-version.invalid"}, // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	}
+	if !slices.Equal(s.BoxValues, want) {
 		t.Errorf("box values %+v", s.BoxValues)
 	}
 }
@@ -463,15 +470,30 @@ func TestBoxValuesParseAndAreWrittenIntoTheSlot(t *testing.T) {
 	}
 }
 
+// The box offers its FQDN and its Base OS and Base Web versions.
+func TestEveryBoxValueTheBoxOffersParses(t *testing.T) {
+	doc := "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: sneakers.box.invalid}\n" + // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"  - {value: box.os.version, placeholder: baseos-version.invalid}\n" + // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"  - {value: box.web.version, placeholder: baseweb-version.invalid}\n" // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	s, err := productspec.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.BoxValues) != 3 || s.BoxValues[1].Value != productspec.BoxOSVersion || s.BoxValues[2].Value != productspec.BoxWebVersion {
+		t.Fatalf("%+v", s.BoxValues)
+	}
+}
+
 func TestABoxValueIsRefusedWhenItBreaksARule(t *testing.T) {
 	for name, doc := range map[string]string{
-		"an unknown value":       "format: 2\nbox_values:\n  - {value: box.serial, placeholder: serial.box.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
-		"a resolvable name":      "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: sneakers.example.org}\n",
-		"the bare .invalid":      "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: invalid}\n",                                                  // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
-		"an upper-case name":     "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: Sneakers.box.invalid}\n",                                     // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
-		"a value twice":          "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: a.invalid}\n  - {value: box.fqdn, placeholder: b.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
-		"a placeholder with a /": "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: a/b.invalid}\n",                                              // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
-		"no placeholder":         "format: 2\nbox_values:\n  - {value: box.fqdn}\n",
+		"an unknown value":         "format: 2\nbox_values:\n  - {value: box.serial, placeholder: serial.box.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"a resolvable name":        "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: sneakers.example.org}\n",
+		"the bare .invalid":        "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: invalid}\n",                                                  // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"an upper-case name":       "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: Sneakers.box.invalid}\n",                                     // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"a value twice":            "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: a.invalid}\n  - {value: box.fqdn, placeholder: b.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"a placeholder with a /":   "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: a/b.invalid}\n",                                              // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+		"no placeholder":           "format: 2\nbox_values:\n  - {value: box.fqdn}\n",
+		"a placeholder in another": "format: 2\nbox_values:\n  - {value: box.fqdn, placeholder: box.invalid}\n  - {value: box.os.version, placeholder: os.box.invalid}\n", // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
 	} {
 		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) {
 			t.Errorf("%s: %v", name, err)

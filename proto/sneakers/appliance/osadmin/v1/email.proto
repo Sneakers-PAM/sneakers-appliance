@@ -1,0 +1,109 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The product's Email page: the mail relay the product sends through.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/upgrade.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// EmailService sets the installed product's mail relay
+// (docs/product-email.md). The relay password is write-only: no answer
+// carries it, and no audit entry or log line does.
+service EmailService {
+  rpc GetEmail(GetEmailRequest) returns (GetEmailResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // SetEmail saves the relay and applies the product again, under the
+  // same maintenance gate as a product update.
+  rpc SetEmail(SetEmailRequest) returns (SetEmailResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "product.email.set"
+    };
+  }
+  // SendTestEmail sends a short message to one address, through the
+  // settings given (with the saved password unless one is given), or
+  // through the saved ones.
+  rpc SendTestEmail(SendTestEmailRequest) returns (SendTestEmailResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "product.email.test-send"
+    };
+  }
+}
+
+// EmailTls is how the connection to the relay is protected.
+enum EmailTls {
+  EMAIL_TLS_UNSPECIFIED = 0;
+  // EMAIL_TLS_NONE sends mail and the relay password unencrypted.
+  EMAIL_TLS_NONE = 1;
+  // EMAIL_TLS_STARTTLS upgrades the connection with STARTTLS first.
+  EMAIL_TLS_STARTTLS = 2;
+  // EMAIL_TLS_IMPLICIT is TLS from the first byte (usually port 465).
+  EMAIL_TLS_IMPLICIT = 3;
+}
+
+// EmailSettings are the relay's settings, without the password.
+message EmailSettings {
+  // host is empty for no relay: the product sends no mail.
+  string host = 1;
+  uint32 port = 2;
+  string from = 3;
+  // username is empty for no AUTH.
+  string username = 4;
+  EmailTls tls = 5;
+  // verify checks the relay's certificate (STARTTLS and TLS).
+  bool verify = 6;
+  // ca_pem is the relay's CA, trusted on top of the system roots; empty
+  // for none.
+  string ca_pem = 7;
+}
+
+message GetEmailRequest {}
+
+message GetEmailResponse {
+  // state is "not installed", "not in this product", "not set" or "set".
+  string state = 1;
+  EmailSettings settings = 2;
+  // password_set says a relay password is saved; the password itself is
+  // never sent back.
+  bool password_set = 3;
+  // label is what the product sends mail for.
+  string label = 4;
+  // encrypted is false while TLS or certificate verification is off:
+  // mail and the relay password go unencrypted or to an unchecked relay.
+  bool encrypted = 5;
+}
+
+message SetEmailRequest {
+  EmailSettings settings = 1;
+  // password replaces the saved one when present; empty clears it.
+  // Absent keeps the saved password.
+  optional string password = 2;
+  // elevation_override is an owner's override of an open elevated shell.
+  ElevationOverride elevation_override = 3;
+}
+
+message SetEmailResponse {}
+
+message SendTestEmailRequest {
+  // to is the one address the test goes to.
+  string to = 1;
+  // settings, when present, are tried instead of the saved ones.
+  EmailSettings settings = 2;
+  // password, when present, is tried instead of the saved one.
+  optional string password = 3;
+}
+
+message SendTestEmailResponse {
+  // answer is the relay's answer to the message.
+  string answer = 1;
+}

@@ -11,6 +11,7 @@
 package osadmin
 
 import (
+	"context"
 	"io/fs"
 	"net/http"
 	"path"
@@ -25,6 +26,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
@@ -140,6 +142,14 @@ type Options struct {
 	// (boxsecrets.Store on the box) at each product apply and revert,
 	// before the product restarts; nil makes none.
 	BoxSecrets BoxSecrets
+	// Email keeps the product's mail relay (boxsettings.Store on the box);
+	// nil leaves the Email page with nothing to set.
+	Email EmailSettings
+	// EmailWorkloads restart the workloads that read the email settings
+	// after a change; nil restarts none.
+	EmailWorkloads EmailWorkloads
+	// SendEmail sends the test email; nil is boxsettings.Send.
+	SendEmail func(ctx context.Context, e boxsettings.Email, to string) (string, error)
 	// Exposed reads the installed product's exposed values as the
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.
@@ -224,6 +234,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewRootShellServiceHandler(&rootShellSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(&tlsSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewEmailServiceHandler(&emailSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewImportServiceHandler(&importSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))

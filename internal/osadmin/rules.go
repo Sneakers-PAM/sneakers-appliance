@@ -236,7 +236,7 @@ func (s *Server) liveRole(sess weblogin.Session) (access.Role, error) {
 	if !ok || !a.HasCredentials() {
 		s.sessions.End(sess.ID)
 		s.o.Logger.Info("osadmin: session ended, its admin was removed or re-invited", log.F("admin", sess.Admin))
-		return "", codes.New(codes.AccessSession, "the admin this session signed in as was removed or re-invited; sign in again")
+		return "", codes.New(codes.AccessSession, "the admin who signed in with this session was removed or re-invited; sign in again")
 	}
 	return a.Role, nil
 }
@@ -391,7 +391,7 @@ func toConnect(err error) error {
 		c = connect.CodeUnauthenticated
 	case codes.AccessForbidden, codes.AccessStepUpRequired:
 		c = connect.CodePermissionDenied
-	case codes.AccessKeyType, codes.AccessKeyWeak, codes.AccessName, codes.AccessConfirm, codes.NetInvalid, codes.AccessPassword, codes.AccessPolicy, codes.AccessQuorum:
+	case codes.AccessKeyType, codes.AccessKeyWeak, codes.AccessName, codes.AccessConfirm, codes.NetInvalid, codes.AccessPassword, codes.AccessPolicy, codes.AccessQuorum, codes.EmailInvalid:
 		c = connect.CodeInvalidArgument
 	case codes.AccessLocked, codes.AccessThrottled:
 		c = connect.CodeResourceExhausted

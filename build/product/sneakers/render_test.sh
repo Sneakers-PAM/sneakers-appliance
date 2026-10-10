@@ -78,6 +78,27 @@ grep -q '^ghcr.io/sneakers-pam/sneakers-migrate sha256:' "$work/pinned" || fail 
 grep -q 'sneakers/sneakers-migrate' "$out/sneakers/sneakers.yaml" || fail "the vault and audit don't list the migrate caller"
 echo "ok: every component is pinned, every service image runs in a stack, and the import's image and caller are in place"
 
+# The product's About: the release's version, and the box's placeholders
+# for its Base OS, Base Web and FQDN, each one product.yaml declares.
+# The chart puts each service's settings in its ConfigMap, a "NAME: value" line each.
+env_value() { sed -n "s/^ *$1: //p" "$out/sneakers/sneakers.yaml" | tr -d "\"'" | head -1; }
+release_version="$(go run "$root/build/tools/bundle" version --release "$work/release.yaml")"
+want=(
+  "SNEAKERS_PRODUCT_VERSION $release_version"
+  "SNEAKERS_APPLIANCE_VERSION baseos-version.invalid"      # scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+  "SNEAKERS_APPLIANCE_WEB_VERSION baseweb-version.invalid" # scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+  "SNEAKERS_APPLIANCE_FQDN sneakers.box.invalid"           # scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+)
+for kv in "${want[@]}"; do
+  read -r name value <<<"$kv"
+  got="$(env_value "$name")"
+  [ "$got" = "$value" ] || fail "the gateway's $name is \"$got\", want $value"
+done
+for ph in $(sed -n 's/^ *placeholder: \([a-z0-9.-]*\).*/\1/p' "$here/product.yaml"); do
+  grep -qF "$ph" "$out/sneakers/sneakers.yaml" || fail "no stack carries the placeholder $ph"
+done
+echo "ok: the gateway gets the product version $release_version and the box's placeholders"
+
 # Pinned by digest and never pulled.
 if grep -h '^ *image: ' "$out"/*/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}$' | grep -q .; then
   fail "an image isn't pinned by digest: $(grep -h '^ *image: ' "$out"/*/*.yaml | grep -v '@sha256:' | head -1)"
@@ -130,6 +151,27 @@ grep -q "OAUTH_PUBLIC_URL: https://$host\$" "$sw" || fail "the root authorizatio
 awk -v RS='---\n' '/kind: NetworkPolicy/ && /\n    name: sneakers-hydra\n/' "$mcp" | grep -q 'cidr: 198.18.0.1/32' || fail "Hydra's public port doesn't take the edge"
 grep -A3 'oauth-prefix:' "$out/edge/edge.yaml" | grep -q 'prefixes: \["/oauth"\]' || fail "the edge has no oauth-prefix middleware"
 echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ route"
+
+# The mail relay comes only from the box (the Email page): the identity
+# service, which sends the product's mail, loads the sneakers-email
+# ConfigMap and reads SMTP_PASS from the sneakers-email Secret, both of
+# which the box writes (product.yaml box_settings and box_secrets). No
+# stack carries an SMTP value of its own, and no ConfigMap the password.
+mkdir -p "$work/docs"
+awk -v d="$work/docs" 'BEGIN{n=0; f=d"/0.yaml"} /^---$/{n++; f=d"/"n".yaml"; next} {print > f}' "$out"/sneakers*/*.yaml
+ident=""
+for f in "$work"/docs/*.yaml; do
+  if grep -q '^kind: ConfigMap$' "$f"; then
+    if grep -qE 'SMTP_PASS|smtpConnectionURI|smtps?://' "$f"; then fail "a ConfigMap carries the relay password or URI: $(grep -m1 -E '^    name:' "$f")"; fi
+    if grep -q '^    name: sneakers-identity$' "$f" && grep -q 'SMTP_' "$f"; then fail "the identity service's own ConfigMap sets SMTP values: $(grep SMTP_ "$f" | head -2)"; fi
+  fi
+  if grep -q '^kind: Deployment$' "$f" && grep -q '^    name: sneakers-identity$' "$f"; then ident="$f"; fi
+done
+[ -n "$ident" ] || fail "no sneakers-identity Deployment"
+grep -A1 'configMapRef:' "$ident" | grep -q 'name: sneakers-email' || fail "the identity service doesn't load the sneakers-email ConfigMap"
+grep -A4 -- '- name: SMTP_PASS' "$ident" | grep -q 'name: sneakers-email' || fail "the identity service doesn't read SMTP_PASS from the sneakers-email Secret"
+if grep -nE 'smtp\.example\.org|smtp-[a-z]+\.box\.invalid' "$out"/*/*.yaml "$here/values.yaml" "$here/product.yaml"; then fail "an SMTP placeholder or example relay is left"; fi
+echo "ok: the mail relay comes only from the box, and the password never from a ConfigMap"
 
 # Refusals.
 if CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > /dev/null 2>&1; then

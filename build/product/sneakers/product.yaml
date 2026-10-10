@@ -93,10 +93,17 @@ escrow:
 # set global.host to this placeholder, so every host-dependent setting
 # (Kratos's URLs and return URLs, the WebAuthn relying party, the SSH
 # websocket, the MCP, OAuth and Hydra addresses) carries it, and the box
-# puts its FQDN in its place when it applies the stacks.
+# puts its FQDN in its place when it applies the stacks. The Base OS and
+# Base Web versions reach the gateway's diagnostics the same way
+# (SNEAKERS_APPLIANCE_VERSION and SNEAKERS_APPLIANCE_WEB_VERSION in
+# values.yaml), for the product's About.
 box_values:
   - value: box.fqdn
     placeholder: sneakers.box.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+  - value: box.os.version
+    placeholder: baseos-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+  - value: box.web.version
+    placeholder: baseweb-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
 
 # The Secrets every box makes for itself (internal/boxsecrets): accessd
 # generates the values on the box the first time a bundle declares them,
@@ -118,8 +125,8 @@ box_secrets:
       - {key: secretsCookie, generate: password}
       - {key: secretsCipher, generate: password}
       # Kratos's courier is off (the identity service sends the mail); the
-      # chart still reads the key.
-      - {key: smtpConnectionURI, value: "smtp://smtp.example.org:25/?disable_starttls=true"}
+      # chart still reads the key, so it carries the box's relay too.
+      - {key: smtpConnectionURI, setting: email.uri}
   - secret: sneakers/sneakers-hydra
     keys:
       - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-postgres:5432/sneakers_hydra?sslmode=disable"}
@@ -135,3 +142,30 @@ box_secrets:
   - secret: sneakers/sneakers-setup-token
     keys:
       - {key: SETUP_TOKEN, generate: token}
+  # The relay password from the Email page, which only ever goes into a
+  # Secret (box_settings below hold the rest).
+  - secret: sneakers/sneakers-email
+    keys:
+      - {key: SMTP_PASS, setting: email.password}
+
+# The product's mail (password resets, one-time codes and notices) goes out
+# through the identity service, to the relay set on :8443's Email page
+# (docs/product-email.md). The box writes the settings as the
+# sneakers-email ConfigMap, which the identity service loads whole, and
+# the password as the sneakers-email Secret; both live in the
+# sneakers-appliance-secrets stack. A change applies the product again and
+# then restarts the identity service, so it reads the new settings.
+email:
+  label: Password resets, one-time codes and notices
+  restart:
+    - sneakers/deployment/sneakers-identity
+box_settings:
+  - configmap: sneakers/sneakers-email
+    keys:
+      - {key: SMTP_HOST, setting: email.host}
+      - {key: SMTP_PORT, setting: email.port}
+      - {key: SMTP_FROM, setting: email.from}
+      - {key: SMTP_USER, setting: email.username}
+      - {key: SMTP_TLS_MODE, setting: email.tls}
+      - {key: SMTP_TLS_INSECURE, setting: email.skip_verify}
+      - {key: SMTP_CA_PEM, setting: email.ca_pem}

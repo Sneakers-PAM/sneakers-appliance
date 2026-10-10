@@ -46,6 +46,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsecrets"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
@@ -71,6 +72,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshsession"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/webslots"
 )
 
 type config struct {
@@ -235,6 +237,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if err != nil {
 		return err
 	}
+	settings := &boxsettings.Store{Dir: filepath.Join(c.state, "platform")}
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{},
 		RootSource: os.Getenv(switchroot.SourceEnv),
@@ -262,7 +265,14 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		},
 		// The Secrets the installed product declares, made on this box
 		// once and kept on the state volume (docs/release.md#productyaml).
-		BoxSecrets:      &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Logger: lg},
+		// They carry the product's email settings too (the Email page),
+		// kept 0600 next to them (docs/product-email.md).
+		BoxSecrets: &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Settings: settings, Logger: lg},
+		Email:      settings,
+		EmailWorkloads: emailWorkloads{
+			k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig,
+			stack: filepath.Join("/var/lib/k0s/manifests", productspec.BoxSecretsStack, productspec.BoxSecretsStack+".yaml"),
+		},
 		Paths:           paths,
 		BoxStateFile:    boxstate.File,
 		CertDir:         paths.OwnDir(),
@@ -289,6 +299,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 				return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 			},
 			Own: func() string { name, _ := boxname.Ensure(c.state); return name },
+			// The Base OS and Base Web versions for the product's About.
+			Versions: func() (string, string) {
+				return release.Version, webslots.ServedVersion(filepath.Join(paths.OwnDir(), osadmin.WebServedFile), release.Version)
+			},
 		},
 		Logger: lg,
 		Upgrade: osadmin.UpgradeOptions{
@@ -382,6 +396,46 @@ func rolloutRestart(k0s, kubeconfig string) func(ctx context.Context, ns, kind, 
 		}
 		return nil
 	}
+}
+
+// emailWorkloads restart what reads the product's email settings once k0s
+// has applied the box secrets stack as it is on disk: every object in the
+// cluster carries the stack's revision.
+type emailWorkloads struct{ k0s, kubeconfig, stack string }
+
+func (w emailWorkloads) Applied(ctx context.Context) error {
+	want, err := boxsecrets.StackRevision(w.stack)
+	if err != nil {
+		return err
+	}
+	jp := `{range .items[*]}{.metadata.annotations['` + boxsecrets.RevisionAnnotation + `']}{"\n"}{end}`
+	for {
+		out, err := exec.CommandContext(ctx, w.k0s, "kubectl", "--kubeconfig", w.kubeconfig, "get", "-f", w.stack, "-o", "jsonpath="+jp).CombinedOutput() // #nosec G204 -- the installed bundle's k0s on the box's own stack
+		if err == nil && allEqual(strings.Fields(string(out)), want) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the box secrets stack isn't applied at revision %s: %s", want, strings.TrimSpace(string(out)))
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+func (w emailWorkloads) Restart(ctx context.Context, ns, kind, name string) error {
+	return rolloutRestart(w.k0s, w.kubeconfig)(ctx, ns, kind, name)
+}
+
+func allEqual(got []string, want string) bool {
+	if len(got) == 0 {
+		return false
+	}
+	for _, g := range got {
+		if g != want {
+			return false
+		}
+	}
+	return true
 }
 
 // stackSettled waits, up to 90 s, until every object in a stack's files is
