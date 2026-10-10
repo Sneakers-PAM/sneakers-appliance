@@ -194,3 +194,29 @@ func TestTheSneakersImportHoldsAfterTheServices(t *testing.T) {
 		t.Fatalf("%+v", s.Import)
 	}
 }
+
+// A phase names, per workload, the Services of earlier phases it waits
+// for before it starts (needs): the render gives each of its workloads an
+// init container that resolves the cluster's DNS, then connects to each.
+func TestAPhasesNeedsParse(t *testing.T) {
+	doc := "format: 2\nphases:\n  - {name: data, label: x, stack: app-data, workloads: [app-db]}\n" +
+		"  - name: front\n    label: y\n    stack: app-front\n    workloads: [app-web, app-api]\n    needs: {app-api: [app-db:5432]}\n"
+	s, err := productspec.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Phases[1].Needs["app-api"]; !slices.Equal(got, []string{"app-db:5432"}) {
+		t.Fatalf("needs %v", s.Phases[1].Needs)
+	}
+	for name, needs := range map[string]string{
+		"a workload of another phase": "{app-db: [app-db:5432]}",
+		"no port":                     "{app-api: [app-db]}",
+		"a named port":                "{app-api: [app-db:postgres]}",
+		"a bad service":               "{app-api: [App_DB:5432]}",
+	} {
+		bad := strings.Replace(doc, "{app-api: [app-db:5432]}", needs, 1)
+		if _, err := productspec.Parse([]byte(bad)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

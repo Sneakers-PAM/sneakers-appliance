@@ -97,6 +97,9 @@ type UpgradeOptions struct {
 	// ProductUpEvery is how often Options.ProductUp is asked while a
 	// product comes up; 0 is DefaultProductUpEvery.
 	ProductUpEvery time.Duration
+	// SwitchReadyBound is how long switching MCP on waits for the product
+	// to be ready with it; 0 is DefaultSwitchReadyBound.
+	SwitchReadyBound time.Duration
 	// WebDir holds the web slots; empty is webslots.Dir. WebServedFile is
 	// the status sneakers-osadmin writes of the pages it serves; empty
 	// doesn't wait for a switch to be served. WebSwitchWait bounds that
