@@ -35,7 +35,8 @@ sneakers-kit backup
   temporary directory inside `--out`, verifies the copy, and gives the same copy to the format's
   writer. The output is moved into `--out` only when every step succeeded; a refused or failed
   build leaves `--out` as it was. A tag moved after the resolve changes nothing. Outputs are named
-  `sneakers-<version>-<arch>`, with `-LAB` for a lab release. Formats arrive with their writers;
+  `sneakers-appliance-<v>-<arch>`, where `<v>` is the version, or `lab-<build label>` for a lab
+  release ([release.md](release.md#file-names)). Formats arrive with their writers;
   a kit refuses a format it doesn't carry.
 - `version` prints the kit version, its channel and the SHA-256 fingerprint of each pin.
 - `backup` is the group for working with exported backup sets off the box. It has no commands yet

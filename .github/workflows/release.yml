@@ -471,7 +471,9 @@ jobs:
       # The OVA for a new install, written by the production kit from the
       # signed artifact the units carry (the kit verifies it first), with the
       # vApp host name and domain properties; its .sha256 and a signature by
-      # the release key go beside it on the Release.
+      # the release key go beside it on the Release, and its line joins
+      # SHA256SUMS, which is signed again. Every file the job made then has
+      # one of the allowed names (docs/release.md, File names).
       - name: Build and sign the OVA (release key)
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -480,15 +482,21 @@ jobs:
         run: |
           keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" ova="$RUNNER_TEMP/signed/ova"
           "$in/sneakers-kit" build "$RUNNER_TEMP/signed/artifact" --format ova --arch amd64 --out "$ova"
-          f="$ova/sneakers-$VERSION-amd64.ova"
-          [ -f "$f" ] || { ls -l "$ova"; echo "the kit wrote no sneakers-$VERSION-amd64.ova" >&2; exit 1; }
+          units="$RUNNER_TEMP/signed/units"
+          f="$ova/sneakers-appliance-$VERSION-amd64.ova"
+          [ -f "$f" ] || { ls -l "$ova"; echo "the kit wrote no sneakers-appliance-$VERSION-amd64.ova" >&2; exit 1; }
           (cd "$ova" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
+          cat "$f.sha256" >> "$units/SHA256SUMS"
           umask 077
           printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
           trap 'rm -f "$keys/cosign.key"' EXIT
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$f.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$f" >/dev/null
           cosign verify-blob --key keys/production/cosign.pub --bundle "$f.sigstore.json" --insecure-ignore-tlog=true "$f" >/dev/null
+          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$units/SHA256SUMS.sigstore.json" \
+            --tlog-upload=false --use-signing-config=false "$units/SHA256SUMS" >/dev/null
+          cosign verify-blob --key keys/production/cosign.pub --bundle "$units/SHA256SUMS.sigstore.json" --insecure-ignore-tlog=true "$units/SHA256SUMS" >/dev/null
+          find "$units" "$ova" -maxdepth 1 -type f -print0 | xargs -0 bash build/release/check-names.sh --channel production
           echo "### OVA: $(basename "$f") $(stat -c %s "$f") bytes" >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the keys
         if: always()
@@ -539,7 +547,7 @@ jobs:
           in="$RUNNER_TEMP/unsigned-amd64" signed="$RUNNER_TEMP/signed-amd64"
           units="$signed/units" cs="$signed/countersignatures"
           (cd "$in" && sha256sum -c --quiet SHA256SUMS)
-          (cd "$units" && sha256sum -c --quiet SHA256SUMS)
+          (cd "$units" && sha256sum -c --quiet --ignore-missing SHA256SUMS)
           chmod +x "$in/sneakers-artifact" "$in/sneakers-kit"
           "$in/sneakers-kit" verify "$signed/artifact"
           for b in "$units"/*.bin; do
@@ -549,9 +557,11 @@ jobs:
           verify "$in/release.yaml" "$cs/release.yaml.sigstore.json"
           verify "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
           verify "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json"
-          ova="$(find "$signed/ova" -maxdepth 1 -name "sneakers-$VERSION-amd64.ova")"
+          ova="$(find "$signed/ova" -maxdepth 1 -name "sneakers-appliance-$VERSION-amd64.ova")"
           [ -n "$ova" ] || { echo "the signed build has no OVA" >&2; exit 1; }
           (cd "$signed/ova" && sha256sum -c --quiet "$(basename "$ova").sha256")
+          grep -qF "  $(basename "$ova")" "$units/SHA256SUMS" || { echo "SHA256SUMS has no line for the OVA" >&2; exit 1; }
+          (cd "$signed/ova" && grep -F "  $(basename "$ova")" "$units/SHA256SUMS" | sha256sum -c --quiet)
           verify "$ova" "$ova.sigstore.json"
           while read -r image dgst; do
             verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
@@ -567,9 +577,10 @@ jobs:
           files=("$units"/*.bin "$units"/*.bin.inputs "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
             "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json" "$ova" "$ova.sha256" "$ova.sigstore.json"
             "$cs/release.yaml" "$cs/release.yaml.sigstore.json" "$cs"/image-sigs/*.sigstore.json)
-          # GitHub takes no release asset of 2 GiB or more: refuse before
-          # anything is uploaded.
+          # GitHub takes no release asset of 2 GiB or more, and every asset
+          # has an allowed name: refuse before anything is uploaded.
           bash build/release/check-asset-sizes.sh "${files[@]}"
+          bash build/release/check-names.sh --channel production "${files[@]}"
           # The Release the owner made for the tag (a draft is fine); a draft
           # is made when there's none. Nothing here publishes it. An rc tag
           # (v<x.y.z>-rc.<n>) is a prerelease, which boxes on the rc channel
@@ -653,12 +664,11 @@ jobs:
           VERSION="$(cat "$lab/version")"
           go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
           tool="$work/sneakers-artifact"
-          "$tool" bin-pack --layout "$lab/artifact" --recipient "$keys/update.pub" \
+          "$tool" bin-pack --layout "$lab/artifact" --recipient "$keys/update.pub" --unit baseOS --commit "${GITHUB_SHA:0:7}" \
             --version "$VERSION" --arch amd64 --channel lab --out "$work/bin"
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$work/bin/header.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$work/bin/header.json" >/dev/null
-          "$tool" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$work/out"
-          bin="$work/out/sneakers-appliance-$VERSION-amd64-LAB.bin"
+          bin="$("$tool" bin-seal --work "$work/bin" --bundle "$work/bin/header.sigstore.json" --out "$work/out")"
           # The box's path: verify, decrypt with the key in the signed UKI,
           # unpack, then the kit chain on what came out.
           "$tool" bin-verify --release-key "$keys/cosign.pub" --channel lab \
@@ -670,7 +680,7 @@ jobs:
           fi
           # The lab product bundle the lab build sealed: opened with the key
           # in the signed UKI and checked, and never a production one.
-          product="$(ls "$lab"/product/sneakers-product-*-LAB.bin)"
+          product="$(ls "$lab"/product/sneakers-product-lab-*-amd64.bin)"
           "$tool" bin-verify --release-key "$keys/cosign.pub" --channel lab \
             --identity-uki "$lab/work/sneakers-$VERSION.efi" --extract "$work/product" "$product"
           if "$tool" bin-verify --release-key "$keys/cosign.pub" --channel production "$product"; then
@@ -679,10 +689,12 @@ jobs:
           # The OVA, written by the lab kit from the artifact the way the
           # release job writes the production one.
           "$lab/sneakers-kit" build "$lab/artifact" --format ova --arch amd64 --out "$work/ova"
-          ova="$work/ova/sneakers-$VERSION-amd64-LAB.ova"
-          [ -f "$ova" ] || { ls -l "$work/ova"; echo "the lab kit wrote no OVA" >&2; exit 1; }
-          # The files a release would attach stay under GitHub's 2 GiB.
+          ova="$(find "$work/ova" -maxdepth 1 -name 'sneakers-appliance-lab-*-amd64.ova')"
+          [ -n "$ova" ] || { ls -l "$work/ova"; echo "the lab kit wrote no OVA" >&2; exit 1; }
+          # The files a release would attach stay under GitHub's 2 GiB, and
+          # have the lab names (docs/release.md, File names).
           bash build/release/check-asset-sizes.sh "$bin" "$product" "$ova"
+          bash build/release/check-names.sh --channel lab "$bin" "$product" "$ova"
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
           fi

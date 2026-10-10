@@ -1046,10 +1046,27 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 	return pkg, res.Msg.GetRemovedVersions(), nil
 }
 
+// indexedFull is the file the index the box last checked lists for the
+// Base OS full release of version, so a fallback fetches a name the
+// source publishes rather than one the box works out; header (the name the
+// patch's signed header gives) when the last check didn't list it.
+func (s *Server) indexedFull(version, header string) string {
+	for _, o := range s.lastCheck().GetBaseOs() {
+		if o.GetKind() == string(updatepkg.KindFull) && o.GetVersion() == version && updatepkg.ValidFileName(o.GetFileName()) {
+			if o.GetFileName() != header {
+				s.o.Logger.Debug("osadmin: the index names the full release", log.F("version", version), log.F("file", o.GetFileName()), log.F("header", header))
+			}
+			return o.GetFileName()
+		}
+	}
+	return header
+}
+
 // patchFallback takes the full .bin of a patch's release when the patch
 // didn't fit the running base or didn't rebuild (spec 5, Section 2.10.3):
-// for a patch fetched from a source, it fetches the full file the signed
-// header names from the same sources and returns its upload id, with an
+// for a patch fetched from a source, it fetches the full file the last
+// checked index lists for that release (the signed header's name when it
+// lists none) from the same sources and returns its upload id, with an
 // audit entry; "" when there's nothing to fall back to. An uploaded patch
 // isn't followed by a fetch: the refusal names the full file instead.
 func (s *Server) patchFallback(ctx context.Context, pkg *osadminv1.UpdatePackage, err error) string {
@@ -1057,7 +1074,7 @@ func (s *Server) patchFallback(ctx context.Context, pkg *osadminv1.UpdatePackage
 	if !ok || pkg.GetKind() != string(updatepkg.KindPatch) {
 		return ""
 	}
-	full := pkg.GetFullBin()
+	full := s.indexedFull(pkg.GetVersion(), pkg.GetFullBin())
 	c := callFrom(ctx)
 	e := c.by("upgrade.patch-fallback")
 	e.Target = "release " + pkg.GetVersion()

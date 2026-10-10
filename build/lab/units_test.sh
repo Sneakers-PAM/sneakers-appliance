@@ -57,6 +57,7 @@ refused "COMMIT" CHANNEL=production
 refused "COMMIT" CHANNEL=production COMMIT=xyz
 refused "BASEOS_INPUTS" CHANNEL=production COMMIT=1a2b3c4 BASEOS_INPUTS=nothex
 refused "BRIDGE is for lab builds only" CHANNEL=production COMMIT=1a2b3c4 BRIDGE=1
+refused "OLD_NAMES is for lab builds only" CHANNEL=production COMMIT=1a2b3c4 OLD_NAMES=1
 refused "doesn't end with -g<commit>" CHANNEL=lab
 
 # A Base OS always ships with its Base Web (spec 7, Section 4.4): a build

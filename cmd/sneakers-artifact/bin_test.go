@@ -121,7 +121,7 @@ func TestTheProductBundleSteps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if filepath.Base(bin) != "sneakers-product-0.2.0-amd64-LAB.bin" {
+	if filepath.Base(bin) != "sneakers-product-lab-0.2.0-amd64.bin" {
 		t.Fatalf("sealed %s", bin)
 	}
 	got, err := runCmd(t, "bin-verify", "--release-key", filepath.Join(tmp, "cosign.pub"), "--channel", "lab",
@@ -146,7 +146,7 @@ func TestTheProductBundleSteps(t *testing.T) {
 		t.Fatalf("index %s: %v", b, err)
 	}
 	e := index.Products[0]
-	if e.Version != "0.2.0" || e.File != "sneakers-product-0.2.0-amd64-LAB.bin" || e.Channel != "lab" || len(e.Bases) != 2 || e.Size == 0 {
+	if e.Version != "0.2.0" || e.File != "sneakers-product-lab-0.2.0-amd64.bin" || e.Channel != "lab" || len(e.Bases) != 2 || e.Size == 0 {
 		t.Fatalf("entry %+v", e)
 	}
 }
@@ -332,7 +332,7 @@ func TestTheUnitsSteps(t *testing.T) {
 	const v = "0.0.0-lab.20261012m-g1a2b3c4"
 	inputs := strings.Repeat("e", 64)
 	osBin := sealUnit(t, tmp, []string{"--bridge"}, "--unit", "baseOS", "--version", v, "--commit", "1a2b3c4", "--inputs", inputs, "--epoch", "1")
-	if filepath.Base(osBin) != "sneakers-appliance-baseOS-"+v+"-amd64-LAB.bin" {
+	if filepath.Base(osBin) != "sneakers-appliance-baseOS-lab-m-amd64.bin" {
 		t.Fatalf("sealed %s", osBin)
 	}
 	bridge := filepath.Join(filepath.Dir(osBin), "sneakers-appliance-"+v+"-amd64-LAB.bin")
@@ -342,7 +342,7 @@ func TestTheUnitsSteps(t *testing.T) {
 		t.Fatal("the bridge copy isn't the same bytes")
 	}
 	webBin := sealUnit(t, tmp, nil, "--unit", "baseWeb", "--version", v, "--commit", "1a2b3c4", "--requires-baseos-min", "0.0.0-0", "--requires-baseos-before", "0.1.0-0")
-	if filepath.Base(webBin) != "sneakers-appliance-baseWeb-"+v+"-amd64-LAB.bin" {
+	if filepath.Base(webBin) != "sneakers-appliance-baseWeb-lab-m-amd64.bin" {
 		t.Fatalf("sealed %s", webBin)
 	}
 	idx := filepath.Join(tmp, updatepkg.IndexName)
@@ -398,7 +398,7 @@ func TestTheBaseWebSteps(t *testing.T) {
 		t.Fatalf("%q %v", got, err)
 	}
 	bin := sealUnit(t, tmp, nil, "--unit", "baseWeb", "--version", "0.3.2", "--commit", "1a2b3c4")
-	if filepath.Base(bin) != "sneakers-appliance-baseWeb-0.3.2-g1a2b3c4-amd64-LAB.bin" {
+	if filepath.Base(bin) != "sneakers-appliance-baseWeb-lab-0.3.2-amd64.bin" {
 		t.Fatalf("sealed %s", bin)
 	}
 }
@@ -419,5 +419,42 @@ func TestBinPackNamesTheBaseWebABaseOSShipsWith(t *testing.T) {
 	if _, err := runCmd(t, "bin-pack", "--layout", filepath.Join(tmp, "layout"), "--recipient", filepath.Join(tmp, "keys", "update.pub"),
 		"--unit", "baseWeb", "--version", "0.3.2", "--includes-baseweb", "0.3.2", "--out", filepath.Join(tmp, "web-work")); err == nil {
 		t.Fatal("a Base Web named a Base Web it includes")
+	}
+}
+
+// bin-name prints the name a .bin is published under, and with --previous
+// the name the builds before the version-only names used; the index lists
+// each file by the name it has, and refuses a name its header doesn't give.
+func TestTheIndexListsEachFileByItsName(t *testing.T) {
+	tmp := t.TempDir()
+	const v = "0.0.0-lab.20261010n3.r20261010105645-ga8df881"
+	osBin := sealUnit(t, tmp, nil, "--unit", "baseOS", "--version", v, "--commit", "a8df881", "--inputs", strings.Repeat("e", 64))
+	if got, err := runCmd(t, "bin-name", osBin); err != nil || got != "sneakers-appliance-baseOS-lab-n3-amd64.bin" {
+		t.Fatalf("bin-name %q %v", got, err)
+	}
+	prev, err := runCmd(t, "bin-name", "--previous", osBin)
+	if err != nil || prev != "sneakers-appliance-baseOS-"+v+"-amd64-LAB.bin" {
+		t.Fatalf("bin-name --previous %q %v", prev, err)
+	}
+	old := filepath.Join(filepath.Dir(osBin), prev)
+	if err := os.Link(osBin, old); err != nil {
+		t.Fatal(err)
+	}
+	idx := filepath.Join(tmp, updatepkg.IndexName)
+	if _, err := runCmd(t, "index", "--out", idx, osBin, old); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(idx) // #nosec G304 -- the test's own output
+	var index updatepkg.Index
+	if err := json.Unmarshal(raw, &index); err != nil || len(index.BaseOS) != 2 ||
+		index.BaseOS[0].File != filepath.Base(osBin) || index.BaseOS[1].File != prev || index.BaseOS[1].Version != v {
+		t.Fatalf("index %s: %v", raw, err)
+	}
+	wrong := filepath.Join(filepath.Dir(osBin), "sneakers-appliance-baseOS-lab-n9-amd64.bin")
+	if err := os.Link(osBin, wrong); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCmd(t, "index", "--out", idx, wrong); err == nil {
+		t.Fatal("a file under another build's name was indexed")
 	}
 }

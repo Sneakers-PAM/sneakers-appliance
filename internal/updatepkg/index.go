@@ -118,7 +118,7 @@ func ReadIndex(r io.Reader) (Index, error) {
 // Offer is what a box may install from idx: its architecture and channel,
 // fitting base, stable (no pre-release part; on a lab box every lab build
 // counts), newer than installed (empty before the first install), and
-// named the way FileName names it. Newest first.
+// named the way its header names it (NamedFor). Newest first.
 func (idx Index) Offer(arch, channel, base, installed string) []IndexEntry {
 	return idx.offerProducts(arch, channel, base, installed, false)
 }
@@ -134,7 +134,7 @@ func (idx Index) offerProducts(arch, channel, base, installed string, pre bool) 
 	for _, e := range idx.Products {
 		h := Header{Format: Format, Name: NameProduct, Version: e.Version, Arch: e.Arch, Kind: KindProduct, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel}
 		switch {
-		case h.check() != nil, e.Arch != arch, e.Channel != channel, e.File != FileName(h):
+		case h.check() != nil, e.Arch != arch, e.Channel != channel, !NamedFor(h, e.File):
 		case h.AppliesTo(base) != nil:
 		case channel == release.ChannelProduction && !pre && semver.Prerelease("v"+e.Version) != "":
 		case installed != "" && semver.Compare("v"+e.Version, "v"+installed) <= 0:
@@ -149,16 +149,33 @@ func (idx Index) offerProducts(arch, channel, base, installed string, pre bool) 
 // Add puts h's entry in its section: products, baseOS, baseWeb, or for a
 // header from before the units, base. The index is then format 2.
 func (idx *Index) Add(h Header, size int64) {
+	idx.add(h, EntryOf(h, size))
+}
+
+// AddFile is Add for a file published under the name file: the entry
+// names it, so an index over files from before the version-only names
+// lists them as they are. A name h isn't published under is refused.
+func (idx *Index) AddFile(h Header, size int64, file string) error {
+	if !NamedFor(h, file) {
+		return codes.New(codes.UpgradeFormat, "%s isn't a name the %s %s header is published under (%s)", file, UnitOf(h).Title(), h.Version, FileName(h))
+	}
+	e := EntryOf(h, size)
+	e.File = file
+	idx.add(h, e)
+	return nil
+}
+
+func (idx *Index) add(h Header, e IndexEntry) {
 	idx.Format = IndexFormat
 	switch {
 	case h.IsProduct():
-		idx.Products = append(idx.Products, EntryOf(h, size))
+		idx.Products = append(idx.Products, e)
 	case UnitOf(h) == UnitBaseWeb:
-		idx.BaseWeb = append(idx.BaseWeb, EntryOf(h, size))
+		idx.BaseWeb = append(idx.BaseWeb, e)
 	case h.Unit == "":
-		idx.Base = append(idx.Base, EntryOf(h, size))
+		idx.Base = append(idx.Base, e)
 	default:
-		idx.BaseOS = append(idx.BaseOS, EntryOf(h, size))
+		idx.BaseOS = append(idx.BaseOS, e)
 	}
 }
 
@@ -194,12 +211,12 @@ func (b Box) epoch() int {
 }
 
 // offerable is whether e, of unit u, is for b at all: its rules hold, its
-// name is the one its header gives, and it's b's architecture, channel and
-// epoch, stable on a production box.
-func (b Box) offerable(e IndexEntry, u Unit, name func(Header) string) (Header, bool) {
+// name is one its header gives (NamedFor), and it's b's architecture,
+// channel and epoch, stable on a production box.
+func (b Box) offerable(e IndexEntry, u Unit) (Header, bool) {
 	h := e.header(u)
 	switch {
-	case h.check() != nil, e.Arch != b.Arch, e.Channel != b.Channel, e.File != name(h):
+	case h.check() != nil, e.Arch != b.Arch, e.Channel != b.Channel, !NamedFor(h, e.File):
 	case h.EpochOf() != b.epoch():
 	case b.Channel == release.ChannelProduction && !b.Prerelease && semver.Prerelease("v"+e.Version) != "":
 	default:
@@ -216,9 +233,9 @@ func (b Box) offerable(e IndexEntry, u Unit, name func(Header) string) (Header, 
 func (idx Index) OfferBaseOS(b Box) []IndexEntry {
 	var out []IndexEntry
 	seen := map[string]bool{}
-	add := func(list []IndexEntry, u Unit, name func(Header) string) {
+	add := func(list []IndexEntry, u Unit) {
 		for _, e := range list {
-			h, ok := b.offerable(e, u, name)
+			h, ok := b.offerable(e, u)
 			k := Kind(e.Kind)
 			switch {
 			case !ok, k != KindFull && k != KindPatch:
@@ -232,8 +249,8 @@ func (idx Index) OfferBaseOS(b Box) []IndexEntry {
 			}
 		}
 	}
-	add(idx.BaseOS, UnitBaseOS, FileName)
-	add(idx.Base, "", FileName)
+	add(idx.BaseOS, UnitBaseOS)
+	add(idx.Base, "")
 	slices.SortStableFunc(out, func(x, y IndexEntry) int {
 		if c := semver.Compare("v"+y.Version, "v"+x.Version); c != 0 {
 			return c
@@ -254,7 +271,7 @@ func (idx Index) OfferBaseOS(b Box) []IndexEntry {
 func (idx Index) OfferBaseWeb(b Box) []IndexEntry {
 	var out []IndexEntry
 	for _, e := range idx.BaseWeb {
-		h, ok := b.offerable(e, UnitBaseWeb, FileName)
+		h, ok := b.offerable(e, UnitBaseWeb)
 		switch {
 		case !ok, h.Kind != KindFull:
 		case FitsBaseOS(h, b.BaseOS, "") != nil:
@@ -276,7 +293,7 @@ func (idx Index) UnfitBaseWeb(b Box) (IndexEntry, Range, bool) {
 	var need Range
 	found := false
 	for _, e := range idx.BaseWeb {
-		h, ok := b.offerable(e, UnitBaseWeb, FileName)
+		h, ok := b.offerable(e, UnitBaseWeb)
 		if !ok || FitsBaseOS(h, b.BaseOS, "") == nil || (b.BaseWeb != "" && semver.Compare("v"+e.Version, "v"+b.BaseWeb) <= 0) {
 			continue
 		}
@@ -291,7 +308,7 @@ func (idx Index) UnfitBaseWeb(b Box) (IndexEntry, Range, bool) {
 // OfferBase is the base releases a box running base may stage from idx:
 // full or patch, its architecture and channel, stable (no pre-release
 // part; on a lab box every lab build counts), newer than running, a patch
-// only for the base it names, and named the way FileName names it. Newest
+// only for the base it names, and named the way its header names it. Newest
 // first. Whether it fits the installed product's base range is the
 // caller's to say.
 func (idx Index) OfferBase(arch, channel, running string) []IndexEntry {
@@ -301,7 +318,7 @@ func (idx Index) OfferBase(arch, channel, running string) []IndexEntry {
 		h := Header{Format: Format, Name: NameFor(k), Version: e.Version, Arch: e.Arch, Kind: k, Bases: e.Bases, Channel: e.Channel}
 		switch {
 		case k != KindFull && k != KindPatch:
-		case h.check() != nil, e.Arch != arch, e.Channel != channel, e.File != FileName(h):
+		case h.check() != nil, e.Arch != arch, e.Channel != channel, !NamedFor(h, e.File):
 		case h.AppliesTo(running) != nil:
 		case channel == release.ChannelProduction && semver.Prerelease("v"+e.Version) != "":
 		case semver.Compare("v"+e.Version, "v"+running) <= 0:
