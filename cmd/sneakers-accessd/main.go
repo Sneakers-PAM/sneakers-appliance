@@ -55,6 +55,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
@@ -264,6 +265,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			Containerd: "/run/k0s/containerd.sock", Edge: "127.0.0.1:443",
 			SwitchDir: filepath.Join(c.state, "platform"),
 		},
+		// edgefall's push socket: the box state goes to every open product
+		// tab before an update, a reboot or a shutdown stops anything
+		// (docs/edge-fallback.md#the-event-stream).
+		BoxEvents: &edgefall.PushClient{Socket: edgefall.PushSocket},
 		// The installed product's switches (the MCP page): their stacks
 		// go in front of k0s or away, and the installed bundle's k0s
 		// restarts what reads them.

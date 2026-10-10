@@ -15,6 +15,7 @@
 package k0s_test
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -141,6 +142,12 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 			t.Fatalf("https://<box>/_box/state from the host: %q, %v", body, err)
 		}
 		time.Sleep(time.Second)
+	}
+	// The box-state stream comes through the pinned Traefik unbuffered:
+	// the first event (the current state) arrives at once, not when a
+	// buffer fills or the stream ends.
+	if line, err := firstEvent(httpsPort, 5*time.Second); err != nil || !strings.Contains(line, `"state":"running"`) {
+		t.Fatalf("https://<box>/_box/events from the host: %q, %v", line, err)
 	}
 	c := http.Client{Timeout: 5 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := c.Get(fmt.Sprintf("http://127.0.0.1:%d/", httpPort))
@@ -366,6 +373,35 @@ func httpsGetPath(port int, path string) (string, error) {
 	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
 	return string(b), err
+}
+
+// firstEvent reads https://<box>/_box/events until its first data line,
+// within max.
+func firstEvent(port int, max time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), max)
+	defer cancel()
+	c := http.Client{Transport: &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // #nosec G402 -- the box's self-signed certificate
+	}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://127.0.0.1:%d/_box/events", port), nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := c.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if ct := resp.Header.Get("Content-Type"); ct != "text/event-stream" {
+		return "", fmt.Errorf("content type %q", ct)
+	}
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		if data, ok := strings.CutPrefix(sc.Text(), "data: "); ok {
+			return data, nil
+		}
+	}
+	return "", fmt.Errorf("no event: %v", sc.Err())
 }
 
 func freePort(t *testing.T) int {
