@@ -40,6 +40,24 @@ func TestHelpListsTheTroubleshootingCommands(t *testing.T) {
 	}
 }
 
+// The disk lines work on the box's busybox: df with -P, so a long device
+// name doesn't wrap the line a script reads, and ls --full-time for a
+// file's size and time, since busybox stat has no -c.
+func TestHelpsDiskLinesSuitBusybox(t *testing.T) {
+	out, err := sh(t, "help")
+	if err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, want := range []string{"df -hP /var/lib", "ls -l --full-time"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("help lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "stat -c") {
+		t.Errorf("help offers stat -c, which busybox lacks:\n%s", out)
+	}
+}
+
 // Before a product is installed kubectl, helm and k0s say so, instead of a
 // bare "not found".
 func TestKubectlAndHelmSayTheyComeWithTheProduct(t *testing.T) {
