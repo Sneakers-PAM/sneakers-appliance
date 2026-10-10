@@ -19,9 +19,12 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A newer push to a pull request cancels its earlier run; on main a merge
+# waits for the running suite instead of cancelling it (GitHub keeps one
+# pending run, the newest), so every run that starts finishes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   image:
     name: 🖥️ Image suite (amd64)
