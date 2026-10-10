@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 )
 
 func (b *box) finishSetup() {
@@ -208,4 +210,93 @@ func (b *box) installProduct(version string) {
 	if err := os.Symlink("a", filepath.Join(dir, "current")); err != nil {
 		b.t.Fatal(err)
 	}
+}
+
+// waitState asks the phase until it says want, or fails after a few
+// seconds.
+func (b *box) waitState(want boxstate.State) {
+	b.t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		p := b.phase()
+		if p.GetState() == string(want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			b.t.Fatalf("state %q, want %q", p.GetState(), want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func (b *box) setRunning(on bool) {
+	b.services.mu.Lock()
+	b.services.running = on
+	b.services.mu.Unlock()
+}
+
+// Once k0s runs the box still says starting until the product is ready
+// (the same check a product apply waits on), so the edge keeps 443 on the
+// box-state page and an open tab doesn't reload into a product whose
+// services are still starting. Each k0s start waits again.
+func TestThePhaseSaysStartingUntilTheProductIsReady(t *testing.T) {
+	p := &fakeProbe{step: productup.StepPods, detail: "Rolling out (12 of 17 ready): waiting for sneakers/sneakers-audit"}
+	b := newBox(t, false, withProbe(p))
+	b.finishSetup()
+	b.installProduct("0.1.0")
+	b.setRunning(true)
+	for range 20 {
+		if got := b.phase(); got.GetState() != string(boxstate.Starting) || !got.GetProductRunning() {
+			t.Fatalf("k0s runs, the product isn't ready: %v", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	p.set("", "", nil)
+	b.waitState(boxstate.Running)
+	b.setRunning(false)
+	if got := b.phase().GetState(); got != string(boxstate.Starting) {
+		t.Fatalf("k0s stopped: %q", got)
+	}
+	p.set(productup.StepK0s, "The Kubernetes API doesn't answer yet.", nil)
+	b.setRunning(true)
+	for range 10 {
+		if got := b.phase().GetState(); got != string(boxstate.Starting) {
+			t.Fatalf("k0s started again, the product isn't ready: %q", got)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	p.set("", "", nil)
+	b.waitState(boxstate.Running)
+}
+
+// A product that isn't ready within its ready bound doesn't keep the box
+// on the box-state page for good: the state goes to running, so what
+// works can be reached.
+func TestThePhaseStopsWaitingForTheProductAfterTheBound(t *testing.T) {
+	p := &fakeProbe{step: productup.StepPods, detail: "4 of 5 pods ready"}
+	b := newBox(t, false, withProbe(p))
+	b.finishSetup()
+	b.installProduct("0.1.0")
+	b.setRunning(true)
+	if got := b.phase().GetState(); got != string(boxstate.Starting) {
+		t.Fatalf("not ready yet: %q", got)
+	}
+	b.clk.Advance(osadmin.ProductUpBound + time.Second)
+	b.waitState(boxstate.Running)
+}
+
+// From a product apply's restart until the product is ready the box says
+// updating, so 443 shows "updating" and nobody signs in to a product that
+// still rolls out; then it says running.
+func TestThePhaseSaysUpdatingUntilAProductApplyIsReady(t *testing.T) {
+	p := &fakeProbe{step: productup.StepPods, detail: "Rolling out (12 of 17 ready): waiting for sneakers/sneakers-audit"}
+	b, alice := applyProductWith(t, p)
+	b.finishSetup()
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	if got := b.phase(); got.GetState() != string(boxstate.Updating) || !got.GetProductRunning() {
+		t.Fatalf("rolling out: %v", got)
+	}
+	p.set("", "", nil)
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
+	b.waitState(boxstate.Running)
 }

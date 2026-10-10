@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strings"
 	"sync/atomic"
@@ -166,15 +167,62 @@ func Redirect() http.Handler {
 	})
 }
 
+// GatePath is the edge's forward check for every request on 443 (a
+// Traefik forwardAuth middleware on the websecure entry point), on the
+// loopback listener only.
+const GatePath = "/_box/gate"
+
+// Gate lets a product request through (204) only while the box is
+// running: after k0s starts and during a product apply or revert the box
+// says starting or updating until the product is ready
+// (docs/edge-fallback.md), and every request gets the branded page with
+// 503 instead, so no one signs in to, and no agent writes to, a product
+// that isn't ready. The poller's own paths always pass, and so does the
+// box itself on loopback, whose readiness check asks the product through
+// the edge before the gate opens. The forwarded headers are Traefik's own:
+// it drops a client's, so the last X-Forwarded-For entry is the peer.
+func (s *Server) Gate(w http.ResponseWriter, r *http.Request) {
+	st := s.state()
+	if st == boxstate.Running || boxPath(r.Header.Get("X-Forwarded-Uri")) || loopbackPeer(r.Header.Get("X-Forwarded-For")) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	h := w.Header()
+	h.Set("Cache-Control", "no-store")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("X-Frame-Options", "DENY")
+	s.page(w, st, s.look.Load())
+}
+
+// boxPath is whether a forwarded URI is one of edgefall's own paths, plain:
+// no dot segments and no escapes.
+func boxPath(uri string) bool {
+	return strings.HasPrefix(uri, "/_box/") && !strings.Contains(uri, "..") && !strings.Contains(uri, "%")
+}
+
+// loopbackPeer is whether the last X-Forwarded-For entry is a loopback
+// address.
+func loopbackPeer(xff string) bool {
+	parts := strings.Split(xff, ",")
+	a, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1]))
+	return err == nil && a.IsLoopback()
+}
+
 // HandoffPath is where the product's edge asks for 80 and 443 (a POST, on
 // the loopback listener only), from an init container that runs just
 // before Traefik starts and binds them.
 const HandoffPath = "/_box/edge-handoff"
 
-// LocalHandler is the loopback listener's handler: the edge's handoff,
-// then h for everything else.
-func LocalHandler(h http.Handler, handoff func() bool) http.Handler {
+// LocalHandler is the loopback listener's handler: the edge's handoff and
+// its gate, then h for everything else.
+func LocalHandler(h *Server, handoff func() bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == GatePath && r.URL.RawPath == "" {
+			h.Gate(w, r)
+			return
+		}
 		if r.Method == http.MethodPost && r.URL.Path == HandoffPath && r.URL.RawPath == "" {
 			handoff()
 			w.Header().Set("Cache-Control", "no-store")

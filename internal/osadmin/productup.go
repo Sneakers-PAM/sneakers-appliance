@@ -52,6 +52,7 @@ func isProductUpStep(id string) bool {
 // first step is active and a goroutine follows the rest, so the apply
 // answers while Updates and the console show the product coming up.
 func (s *Server) startProductUp() {
+	s.productWaitsAgain()
 	s.setStep(productup.StepK0s, "")
 	s.followProductUp()
 }
@@ -162,6 +163,7 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 		case err != nil:
 			s.o.Logger.Debug("osadmin: the product's progress isn't known this time", log.F("step", at), log.F("error", err.Error()))
 		case res.Step == "":
+			s.productIsReady()
 			s.finishSteps(productup.StepEdge)
 			if h := s.takeHeld(started); h != nil {
 				s.writeHeld(h, nil, "")

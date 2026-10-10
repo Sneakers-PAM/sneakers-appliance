@@ -17,7 +17,11 @@
 # /_box/ goes to sneakers-edgefall on 127.0.0.1:9180 (the host's loopback:
 # Traefik is on the host network), and when the hello pod doesn't answer
 # (502 to 504) the edge serves edgefall's box-state page instead of its
-# own error (docs/edge-fallback.md).
+# own error (docs/edge-fallback.md). Every request on 443 passes
+# edgefall's gate first (box-gate, a forwardAuth on the websecure entry
+# point): while the box says starting or updating, which it does until the
+# product is ready after k0s starts and through a product apply or revert,
+# each request gets the box-state page with 503 instead of the product.
 # The product's charts publish their routes as Ingresses of the class
 # traefik in the sneakers namespace, which Traefik reads with the
 # kubernetesingress provider. Its role is cluster-wide (the product's
@@ -100,6 +104,9 @@ data:
           middlewares: [box-page]
           tls: {}
       middlewares:
+        box-gate:
+          forwardAuth:
+            address: http://127.0.0.1:9180/_box/gate
         box-page:
           errors:
             status: ["502-504"]
@@ -166,6 +173,7 @@ spec:
             - --entryPoints.web.http.redirections.entryPoint.scheme=https
             - --entryPoints.websecure.address=:443
             - --entryPoints.websecure.http.tls=true
+            - --entryPoints.websecure.http.middlewares=box-gate@file
             - --entryPoints.traefik.address=127.0.0.1:9000
             - --providers.file.directory=/etc/traefik/dynamic
             - --providers.file.watch=true
