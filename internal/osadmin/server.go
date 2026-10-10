@@ -98,6 +98,12 @@ type Options struct {
 	// as the steps after restarting, until the product answers on 443;
 	// nil ends the apply at the restart.
 	ProductUp ProductProbe
+	// BoxEvents is edgefall's push socket (edgefall.PushClient on the
+	// box): the box state goes there the moment an update, a product
+	// apply, a reboot or a shutdown starts, before anything stops, and at
+	// each step (docs/edge-fallback.md#the-event-stream); nil pushes
+	// nothing.
+	BoxEvents BoxNotifier
 	Network   netdv1connect.NetworkServiceClient
 	Paths     Paths
 	// BoxStateFile is init's announcement of a reboot or a shutdown
@@ -179,6 +185,7 @@ type Server struct {
 	checks   checks
 	progress progress
 	ready    readiness
+	boxPush  boxPush
 	// revertMu guards revertAudited, the last network change whose revert
 	// is in the audit, so a timer and a late check don't write it twice.
 	revertMu      sync.Mutex

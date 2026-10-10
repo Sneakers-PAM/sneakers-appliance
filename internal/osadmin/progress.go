@@ -268,6 +268,7 @@ func (s *Server) setVersion(v string) {
 // setStep makes id the active step with detail, every step before it
 // done. A step that isn't in the record is ignored.
 func (s *Server) setStep(id, detail string) {
+	defer s.boxChanged()
 	s.progress.mu.Lock()
 	defer s.progress.mu.Unlock()
 	s.loadProgress()
@@ -302,6 +303,7 @@ func (s *Server) setStep(id, detail string) {
 
 // failStep marks id failed with why; the steps after it stay pending.
 func (s *Server) failStep(id string, err error) {
+	defer s.boxChanged()
 	s.progress.mu.Lock()
 	defer s.progress.mu.Unlock()
 	s.loadProgress()
@@ -367,6 +369,7 @@ func (s *Server) failStepLocked(id, why, code string) {
 // finishSteps marks every step through last done: the end of a stage
 // (through staging) or of the whole update.
 func (s *Server) finishSteps(last string) {
+	defer s.boxChanged()
 	s.progress.mu.Lock()
 	defer s.progress.mu.Unlock()
 	s.loadProgress()

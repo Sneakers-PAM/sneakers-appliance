@@ -14,6 +14,7 @@ import (
 
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
@@ -112,7 +113,7 @@ func (s *Server) HostNameChanged(ctx context.Context) {
 		return
 	}
 	by := osaudit.Entry{Actor: "box", Action: "upgrade.apply"}
-	if _, err := s.beginMaintenance(ctx, "product re-apply for the new host name", by, nil); err != nil {
+	if _, err := s.beginMaintenance(ctx, "product re-apply for the new host name", edgefall.KindProductApply, by, nil); err != nil {
 		lg.Warn("osadmin: the host name change waits", log.F("fqdn", fqdn), log.F("error", err.Error()))
 		s.lookAgain(hostNameRetry)
 		return

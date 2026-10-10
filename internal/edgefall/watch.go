@@ -14,11 +14,21 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 )
 
-// Phase is what accessd's public GetPhase answers that edgefall uses.
+// Phase is what accessd's public GetPhase answers that edgefall uses, or
+// what accessd pushes the moment it changes.
 type Phase struct {
-	State            string
-	ProductRunning   bool
-	ProductInstalled bool
+	State            string `json:"state"`
+	ProductRunning   bool   `json:"productRunning"`
+	ProductInstalled bool   `json:"productInstalled"`
+	// Kind is what an updating box is doing: KindUpdate or
+	// KindProductApply; empty is an update.
+	Kind string `json:"kind,omitempty"`
+	// Step is the update's active step id, Detail its words.
+	Step   string `json:"step,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	// Reset, on a push, drops a reboot or a shutdown seen before: accessd
+	// says it was refused, so the box isn't going after all.
+	Reset bool `json:"reset,omitempty"`
 }
 
 // Source asks accessd's GetPhase.
@@ -46,6 +56,10 @@ type Watcher struct {
 	startedAt time.Time
 	handedOff bool
 	now       func() time.Time
+	// events streams the state (EventsPath); kind, step and detail go
+	// with it.
+	events             *Hub
+	kind, step, detail string
 }
 
 // HandoffWait is how long edgefall keeps 80 and 443 after k0s starts when
@@ -86,7 +100,25 @@ func NewWatcher(src Source, file string, lg log.Logger) *Watcher {
 	if lg == nil {
 		lg = log.Nop()
 	}
-	return &Watcher{src: src, file: file, lg: lg, state: boxstate.Starting, now: time.Now}
+	return &Watcher{src: src, file: file, lg: lg, state: boxstate.Starting, now: time.Now, events: NewHub()}
+}
+
+// Events is the stream of the state this watcher keeps.
+func (w *Watcher) Events() *Hub { return w.events }
+
+// Push takes a phase accessd pushed, as an answer to a poll, and returns
+// the event the streams get.
+func (w *Watcher) Push(p Phase) Event {
+	if p.Reset {
+		w.mu.Lock()
+		if w.going {
+			w.lg.Info("edgefall: accessd says the reboot or shutdown isn't happening")
+		}
+		w.going = false
+		w.mu.Unlock()
+	}
+	w.apply(boxstate.Read(w.file), p, nil)
+	return w.events.Current()
 }
 
 // Poll asks once. An answer sets the state and the claim: on a box with a
@@ -98,11 +130,19 @@ func NewWatcher(src Source, file string, lg log.Logger) *Watcher {
 func (w *Watcher) Poll(ctx context.Context) {
 	announced := boxstate.Read(w.file)
 	p, err := w.src(ctx)
+	w.apply(announced, p, err)
+}
+
+func (w *Watcher) apply(announced boxstate.State, p Phase, err error) {
 	if err == nil && !boxstate.Valid(p.State) {
 		err = fmt.Errorf("accessd answered the state %q", p.State)
 	}
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	defer func() {
+		st, kind, step, detail := w.state, w.kind, w.step, w.detail
+		w.mu.Unlock()
+		w.events.Set(st, kind, step, detail)
+	}()
 	prev, prevClaim := w.state, w.claim
 	switch {
 	case err == nil:
@@ -112,6 +152,10 @@ func (w *Watcher) Poll(ctx context.Context) {
 		}
 		w.state = s
 		w.going = w.going || boxstate.Going(s) || announced != ""
+		w.kind, w.step, w.detail = kindOf(w.state, p.Kind), p.Step, p.Detail
+		if w.state != boxstate.Updating {
+			w.step, w.detail = "", ""
+		}
 		w.installed = p.ProductInstalled
 		switch {
 		case !p.ProductRunning:
@@ -127,6 +171,7 @@ func (w *Watcher) Poll(ctx context.Context) {
 			w.state = announced
 		}
 		w.claim = w.installed
+		w.kind = kindOf(w.state, w.kind)
 	}
 	if err != nil {
 		w.lg.Debug("edgefall: no state from accessd", log.F("error", err.Error()), log.F("announced", string(announced)))
@@ -151,4 +196,22 @@ func (w *Watcher) Claim() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.claim
+}
+
+// kindOf is the stream's kind for a state: a reboot, a shutdown, or for
+// an updating box what accessd says it is (an update when it doesn't say);
+// none otherwise.
+func kindOf(s boxstate.State, said string) string {
+	switch s {
+	case boxstate.Rebooting:
+		return KindReboot
+	case boxstate.ShuttingDown:
+		return KindShutdown
+	case boxstate.Updating:
+		if said == KindProductApply {
+			return KindProductApply
+		}
+		return KindUpdate
+	}
+	return ""
 }
