@@ -27,7 +27,7 @@ function element() {
 }
 
 // One tab: poll.js with its own clock, timers, page and box.
-function tab(seed) {
+function tab(seed, sse) {
   let now = 0;
   let timers = [];
   let nextId = 1;
@@ -77,6 +77,30 @@ function tab(seed) {
       return next || Promise.resolve({ ok: true, headers: headers({}) });
     },
   };
+  // A fake EventSource on the same clock: box.events says whether the
+  // stream opens ("ok"), is refused ("refuse") or isn't there at all.
+  const streams = [];
+  class FakeEventSource {
+    constructor(url) {
+      this.url = url;
+      this.listeners = {};
+      this.closed = false;
+      streams.push({ at: now, es: this });
+      ctx.setTimeout(() => {
+        if (this.closed) return;
+        if (box.events === "ok" && box.reachable) {
+          this.fire("open", {});
+          this.fire("state", { data: JSON.stringify({ state: box.state, seq: 1 }) });
+        } else {
+          this.fire("error", {});
+        }
+      }, 0);
+    }
+    addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
+    fire(type, ev) { for (const fn of this.listeners[type] || []) fn(ev); }
+    close() { this.closed = true; }
+  }
+  const live = () => streams.filter((x) => !x.es.closed).map((x) => x.es);
   const ctx = {
     window,
     document,
@@ -100,10 +124,27 @@ function tab(seed) {
     TypeError,
     Object,
   };
+  if (sse) {
+    box.events = sse;
+    window.EventSource = FakeEventSource;
+    ctx.EventSource = FakeEventSource;
+  }
   vm.createContext(ctx);
   const flush = () => new Promise((r) => setImmediate(r));
   const t = {
     box,
+    streams,
+    // An event on every open stream, as the box pushes it.
+    async push(state) {
+      for (const es of live()) es.fire("state", { data: JSON.stringify({ state, seq: 2 }) });
+      for (let i = 0; i < 5; i++) await flush();
+    },
+    // The stream drops (the box went away).
+    async drop() {
+      for (const es of live()) es.fire("error", {});
+      for (let i = 0; i < 5; i++) await flush();
+    },
+    overlay: () => document.documentElement.children.length,
     asks,
     document,
     window,
@@ -226,6 +267,67 @@ async function main() {
     await a.visibility(false);
     await a.until(2 * MIN + 5000);
     out.thaw = { overlay: a.document.documentElement.children.length };
+  }
+
+  // The state events. While the stream is up nothing asks /_box/state
+  // after the one ask at load, and an event lays the page over at once.
+  {
+    const a = tab(9, "ok");
+    await a.start();
+    await a.until(10 * MIN);
+    const asksUp = a.asks.length;
+    const overlayBefore = a.overlay();
+    await a.push("updating");
+    const overlayNow = a.overlay();
+    out.events = { asksUp, overlayBefore, overlayNow, streams: a.streams.length };
+  }
+
+  // The stream drops while the box updates: the page stays, and the
+  // stream is tried again after 1, 2, 4, 8, 10, 10 s; when it opens on a
+  // running box the page reloads.
+  {
+    const a = tab(10, "ok");
+    await a.start();
+    await a.until(MIN);
+    await a.push("updating");
+    a.box.reachable = false;
+    const at = a.now();
+    await a.drop();
+    await a.until(at + 40 * 1000);
+    const retries = a.streams.map((x) => x.at - at).filter((x) => x >= 0);
+    const overlay = a.overlay();
+    a.box.reachable = true;
+    a.box.state = "running";
+    await a.until(at + 60 * 1000);
+    out.dropUpdating = { retries, overlay, reloads: a.window.reloads };
+  }
+
+  // The stream drops while the box runs: tried again at once; after 3
+  // failures one ask of /_box/state, which answers running, so no
+  // "can't be reached".
+  {
+    const a = tab(11, "ok");
+    await a.start();
+    await a.until(MIN);
+    const asked = a.asks.length;
+    a.box.events = "refuse";
+    const at = a.now();
+    await a.drop();
+    await a.until(at + 5000);
+    out.dropRunning = {
+      retries: a.streams.map((x) => x.at - at).filter((x) => x >= 0).slice(0, 3),
+      asks: a.asks.length - asked,
+      overlay: a.overlay(),
+    };
+  }
+
+  // A box whose stream never opens (an older edge): the slow poll every
+  // 30 to 60 seconds is the fallback.
+  {
+    const a = tab(12, "refuse");
+    await a.start();
+    await a.until(10 * MIN);
+    out.refused = { gaps: gaps(a.asks), overlay: a.overlay() };
   }
 
   process.stdout.write(JSON.stringify(out));

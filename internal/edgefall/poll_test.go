@@ -35,6 +35,26 @@ type pollRun struct {
 	Thaw struct {
 		Overlay int `json:"overlay"`
 	} `json:"thaw"`
+	Events struct {
+		AsksUp        int `json:"asksUp"`
+		OverlayBefore int `json:"overlayBefore"`
+		OverlayNow    int `json:"overlayNow"`
+		Streams       int `json:"streams"`
+	} `json:"events"`
+	DropUpdating struct {
+		Retries []int64 `json:"retries"`
+		Overlay int     `json:"overlay"`
+		Reloads int     `json:"reloads"`
+	} `json:"dropUpdating"`
+	DropRunning struct {
+		Retries []int64 `json:"retries"`
+		Asks    int     `json:"asks"`
+		Overlay int     `json:"overlay"`
+	} `json:"dropRunning"`
+	Refused struct {
+		Gaps    []int64 `json:"gaps"`
+		Overlay int     `json:"overlay"`
+	} `json:"refused"`
 	Hidden struct {
 		WhileHidden int     `json:"whileHidden"`
 		OnShow      []int64 `json:"onShow"`
@@ -144,4 +164,55 @@ func TestThePollerWaitsForASlowAnswerAndNeverOverlaps(t *testing.T) {
 	if r.Thaw.Overlay != 0 {
 		t.Fatalf("an ask that failed while the tab was hidden laid the overlay over the page")
 	}
+}
+
+// With the state events, the one ask at load is all while the stream is
+// up, and an event lays the box-state page over at once, from one stream.
+func TestTheClientFollowsTheStateEvents(t *testing.T) {
+	r := runPoller(t).Events
+	if r.AsksUp != 1 || r.Streams != 1 {
+		t.Fatalf("with the stream up for 10 minutes: %d asks, %d streams", r.AsksUp, r.Streams)
+	}
+	if r.OverlayBefore != 0 || r.OverlayNow != 1 {
+		t.Fatalf("an updating event didn't lay the page over at once: %+v", r)
+	}
+}
+
+// A stream that drops while the box updates keeps the page up and is
+// tried again after 1, 2, 4, 8 and then 10 seconds; once it opens on a
+// running box, the page reloads.
+func TestADroppedStreamWhileUpdatingBacksOff(t *testing.T) {
+	r := runPoller(t).DropUpdating
+	want := []int64{1000, 3000, 7000, 15000, 25000, 35000}
+	if len(r.Retries) < len(want) {
+		t.Fatalf("retries at %v ms", r.Retries)
+	}
+	for i, w := range want {
+		if r.Retries[i] != w {
+			t.Fatalf("retries at %v ms, want %v", r.Retries, want)
+		}
+	}
+	if r.Overlay != 1 || r.Reloads != 1 {
+		t.Fatalf("overlay %d, reloads %d", r.Overlay, r.Reloads)
+	}
+}
+
+// A stream that drops while the box runs is tried again at once; after
+// three failures one ask of /_box/state decides, and a running answer
+// says nothing to the page.
+func TestADroppedStreamWhileRunningRetriesAtOnce(t *testing.T) {
+	r := runPoller(t).DropRunning
+	if len(r.Retries) != 3 || r.Retries[0] != 0 || r.Asks != 1 || r.Overlay != 0 {
+		t.Fatalf("%+v", r)
+	}
+}
+
+// While the stream can't open, a slow poll every 30 to 60 seconds is the
+// fallback.
+func TestTheFallbackPollIsSlow(t *testing.T) {
+	r := runPoller(t).Refused
+	if len(r.Gaps) < 3 || r.Overlay != 0 {
+		t.Fatalf("%+v", r)
+	}
+	within(t, "fallback", r.Gaps[1:], 30000, 60000)
 }

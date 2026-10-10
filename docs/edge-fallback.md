@@ -138,7 +138,24 @@ A product page includes it:
 <script src="/_box/poll.js" defer></script>
 ```
 
-It asks `/_box/state` once when the page loads (one ask at a time, each given up after 5 seconds), then:
+Where the browser has EventSource (every current one), it opens one stream per page on the relative
+`/_box/events` and follows the box's state events (`event: state`, one JSON line with `state`,
+`kind`, `step`, `detail`, `since` and `seq`):
+
+- An event switches the page at once: `updating`, `rebooting`, `shutting-down` or `starting` lays
+  the box-state page over the product before 443 drops, and `running` after it reloads the page once
+  the page itself answers.
+- It asks `/_box/state` once when the page loads, for the product's brand, and not again while the
+  stream is up.
+- A stream that drops while the state isn't `running` is the box restarting: the box-state page
+  stays, and the stream is tried again after 1, 2, 4, 8 and then every 10 seconds.
+- A stream that drops while the box runs is tried again at once. After 3 failures in a row it asks
+  `/_box/state`, and says "Sneakers-PAM can't be reached" only if that fails too.
+- While the stream can't open, it asks `/_box/state` every 37.5 to 52.5 seconds (45 with jitter) as
+  the fallback.
+
+Without EventSource it polls instead. It asks `/_box/state` once when the page loads (one ask at a
+time, each given up after 5 seconds), then:
 
 - about every 45 seconds while the box answers `running`, spread by up to 7.5 seconds either way so
   open tabs don't ask in step;
