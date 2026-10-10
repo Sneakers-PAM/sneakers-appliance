@@ -399,7 +399,7 @@ func (m *Manager) Runs() ([]Run, error) {
 		r := &runs[i]
 		base := filepath.Join(out, r.Job)
 		if b, err := readCapped(base + ".txt"); err == nil {
-			r.Output = b
+			r.Output = ansiCodes.ReplaceAllString(b, "")
 		}
 		if b, err := os.ReadFile(base + ".txt.exit"); err == nil { // #nosec G304 -- the box's own file
 			if n, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
@@ -417,6 +417,10 @@ func (m *Manager) Runs() ([]Run, error) {
 	}
 	return runs, nil
 }
+
+// ansiCodes are the terminal control sequences (colours, line clears) a
+// step's console log carries; the Import page shows the output as text.
+var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 
 func readCapped(p string) (string, error) {
 	f, err := os.Open(p) // #nosec G304 -- the box's own file
