@@ -13,8 +13,8 @@
 #   VERITYSETUP    the static veritysetup (build/static/cryptsetup.sh)
 #   OPENSSH        directory with the static OpenSSH (build/openssh/build.sh)
 #   BUSYBOX        the static busybox (build/busybox/build.sh)
-#   STATIC         directory with the static cryptsetup, veritysetup, mke2fs
-#                  and sgdisk and their stamps (build/static), which the root
+#   STATIC         directory with the static cryptsetup, veritysetup, mke2fs,
+#                  sgdisk and watch (with its terminfo entries) and their stamps (build/static), which the root
 #                  carries for first boot
 #   RELEASE        the release.yaml: sneakers-release's manifest/release.yaml
 #                  at the commit build/release/pins.env pins

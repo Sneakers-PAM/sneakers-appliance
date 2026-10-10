@@ -33,7 +33,7 @@ openssh_stamp() {
   stamp_of openssh "$v" "$stamp_root/build/openssh/versions.env" "$stamp_root/build/openssh/build.sh"
 }
 
-# static_stamp <cryptsetup|e2fsprogs|gptfdisk> <arch>: a static tool from
+# static_stamp <cryptsetup|e2fsprogs|gptfdisk|procps> <arch>: a static tool from
 # build/static at the current pins.
 static_stamp() {
   stamp_of "$1-$2" pinned "$stamp_root/build/ci/versions.env" "$stamp_root/build/static/$1.sh"
