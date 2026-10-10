@@ -65,6 +65,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productedge"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -275,7 +276,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// once and kept on the state volume (docs/release.md#productyaml).
 		// They carry the product's email settings too (the Email page),
 		// kept 0600 next to them (docs/product-email.md).
-		BoxSecrets: &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Settings: settings, Logger: lg},
+		BoxSecrets: &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Settings: settings, Logger: lg, Restore: escrowRestore(custody)},
 		Email:      settings,
 		EmailWorkloads: emailWorkloads{
 			k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig,
@@ -395,6 +396,28 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 
 // rolloutRestart restarts a workload with the installed bundle's k0s as
 // kubectl on the admin kubeconfig.
+// escrowRestore reads a product key the installed bundle names under
+// escrow from init's sealed items ("product-<product>-<name>"), which a
+// replacement box brought over with the escrow.
+func escrowRestore(custody initv1connect.KeyCustodyServiceClient) func(name string) (string, bool, error) {
+	return func(name string) (string, bool, error) {
+		info := productinfo.Installed(product.Dir)
+		if !info.Present() {
+			return "", false, nil
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		out, err := custody.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: osadmin.ProductEscrowName(info.Name, name)}))
+		if connect.CodeOf(err) == connect.CodeNotFound {
+			return "", false, nil
+		}
+		if err != nil {
+			return "", false, err
+		}
+		return string(out.Msg.GetSecret()), true, nil
+	}
+}
+
 func rolloutRestart(k0s, kubeconfig string) func(ctx context.Context, ns, kind, name string) error {
 	return func(ctx context.Context, ns, kind, name string) error {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)

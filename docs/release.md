@@ -395,7 +395,9 @@ The box refuses a key that's both or neither, an unknown generator, a key or a S
 reference to a key that isn't generated, a brace that isn't closed, and the appliance's own
 namespace. At each product apply and revert, after the slots switch and before k0s restarts,
 accessd makes every generated value the current slot declares that it hasn't made before (from the
-kernel's random source) and keeps them in `/var/lib/sneakers/platform/box-secrets.json` (mode
+kernel's random source; a key `escrow` names is first read from the box's sealed item
+`product-<product>-<name>`, which a replacement box has from its imported escrow, see
+[key-custody.md](key-custody.md#product-keys)) and keeps them in `/var/lib/sneakers/platform/box-secrets.json` (mode
 0600, on the encrypted state volume). It then writes the Secrets that slot declares as the stack
 `sneakers-appliance-secrets` (`/var/lib/k0s/manifests`, mode 0600). A value is never made twice:
 updates, reverts and reboots keep it, and a value a later bundle stops declaring is kept for one
