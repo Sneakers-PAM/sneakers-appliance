@@ -135,8 +135,12 @@ reach every console. When no console takes writes, init keeps the console the ke
 A service with `console: true` owns the consoles while it runs (the first-boot info screen in
 `firstboot`, the status screen in `normal`; [console.md](console.md)): its standard output is its own pipe, copied
 to every console, while init's and every other service's output goes to
-`/run/sneakers/console.log` instead (1 MiB, then `console.log.1`). At most one service per phase may
-own the console, and it runs as root. When it stops, the consoles get a fresh line with the colours
+`/run/sneakers/console.log` instead (1 MiB, then `console.log.1`). What was written before the
+claim still reaches the consoles: the claim waits (up to half a second) until the shared output's
+pipe is empty and every console has written it. A service's `services: ready` line is written
+before any service waiting on it in `after:` starts, so a console service that waits for accessd
+never sends accessd's ready line aside. At most one service per phase may own the console, and it
+runs as root. When it stops, the consoles get a fresh line with the colours
 reset and the shared output again.
 
 #### The screen stays quiet
