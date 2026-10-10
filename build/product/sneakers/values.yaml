@@ -112,3 +112,11 @@ sshbroker:
     annotations: *edge
   networkPolicy:
     ingressFrom: *edgeFrom
+postgres:
+  # Layered over the small box's settings (values-small-box.yaml). The
+  # write-ahead log stays within max_wal_size through PostgreSQL's own
+  # checkpoints; the box's disk guard warns past product.yaml's wal_warn
+  # and never removes a WAL file itself.
+  parameters:
+    max_wal_size: 512MB
+    min_wal_size: 64MB

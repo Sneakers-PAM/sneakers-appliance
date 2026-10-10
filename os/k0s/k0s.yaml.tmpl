@@ -56,3 +56,26 @@ spec:
         name: "@NODE_NAME@"
   telemetry:
     enabled: false
+  # The kubelet's disk settings, explicit rather than the kubelet's
+  # defaults (docs/disk-layout.md "Keeping the disk from filling");
+  # k0s-interim starts k0s with this profile. The box's own cleanup goes
+  # first, from 80% full, and keeps every image either product release
+  # needs; the kubelet's image garbage collection is the last resort, from
+  # 90% down to 85%. The kubelet rotates each container's log at 10 MiB,
+  # keeping 3. Eviction starts at 5% free: the default (imagefs.available
+  # below 15%) would evict the product's pods at 85% full, since images
+  # and pods share the one state volume. Setting evictionHard replaces the
+  # whole default, so every signal is named.
+  workerProfiles:
+    - name: sneakers
+      values:
+        imageGCHighThresholdPercent: 90
+        imageGCLowThresholdPercent: 85
+        containerLogMaxSize: 10Mi
+        containerLogMaxFiles: 3
+        evictionHard:
+          memory.available: 100Mi
+          nodefs.available: 5%
+          nodefs.inodesFree: 5%
+          imagefs.available: 5%
+          imagefs.inodesFree: 5%
