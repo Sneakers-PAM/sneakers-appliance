@@ -10,7 +10,7 @@
 | The airgap bundle: pull by digest per architecture, signatures, both-way check (a `registry:2` container) | `go test ./internal/bundle/` | every PR (`🧪 Build & Test`) |
 | The disk guard on a real small volume: filled past 80% with removable files it recovers by itself; past 90% with a protected file it stays critical and touches nothing | `DISKGUARD_TEST_DIR=<a directory on a tmpfs or loop volume of 8 GiB or less> go test -tags integration -run Fill ./internal/diskguard/` | by hand (a tmpfs mount needs root; the test skips without the variable) |
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
-| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a pull request only builds the lab release and reports the root image and product bundle sizes |
+| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a merge never cancels the suite already running on main, it waits for it; a pull request only builds the lab release and reports the root image and product bundle sizes |
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
