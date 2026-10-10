@@ -64,6 +64,19 @@ whether a password is saved, never the password. `SetEmail` saves them and appli
 again (`password` absent keeps the saved one, empty clears it); `SendTestEmail` sends one message.
 A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`.
 
+`StatusService.HideProtectionNotice` hides the reduced-protection banner
+(`WARNING_KIND_REDUCED_PROTECTION`) for every admin: any signed-in admin may call it, with no
+step-up or code. The request carries the `protection_reason` the banner was shown for; the box
+keeps the acknowledgement (who, when, the level and the reason) in `protection-notice.json` on the
+state volume, so it holds across reboots and updates. While it matches the box's level and reason,
+`GetStatus` leaves the warning out and sets `protection_notice` (`hidden`, `hidden_by`,
+`hidden_at`); `protection_detail` always carries the reduced level's text and how to raise it, hidden
+or not. Another reason shows the banner again, and full protection clears the acknowledgement, so
+a later drop shows it again. A request whose reason isn't the box's reason now, or one made at full
+protection, hides nothing and answers `hidden: false`. It is the only warning that can be hidden.
+The call is audited as `status.protection-notice.hide` with the `level` and `reason`; when nothing
+was hidden the detail adds `hidden` `no` and what the box has `now`.
+
 | Method | Role | Step-up | Audit action |
 |---|---|---|---|
 | `SignInService.SignIn` | public | no | `signin.password` |
@@ -76,6 +89,7 @@ A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`.
 | `StatusService.SetSecureBoot` | owner | yes | `status.secure-boot.set` |
 | `StatusService.GetPhase` | public | no | |
 | `StatusService.CleanUpDisk` | admin | yes | `disk.cleanup` |
+| `StatusService.HideProtectionNotice` | admin | no | `status.protection-notice.hide` |
 
 `GetPhase` answers `phase` (`firstboot` until setup's Finish, then `normal`) and, for the product
 edge's box-state page ([edge-fallback.md](edge-fallback.md)), `state`: `updating` while an update

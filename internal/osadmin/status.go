@@ -95,10 +95,14 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		switch prot.Msg.GetLevel() {
 		case initv1.ProtectionLevel_PROTECTION_LEVEL_FULL:
 			out.Protection = osadminv1.Protection_PROTECTION_FULL
+			s.clearProtectionAck()
 		case initv1.ProtectionLevel_PROTECTION_LEVEL_REDUCED:
 			out.Protection = osadminv1.Protection_PROTECTION_REDUCED
 			p := keycustody.Reduced(keycustody.Reason(prot.Msg.GetReason()))
-			add(osadminv1.WarningKind_WARNING_KIND_REDUCED_PROTECTION, screens.ProtectionText(p, keycustody.Mode(out.CustodyMode))+" "+screens.RaiseText(p))
+			out.ProtectionDetail = screens.ProtectionText(p, keycustody.Mode(out.CustodyMode)) + " " + screens.RaiseText(p)
+			if out.ProtectionNotice = s.protectionNotice(prot.Msg.GetReason()); out.ProtectionNotice == nil {
+				add(osadminv1.WarningKind_WARNING_KIND_REDUCED_PROTECTION, out.ProtectionDetail)
+			}
 		}
 	}
 	if img, ierr := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); ierr == nil {
