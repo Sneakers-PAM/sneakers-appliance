@@ -18,10 +18,10 @@ renders the config and deploys the real platform; the hello stack goes then.
 | Piece | Where | What |
 |---|---|---|
 | Service entry | `os/rootfs/services.d/k0s.yaml` | waits (`start-when`, [init.md](init.md#the-service-table)) for `/var/lib/sneakers/setup/done` and the installed bundle, `/var/lib/sneakers/product/current/bundle.json`, so a box with no bundle runs no k0s; a product apply or revert restarts it through the Services API. `k0s-interim run` (`exec`s `<current slot>/k0s controller --enable-worker --no-taints --config /run/sneakers/k0s/k0s.yaml --data-dir /var/lib/k0s --profile sneakers`), root, `restart: always`, `stop-timeout: 2m`, with `pre-stop: sneakers-accessd quiesce` (the product stops latest phase first, [upgrades.md](upgrades.md#the-phases)), after netd, phase `normal` only (the data directory is on the state volume). konnectivity, metrics-server, autopilot and the update prober are disabled: none is bundled, and the prober would reach the internet. While the console service owns the consoles, k0s's output goes to `/run/sneakers/console.log`. |
-| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | refuses to go on without an installed bundle; mounts cgroup2 on `/sys/fs/cgroup` when it isn't; reads the box's node name (below) and stops when there's none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface and routes the Service range there (below); renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories; writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one, and the kubelet's resolver file from it (below); links the bundle's images into `/var/lib/k0s/images/`; copies each of the bundle's stacks, `<slot>/manifests/<name>/`, to `/var/lib/k0s/manifests/<name>/`; writes the `box-tls` Secret for the interim edge: the certificate assigned to the Product (443) endpoint, else the box's own :8443 one (below) |
+| Pre-start (interim) | `k0s-interim prepare` (`/usr/libexec/sneakers/k0s-interim`) | refuses to go on without an installed bundle; mounts cgroup2 on `/sys/fs/cgroup` when it isn't; reads the box's node name (below) and stops when there's none; makes `/var/lib/sneakers/machine-id` once; puts `198.18.0.1/32` on the `sneakers0` dummy interface and routes the Service range there (below); renders the config into `/run/sneakers/k0s/`; makes the CNI and log directories, and copies the installed CNI plugins into the box's own `/var/lib/sneakers/k0s/cni-bin` (below); writes an empty `/run/sneakers/resolv.conf` if netd hasn't written one, and the kubelet's resolver file from it (below); links the bundle's images into `/var/lib/k0s/images/`; copies each of the bundle's stacks, `<slot>/manifests/<name>/`, to `/var/lib/k0s/manifests/<name>/`; writes the `box-tls` Secret for the interim edge: the certificate assigned to the Product (443) endpoint, else the box's own :8443 one (below) |
 | Box secrets | accessd, at each product apply and revert | the Secrets the bundle's `product.yaml` declares as `box_secrets`, made on the box once and kept in `/var/lib/sneakers/platform/box-secrets.json`, written as the stack `sneakers-appliance-secrets` before k0s restarts ([release.md](release.md#productyaml)); `k0s-interim` leaves that stack alone |
 | Cluster config | `/etc/k0s/k0s.yaml.tmpl` (`os/k0s/k0s.yaml.tmpl`) | the API, etcd peer and node address `198.18.0.1`; the pod range `10.244.0.0/16` and the Service range `10.96.0.0/12` (k0s's defaults, named, and the defaults of the box's network settings, [network.md](network.md)); every system image pinned by `<tag>@sha256:<digest>`; `default_pull_policy: Never`; NodePorts on every address; telemetry off; etcd storage named `@NODE_NAME@`, the one field rendered; the `sneakers` worker profile, the kubelet's image garbage collection (90% down to 85%), container-log rotation (10 MiB, 3 files) and disk eviction (5% free) set explicitly ([disk-layout.md](disk-layout.md#keeping-the-disk-from-filling)) <!-- scrub:allow=private-ip --> |
-| containerd config | `/etc/k0s/containerd.toml` (`os/k0s/containerd.toml`) | what k0s would write, with the sandbox (pause) image pinned by digest. It isn't marked `k0s_managed`, so k0s uses it as it is instead of writing into the read-only `/etc`. Drop-ins: `/etc/k0s/containerd.d/` (empty). |
+| containerd config | `/etc/k0s/containerd.toml` (`os/k0s/containerd.toml`) | what k0s would write, with the sandbox (pause) image pinned by digest and the CNI plugins taken from `/var/lib/sneakers/k0s/cni-bin` first, then `/opt/cni/bin` (below). It isn't marked `k0s_managed`, so k0s uses it as it is instead of writing into the read-only `/etc`. Drop-ins: `/etc/k0s/containerd.d/` (empty). |
 | Host paths in the root | the root | `/etc/cni -> /var/lib/cni-conf` and `/opt -> /var/lib/opt` (kube-router installs the CNI config and plugins there), `/var/run -> /run` (containerd's NRI socket), `/var/log -> /var/lib/log` (pod logs), `/etc/machine-id -> /var/lib/sneakers/machine-id`, `/etc/hosts` (localhost), `/bin/mount` and `/bin/umount` (busybox; the kubelet mounts tmpfs volumes with them), `/lib/modules` (empty: the kernel has no loadable modules), `/usr/libexec/k0s/kubelet-plugins/volume/exec` (empty) |
 
 k0s runs etcd, the API server and the scheduler as root here: the box has no `etcd`,
@@ -45,6 +45,28 @@ the API through the `kubernetes` Service, so on a management network with no gat
 started, and with it the pod network: pods stayed in ContainerCreating on the bridge CNI's "no IP
 ranges". With the route the cluster doesn't depend on the management network's gateway, the same
 as its address.
+
+### The CNI plugins containerd runs
+
+kube-router's `install-cni-bins` init container (the `cni-node` image) installs the CNI plugins
+into `/opt/cni/bin` each time the kube-router pod starts, writing each file in place. After a
+reboot the CNI config and the plugins are still on the state volume, so containerd starts every
+pod's sandbox at once, while the installer is rewriting the plugins. An exec of a plugin that is
+open for writing fails with `ETXTBSY`, and libcni (v1.3, in containerd 2.3) retries that by
+running the same `exec.Cmd` again, which fails with `exec: already started`: pods, CoreDNS among
+them, failed with `FailedCreatePodSandBox` until the kubelet's next try.
+
+So containerd doesn't run the installer's files. At each start, before k0s, `k0s-interim prepare`
+copies every plugin in `/opt/cni/bin` into `/var/lib/sneakers/k0s/cni-bin` (a changed one by
+rename, an unchanged one left alone, compared by SHA-256), and `containerd.toml` puts that
+directory first in `bin_dirs`. Nothing writes the copy while k0s runs. `/opt/cni/bin` comes after
+it for a box's first start, when the copy is empty; then there's no CNI config until the installer
+has finished (`install-cniconf` runs after it), so nothing runs a plugin mid-write. A k0s update
+that brings new plugins puts them in the copy at the next k0s start.
+
+A phased product's first phase waits for kube-router and CoreDNS to be ready (the `cluster` step,
+[upgrades.md](upgrades.md#the-phases)), so a sandbox that failed here holds the product's pods back
+rather than starting them with no cluster DNS.
 
 ### Cluster DNS with no DNS server
 
@@ -80,8 +102,8 @@ measures it.
 Everything k0s writes is under `/var/lib/k0s` on the state volume (LUKS2, mounted at `/var/lib` by
 init): etcd, the PKI, containerd's image store and snapshots (`containerd/`), the binaries k0s
 unpacks (`bin/`), the kubelet's directory, the image links (`images/`) and the stacks
-(`manifests/`). The CNI files are in `/var/lib/cni-conf` and `/var/lib/opt`, and the host-local IP
-allocations in `/var/lib/cni`. The rendered config and k0s's run directory are on `/run` (tmpfs).
+(`manifests/`). The CNI files are in `/var/lib/cni-conf` and `/var/lib/opt`, the plugins containerd runs in
+`/var/lib/sneakers/k0s/cni-bin`, and the host-local IP allocations in `/var/lib/cni`. The rendered config and k0s's run directory are on `/run` (tmpfs).
 A factory reset wipes them with the rest of the state.
 
 ## The product bundle and the airgapped images

@@ -63,6 +63,9 @@ type options struct {
 	SwitchFrom          []string
 	// Data is the directory the hostPath volumes go under.
 	Data string
+	// WaitJob names the release's Job image (spec.jobs) whose `wait`
+	// command each phased workload's init container runs; empty adds none.
+	WaitJob string
 }
 
 func main() {
@@ -80,6 +83,7 @@ func main() {
 	fl.StringVar(&o.SwitchConfigMap, "switch-configmap", "", "the ConfigMap the switch's stack carries")
 	fl.StringVar(&from, "switch-from", "", "the ConfigMaps whose changed settings it holds, comma-separated")
 	fl.StringVar(&o.Data, "data", "", "the directory the hostPath volumes go under")
+	fl.StringVar(&o.WaitJob, "wait-job", "", "the release's Job image whose wait command each phased workload's init container runs")
 	if err := fl.Parse(os.Args[1:]); err != nil {
 		os.Exit(2)
 	}
@@ -149,7 +153,11 @@ func render(o options, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	offDocs, phased, err := phaseSplit(o, spec, offDocs, switchDocs)
+	wait, err := waitImage(o, rel, pins, images)
+	if err != nil {
+		return err
+	}
+	offDocs, phased, err := phaseSplit(o, spec, offDocs, switchDocs, wait)
 	if err != nil {
 		return err
 	}

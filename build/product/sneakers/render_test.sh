@@ -79,7 +79,17 @@ if grep -q '^kind: \(Deployment\|StatefulSet\|DaemonSet\)$' "$out/sneakers/sneak
   fail "the always-on stack holds a workload: every workload starts in its phase"
 fi
 grep -q 'sneakers-appliance/phase: front' "$out/sneakers-mcp/sneakers-mcp.yaml" || fail "the MCP switch's workloads aren't in the front phase"
-echo "ok: every workload is in its phase's stack"
+# Each phased workload waits for the cluster's DNS and its needs first,
+# with the release's migrate image.
+migrate_ref="$(go run "$root/build/tools/bundle" images --release "$work/release.yaml" | awk '$1 ~ /sneakers-migrate$/ { print $1 "@" $2 }')"
+for st in $(sed -n 's/^    stack: \(sneakers-[a-z-]*\)$/\1/p' "$here/product.yaml") sneakers-mcp; do
+  workloads="$(grep -c '^kind: \(Deployment\|StatefulSet\)$' "$out/$st/$st.yaml")"
+  waits="$(grep -c -- '- name: wait-phase$\|^ *name: wait-phase$' "$out/$st/$st.yaml")"
+  [ "$waits" -eq "$workloads" ] || fail "the phase stack $st has $workloads workloads and $waits waits"
+  grep -q "image: $migrate_ref\$" "$out/$st/$st.yaml" || fail "the phase stack $st's waits don't run $migrate_ref"
+done
+grep -q -- '--tcp' "$out/sneakers-front/sneakers-front.yaml" || fail "the gateway waits for none of the services"
+echo "ok: every workload is in its phase's stack and waits for its needs"
 
 # Complete: every component pinned, every service run.
 go run "$root/build/tools/bundle" images --release "$work/release.yaml" > "$work/pinned"

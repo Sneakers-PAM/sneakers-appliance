@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,6 +40,13 @@ type Phase struct {
 	// Timeout is how long the phase may take to be Ready; empty is
 	// DefaultPhaseTimeout.
 	Timeout string `yaml:"timeout"`
+	// Needs are, per workload of the phase, the Services of earlier phases
+	// it connects to, "<service>:<port>" in the product's namespace: the
+	// render gives each of the phase's workloads an init container that
+	// resolves the cluster's DNS, then waits until each connects (a
+	// Service with no Ready endpoint refuses the connection), so a pod the
+	// kubelet starts out of order waits instead of crashing.
+	Needs map[string][]string `yaml:"needs"`
 }
 
 // The bounds and the default of a phase's timeout.
@@ -131,6 +139,17 @@ func (s Spec) checkPhases() error {
 				return bad("phases[%d]: %q isn't a switch's stack, is placed by another phase, or is the import's", i, st)
 			}
 			stacks[st] = true
+		}
+		for w, needs := range p.Needs {
+			if !slices.Contains(p.Workloads, w) {
+				return bad("phases[%d]: needs names %q, which isn't one of the phase's workloads", i, w)
+			}
+			for _, n := range needs {
+				svc, port, ok := strings.Cut(n, ":")
+				if num, err := strconv.Atoi(port); !ok || !dnsRE.MatchString(svc) || err != nil || num < 1 || num > 65535 {
+					return bad("phases[%d]: %s needs %q, which isn't <service>:<port number>", i, w, n)
+				}
+			}
 		}
 		if t := p.Timeout; t != "" {
 			d, err := time.ParseDuration(t)

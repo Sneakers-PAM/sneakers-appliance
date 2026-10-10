@@ -30,8 +30,15 @@ message GetMcpRequest {}
 message GetMcpResponse {
   bool mcp_enabled = 1;
   bool machine_api_enabled = 2;
-  // state is the MCP service's state, such as running or stopped.
+  // state is the MCP switch as set: on, off, not installed or not in this
+  // product.
   string state = 3;
+  // readiness is how far the product has come up with the switch on:
+  // starting (it rolls out), ready, or failed (it wasn't ready within the
+  // bound of the last switch-on); empty while the switch is off.
+  string readiness = 4;
+  // detail is what a starting or failed MCP waits for, in words.
+  string detail = 5;
 }
 
 message SetMcpRequest {

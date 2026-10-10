@@ -85,3 +85,20 @@ func TestTheShellsMcpCommandDrivesTheProductsSwitch(t *testing.T) {
 		t.Fatalf("%v\n%s", err, out)
 	}
 }
+
+// With MCP on, "<product> mcp" shows how far the product has come up with
+// it, and a switch-on answers once the product is ready with it.
+func TestTheShellsMcpCommandShowsReadiness(t *testing.T) {
+	f := &mcpAccessd{state: &osadminv1.GetMcpResponse{McpEnabled: true, State: "on", MachineApiEnabled: true, Readiness: "starting", Detail: "Rolling out (13 of 14 ready): waiting for sneakers/sneakers-mcp"}}
+	out, err := runMcp(t, f, "sneakers mcp")
+	if err != nil || !strings.Contains(out, "starting") || !strings.Contains(out, "waiting for sneakers/sneakers-mcp") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	f.state.Readiness, f.state.Detail = "failed", "MCP is on, but the product isn't ready with it after 1m30s: x"
+	if out, err = runMcp(t, f, "sneakers mcp"); err != nil || !strings.Contains(out, "failed") || !strings.Contains(out, "after 1m30s") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if out, err = runMcp(t, f, "sneakers mcp on"); err != nil || !strings.Contains(out, "ready") {
+		t.Fatalf("on: %v\n%s", err, out)
+	}
+}

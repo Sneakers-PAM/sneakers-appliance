@@ -208,7 +208,11 @@ ready:
 # runs in the vault itself, so the identity phase is Ready only once it
 # passed. The MCP switch's stack (the MCP server and Hydra) comes with the
 # front phase, before the gateway and the staff web app that read its
-# ConfigMap.
+# ConfigMap. Each workload's init container (the release's sneakers-migrate
+# image, `wait`) first resolves the cluster's DNS, then connects to each
+# Service of an earlier phase its needs name, which its NetworkPolicies
+# admit, so a pod the kubelet starts out of order (after a power loss)
+# waits instead of crashing.
 phases:
   - name: data
     label: Starting the database and the cache
@@ -218,12 +222,33 @@ phases:
     label: Starting sign-in, identity and the vault
     stack: sneakers-identity
     workloads: [sneakers-kratos, sneakers-identity, sneakers-vault]
+    needs:
+      sneakers-kratos: [sneakers-postgres:5432]
+      sneakers-identity: [sneakers-postgres:5432]
+      sneakers-vault: [sneakers-postgres:5432, sneakers-valkey:6379]
   - name: services
     label: Starting the services
     stack: sneakers-services
     workloads: [sneakers-workflow, sneakers-audit, sneakers-notify, sneakers-connector, sneakers-sshbroker]
+    needs:
+      sneakers-workflow: [sneakers-postgres:5432, sneakers-vault:9091]
+      sneakers-audit: [sneakers-postgres:5432]
+      sneakers-notify: [sneakers-valkey:6379, sneakers-identity:9192]
+      sneakers-connector: [sneakers-vault:9091]
+      sneakers-sshbroker: [sneakers-valkey:6379, sneakers-vault:9091]
   - name: front
     label: Starting the gateway and the web apps
     stack: sneakers-front
     workloads: [sneakers-gateway, sneakers-web-staff, sneakers-web-admin, sneakers-mcp, sneakers-hydra]
     switch_stacks: [sneakers-mcp]
+    needs:
+      sneakers-gateway:
+        - sneakers-valkey:6379
+        - sneakers-kratos-public:80
+        - sneakers-identity:9192
+        - sneakers-vault:9091
+        - sneakers-workflow:9193
+        - sneakers-audit:9194
+        - sneakers-notify:9195
+        - sneakers-sshbroker:9096
+      sneakers-hydra: [sneakers-postgres:5432]
