@@ -69,7 +69,7 @@ func (s *Server) baseWebStatus(ctx context.Context) *osadminv1.BaseWebStatus {
 	sv := s.webServed()
 	st := s.webSlots().Status()
 	out := &osadminv1.BaseWebStatus{RunningVersion: sv.Version, Source: sv.Source, Slot: sv.Slot, Reason: sv.Reason, CurrentVersion: st.Current, StagedVersion: st.Staged,
-		PreviousVersion: st.Previous, CanRevert: st.Current != "", BuiltinVersion: s.builtinWebVersion(), Fits: true}
+		PreviousVersion: st.Previous, CanRevert: st.Current != "" && !s.webRevertIdle(sv, st), BuiltinVersion: s.builtinWebVersion(), Fits: true}
 	if h, ok := s.webSlots().Header("current"); ok {
 		need, _ := h.NeedsBaseOS()
 		out.RequiresBaseOs = need.Text()
@@ -139,6 +139,13 @@ func (s *Server) applyWeb(ctx context.Context, by osaudit.Entry) (string, error)
 	return h.Version, err
 }
 
+// webRevertIdle reports a revert that can't change what serves: the
+// built-in pages serve, and the previous slot isn't newer than them, so
+// the watcher would keep serving them after the links moved.
+func (s *Server) webRevertIdle(sv webslots.Served, st webslots.Status) bool {
+	return sv.Source == webslots.SourceBuiltIn && st.Previous != "" && !webslots.Newer(st.Previous, s.builtinWebVersion())
+}
+
 // revertWeb goes back to the previous web slot, or with none (or one
 // older than the root's own pages) to the built-in pages. A previous Base Web that doesn't fit the running Base
 // OS is refused (UPGRADE_COMPAT).
@@ -152,6 +159,8 @@ func (s *Server) revertWeb(ctx context.Context, by osaudit.Entry) (string, error
 	var err error
 	if st.Current == "" {
 		err = codes.New(codes.UpgradeNoPrevious, "the box serves its built-in pages; there's no Base Web to revert")
+	} else if s.webRevertIdle(s.webServed(), st) {
+		err = codes.New(codes.UpgradeNoPrevious, "the box serves its built-in pages, Base Web %s, which are newer than the previous Base Web %s; a revert wouldn't change what serves", s.builtinWebVersion(), st.Previous)
 	}
 	if h, ok := sl.Header("previous"); ok && err == nil {
 		base, berr := s.baseVersion(ctx)

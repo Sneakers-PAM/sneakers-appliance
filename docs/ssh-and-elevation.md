@@ -195,7 +195,9 @@ A command offered only in the other origin is refused with `ACCESS_FORBIDDEN` an
 ("Not available in this release.") until their services are on the box. The accessd commands go to
 `/run/sneakers/access.sock`, which knows the login by its uid ([access.md](access.md#accesssock));
 `network set` takes `hostname`, `dns`, `search`, `ntp`, `allow-list` (comma-separated lists),
-`time-zone` and `https-proxy` on top of the current settings. `help network set` lists every key
+`time-zone` and `https-proxy` on top of the current settings. A change that can't cut anyone off
+(DNS, search domains, NTP, the time zone, the proxy) is kept at once, and `network set` says
+"Applied and kept; there's nothing to confirm." instead of asking. `help network set` lists every key
 with an example, from the same table the parser reads, and so do `network set` alone and `network
 set ?`; an unknown key answers `SHELL_PARSE` with the closest key ("did you mean time-zone?"). While accessd is down they answer
 `NOT_AVAILABLE` ("the appliance services are unavailable"), and `status` shows the last status
@@ -301,7 +303,9 @@ sneakers-elevated warns a minute before the end.
 At its start the session says who it's for, that it's recorded and when it ends, and that `help`
 lists the commands that help troubleshoot the box. `help` comes from the shell's start file
 (`os/rootshell/rc.sh`, handed to ash through `ENV`): pods, logs, events, `k0s status`, the stacks
-k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. It
+k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. The
+disk lines suit busybox: `df -hP`, whose `-P` keeps each volume on one line for a script to read,
+and `ls -l --full-time` for a file's size and time, because busybox `stat` has no `-c`. It
 also says why `helm list -A` is empty: the product's stacks are k0s manifests the appliance applies
 from the installed bundle, not Helm releases, because the update slots and revert track the
 manifests directly and Helm's release state would sit outside them.

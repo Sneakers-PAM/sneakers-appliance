@@ -98,6 +98,8 @@ const (
 	// fillWarnDays: a volume that would fill within this many days at the
 	// last day's rate is growing too fast.
 	fillWarnDays = 7
+	// growthMinSpan: the growth warning needs samples this far apart.
+	growthMinSpan = 6 * time.Hour
 )
 
 // Guard watches the volumes, audits each alert as it starts and clears,
@@ -378,16 +380,17 @@ func (g *Guard) watches() []Watch {
 }
 
 // rate is how fast name grew per day over the last day's samples: from the
-// oldest sample at most a day old (and at least an hour) to the newest.
-func (g *Guard) rate(now time.Time, get func(sample) (int64, bool)) (int64, bool) {
+// oldest sample at most a day old (and at least an hour) to the newest. It
+// also gives what really grew and over what span.
+func (g *Guard) rate(now time.Time, get func(sample) (int64, bool)) (perDay, grew int64, span time.Duration, ok bool) {
 	n := len(g.st.Samples)
 	if n < 2 {
-		return 0, false
+		return 0, 0, 0, false
 	}
 	last := g.st.Samples[n-1]
 	lv, ok := get(last)
 	if !ok {
-		return 0, false
+		return 0, 0, 0, false
 	}
 	for _, s := range g.st.Samples[:n-1] {
 		if now.Sub(s.At) > 25*time.Hour {
@@ -395,15 +398,15 @@ func (g *Guard) rate(now time.Time, get func(sample) (int64, bool)) (int64, bool
 		}
 		span := last.At.Sub(s.At)
 		if span < time.Hour {
-			return 0, false
+			return 0, 0, 0, false
 		}
 		fv, ok := get(s)
 		if !ok {
 			continue
 		}
-		return int64(float64(lv-fv) * float64(24*time.Hour) / float64(span)), true
+		return int64(float64(lv-fv) * float64(24*time.Hour) / float64(span)), lv - fv, span, true
 	}
-	return 0, false
+	return 0, 0, 0, false
 }
 
 func (g *Guard) build(now time.Time, vols []VolumeReport) Report {
@@ -419,22 +422,33 @@ func (g *Guard) build(now time.Time, vols []VolumeReport) Report {
 			r.Warnings = append(r.Warnings, spaceWarning(v))
 		}
 		name := v.Name
-		perDay, ok := g.rate(now, func(s sample) (int64, bool) { n, ok := s.Volumes[name]; return n, ok })
-		if ok && perDay > 0 {
+		// A trend needs hours of samples: one jump between two hourly
+		// samples is a fill, which the space warning already covers, and
+		// scaled up to a day it reads as many times the disk.
+		perDay, grew, span, ok := g.rate(now, func(s sample) (int64, bool) { n, ok := s.Volumes[name]; return n, ok })
+		if ok && perDay > 0 && span >= growthMinSpan {
 			days := float64(v.Avail) / float64(perDay)
 			if days < fillWarnDays {
 				r.Warnings = append(r.Warnings, Warning{Kind: WarnGrowth, Detail: fmt.Sprintf(
-					"The %s volume grew %s in the last day; at that rate it fills in about %s.", strings.ToLower(v.Label), Bytes(perDay), daysText(days))})
+					"The %s volume grew %s in the last %s; at that rate it fills in %s.", strings.ToLower(v.Label), Bytes(grew), spanText(span), daysText(days))})
 			}
 		}
 	}
 	for _, w := range g.watches() {
 		wr := WatchReport{Watch: w}
+		var sampled bool
 		if n := len(g.st.Samples); n > 0 {
-			wr.Size = g.st.Samples[n-1].Watches[w.Name]
+			wr.Size, sampled = g.st.Samples[n-1].Watches[w.Name]
+		}
+		if !sampled {
+			// Newer than the last hourly sample: measure it now rather
+			// than show 0 B until the next one.
+			if n, err := g.dirSize(w.Path); err == nil {
+				wr.Size = n
+			}
 		}
 		name := w.Name
-		if perDay, ok := g.rate(now, func(s sample) (int64, bool) { n, ok := s.Watches[name]; return n, ok }); ok {
+		if perDay, _, _, ok := g.rate(now, func(s sample) (int64, bool) { n, ok := s.Watches[name]; return n, ok }); ok {
 			wr.GrowthPerDay = perDay
 		}
 		if w.WAL != "" {
@@ -479,9 +493,18 @@ func daysText(d float64) string {
 		return "less than a day"
 	}
 	if d < 2 {
-		return "a day"
+		return "about a day"
 	}
-	return fmt.Sprintf("%d days", int(d))
+	return fmt.Sprintf("about %d days", int(d))
+}
+
+// spanText is a sampling span in whole hours.
+func spanText(d time.Duration) string {
+	h := int(d.Round(time.Hour) / time.Hour)
+	if h == 1 {
+		return "hour"
+	}
+	return fmt.Sprintf("%d hours", h)
 }
 
 func dayOfFile(name string) string {
