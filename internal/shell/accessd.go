@@ -165,7 +165,14 @@ func (s *Services) mcpShow(ctx context.Context) (Result, error) {
 	m := out.Msg.GetMcp()
 	word := map[bool]string{true: "on", false: "off"}
 	text := fmt.Sprintf("%-12s %s\n%-12s %s\n", "MCP", Printable(m.GetState()), "machine API", word[m.GetMachineApiEnabled()])
-	return Result{Text: text, Data: map[string]any{"state": m.GetState(), "mcp": m.GetMcpEnabled(), "machineApi": m.GetMachineApiEnabled()}}, nil
+	if r := m.GetReadiness(); r != "" {
+		line := Printable(r)
+		if d := m.GetDetail(); d != "" {
+			line += ": " + Printable(d)
+		}
+		text += fmt.Sprintf("%-12s %s\n", "readiness", line)
+	}
+	return Result{Text: text, Data: map[string]any{"state": m.GetState(), "mcp": m.GetMcpEnabled(), "machineApi": m.GetMachineApiEnabled(), "readiness": m.GetReadiness(), "detail": m.GetDetail()}}, nil
 }
 
 // mcpSet sets the switch; an empty api keeps the machine API as it is.
@@ -182,7 +189,7 @@ func (s *Services) mcpSet(ctx context.Context, on bool, api string) (Result, err
 		return Result{}, err
 	}
 	word := map[bool]string{true: "on", false: "off"}
-	return Result{Text: fmt.Sprintf("MCP is %s; the machine API is %s.", word[on], word[machine]), Data: map[string]any{"mcp": on, "machineApi": machine}}, nil
+	return Result{Text: fmt.Sprintf("MCP is %s; the machine API is %s. The product is ready with it.", word[on], word[machine]), Data: map[string]any{"mcp": on, "machineApi": machine}}, nil
 }
 
 // updatesShow prints the GitHub update source's channel, repository and

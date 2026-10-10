@@ -40,13 +40,18 @@ import (
 // The local sockets: init's power socket for reboot and poweroff.
 const powerSocket = "/run/sneakers/power.sock"
 
-func unixClient(sock string) *http.Client {
+func unixClient(sock string, timeout time.Duration) *http.Client {
 	return &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", sock)
 		},
-	}, Timeout: 30 * time.Second}
+	}, Timeout: timeout}
 }
+
+// accessTimeout is how long a call to accessd may take: as long as
+// :8443's front waits, since a switch answers once the product is ready
+// with it (osadmin.DefaultSwitchReadyBound).
+const accessTimeout = 2 * time.Minute
 
 func backend() *shell.Services {
 	name := "unknown"
@@ -56,10 +61,10 @@ func backend() *shell.Services {
 	sess, err := shell.SessionFromSSH(os.Getenv, name)
 	s := &shell.Services{
 		Session: sess, SessionErr: err,
-		Power:      initv1connect.NewPowerServiceClient(unixClient(powerSocket), "http://power.sock"),
+		Power:      initv1connect.NewPowerServiceClient(unixClient(powerSocket, 30*time.Second), "http://power.sock"),
 		StatusFile: accessapi.StatusFile,
 	}
-	s.UseAccessd(unixClient(accessapi.SocketPath), "http://access.sock")
+	s.UseAccessd(unixClient(accessapi.SocketPath, accessTimeout), "http://access.sock")
 	return s
 }
 

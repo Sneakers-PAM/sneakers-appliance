@@ -196,6 +196,12 @@ type Server struct {
 		mu    sync.Mutex
 		timer clock.Timer
 	}
+	// mcpFailed is why the last switch-on wasn't ready within its bound,
+	// shown until the product is ready or the switch is set again.
+	mcpFailed struct {
+		mu     sync.Mutex
+		reason string
+	}
 }
 
 // New returns a server.
