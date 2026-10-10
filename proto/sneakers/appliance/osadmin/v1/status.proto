@@ -38,6 +38,82 @@ service StatusService {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (rule) = {public: true};
   }
+  // CleanUpDisk runs the disk cleanup now (the hourly one's steps) and
+  // says what each step freed.
+  rpc CleanUpDisk(CleanUpDiskRequest) returns (CleanUpDiskResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "disk.cleanup"
+    };
+  }
+}
+
+message CleanUpDiskRequest {}
+
+message CleanUpDiskResponse {
+  DiskCleanup cleanup = 1;
+}
+
+// DiskCleanup is one run of the disk cleanup.
+message DiskCleanup {
+  google.protobuf.Timestamp time = 1;
+  // trigger is timer (the hourly run), alert (a volume passed 80%) or
+  // admin; actor is the admin who asked, or disk-guard.
+  string trigger = 2;
+  string actor = 3;
+  uint64 freed_bytes = 4;
+  repeated DiskCleanupCategory categories = 5;
+}
+
+// DiskCleanupCategory is one step of a cleanup run: pod-logs, os-audit,
+// images, updates, tmp or wal (which only checks).
+message DiskCleanupCategory {
+  string name = 1;
+  uint64 freed_bytes = 2;
+  // note says what a step that freed nothing found; error why it failed.
+  string note = 3;
+  string error = 4;
+}
+
+// DiskLevel is a volume's alert level: a warning from 80% used, critical
+// from 90%, each clearing 5 points below where it starts.
+enum DiskLevel {
+  DISK_LEVEL_UNSPECIFIED = 0;
+  DISK_LEVEL_OK = 1;
+  DISK_LEVEL_WARNING = 2;
+  DISK_LEVEL_CRITICAL = 3;
+}
+
+// Volume is one of the box's volumes.
+message Volume {
+  // name is state, data or backup.
+  string name = 1;
+  string label = 2;
+  string path = 3;
+  uint64 used_bytes = 4;
+  // total_bytes is what's usable: used plus available.
+  uint64 total_bytes = 5;
+  double percent = 6;
+  DiskLevel level = 7;
+  // level_since is when the level began.
+  google.protobuf.Timestamp level_since = 8;
+  // shared_with names the volume this one is on when it isn't a
+  // filesystem of its own; it has no alert of its own then.
+  string shared_with = 9;
+}
+
+// DataPath is one of the product's data paths the box watches.
+message DataPath {
+  string name = 1;
+  string label = 2;
+  uint64 size_bytes = 3;
+  // growth_bytes_per_day is over the last day's hourly samples.
+  int64 growth_bytes_per_day = 4;
+  // wal_bytes is its write-ahead log's size, and wal_warn_bytes the size
+  // it shouldn't pass; both 0 when it declares none.
+  uint64 wal_bytes = 5;
+  uint64 wal_warn_bytes = 6;
 }
 
 message GetPhaseRequest {}
@@ -102,12 +178,26 @@ enum WarningKind {
   // confirmed and was undone (by the window, or at start after a reboot
   // or an update inside it).
   WARNING_KIND_NETWORK_REVERTED = 12;
+  // WARNING_KIND_DISK_SPACE: a volume is 80% full or more (critical from
+  // 90%).
+  WARNING_KIND_DISK_SPACE = 13;
+  // WARNING_KIND_DISK_GROWTH: a volume would fill within a week at the
+  // last day's rate.
+  WARNING_KIND_DISK_GROWTH = 14;
+  // WARNING_KIND_DATA_WAL: a product data path's write-ahead log is over
+  // the size its product.yaml declares.
+  WARNING_KIND_DATA_WAL = 15;
+  // WARNING_KIND_AUDIT_ARCHIVE: the OS audit archive is over its cap and
+  // its oldest files move to the backup volume after a day.
+  WARNING_KIND_AUDIT_ARCHIVE = 16;
 }
 
 message Warning {
   WarningKind kind = 1;
   // detail is one plain sentence.
   string detail = 2;
+  // critical marks a warning that needs action now (a volume 90% full).
+  bool critical = 3;
 }
 
 // Component is one OS-layer service osadmin talks to.
@@ -175,6 +265,12 @@ message GetStatusResponse {
   // network_change is the network change that waits for its
   // confirmation, and how the last one ended, so every page can show it.
   NetworkChange network_change = 27;
+  // volumes are the box's volumes with their alert levels, and
+  // data_paths the product's data paths (the disk guard).
+  repeated Volume volumes = 28;
+  repeated DataPath data_paths = 29;
+  // last_cleanup is the disk cleanup's last run since accessd started.
+  DiskCleanup last_cleanup = 30;
 }
 
 // NetworkChange is the state of the network change window.

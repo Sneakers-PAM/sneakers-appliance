@@ -66,7 +66,10 @@ type Options struct {
 	Now                func() time.Time
 	LogRetention       time.Duration
 	RecordingRetention time.Duration
-	Logger             log.Logger
+	// MaxFileSize is the size a file rolls over at to the day's next part;
+	// 0 is DefaultMaxFileSize.
+	MaxFileSize int64
+	Logger      log.Logger
 }
 
 // Log is the chained log in one directory.
@@ -101,6 +104,9 @@ func Open(dir string, o Options) (*Log, error) {
 	if o.Logger == nil {
 		o.Logger = log.Nop()
 	}
+	if o.MaxFileSize <= 0 {
+		o.MaxFileSize = DefaultMaxFileSize
+	}
 	if err := os.MkdirAll(filepath.Join(dir, SessionsDir), 0o700); err != nil {
 		return nil, fmt.Errorf("os audit: %w", err)
 	}
@@ -110,7 +116,7 @@ func Open(dir string, o Options) (*Log, error) {
 		return nil, err
 	}
 	if len(files) > 0 {
-		last, err := lastLine(filepath.Join(dir, files[len(files)-1]))
+		last, err := l.lastLine(files[len(files)-1])
 		if err != nil {
 			return nil, err
 		}
@@ -130,10 +136,7 @@ func (l *Log) Dir() string { return l.dir }
 func (l *Log) Path() string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	name := filepath.Base(l.pathFor(l.o.Now()))
-	if name < l.newest {
-		name = l.newest
-	}
+	name, _ := l.target(l.o.Now())
 	return filepath.Join(l.dir, name)
 }
 
@@ -154,18 +157,32 @@ func (l *Log) Append(e Entry) error {
 	if err := l.refresh(); err != nil {
 		return err
 	}
+	return l.appendLocked(e)
+}
+
+// appendLocked appends e, rolling over to the day's next part first when
+// the newest file is full; the caller holds the locks.
+func (l *Log) appendLocked(e Entry) error {
 	if e.Time.IsZero() {
 		e.Time = l.o.Now()
 	}
 	e.Time = e.Time.UTC()
+	name, rolled := l.target(e.Time)
+	if rolled {
+		if err := l.writeLink(name, e.Time); err != nil {
+			return err
+		}
+	}
+	return l.appendTo(name, e)
+}
+
+// appendTo writes e to the file name as the next line; the caller holds
+// the locks.
+func (l *Log) appendTo(name string, e Entry) error {
 	e.Prev = l.head
 	line, err := json.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("os audit: %w", err)
-	}
-	name := filepath.Base(l.pathFor(e.Time))
-	if name < l.newest {
-		name = l.newest
 	}
 	f, err := os.OpenFile(filepath.Join(l.dir, name), os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600) // #nosec G304 -- a day file in the log directory
 	if err != nil {
@@ -222,10 +239,11 @@ func (l *Log) walk(fn func(file string, n int, e Entry) error) (string, error) {
 		return "", err
 	}
 	prev, first := "", true
+	seen := map[string]fileSum{}
 	for _, name := range files {
-		b, err := os.ReadFile(filepath.Join(l.dir, name)) // #nosec G304 -- a day file listed from the log directory
+		b, err := l.readFile(name)
 		if err != nil {
-			return "", fmt.Errorf("os audit: %w", err)
+			return "", err
 		}
 		for n, line := range bytes.Split(bytes.TrimSuffix(b, []byte("\n")), []byte("\n")) {
 			if len(line) == 0 {
@@ -238,12 +256,18 @@ func (l *Log) walk(fn func(file string, n int, e Entry) error) (string, error) {
 			if !first && e.Prev != prev {
 				return "", fmt.Errorf("os audit: %s line %d doesn't chain to the line before it", name, n+1)
 			}
+			if n == 0 && e.Action == ActionRotate {
+				if err := checkLink(name, e, seen); err != nil {
+					return "", err
+				}
+			}
 			first = false
 			prev = hashLine(line)
 			if err := fn(name, n+1, e); err != nil {
 				return "", err
 			}
 		}
+		seen[keyOf(name)] = sumOf(b)
 	}
 	return prev, nil
 }
@@ -267,10 +291,12 @@ func (l *Log) Prune() error {
 	}
 	cut := now.Add(-l.o.LogRetention).UTC().Format(dayLayout)
 	for _, name := range files {
-		day := strings.TrimSuffix(strings.TrimPrefix(name, filePrefix), fileSuffix)
-		if day < cut && name != l.newest {
+		if dayOf(name) < cut && name != l.newest {
 			if err := os.Remove(filepath.Join(l.dir, name)); err != nil {
 				return fmt.Errorf("os audit: %w", err)
+			}
+			if name == keyOf(name) {
+				_ = os.Remove(filepath.Join(l.dir, name+gzSuffix))
 			}
 			l.o.Logger.Info("os audit: pruned log file", log.F("file", name))
 		}
@@ -311,23 +337,57 @@ func (l *Log) RunRetention(ctx context.Context, every time.Duration) {
 	}
 }
 
+// files lists the log's files in chain order: by name with any .gz left
+// off, a day's parts after its first file. A file there both plain and
+// compressed (a compress cut off before the plain one went) is read
+// plain.
 func (l *Log) files() ([]string, error) {
 	ents, err := os.ReadDir(l.dir)
 	if err != nil {
 		return nil, fmt.Errorf("os audit: %w", err)
 	}
-	var out []string
+	byKey := map[string]string{}
 	for _, e := range ents {
-		if !e.IsDir() && strings.HasPrefix(e.Name(), filePrefix) && strings.HasSuffix(e.Name(), fileSuffix) {
-			out = append(out, e.Name())
+		n := e.Name()
+		if e.IsDir() || !strings.HasPrefix(n, filePrefix) {
+			continue
 		}
+		k := keyOf(n)
+		if !strings.HasSuffix(k, fileSuffix) {
+			continue
+		}
+		if have, ok := byKey[k]; ok && have == k {
+			continue
+		}
+		byKey[k] = n
 	}
-	slices.Sort(out)
+	keys := make([]string, 0, len(byKey))
+	for k := range byKey {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, byKey[k])
+	}
 	return out, nil
 }
 
-func lastLine(path string) ([]byte, error) {
-	f, err := os.Open(path) // #nosec G304 -- the newest day file in the log directory
+// lastLine is the last non-empty line of the file name in the log
+// directory, or nil when it has none or isn't there.
+func (l *Log) lastLine(name string) ([]byte, error) {
+	if strings.HasSuffix(name, gzSuffix) {
+		b, err := l.readFile(name)
+		if err != nil {
+			return nil, err
+		}
+		lines := bytes.Split(bytes.TrimRight(b, "\n"), []byte("\n"))
+		if last := lines[len(lines)-1]; len(last) > 0 {
+			return last, nil
+		}
+		return nil, nil
+	}
+	f, err := os.Open(filepath.Join(l.dir, name)) // #nosec G304 -- the newest file in the log directory
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
@@ -372,14 +432,14 @@ func (l *Log) refresh() error {
 		return err
 	}
 	newest := files[len(files)-1]
-	if newest < l.newest {
+	if keyOf(newest) < keyOf(l.newest) {
 		newest = l.newest
 	}
 	size := fileSize(filepath.Join(l.dir, newest))
 	if newest == l.newest && size == l.size {
 		return nil
 	}
-	last, err := lastLine(filepath.Join(l.dir, newest))
+	last, err := l.lastLine(newest)
 	if err != nil {
 		return err
 	}

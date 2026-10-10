@@ -501,6 +501,14 @@ func (s *Server) endStaging() {
 	s.upgrades.staging = false
 }
 
+// UpdateBusy reports a file coming in or a stage under way, when the disk
+// cleanup leaves the update files alone.
+func (s *Server) UpdateBusy() bool {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	return s.upgrades.receiving > 0 || s.upgrades.staging
+}
+
 func (s *Server) isStaging() bool {
 	s.upgrades.mu.Lock()
 	defer s.upgrades.mu.Unlock()

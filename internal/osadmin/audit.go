@@ -7,8 +7,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -83,23 +81,17 @@ func (s *Server) exportAudit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, codes.Describe(err), http.StatusUnauthorized)
 		return
 	}
-	paths, _ := filepath.Glob(filepath.Join(s.o.Audit.Dir(), "log-*.jsonl"))
-	slices.Sort(paths)
 	w.Header().Set("Content-Type", "application/jsonl")
 	w.Header().Set("Content-Disposition", `attachment; filename="os-audit.jsonl"`)
 	s.write(entry, nil)
-	for _, p := range paths {
-		f, err := os.Open(p) // #nosec G304 -- a day file listed from the log directory
-		if err != nil {
-			s.o.Logger.Error(err, "osadmin: audit export: a day file can't be read", log.F("file", filepath.Base(p)))
-			return
-		}
-		_, err = io.Copy(w, f)
-		_ = f.Close()
-		if err != nil {
-			s.o.Logger.Warn("osadmin: audit export interrupted", log.F("error", err.Error()))
-			return
-		}
+	files := 0
+	if err := s.o.Audit.ReadFiles(func(_ string, f io.Reader) error {
+		files++
+		_, err := io.Copy(w, f)
+		return err
+	}); err != nil {
+		s.o.Logger.Warn("osadmin: audit export interrupted", log.F("error", err.Error()))
+		return
 	}
-	s.o.Logger.Info("osadmin: audit log exported", log.F("admin", sess.Admin), log.F("files", len(paths)))
+	s.o.Logger.Info("osadmin: audit log exported", log.F("admin", sess.Admin), log.F("files", files))
 }

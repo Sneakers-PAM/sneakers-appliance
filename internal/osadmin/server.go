@@ -132,6 +132,10 @@ type Options struct {
 	Shells Shells
 	// Assets are the static admin pages; nil serves a short notice.
 	Assets fs.FS
+	// Disk is the disk guard Status reads and CleanUpDisk runs
+	// (diskguard.Guard on the box); nil shows no volumes and answers Not
+	// available.
+	Disk DiskGuard
 	// Switches turn the installed product's switches (its MCP) on and
 	// off; nil answers the MCP page with no product.
 	Switches *productswitch.Switches

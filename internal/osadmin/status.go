@@ -126,6 +126,7 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		add(osadminv1.WarningKind_WARNING_KIND_FACTORY_RESET, detail)
 	}
 	out.Disk = s.disk()
+	s.diskStatus(out)
 	return connect.NewResponse(out), nil
 }
 

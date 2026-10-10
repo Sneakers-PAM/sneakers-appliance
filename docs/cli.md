@@ -133,6 +133,47 @@ Example:
   backup
 ```
 
+## `disk`
+
+Disk space.
+
+The box's disk: it cleans up after itself every hour and when a volume passes 80%; Status shows each volume's use.
+
+Offered over: SSH and console.
+
+```text
+disk <command>
+```
+
+Its commands:
+
+- `disk cleanup`: Free disk space now
+
+Example:
+
+```text
+  disk cleanup
+```
+
+## `disk cleanup`
+
+Free disk space now.
+
+Runs the disk cleanup at once, the one the box runs every hour and whenever a volume passes 80%: rotated pod logs over their cap, closed OS audit files (compressed, never deleted), images neither product release needs, update files left behind and stale temporary files. It never touches product data, secrets, backups, either release or key custody. It prints what each step freed, and the run is audited.
+
+Offered over: SSH and console.
+
+```text
+disk cleanup
+```
+
+Example:
+
+```text
+  disk cleanup
+  disk cleanup -o json
+```
+
 ## `help`
 
 Help about any command.

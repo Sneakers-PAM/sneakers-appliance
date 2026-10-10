@@ -75,6 +75,7 @@ A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`.
 | `StatusService.GetStatus` | admin | no | |
 | `StatusService.SetSecureBoot` | owner | yes | `status.secure-boot.set` |
 | `StatusService.GetPhase` | public | no | |
+| `StatusService.CleanUpDisk` | admin | yes | `disk.cleanup` |
 
 `GetPhase` answers `phase` (`firstboot` until setup's Finish, then `normal`) and, for the product
 edge's box-state page ([edge-fallback.md](edge-fallback.md)), `state`: `updating` while an update
@@ -86,6 +87,15 @@ has announced one, else `running` when setup is done and the product's service (
 for the restart page before anyone signs in again: each step's id, label and state only, with no
 version, detail or code ([upgrades.md](upgrades.md#the-steps-of-an-update)). It says nothing else
 about the box.
+
+`GetStatus` carries the disk guard's view ([disk-layout.md](disk-layout.md#keeping-the-disk-from-filling)):
+`volumes` (each volume's use and alert level, `DISK_LEVEL_WARNING` from 80%, `DISK_LEVEL_CRITICAL`
+from 90%, with `shared_with` for one that is on another's filesystem), `data_paths` (the product's
+data paths with their size, daily growth and write-ahead log) and `last_cleanup`, and its warnings
+among `warnings` (`WARNING_KIND_DISK_SPACE` with `critical` at 90%, `WARNING_KIND_DISK_GROWTH`,
+`WARNING_KIND_DATA_WAL`, `WARNING_KIND_AUDIT_ARCHIVE`). `CleanUpDisk` runs the cleanup at once, as
+the signed-in admin, and answers what each step freed; the closed shell's `disk cleanup` runs the
+same.
 | `SetupService.GetSetup` | admin or code session | no | |
 | `SetupService.RedeemCode` | public | no | `setup.code.redeem` |
 | `SetupService.CheckPassword` | admin or code session | no | |

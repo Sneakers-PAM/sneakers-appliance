@@ -241,7 +241,7 @@ run() {
   # k0s puts its own binaries first; the kubelet finds mount(8) in /bin.
   export PATH=/usr/sbin:/usr/bin:/sbin:/bin
   exec "$product/k0s" controller --enable-worker --no-taints \
-    --config /run/sneakers/k0s/k0s.yaml --data-dir "$data" \
+    --config /run/sneakers/k0s/k0s.yaml --data-dir "$data" --profile sneakers \
     --disable-components konnectivity-server,metrics-server,update-prober,autopilot \
     --kubelet-extra-args="--hostname-override=$name --node-ip=$node_ip --resolv-conf=/run/sneakers/k0s/resolv.conf"
 }
