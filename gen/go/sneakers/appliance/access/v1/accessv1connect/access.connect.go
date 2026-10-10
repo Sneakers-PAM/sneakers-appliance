@@ -87,6 +87,10 @@ const (
 	// AccessServiceGetExposedValueProcedure is the fully-qualified name of the AccessService's
 	// GetExposedValue RPC.
 	AccessServiceGetExposedValueProcedure = "/sneakers.appliance.access.v1.AccessService/GetExposedValue"
+	// AccessServiceGetMcpProcedure is the fully-qualified name of the AccessService's GetMcp RPC.
+	AccessServiceGetMcpProcedure = "/sneakers.appliance.access.v1.AccessService/GetMcp"
+	// AccessServiceSetMcpProcedure is the fully-qualified name of the AccessService's SetMcp RPC.
+	AccessServiceSetMcpProcedure = "/sneakers.appliance.access.v1.AccessService/SetMcp"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -216,6 +220,12 @@ type AccessServiceClient interface {
 	// ProductService.GetExposedValue run as the login's admin, so the shell
 	// reads exactly what :8443 would, under the same allow-list and audit.
 	GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error)
+	// GetMcp and SetMcp are the closed shell's "<product> mcp": osadmin's
+	// McpService run as the login's admin, so the shell drives the same
+	// product.yaml switches as the MCP card on :8443, under the same role
+	// and audit.
+	GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error)
+	SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -286,6 +296,19 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("GetExposedValue")),
 			connect.WithClientOptions(opts...),
 		),
+		getMcp: connect.NewClient[v1.GetMcpRequest, v1.GetMcpResponse](
+			httpClient,
+			baseURL+AccessServiceGetMcpProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("GetMcp")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		setMcp: connect.NewClient[v1.SetMcpRequest, v1.SetMcpResponse](
+			httpClient,
+			baseURL+AccessServiceSetMcpProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("SetMcp")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -300,6 +323,8 @@ type accessServiceClient struct {
 	removeKey       *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
 	addRecoveryKey  *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
 	getExposedValue *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
+	getMcp          *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
+	setMcp          *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -349,6 +374,16 @@ func (c *accessServiceClient) GetExposedValue(ctx context.Context, req *connect.
 	return c.getExposedValue.CallUnary(ctx, req)
 }
 
+// GetMcp calls sneakers.appliance.access.v1.AccessService.GetMcp.
+func (c *accessServiceClient) GetMcp(ctx context.Context, req *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error) {
+	return c.getMcp.CallUnary(ctx, req)
+}
+
+// SetMcp calls sneakers.appliance.access.v1.AccessService.SetMcp.
+func (c *accessServiceClient) SetMcp(ctx context.Context, req *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error) {
+	return c.setMcp.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -374,6 +409,12 @@ type AccessServiceHandler interface {
 	// ProductService.GetExposedValue run as the login's admin, so the shell
 	// reads exactly what :8443 would, under the same allow-list and audit.
 	GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error)
+	// GetMcp and SetMcp are the closed shell's "<product> mcp": osadmin's
+	// McpService run as the login's admin, so the shell drives the same
+	// product.yaml switches as the MCP card on :8443, under the same role
+	// and audit.
+	GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error)
+	SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -440,6 +481,19 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("GetExposedValue")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceGetMcpHandler := connect.NewUnaryHandler(
+		AccessServiceGetMcpProcedure,
+		svc.GetMcp,
+		connect.WithSchema(accessServiceMethods.ByName("GetMcp")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceSetMcpHandler := connect.NewUnaryHandler(
+		AccessServiceSetMcpProcedure,
+		svc.SetMcp,
+		connect.WithSchema(accessServiceMethods.ByName("SetMcp")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -460,6 +514,10 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceAddRecoveryKeyHandler.ServeHTTP(w, r)
 		case AccessServiceGetExposedValueProcedure:
 			accessServiceGetExposedValueHandler.ServeHTTP(w, r)
+		case AccessServiceGetMcpProcedure:
+			accessServiceGetMcpHandler.ServeHTTP(w, r)
+		case AccessServiceSetMcpProcedure:
+			accessServiceSetMcpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -503,6 +561,14 @@ func (UnimplementedAccessServiceHandler) AddRecoveryKey(context.Context, *connec
 
 func (UnimplementedAccessServiceHandler) GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.GetExposedValue is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.GetMcp is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.SetMcp is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

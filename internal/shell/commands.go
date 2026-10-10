@@ -120,7 +120,7 @@ var specs = []spec{
 	{path: "backup", use: "backup [...]", short: "Backups", action: "backup", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "restore", use: "restore [...]", short: "Restore from a backup", action: "restore", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true},
-	{path: "mcp", use: "mcp [...]", short: "The MCP switch", action: "mcp", origins: both, nargs: [2]int{0, -1}, later: true, product: true},
+	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true},
 	{path: "logs export", short: "Stream the logs as an archive to standard output", action: "logs.export", origins: []Origin{OriginSSH}, later: true},
 	{path: "support-bundle", short: "Stream a support bundle to standard output", action: "support.bundle", origins: []Origin{OriginSSH}, later: true},
@@ -204,7 +204,7 @@ func Resolve(words []string) *Command {
 // Actions are every backend call a command line can make. Nothing else
 // leaves the shell.
 func Actions() []string {
-	out := []string{"rootshell.open", "network.confirm", "product.value"}
+	out := []string{"rootshell.open", "network.confirm", "product.value", "mcp.show"}
 	for _, s := range specs {
 		if !slices.Contains(out, s.action) {
 			out = append(out, s.action)
@@ -518,6 +518,40 @@ func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags
 		return Result{Text: fmt.Sprintf("Not kept; the change reverts on its own. To keep it, run: network confirm %s", token)}, nil
 	}
 	return e.Backend.Call(ctx, Request{Action: "network.confirm", Args: []string{token}})
+}
+
+// runMcp shows the product's MCP switch, or sets it. The machine API
+// switch keeps its current setting unless the line names it.
+func runMcp(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
+	if len(args) == 0 {
+		return e.Backend.Call(ctx, Request{Action: "mcp.show"})
+	}
+	on, ok := onOff(args[0])
+	if !ok {
+		return Result{}, codes.New(codes.ShellParse, "mcp takes on or off, not %q", Printable(args[0]))
+	}
+	api := ""
+	if len(args) == 2 {
+		k, v, _ := strings.Cut(args[1], "=")
+		if k != "machine-api" {
+			return Result{}, codes.New(codes.ShellParse, "mcp takes machine-api=on|off after on or off, not %q", Printable(args[1]))
+		}
+		if _, ok := onOff(v); !ok {
+			return Result{}, codes.New(codes.ShellParse, "machine-api is on or off, not %q", Printable(v))
+		}
+		api = v
+	}
+	return e.Backend.Call(ctx, Request{Action: "mcp.set", Args: []string{map[bool]string{true: "on", false: "off"}[on]}, Flags: map[string]string{"machine-api": api}})
+}
+
+func onOff(v string) (bool, bool) {
+	switch v {
+	case "on":
+		return true, true
+	case "off":
+		return false, true
+	}
+	return false, false
 }
 
 // runRootShell asks for a challenge, reads the code the operator got for it

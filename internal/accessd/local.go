@@ -75,6 +75,22 @@ func (h *accessH) GetExposedValue(ctx context.Context, r *connect.Request[access
 	return connect.NewResponse(&accessv1.GetExposedValueResponse{Value: out}), nil
 }
 
+func (h *accessH) GetMcp(ctx context.Context, r *connect.Request[accessv1.GetMcpRequest]) (*connect.Response[accessv1.GetMcpResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceGetMcpProcedure, osadminv1connect.McpServiceGetMcpProcedure, h.s.h.Mcp.GetMcp, &osadminv1.GetMcpRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.GetMcpResponse{Mcp: out}), nil
+}
+
+func (h *accessH) SetMcp(ctx context.Context, r *connect.Request[accessv1.SetMcpRequest]) (*connect.Response[accessv1.SetMcpResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceSetMcpProcedure, osadminv1connect.McpServiceSetMcpProcedure, h.s.h.Mcp.SetMcp,
+		&osadminv1.SetMcpRequest{McpEnabled: r.Msg.GetMcpEnabled(), MachineApiEnabled: r.Msg.GetMachineApiEnabled()}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.SetMcpResponse{}), nil
+}
+
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
 	m := r.Msg
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceAddAdminProcedure, osadminv1connect.AccessServiceAddAdminProcedure, h.s.h.Access.AddAdmin,
