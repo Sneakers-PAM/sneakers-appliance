@@ -424,12 +424,15 @@ func (s *Supervisor) probe(ctx context.Context, u *unit, proc Process) {
 			ok = true
 		}
 		if ok {
+			// The line goes out before a dependent can see the service
+			// ready: a console service it starts claims the consoles, and
+			// a line written after the claim goes aside.
+			s.o.Logger.Info("services: ready", log.F("service", u.svc.Name))
 			s.mu.Lock()
 			if u.proc == proc {
 				u.ready = true
 			}
 			s.mu.Unlock()
-			s.o.Logger.Info("services: ready", log.F("service", u.svc.Name))
 			return
 		}
 		if time.Now().After(deadline) {

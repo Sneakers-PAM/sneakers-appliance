@@ -87,12 +87,18 @@ func Take(logf func(string, ...any)) (*Taken, map[string]error, error) {
 	}
 	_ = unix.Close(inP[0])
 	_ = unix.Close(outP[1])
-	t := &Taken{out: outP[0]}
+	return newTaken(os.NewFile(uintptr(outP[0]), "console-out"), os.NewFile(uintptr(inP[1]), "console-in"), cons, logf), dropped, nil // #nosec G115 -- file descriptors
+}
+
+// newTaken joins out, the read end of the shared output's pipe, and in,
+// the write end of the input's, to cons.
+func newTaken(out, in *os.File, cons []Console, logf func(string, ...any)) *Taken {
+	t := &Taken{out: int(out.Fd())} // #nosec G115 -- a file descriptor
 	for _, c := range cons {
 		t.Kept = append(t.Kept, c.Name)
 	}
-	t.mux = Join(os.NewFile(uintptr(outP[0]), "console-out"), os.NewFile(uintptr(inP[1]), "console-in"), cons, logf) // #nosec G115 -- file descriptors
-	return t, dropped, nil
+	t.mux = Join(out, in, cons, logf)
+	return t
 }
 
 // Flush waits, up to timeout, until what's been written to standard
@@ -117,12 +123,15 @@ func (t *Taken) Flush(timeout time.Duration) {
 
 // Claim gives the consoles to a program: the write end of a pipe for its
 // standard output. The caller closes its own copy once the program has
-// started, so the claim ends with the program.
+// started, so the claim ends with the program. What was written before
+// the claim goes to the consoles first, not aside (the line saying the
+// service the program waits for is ready, say).
 func (t *Taken) Claim() (*os.File, error) {
 	r, w, err := os.Pipe()
 	if err != nil {
 		return nil, err
 	}
+	t.Flush(claimWait)
 	t.mux.Attach(r)
 	return w, nil
 }
@@ -159,3 +168,7 @@ func (t *Taken) Hold(page []byte) {
 
 // loudWait bounds how long Loud waits for the quiet lines to go their way.
 const loudWait = 500 * time.Millisecond
+
+// claimWait bounds how long a claim waits for the lines written before it
+// to reach the consoles.
+const claimWait = 500 * time.Millisecond

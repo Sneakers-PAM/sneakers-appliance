@@ -6,8 +6,12 @@ package services_test
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"testing"
+	"time"
+
+	log "github.com/Bugs5382/go-log"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
@@ -136,5 +140,71 @@ func TestTheRootImageConsoleOwners(t *testing.T) {
 		if !s.Console || len(s.Phases) != 1 || s.Phases[0] != p || s.Restart != services.RestartAlways || s.User != "" || s.OnDemand(p) || len(s.After) != 1 || s.After[0] != "accessd" {
 			t.Fatalf("%s: %+v", name, s)
 		}
+	}
+}
+
+// slowLog is a log output that takes a while over a "services: ready"
+// line, as a write into init's console pipe can.
+type slowLog struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (l *slowLog) Write(p []byte) (int, error) {
+	if strings.Contains(string(p), "services: ready") {
+		time.Sleep(200 * time.Millisecond)
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.Write(p)
+}
+
+func (l *slowLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.buf.String()
+}
+
+// seeing records what the log held when a claim on the consoles was made.
+type seeing struct {
+	owner
+	log  *slowLog
+	seen []string
+}
+
+func (o *seeing) Claim() (*os.File, error) {
+	o.mu.Lock()
+	o.seen = append(o.seen, o.log.String())
+	o.mu.Unlock()
+	return o.owner.Claim()
+}
+
+// A dependency's "services: ready" line is written before a service that
+// waits for it starts: a console service claims the consoles as it
+// starts, and a line written after the claim goes aside, off the consoles.
+func TestTheReadyLineIsWrittenBeforeADependentStarts(t *testing.T) {
+	tbl, err := table(t, map[string]string{
+		"accessd":   "exec: /usr/bin/sneakers-accessd\nphases: [firstboot]\nreadiness:\n  file: /run/sneakers/access.ready\n",
+		"firstboot": "exec: /usr/bin/sneakers-firstboot\nphases: [firstboot]\nafter: [accessd]\nconsole: true\n",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &consoleRunner{fakeRunner: newRunner(), stdout: map[string]*os.File{}}
+	r.files["/run/sneakers/access.ready"] = true
+	lg := &slowLog{}
+	o := &seeing{log: lg}
+	opt := opts()
+	opt.Console = o
+	opt.Logger = log.NewLoggerWithOptions("sneakers-init", log.WithOutput(lg), log.WithDefaultFormat(log.FormatJSON), log.WithDefaultLevel(log.LevelInfo))
+	s := services.NewSupervisor(r, tbl, opt)
+	if err := s.EnterPhase(context.Background(), phase.Firstboot); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the console claim", func() bool { o.mu.Lock(); defer o.mu.Unlock(); return len(o.seen) == 1 })
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if !strings.Contains(o.seen[0], `"services: ready"`) || !strings.Contains(o.seen[0], `"service":"accessd"`) {
+		t.Fatalf("firstboot claimed the consoles before accessd's ready line was written; the log then:\n%s", o.seen[0])
 	}
 }
