@@ -102,6 +102,35 @@ if grep -h '^ *image: ' "$out"/*/*.yaml | grep -vE 'image: (ghcr\.io|docker\.io|
 fi
 echo "ok: no lab value"
 
+# The OAuth issuer (Ory Hydra) is https://<fqdn>/oauth, on the box's one
+# name and certificate: the edge routes /oauth/ to Hydra's public port and
+# strips the prefix, Hydra's discovery and endpoints carry it, and the
+# gateway checks tokens against it. No hydra.<fqdn> address is left.
+mcp="$out/sneakers-mcp/sneakers-mcp.yaml"
+host='sneakers.box.invalid'  # scrub:allow=fqdn -- the reserved .invalid placeholder
+if grep -nE "hydra\.$host|hydra\.\{\{" "$out"/*/*.yaml "$here/values.yaml" "$here/values-mcp-on.yaml"; then fail "a hydra.<fqdn> address is left"; fi
+mkdir -p "$work/mcpdocs"
+awk -v d="$work/mcpdocs" 'BEGIN{n=0; f=d"/0.yaml"} /^---$/{n++; f=d"/"n".yaml"; next} {print > f}' "$mcp"
+ing="" hcm="" sw=""
+for f in "$work"/mcpdocs/*.yaml; do
+  grep -q '^kind: Ingress$' "$f" && grep -q 'name: sneakers-hydra-public$' "$f" && ing="$f"
+  grep -q '^kind: ConfigMap$' "$f" && grep -q '^    name: sneakers-hydra$' "$f" && hcm="$f"
+  grep -q '^kind: ConfigMap$' "$f" && grep -q '^    name: sneakers-mcp-switch$' "$f" && sw="$f"
+done
+[ -n "$ing" ] || fail "no Ingress for Hydra's public port in the sneakers-mcp stack"
+grep -q 'path: /oauth/$' "$ing" || fail "Hydra's Ingress isn't on /oauth/: $(grep 'path:' "$ing")"
+grep -q 'router.middlewares: .*oauth-prefix@file' "$ing" || fail "Hydra's Ingress doesn't strip /oauth"
+grep -q 'router.middlewares: .*box-page@file' "$ing" || fail "Hydra's Ingress lacks the box-state page"
+[ -n "$hcm" ] || fail "no Hydra config"
+grep -q "issuer: https://$host/oauth\$" "$hcm" || fail "Hydra's issuer isn't https://<fqdn>/oauth: $(grep -m1 'issuer:' "$hcm")"
+grep -q "public: https://$host/oauth/\$" "$hcm" || fail "Hydra's public URL isn't https://<fqdn>/oauth/"
+[ -n "$sw" ] || fail "no sneakers-mcp-switch ConfigMap"
+grep -q "HYDRA_ISSUER: https://$host/oauth\$" "$sw" || fail "the gateway doesn't check https://<fqdn>/oauth: $(grep HYDRA_ISSUER "$sw")"
+grep -q "OAUTH_PUBLIC_URL: https://$host\$" "$sw" || fail "the root authorization server moved: $(grep OAUTH_PUBLIC_URL "$sw")"
+awk -v RS='---\n' '/kind: NetworkPolicy/ && /\n    name: sneakers-hydra\n/' "$mcp" | grep -q 'cidr: 198.18.0.1/32' || fail "Hydra's public port doesn't take the edge"
+grep -A3 'oauth-prefix:' "$out/edge/edge.yaml" | grep -q 'prefixes: \["/oauth"\]' || fail "the edge has no oauth-prefix middleware"
+echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ route"
+
 # Refusals.
 if CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > /dev/null 2>&1; then
   fail "rendered into a non-empty OUT"

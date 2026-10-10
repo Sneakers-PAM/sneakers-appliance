@@ -56,7 +56,7 @@ kind: ConfigMap
 metadata:
   name: sneakers-mcp-switch
 data:
-  HYDRA_ISSUER: https://hydra.PH/
+  HYDRA_ISSUER: https://PH/oauth
   MCP_URL: https://PH/mcp
 `, "PH", placeholder)
 
