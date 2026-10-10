@@ -46,7 +46,13 @@ type Store struct {
 	// Settings are the box's settings an admin sets on :8443
 	// (boxsettings.Store on the box); nil gives every setting its default.
 	Settings Settings
-	Logger   log.Logger
+	// Restore reads a product key the bundle names under escrow from the
+	// box's sealed items, by its escrow name: on a replacement box they
+	// came over with the escrow (KeyCustody.ImportEscrow), and a key made
+	// anew would leave the restored data unreadable. found is false when
+	// nothing is sealed under that name; nil restores nothing.
+	Restore func(name string) (value string, found bool, err error)
+	Logger  log.Logger
 }
 
 // Settings are the box's settings by name (productspec.IsSetting).
@@ -92,12 +98,24 @@ func (s *Store) Ensure(slot string) error {
 	if err != nil {
 		return err
 	}
-	made := 0
+	made, restored := 0, 0
 	for _, b := range spec.BoxSecrets {
 		for _, k := range b.Keys {
 			id := b.Secret + "/" + k.Key
 			if k.Generate == "" || values[id] != "" {
 				continue
+			}
+			if name, ok := escrowName(spec, b.Secret, k.Key); ok && s.Restore != nil {
+				v, found, err := s.Restore(name)
+				if err != nil {
+					return fmt.Errorf("boxsecrets: the escrowed %s can't be read, so no new one is made: %w", name, err)
+				}
+				if found {
+					values[id] = v
+					restored++
+					s.logger().Info("boxsecrets: a key is restored from the escrow", log.F("key", name))
+					continue
+				}
 			}
 			v, err := generate(k.Generate)
 			if err != nil {
@@ -107,7 +125,7 @@ func (s *Store) Ensure(slot string) error {
 			made++
 		}
 	}
-	if made > 0 {
+	if made > 0 || restored > 0 {
 		if err := s.save(values); err != nil {
 			return err
 		}
@@ -126,8 +144,19 @@ func (s *Store) Ensure(slot string) error {
 	if err := writeAtomic(filepath.Join(stack, productspec.BoxSecretsStack+".yaml"), doc); err != nil {
 		return err
 	}
-	s.logger().Info("boxsecrets: the box secrets are in place", log.F("secrets", len(spec.BoxSecrets)), log.F("generated", made))
+	s.logger().Info("boxsecrets: the box secrets are in place", log.F("secrets", len(spec.BoxSecrets)), log.F("generated", made), log.F("restored", restored))
 	return nil
+}
+
+// escrowName is the escrow name of a box secret's key, when the bundle
+// names it under escrow.
+func escrowName(spec productspec.Spec, secret, key string) (string, bool) {
+	for _, e := range spec.Escrow {
+		if e.Secret == secret && e.Key == key {
+			return e.Name, true
+		}
+	}
+	return "", false
 }
 
 // Render is the stack for spec's box secrets with values and the box's
