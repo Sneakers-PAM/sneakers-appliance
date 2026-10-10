@@ -19,6 +19,10 @@ import (
 // command words.
 func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) error {
 	t := term.NewTerminal(rw, prompt)
+	// Up and Down recall the menu's command lines only: an answer typed at
+	// a command's prompt is kept out.
+	recall := &menuRecall{History: t.History}
+	t.History = recall
 	// Tab completes the word before the cursor; a second Tab that can't
 	// complete any further lists the candidates, and the prompt and the
 	// line are drawn again under them.
@@ -48,7 +52,7 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 		session.History = &History{}
 	}
 	session.Out, session.Err = t, t
-	session.In = &termLines{t: t, prompt: prompt}
+	session.In = &termLines{t: t, prompt: prompt, recall: recall}
 	_, _ = io.WriteString(t, "Type help for the commands, exit to leave.\n")
 	for {
 		if ctx.Err() != nil {
@@ -72,27 +76,55 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 	}
 }
 
+// menuRecall is the terminal's arrow-key recall, which takes no lines
+// while a command reads from the terminal.
+type menuRecall struct {
+	term.History
+	off bool
+}
+
+func (h *menuRecall) Add(entry string) {
+	if !h.off {
+		h.History.Add(entry)
+	}
+}
+
 // termLines lets a command read a confirmation from the terminal it runs
-// on: each Read returns one more line.
+// on: each Read returns one more line. Nothing it reads enters recall.
 type termLines struct {
 	t      *term.Terminal
 	prompt string
 	buf    []byte
+	recall *menuRecall
 }
 
 // AskLine reads one line with prompt as the terminal's prompt, then puts
 // the menu's prompt back: a command's question is its own line, and the
-// menu's prompt never follows it on the same line.
+// menu's prompt never follows it on the same line. The answer stays out
+// of recall.
 func (r *termLines) AskLine(prompt string) (string, error) {
 	r.buf = nil
 	r.t.SetPrompt(prompt)
 	defer r.t.SetPrompt(r.prompt)
-	return r.t.ReadLine()
+	return r.unrecalled(r.t.ReadLine)
+}
+
+// AskSecret reads one line with prompt and no echo, for a code or a
+// password; like every answer it stays out of recall.
+func (r *termLines) AskSecret(prompt string) (string, error) {
+	r.buf = nil
+	return r.unrecalled(func() (string, error) { return r.t.ReadPassword(prompt) })
+}
+
+func (r *termLines) unrecalled(read func() (string, error)) (string, error) {
+	r.recall.off = true
+	defer func() { r.recall.off = false }()
+	return read()
 }
 
 func (r *termLines) Read(p []byte) (int, error) {
 	if len(r.buf) == 0 {
-		line, err := r.t.ReadLine()
+		line, err := r.unrecalled(r.t.ReadLine)
 		if err != nil {
 			return 0, err
 		}
