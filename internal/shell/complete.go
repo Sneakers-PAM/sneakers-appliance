@@ -54,10 +54,17 @@ func completeKeys(keys []Key) func(context.Context, *Env, []string, string) ([]s
 	}
 }
 
-func completeMcp(_ context.Context, e *Env, args []string, partial string) ([]string, cobra.ShellCompDirective) {
+func completeMcp(ctx context.Context, e *Env, args []string, partial string) ([]string, cobra.ShellCompDirective) {
 	switch {
 	case len(args) == 0:
-		return []string{"off\tturn the MCP off", "on\tturn the MCP on"}, cobra.ShellCompDirectiveNoFileComp
+		off, on := "off\tturn the MCP off", "on\tturn the MCP on"
+		switch mcpState(ctx, e) {
+		case "off":
+			off += current
+		case "on":
+			on += current
+		}
+		return []string{off, on}, cobra.ShellCompDirectiveNoFileComp
 	case len(args) == 1 && !noMachineAPI(e.Switches):
 		if strings.HasPrefix(partial, "machine-api=") {
 			return []string{"machine-api=off", "machine-api=on"}, cobra.ShellCompDirectiveNoFileComp
@@ -65,6 +72,26 @@ func completeMcp(_ context.Context, e *Env, args []string, partial string) ([]st
 		return []string{"machine-api=\tset the machine API too"}, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 	}
 	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
+// current marks the value in effect in a candidate's description.
+const current = " (current)"
+
+// mcpState is the MCP switch as accessd reports it, on or off; empty when
+// it can't be asked (no backend, as for ?).
+func mcpState(ctx context.Context, e *Env) string {
+	if e.Backend == nil {
+		return ""
+	}
+	res, err := e.Backend.Call(ctx, Request{Action: "mcp.show"})
+	if err != nil {
+		return ""
+	}
+	data, _ := res.Data.(map[string]any)
+	if on, ok := data["mcp"].(bool); ok {
+		return map[bool]string{true: "on", false: "off"}[on]
+	}
+	return ""
 }
 
 // completeUpdates offers updates' two settings, then the channel's values
@@ -107,25 +134,41 @@ func adminNames(ctx context.Context, e *Env) []string {
 // also returns the candidates for the word, which a second Tab lists.
 // Only what the session may run is offered.
 func Completions(e *Env, typed string) (string, []string) {
-	words, err := Split(typed)
+	line, cands := completions(e, typed)
+	return line, candidateWords(cands)
+}
+
+// Candidate is one word Tab may complete to, with what it does.
+type Candidate struct{ Word, Note string }
+
+func candidateWords(cands []Candidate) []string {
+	out := make([]string, 0, len(cands))
+	for _, c := range cands {
+		out = append(out, c.Word)
+	}
+	return out
+}
+
+func completions(e *Env, typed string) (string, []Candidate) {
+	ws, err := Split(typed)
 	if err != nil {
 		return typed, nil
 	}
 	partial := ""
-	if typed != "" && !strings.HasSuffix(typed, " ") && !strings.HasSuffix(typed, "\t") && len(words) > 0 {
-		partial, words = words[len(words)-1], words[:len(words)-1]
+	if typed != "" && !strings.HasSuffix(typed, " ") && !strings.HasSuffix(typed, "\t") && len(ws) > 0 {
+		partial, ws = ws[len(ws)-1], ws[:len(ws)-1]
 	}
-	cands, directive := complete(e, words, partial)
-	if len(words) == 0 && strings.HasPrefix("exit", partial) {
-		cands = append(cands, "exit")
-		slices.Sort(cands)
+	cands, directive := complete(e, ws, partial)
+	if len(ws) == 0 && strings.HasPrefix("exit", partial) {
+		cands = append(cands, Candidate{Word: "exit", Note: "Leave the shell"})
+		slices.SortFunc(cands, func(a, b Candidate) int { return strings.Compare(a.Word, b.Word) })
 	}
 	if len(cands) == 0 {
 		return typed, nil
 	}
-	common := cands[0]
+	common := cands[0].Word
 	for _, c := range cands[1:] {
-		common = commonPrefix(common, c)
+		common = commonPrefix(common, c.Word)
 	}
 	if len(common) < len(partial) {
 		return typed, cands
@@ -137,7 +180,7 @@ func Completions(e *Env, typed string) (string, []string) {
 }
 
 // complete runs cobra's completion for words and the partial last word.
-func complete(e *Env, words []string, partial string) ([]string, cobra.ShellCompDirective) {
+func complete(e *Env, words []string, partial string) ([]Candidate, cobra.ShellCompDirective) {
 	var out bytes.Buffer
 	session := *e
 	session.Out, session.Err, session.In = io.Discard, io.Discard, strings.NewReader("")
@@ -156,11 +199,11 @@ func complete(e *Env, words []string, partial string) ([]string, cobra.ShellComp
 	if err != nil || cobra.ShellCompDirective(d)&cobra.ShellCompDirectiveError != 0 {
 		return nil, cobra.ShellCompDirectiveError
 	}
-	var cands []string
+	var cands []Candidate
 	for _, l := range lines[:len(lines)-1] {
-		word, _, _ := strings.Cut(l, "\t")
+		word, note, _ := strings.Cut(l, "\t")
 		if word != "" && strings.HasPrefix(word, partial) && word != cobra.ShellCompRequestCmd && word != cobra.ShellCompNoDescRequestCmd {
-			cands = append(cands, word)
+			cands = append(cands, Candidate{Word: word, Note: note})
 		}
 	}
 	return cands, cobra.ShellCompDirective(d)
