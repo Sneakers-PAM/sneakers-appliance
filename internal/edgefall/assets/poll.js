@@ -25,7 +25,11 @@
   // How long the poller keeps asking every second after a page request
   // answered with the box-state header or failed.
   var ALERT_MS = 30000;
-  var TIMEOUT_MS = 1500;
+  // Long enough for a box under load or a browser queueing the ask behind
+  // the page's own requests: a shorter one gave up on answers that were on
+  // their way, and each miss made it ask faster. Only one ask is out at a
+  // time.
+  var TIMEOUT_MS = 5000;
   // A single lost answer isn't the box going away.
   var MISSES = 2;
   // After this long the page offers a reload, which is how the browser
@@ -237,6 +241,9 @@
         last = state;
         show(state, true);
       }, function () {
+        // A browser holds back a hidden tab's requests and timers, so an
+        // ask that fails while hidden says nothing about the box.
+        if (document.hidden) return;
         misses++;
         if (ui || onPage || misses >= MISSES || WORDS[last]) show(last, false);
       })

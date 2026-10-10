@@ -27,6 +27,14 @@ type pollRun struct {
 		Later     []int64 `json:"later"`
 		Error     []int64 `json:"error"`
 	} `json:"kick"`
+	Slow struct {
+		Aborted     int `json:"aborted"`
+		MaxInFlight int `json:"maxInFlight"`
+		Asks        int `json:"asks"`
+	} `json:"slow"`
+	Thaw struct {
+		Overlay int `json:"overlay"`
+	} `json:"thaw"`
 	Hidden struct {
 		WhileHidden int     `json:"whileHidden"`
 		OnShow      []int64 `json:"onShow"`
@@ -122,5 +130,18 @@ func TestThePollerWaitsWhileTheTabIsHidden(t *testing.T) {
 	}
 	if len(r.Hidden.OnShow) != 1 || r.Hidden.OnShow[0] != 0 {
 		t.Fatalf("shown again, the tab asked at %v ms", r.Hidden.OnShow)
+	}
+}
+
+// A box that takes 2.5 seconds to answer isn't given up on, and the
+// poller never has two asks out at once, so slow answers don't pile up
+// into timeouts.
+func TestThePollerWaitsForASlowAnswerAndNeverOverlaps(t *testing.T) {
+	r := runPoller(t)
+	if r.Slow.Aborted != 0 || r.Slow.MaxInFlight != 1 || r.Slow.Asks < 10 {
+		t.Fatalf("slow box: %+v", r.Slow)
+	}
+	if r.Thaw.Overlay != 0 {
+		t.Fatalf("an ask that failed while the tab was hidden laid the overlay over the page")
 	}
 }

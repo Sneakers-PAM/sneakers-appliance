@@ -138,14 +138,15 @@ A product page includes it:
 <script src="/_box/poll.js" defer></script>
 ```
 
-It asks `/_box/state` once when the page loads (each ask times out after 1.5 seconds), then:
+It asks `/_box/state` once when the page loads (one ask at a time, each given up after 5 seconds), then:
 
 - about every 45 seconds while the box answers `running`, spread by up to 7.5 seconds either way so
   open tabs don't ask in step;
 - every second while the state isn't `running`, while the box doesn't answer, and for 30 seconds
   after one of the page's own `fetch` requests answers with the `Sneakers-Box-State` header or
   fails with a network error (the poller watches the page's `fetch` for that, and asks at once);
-- never while the tab is hidden; when the tab is shown again it asks at once.
+- never while the tab is hidden (an ask that fails while it is hidden doesn't count as a miss); when
+  the tab is shown again it asks at once.
 
 While the state isn't `running`, it lays the branded page over the product (a closed shadow root, styled through the DOM,
 so a product's CSP needs only `script-src 'self'` and `connect-src 'self'`). When nothing answers,

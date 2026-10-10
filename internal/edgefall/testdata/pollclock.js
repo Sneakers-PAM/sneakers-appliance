@@ -34,7 +34,7 @@ function tab(seed) {
   let rand = seed;
   const asks = [];
   const listeners = {};
-  const box = { state: "running", reachable: true };
+  const box = { state: "running", reachable: true, latency: 0, inFlight: 0, maxInFlight: 0, aborted: 0 };
   const document = {
     hidden: false,
     documentElement: element(),
@@ -50,11 +50,27 @@ function tab(seed) {
     reloads: 0,
     AbortController,
     // The page's own requests and the poller's asks both come here.
-    fetch(url) {
+    fetch(url, opts) {
       if (url === "/_box/state") {
         asks.push(now);
         if (!box.reachable) return Promise.reject(new TypeError("network"));
-        return Promise.resolve({ ok: true, headers: headers({}), json: () => Promise.resolve({ state: box.state }) });
+        const answer = { ok: true, headers: headers({}), json: () => Promise.resolve({ state: box.state }) };
+        if (!box.latency) return Promise.resolve(answer);
+        // A slow answer: it comes after box.latency on the fake clock,
+        // unless the poller gives up on it first.
+        box.inFlight++;
+        box.maxInFlight = Math.max(box.maxInFlight, box.inFlight);
+        return new Promise((resolve, reject) => {
+          const id = ctx.setTimeout(() => { box.inFlight--; resolve(answer); }, box.latency);
+          if (opts && opts.signal) {
+            opts.signal.addEventListener("abort", () => {
+              ctx.clearTimeout(id);
+              box.inFlight--;
+              box.aborted++;
+              reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+            });
+          }
+        });
       }
       const next = window.__next;
       window.__next = null;
@@ -183,6 +199,33 @@ async function main() {
     await a.visibility(false);
     const onShow = a.asks.filter((x) => x >= shownAt).map((x) => x - shownAt);
     out.hidden = { whileHidden, onShow };
+  }
+
+  // A slow box (2.5 s an answer): no ask is given up on, and asks never
+  // overlap, while it runs or while it reboots.
+  {
+    const a = tab(7);
+    a.box.latency = 2500;
+    await a.start();
+    await a.until(5 * MIN);
+    a.box.state = "rebooting";
+    await a.until(6 * MIN);
+    out.slow = { aborted: a.box.aborted, maxInFlight: a.box.maxInFlight, asks: a.asks.length };
+  }
+
+  // An ask in flight when the tab is hidden that fails isn't the box going
+  // away: shown again, there's no overlay.
+  {
+    const a = tab(8);
+    await a.start();
+    await a.until(MIN);
+    a.box.reachable = false;
+    await a.visibility(true);
+    await a.until(2 * MIN);
+    a.box.reachable = true;
+    await a.visibility(false);
+    await a.until(2 * MIN + 5000);
+    out.thaw = { overlay: a.document.documentElement.children.length };
   }
 
   process.stdout.write(JSON.stringify(out));
