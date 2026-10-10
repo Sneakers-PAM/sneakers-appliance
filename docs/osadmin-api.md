@@ -58,6 +58,12 @@ after setup, and invitations and Recover access codes still use the code pages.
 
 ### Available in this release
 
+`EmailService` is the product's Email page ([product-email.md](product-email.md)): `GetEmail`
+answers `state` (`not installed`, `not in this product`, `not set` or `set`), the settings and
+whether a password is saved, never the password. `SetEmail` saves them and applies the product
+again (`password` absent keeps the saved one, empty clears it); `SendTestEmail` sends one message.
+A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`.
+
 | Method | Role | Step-up | Audit action |
 |---|---|---|---|
 | `SignInService.SignIn` | public | no | `signin.password` |
@@ -135,6 +141,9 @@ about the box.
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
+| `EmailService.GetEmail` | admin | no | |
+| `EmailService.SetEmail` | admin | yes | `product.email.set` |
+| `EmailService.SendTestEmail` | admin | yes | `product.email.test-send` |
 | `ImportService.GetImport` | admin | no | |
 | `ImportService.OpenImport` | admin | yes | `import.open` |
 | `ImportService.RunImportStep` | admin | yes | `import.run` |

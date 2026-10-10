@@ -95,6 +95,12 @@ type Spec struct {
 	// (package boxsecrets): no bundle carries their values, so every box
 	// has its own, kept across updates and reverts.
 	BoxSecrets []BoxSecret `yaml:"box_secrets"`
+	// BoxSettings are ConfigMaps the box writes from the settings an
+	// admin sets on :8443 (package boxsettings), never secret ones.
+	BoxSettings []BoxSetting `yaml:"box_settings"`
+	// Email, when set, says the product reads the box's email settings,
+	// so :8443 offers its Email page.
+	Email *Email `yaml:"email"`
 }
 
 // EscrowKey is one Secret key the recovery escrow carries.
@@ -245,6 +251,9 @@ type BoxKey struct {
 	Key      string `yaml:"key"`
 	Generate string `yaml:"generate"`
 	Value    string `yaml:"value"`
+	// Setting is one of the box's settings (productspec.IsSetting), set
+	// on :8443; unset, its default.
+	Setting string `yaml:"setting"`
 }
 
 // Namespace is the Secret's namespace.
@@ -388,6 +397,9 @@ func Parse(b []byte) (Spec, error) {
 	if err := s.checkBoxSecrets(); err != nil {
 		return Spec{}, err
 	}
+	if err := s.checkSettings(); err != nil {
+		return Spec{}, err
+	}
 	seen := map[string]bool{}
 	for i, v := range s.ExposedValues {
 		if err := v.check(); err != nil {
@@ -480,9 +492,15 @@ func (s Spec) checkBoxSecrets() error {
 				return bad("box_secrets[%d].keys[%d]: %q isn't a Secret data key, or is declared twice", i, j, k.Key)
 			}
 			keys[k.Key] = true
+			kinds := 0
+			for _, v := range []string{k.Generate, k.Value, k.Setting} {
+				if v != "" {
+					kinds++
+				}
+			}
 			switch {
-			case k.Generate != "" && k.Value != "", k.Generate == "" && k.Value == "":
-				return bad("box_secrets[%d].keys[%d]: %s is generated or a value, one of them", i, j, k.Key)
+			case kinds != 1:
+				return bad("box_secrets[%d].keys[%d]: %s is generated, a value or a setting, one of them", i, j, k.Key)
 			case k.Generate != "":
 				switch k.Generate {
 				case GeneratePassword, GenerateKey32, GenerateToken:

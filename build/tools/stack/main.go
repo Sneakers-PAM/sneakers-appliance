@@ -52,7 +52,11 @@ type options struct {
 	// SwitchConfigMap is the ConfigMap the switch's stack carries, with
 	// the settings SwitchFrom's ConfigMaps change when it's on.
 	SwitchConfigMap string
-	SwitchFrom      []string
+	// secretKeys are the box secret keys that hold a secret setting, and
+	// boxMaps the ConfigMaps the box writes; render fills them from
+	// product.yaml.
+	secretKeys, boxMaps map[string]bool
+	SwitchFrom          []string
 	// Data is the directory the hostPath volumes go under.
 	Data string
 }
@@ -113,6 +117,19 @@ func render(o options, w io.Writer) error {
 		box[b.SecretName()] = map[string]bool{}
 		for _, k := range b.Keys {
 			box[b.SecretName()][k.Key] = true
+		}
+	}
+	o.secretKeys, o.boxMaps = map[string]bool{}, map[string]bool{}
+	for _, b := range spec.BoxSecrets {
+		for _, k := range b.Keys {
+			if _, secret := productspec.IsSetting(k.Setting); secret {
+				o.secretKeys[k.Key] = true
+			}
+		}
+	}
+	for _, b := range spec.BoxSettings {
+		if b.Namespace() == o.Namespace {
+			o.boxMaps[b.ConfigMapName()] = true
 		}
 	}
 	images := map[string]bool{}
@@ -212,6 +229,16 @@ func convert(o options, file string, pins map[string]string, box map[string]map[
 			continue
 		case "PersistentVolumeClaim":
 			continue
+		case "ConfigMap":
+			if o.boxMaps[name] {
+				return nil, fmt.Errorf("the render carries the ConfigMap %s, which the box writes from its settings (product.yaml box_settings)", name)
+			}
+			data, _ := d["data"].(doc)
+			for k := range data {
+				if o.secretKeys[k] {
+					return nil, fmt.Errorf("the ConfigMap %s carries %s, which product.yaml keeps in a box secret: a secret setting never goes into a ConfigMap", name, k)
+				}
+			}
 		}
 		if !clusterKinds[kind] {
 			md["namespace"] = o.Namespace

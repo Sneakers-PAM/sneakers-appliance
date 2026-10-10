@@ -83,6 +83,13 @@ shell, the console and :8443 show the same sentence.
 | 3814 | `TLS_ACME_UNAVAILABLE` | ACME through cert-manager isn't available yet; it comes with the product bundle |
 | 3815 | `TLS_NO_HOSTNAME` | the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network |
 
+## Product email (39xx)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3901 | `EMAIL_INVALID` | an email setting fails validation (the error names it) |
+| 3902 | `EMAIL_SEND` | the test email didn't go out; the error gives the relay's answer or the connection's failure |
+
 ## Build kit and boot (1xxx and 2xxx)
 
 | Code | Symbol | Meaning |
