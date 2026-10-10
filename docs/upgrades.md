@@ -132,9 +132,13 @@ ready:
 When the product isn't ready within the timeout after following began, the step it's on fails with
 `UPGRADE_PRODUCT_START`, and its detail says what it waited for ("the product isn't ready after
 15m0s: Rolling out (13 of 14 ready): waiting for app/api, 0 of 1 updated, 1 running"). The record
-is failed, not done, the history gets a failed entry by `osadmin`, and the audit log
+is failed, not done, the history gets the apply's or revert's entry as failed, and the audit log
 `upgrade.product-not-ready`; the root shell's `kubectl` shows what holds it. A revert waits the same
-way. An import's Verify step waits too: the import restarts the workloads that load the imported
+way. The history entry of a product apply or revert (an Updates install, a revert, or the product
+applied again for a new host name or email settings) is held in the record until then: it reads
+`ok` only once the product is ready, never while the steps still roll out. One that fails before
+the restart goes in at once. A product without `ready.health` skips only the health step; the
+rollout and 443 still gate done and the history. An import's Verify step waits too: the import restarts the workloads that load the imported
 data, and Verify is refused with `PRODUCT_NOT_READY`, naming what it waits for, until the product is
 ready again.
 
