@@ -63,6 +63,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `recover-access.code`, `recover-access.cancel` | accessd | the console's Recover access code |
 | `rootshell.begin`, `rootshell.code.issue`, `rootshell.open`, `rootshell.end` | accessd | the root shell's challenge, code, opening and end; `rootshell.end` is `ok` with how it ended in `detail.reason` (`exit`, `idle`, `time-box`, `terminated`) |
 | `product.value.read` | accessd | an admin reads a value the product exposes (`<product> <name>` or `ProductService.GetExposedValue`): `detail.name`, `detail.state` `shown` or `consumed`; never the value ([ssh-and-elevation.md](ssh-and-elevation.md#product-values)) |
+| `mcp.set` | accessd | an admin sets the product's MCP and machine API switches (the MCP card on :8443, or `<product> mcp on\|off` with the `ssh` surface): `detail.mcp`, `detail.machineApi` `on` or `off` ([ssh-and-elevation.md](ssh-and-elevation.md#the-mcp-switch)) |
 | `clock.step` | netd | SNTP stepped the clock (`detail.server`, `detail.offsetMs`, `detail.at`: `boot` or `running`); small offsets are slewed and not audited ([network.md](network.md#dns-ntp-and-the-host-name)) |
 
 ## Reboot and shutdown
