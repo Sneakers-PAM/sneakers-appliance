@@ -57,6 +57,14 @@ has sign 'sneakers-kit" build "\$RUNNER_TEMP/signed/artifact" --format ova' "bui
 has sign 'bundle "\$f\.sigstore\.json"' "sign the OVA"
 has publish '"\$ova" "\$ova\.sha256" "\$ova\.sigstore\.json"' "attach the OVA, its sum and its signature"
 has lab 'sneakers-kit" build "\$lab/artifact" --format ova' "build the lab OVA the same way"
+# Every file a release makes has one of the allowed names: the version on
+# production, lab-<build label> on lab, never a date, a build time or a
+# commit (docs/release.md, File names). The OVA is in SHA256SUMS too.
+has sign 'sneakers-appliance-\$VERSION-amd64\.ova' "name the OVA sneakers-appliance-<version>-<arch>.ova"
+has sign 'check-names\.sh --channel production' "check the signed files' names"
+has sign 'cat "\$f\.sha256" >> "\$units/SHA256SUMS"' "add the OVA to SHA256SUMS"
+has publish 'check-names\.sh --channel production "\$\{files\[@\]\}"' "check every asset's name"
+has lab 'check-names\.sh --channel lab' "check the lab files' names"
 
 for id in build sign publish; do
   if job "$id" | grep -qE 'sneakers-appliance-\$VERSION-amd64\.bin|--recipient keys/production/update.pub --version "\$VERSION" --arch amd64 --channel production --out'; then

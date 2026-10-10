@@ -39,7 +39,7 @@ func TestQCOW2WriterThroughTheKit(t *testing.T) {
 	if err != nil || len(paths) != 2 {
 		t.Fatalf("%v %v", paths, err)
 	}
-	img := filepath.Join(out, "sneakers-"+fixtures.Version+"-amd64-LAB.qcow2")
+	img := filepath.Join(out, "sneakers-appliance-lab-"+fixtures.Version+"-amd64.qcow2")
 	info, err := exec.Command("qemu-img", "info", "--output=json", img).CombinedOutput() // #nosec G204 -- test-only, fixed tool
 	if err != nil || !strings.Contains(string(info), `"format": "qcow2"`) || !strings.Contains(string(info), `"virtual-size": 68719476736`) {
 		t.Fatalf("qemu-img info: %v\n%s", err, info)

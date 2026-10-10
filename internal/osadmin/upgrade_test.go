@@ -251,6 +251,59 @@ func TestAPatchThatDoesntApplyFallsBackToTheFullRelease(t *testing.T) {
 	}
 }
 
+// The fallback finds the full release through the index the box last
+// checked, never by the name it would guess: a mirror that lists the full
+// release under another name (one from before the version-only names)
+// still serves the fallback.
+func TestAPatchFallbackFetchesTheFullReleaseTheIndexNames(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	p := patchHeader("0.1.1", "0.1.0")
+	p.Name, p.Commit = updatepkg.Name, "1a2b3c4"
+	f := updatepkg.Header{Name: updatepkg.Name, Unit: updatepkg.UnitBaseOS, Version: "0.1.1", Commit: "1a2b3c4", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction}
+	listed := updatepkg.PreviousFileName(f)
+	if listed == p.Target.FullBin {
+		t.Fatal("the test needs the index to name the full release differently")
+	}
+	var idx updatepkg.Index
+	if err := idx.AddFile(p, 1<<20, updatepkg.FileName(p)); err != nil {
+		t.Fatal(err)
+	}
+	if err := idx.AddFile(f, 33<<20, listed); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b.mirrorFiles[updatepkg.IndexName] = raw
+	b.mirrorFiles[updatepkg.FileName(p)] = bin(t, b.sign, b.enc, p)
+	b.mirrorFiles[listed] = bin(t, b.sign, b.enc, f)
+	if err := setPolicy(t, alice, &osadminv1.UpgradePolicy{Source: osadmin.SourceManual, MirrorUrl: b.mirror.URL}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkNow(alice); err != nil {
+		t.Fatal(err)
+	}
+	b.init.patchErr = connect.NewError(connect.CodeFailedPrecondition, errors.New("UPGRADE_PATCH_BASE (2508): the running root image isn't the one the patch was made from"))
+	got, err := alice.upgrade().FetchUpdate(ctx, connect.NewRequest(&osadminv1.FetchUpdateRequest{FileName: updatepkg.FileName(p)}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := alice.upgrade().StageUpdate(ctx, connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: got.Msg.GetUploadId()}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Msg.GetPackage().GetKind() != "full" {
+		t.Fatalf("staged %v", res.Msg.GetPackage())
+	}
+	if e := lastEntry(t, b.log, "upgrade.patch-fallback"); e.Outcome != "ok" || e.Detail["full"] != listed {
+		t.Fatalf("the fallback entry %+v", e)
+	}
+}
+
 // An uploaded patch that doesn't apply isn't followed by a fetch: the
 // refusal names the full release to upload.
 func TestAnUploadedPatchThatDoesntApplyNamesTheFullRelease(t *testing.T) {

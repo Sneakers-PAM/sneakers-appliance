@@ -296,7 +296,7 @@ func (h Header) checkPatch() error {
 		if !hashRE.MatchString(t.RootSHA256) || !hashRE.MatchString(t.UKISHA256) {
 			return codes.New(codes.UpgradeFormat, "the patch's target names its root image's and its UKI's SHA-256")
 		}
-		if t.FullBin != "" && !binNameRE.MatchString(t.FullBin) {
+		if t.FullBin != "" && !ValidFileName(t.FullBin) {
 			return codes.New(codes.UpgradeFormat, "the patch's full .bin %q isn't a release file name", t.FullBin)
 		}
 	}
@@ -315,23 +315,28 @@ func (h Header) Applicable() error {
 	return nil
 }
 
-// binNameRE matches every published .bin name: the units' names, the
-// products', and the names from before the units.
-var binNameRE = regexp.MustCompile(`^sneakers-(appliance|appliance-baseOS|appliance-baseOS-patch|appliance-baseWeb|product)-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?-(amd64|arm64)(-LAB)?\.bin$`)
+// binNameRE matches every published .bin name: the version-only names
+// (FileName), and the names before them (PreviousFileName and the names
+// from before the units).
+var (
+	binNameRE  = regexp.MustCompile(`^sneakers-(appliance|appliance-baseOS|appliance-baseOS-patch|appliance-baseWeb|product)-[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?-(amd64|arm64)(-LAB)?\.bin$`)
+	labNameRE  = regexp.MustCompile(`^sneakers-(appliance-baseOS-patch|appliance-baseOS|appliance-baseWeb|product)-lab-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*-(amd64|arm64)\.bin$`)
+	fileRE     = regexp.MustCompile(`^sneakers-(?:appliance-baseOS-patch|appliance-baseOS|appliance-baseWeb|appliance|product)-(.+)-(?:amd64|arm64)(-LAB)?\.bin$`)
+	commitGR   = regexp.MustCompile(`-g[0-9a-f]{7}$`)
+	patchToSep = "-to-"
+)
 
 // ValidFileName reports whether name is shaped like a published .bin's.
 // It's a filter for what a box fetches; the header decides.
-func ValidFileName(name string) bool { return binNameRE.MatchString(name) }
-
-var (
-	fileRE   = regexp.MustCompile(`^sneakers-(?:appliance-baseOS-patch|appliance-baseOS|appliance-baseWeb|appliance|product)-(.+)-(?:amd64|arm64)(-LAB)?\.bin$`)
-	commitGR = regexp.MustCompile(`-g[0-9a-f]{7}$`)
-)
+func ValidFileName(name string) bool {
+	return binNameRE.MatchString(name) || labNameRE.MatchString(name)
+}
 
 // ReleaseOf is the release version a published file belongs to, as the
 // release source's tag names it: the version in its name (a patch's
-// target), without the commit a production name adds. ok is false for a
-// name that isn't a release file's.
+// target), without the commit a previous production name added. ok is
+// false for a name that isn't a release file's, and for a lab name, which
+// carries the build's label and not its version (the index has that).
 func ReleaseOf(name string) (string, bool) {
 	if !binNameRE.MatchString(name) {
 		return "", false
@@ -341,8 +346,12 @@ func ReleaseOf(name string) (string, bool) {
 		return "", false
 	}
 	v := m[1]
-	if i := strings.Index(v, "-from-"); i >= 0 && strings.HasPrefix(name, Name+"-baseOS-patch-") {
-		v = v[:i]
+	if strings.HasPrefix(name, Name+"-baseOS-patch-") {
+		if i := strings.Index(v, "-from-"); i >= 0 {
+			v = v[:i]
+		} else if i := strings.LastIndex(v, patchToSep); i >= 0 {
+			v = v[i+len(patchToSep):]
+		}
 	}
 	if m[2] == "" {
 		v = commitGR.ReplaceAllString(v, "")

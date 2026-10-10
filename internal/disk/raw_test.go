@@ -120,7 +120,7 @@ func TestRawWriterThroughTheKit(t *testing.T) {
 	dir, pins := fixtures.Build(t, fixtures.Options{})
 	out := t.TempDir()
 	paths, err := kitout.NewWriters(disk.Raw{}).Run(context.Background(), verify.LocalLayout(dir), pins, "raw", kitout.Options{Out: out, KitVersion: fixtures.Version})
-	if err != nil || len(paths) != 1 || filepath.Base(paths[0]) != "sneakers-"+fixtures.Version+"-amd64-LAB.raw" {
+	if err != nil || len(paths) != 1 || filepath.Base(paths[0]) != "sneakers-appliance-lab-"+fixtures.Version+"-amd64.raw" {
 		t.Fatalf("%v %v", paths, err)
 	}
 }

@@ -81,7 +81,7 @@ func TestAProductBundleHasItsOwnFileName(t *testing.T) {
 	if got := updatepkg.FileName(productHeader(release.ChannelProduction, "0.2.0")); got != "sneakers-product-0.2.0-amd64.bin" {
 		t.Fatal(got)
 	}
-	if got := updatepkg.FileName(productHeader(release.ChannelLab, "0.2.0")); got != "sneakers-product-0.2.0-amd64-LAB.bin" {
+	if got := updatepkg.FileName(productHeader(release.ChannelLab, "0.2.0")); got != "sneakers-product-lab-0.2.0-amd64.bin" {
 		t.Fatal(got)
 	}
 }

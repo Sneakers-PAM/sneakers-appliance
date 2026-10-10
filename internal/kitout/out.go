@@ -156,14 +156,12 @@ func (ws Writers) Run(ctx context.Context, src verify.Source, pins release.Pins,
 	return written, nil
 }
 
-// BaseName is the stem every output of s uses: sneakers-<version>-<arch>,
-// with -LAB for a lab release.
+// BaseName is the stem every output of s uses, the format its extension:
+// sneakers-appliance-<v>-<arch>, where <v> is the version on production
+// and lab-<build label> on lab (release.NameVersion).
 func BaseName(s *verify.State) string {
-	n := fmt.Sprintf("sneakers-%s-%s", s.Manifest.Metadata.Version, s.Manifest.Spec.Arch)
-	if s.Manifest.Metadata.Channel == release.ChannelLab {
-		n += "-LAB"
-	}
-	return n
+	m := s.Manifest
+	return fmt.Sprintf("sneakers-appliance-%s-%s", release.NameVersion(m.Metadata.Version, m.Metadata.Channel), m.Spec.Arch)
 }
 
 func removeAll(paths []string) {

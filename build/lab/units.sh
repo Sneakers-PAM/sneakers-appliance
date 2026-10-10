@@ -5,16 +5,24 @@
 # units.sh: make a build's three update units (spec 7) from the output of
 # build/lab/build.sh, sealed with the same throwaway lab keys, or, with
 # CHANNEL=production, from the release workflow's signed build, sealed in
-# its sign job with the production release key (docs/release.md). The
-# names below are the lab ones; a production file has no -LAB, and its
-# Base OS and Base Web versions carry -g<commit> once:
+# its sign job with the production release key (docs/release.md). A name
+# carries the version on production and lab-<build label> on lab (the
+# build's letter and rebuild number, lab-n3, or the product's own label,
+# lab-sneakers.10); the build date, build time and commit stay in the
+# signed header and the index:
 #
-#   sneakers-appliance-baseOS-<version>-amd64-LAB.bin   the Base OS full release
-#   sneakers-appliance-<version>-amd64-LAB.bin          its bridge copy (BRIDGE=1)
-#   sneakers-appliance-baseOS-patch-<v>-from-<b>-...    a Base OS patch from each PATCH_FROM build
-#   sneakers-appliance-baseWeb-<version>-amd64-LAB.bin  the Base Web, always: every Base OS ships with one
-#   sneakers-product-<version>-amd64-LAB.bin            the product bundle, as the build made it
-#   sneakers-product-index.json                         the format 2 index over all of them
+#   sneakers-appliance-baseOS-<v>-amd64.bin               the Base OS full release
+#   sneakers-appliance-<version>-amd64-LAB.bin            its bridge copy (BRIDGE=1)
+#   sneakers-appliance-baseOS-patch-<b>-to-<v>-amd64.bin  a Base OS patch from each PATCH_FROM build
+#                                                         (lab: ...-patch-lab-n2-to-n3-amd64.bin)
+#   sneakers-appliance-baseWeb-<v>-amd64.bin              the Base Web, always: every Base OS ships with one
+#   sneakers-product-<v>-amd64.bin                        the product bundle, as the build made it
+#   sneakers-product-index.json                           the format 2 index over all of them
+#
+# On lab each unit is also there under the name the builds before the
+# version-only names used (OLD_NAMES), listed in the index too, so a box
+# running one of those builds still finds its update. Every new name is
+# checked by build/release/check-names.sh.
 #
 # Every .bin has a <file>.inputs next to it: the SHA-256 of the unit's
 # build inputs, also in its signed header, so a release job can compare it
@@ -45,6 +53,10 @@
 #   UNITS      the output directory (default $OUT/units)
 #   BRIDGE     1 also writes the Base OS file under its old name and lists it
 #              in the index's legacy base section, for boxes before the units
+#   OLD_NAMES  1 (the lab default) also links each unit under the name the
+#              builds before the version-only names gave it and lists it in
+#              the index, for boxes running those builds; 0 leaves them out.
+#              Lab only
 #   PATCH_FROM build/lab/build.sh outputs to make a published patch from
 #              (space-separated); a base may also be an earlier release's
 #              Base OS unpacked (version and artifact/ only, as the release
@@ -124,6 +136,7 @@ case "$channel" in
     # The first production release is full units only; boxes before the
     # units never ran a production build, so there's nothing to bridge.
     [ "${BRIDGE:-}" != 1 ] || { echo "units: BRIDGE is for lab builds only" >&2; exit 1; }
+    [ "${OLD_NAMES:-0}" = 0 ] || { echo "units: OLD_NAMES is for lab builds only" >&2; exit 1; }
     ;;
   *) echo "units: CHANNEL is $channel, not lab or production" >&2; exit 1 ;;
 esac
@@ -219,8 +232,28 @@ for p in "$OUT"/product/sneakers-product-*.bin; do
   printf '%s\n' "$(inputs_product "$OUT/work/release.yaml" "${STACKS:-$here/stacks}")" > "$units/$(basename "$p").inputs"
 done
 
-# The index lists every unit file here and in INDEX_ALSO; a file under the
-# old name (a bridge copy) goes in the legacy base section.
+# Each unit under its new name is checked; on lab it's also linked under
+# the name the builds before the version-only names gave it.
+named=()
+for f in "$units"/*.bin; do
+  [ -f "$f" ] || continue
+  n="$(basename "$f")"
+  [ "$n" = "$("$tool" bin-name "$f")" ] || continue
+  named+=("$f")
+  if [ "$channel" = lab ] && [ "${OLD_NAMES:-1}" = 1 ]; then
+    old="$("$tool" bin-name --previous "$f")"
+    if [ "$old" != "$n" ] && [ ! -e "$units/$old" ]; then
+      ln "$f" "$units/$old" 2>/dev/null || cp "$f" "$units/$old"
+      cp "$f.inputs" "$units/$old.inputs"
+      echo "units: also as $old, for boxes before the version-only names"
+    fi
+  fi
+done
+bash "$root/build/release/check-names.sh" --channel "$channel" "${named[@]}" "${named[@]/%/.inputs}"
+
+# The index lists every unit file here and in INDEX_ALSO, by the name it
+# has; a file under the old name (a bridge copy) goes in the legacy base
+# section.
 bins=() bridges=()
 for d in "$units" ${INDEX_ALSO:-}; do
   for f in "$d"/*.bin; do

@@ -91,8 +91,9 @@ func productCheckCmd() *cobra.Command {
 // its .bin files (format 2): product bundles in its products section, the
 // units' releases in baseOS and baseWeb, a base release from before the
 // units in base, and with --bridge a Base OS release in base too, under
-// its legacy name. It reads only their headers: the box verifies each
-// .bin when it's staged.
+// its legacy name. Each file is listed by the name it has, which must be
+// one its header gives (updatepkg.NamedFor). It reads only their headers:
+// the box verifies each .bin when it's staged.
 func productIndexCmd() *cobra.Command {
 	var out string
 	var bridges []string
@@ -108,7 +109,9 @@ func productIndexCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				idx.Add(h, size)
+				if err := idx.AddFile(h, size, filepath.Base(a)); err != nil {
+					return err
+				}
 			}
 			for _, a := range bridges {
 				h, size, err := indexHeader(a)
@@ -134,6 +137,33 @@ func productIndexCmd() *cobra.Command {
 	cmd.Flags().StringVar(&out, "out", "", "the index file to write")
 	cmd.Flags().StringSliceVar(&bridges, "bridge", nil, "a Base OS full .bin to list in the legacy base section too (repeatable)")
 	_ = cmd.MarkFlagRequired("out")
+	return cmd
+}
+
+// binNameCmd prints the name a .bin is published under, read from its
+// header; with --previous, the name the builds before the version-only
+// names used, which a lab mirror also carries the file under so a box
+// running one of those builds still finds it in the index.
+func binNameCmd() *cobra.Command {
+	var previous bool
+	cmd := &cobra.Command{
+		Use:   "bin-name <file.bin>",
+		Short: "Print the name a .bin is published under",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			h, _, err := indexHeader(args[0])
+			if err != nil {
+				return err
+			}
+			name := updatepkg.FileName(h)
+			if previous {
+				name = updatepkg.PreviousFileName(h)
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), name)
+			return err
+		},
+	}
+	cmd.Flags().BoolVar(&previous, "previous", false, "the name before the version-only names")
 	return cmd
 }
 

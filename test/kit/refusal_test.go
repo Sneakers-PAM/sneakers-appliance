@@ -41,7 +41,7 @@ func TestBuildWritesOnlyOnSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) != 1 || filepath.Base(paths[0]) != "sneakers-"+fixtures.Version+"-amd64-LAB.marker" {
+	if len(paths) != 1 || filepath.Base(paths[0]) != "sneakers-appliance-lab-"+fixtures.Version+"-amd64.marker" {
 		t.Fatalf("wrote %v", paths)
 	}
 	entries, _ := os.ReadDir(out)
