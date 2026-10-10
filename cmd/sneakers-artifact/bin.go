@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -64,6 +65,7 @@ func binPackCmd() *cobra.Command {
 		needMin, needBefore    string
 		includesWeb            string
 		patchSpecPath          string
+		previousFullName       bool
 		layout, recipient, out string
 	)
 	cmd := &cobra.Command{
@@ -86,8 +88,11 @@ func binPackCmd() *cobra.Command {
 				return err
 			}
 			h.Kind, h.Unit = updatepkg.Kind(kind), updatepkg.Unit(unit)
+			if previousFullName && (patchSpecPath == "" || h.Channel != release.ChannelLab) {
+				return errors.New("--previous-full-name is for a lab patch (--patch-spec on the lab channel) only")
+			}
 			if patchSpecPath != "" {
-				if err := readPatchSpec(patchSpecPath, &h); err != nil {
+				if err := readPatchSpec(patchSpecPath, &h, previousFullName); err != nil {
 					return err
 				}
 			}
@@ -134,6 +139,7 @@ func binPackCmd() *cobra.Command {
 	f.StringVar(&needBefore, "requires-baseos-before", "", "a Base Web package: the first Base OS it no longer fits")
 	f.StringVar(&includesWeb, "includes-baseweb", "", "a Base OS release: the version of the Base Web it ships with (spec 7, Section 4.4)")
 	f.StringVar(&patchSpecPath, "patch-spec", "", "a Base OS patch: the "+patchSpecFile+" patch-make wrote (sets --kind patch and the base)")
+	f.BoolVar(&previousFullName, "previous-full-name", false, "a lab patch: name the full release it falls back to by the name the builds before the version-only names gave it, which a box running one of those builds checks (units.sh OLD_NAMES)")
 	f.StringVar(&out, "out", "", "the work directory for header.json and payload.age")
 	for _, req := range []string{"layout", "recipient", "version", "out"} {
 		_ = cmd.MarkFlagRequired(req)

@@ -57,8 +57,11 @@ index (`version`, `commit`), where the box and the :8443 pages read them. `<arch
   (`-LAB` before `.bin`, the commit and the build date in the version,
   `...-patch-<to>-from-<from>-...`; `updatepkg.PreviousFileName`). On lab, `build/lab/units.sh`
   also links each unit under that earlier name and lists it in the index (`OLD_NAMES=1`, the lab
-  default), so a box still running one of those builds finds its update. A patch's fallback to
-  the full release takes the name the last checked index lists for it.
+  default), so a box still running one of those builds finds its update. With `OLD_NAMES=1` each
+  patch also names its full release by the earlier name (`sneakers-artifact bin-pack
+  --previous-full-name`, lab only): a box from before the version-only names checks that name and
+  refuses the new one. A patch's fallback to the full release takes the name the last checked
+  index lists for it.
 
 Each `.bin` is an update package. The box downloads it from the GitHub Release, or an admin
 uploads the identical file through :8443 or the console on an air-gapped box. Both paths read it
