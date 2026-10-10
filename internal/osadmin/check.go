@@ -27,6 +27,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/ghrelease"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
 )
 
@@ -59,11 +60,17 @@ func effectiveSource(p Policy, directAvailable bool) string {
 }
 
 // builtinList is the built-in source list: the lab mirrors the build
-// names, then the release source.
+// names, then the release source; a lab build's GitHub repository
+// override alone when it's set.
 func (s *Server) builtinList() []string {
+	p := s.policy()
+	_, web, _ := s.releaseURLs(p)
+	if s.labOverride(p) {
+		return []string{web}
+	}
 	out := append([]string(nil), s.o.Upgrade.BuiltinMirrors...)
-	if s.o.Upgrade.DirectURL != "" {
-		out = append(out, s.o.Upgrade.DirectURL)
+	if web != "" {
+		out = append(out, web)
 	}
 	return out
 }
@@ -223,13 +230,14 @@ func (s *Server) patchMinFree() int64 {
 
 // box is what this box runs, for the units' offers.
 func (s *Server) box(base string) updatepkg.Box {
-	return updatepkg.Box{Arch: s.arch(), Channel: s.o.Upgrade.Channel, Epoch: updatepkg.BoxEpoch, BaseOS: base, BaseWeb: s.webServed().Version}
+	ch, _ := s.releaseChannel(s.policy())
+	return updatepkg.Box{Arch: s.arch(), Channel: s.o.Upgrade.Channel, Epoch: updatepkg.BoxEpoch, BaseOS: base, BaseWeb: s.webServed().Version, Prerelease: ch == ghrelease.RC}
 }
 
 // CheckUpdates reads the index again and answers each unit's offers.
 func (h *upgradeSvc) CheckUpdates(ctx context.Context, _ *connect.Request[osadminv1.CheckUpdatesRequest]) (*connect.Response[osadminv1.CheckUpdatesResponse], error) {
 	s := h.s
-	srcs := s.sources(updatepkg.IndexName, "latest/download/"+updatepkg.IndexName)
+	srcs := s.sources(updatepkg.IndexName)
 	if len(srcs) == 0 {
 		return nil, codes.New(codes.UpgradeAirGapped, "the box has no update source (upload only); choose the built-in list or a mirror, or upload the .bin")
 	}
@@ -239,7 +247,7 @@ func (h *upgradeSvc) CheckUpdates(ctx context.Context, _ *connect.Request[osadmi
 	}
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src)
+		idx, err := s.fetchIndex(ctx, src, true)
 		if err != nil {
 			lastErr = err
 			continue
@@ -289,7 +297,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		out.BaseWebWaits = "Base Web " + e.Version + " needs Base OS " + need.Text() + "."
 	}
 	installed := s.slots().Status().Installed
-	for i, e := range idx.Offer(s.arch(), s.o.Upgrade.Channel, base, installed) {
+	for i, e := range idx.OfferProducts(b, installed) {
 		h := updatepkg.Header{MinBase: e.MinBase, MaxBase: e.MaxBase}
 		needs := ""
 		if h.HasRange() {

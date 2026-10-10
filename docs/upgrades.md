@@ -135,8 +135,8 @@ The Updates page drives the same flow for an uploaded or a fetched `.bin`:
 
 1. **Get the file.** Upload it (`POST /upload`, any admin) or fetch it (`UpgradeService.FetchUpdate`,
    the file name such as `sneakers-appliance-0.2.0-amd64.bin`) from the configured mirror, then,
-   when the policy's `direct` is on, from the release source (the GitHub Release of the version the
-   name carries; production builds only). With no mirror and `direct` off the box is air-gapped: it
+   when the policy's `direct` is on, from the release source (the GitHub Release the box picked for
+   its channel; production builds only, [the GitHub source](#the-github-source)). With no mirror and `direct` off the box is air-gapped: it
    never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload is the only path. The mirror is an
    `http://` or `https://` URL ([an internal mirror](#an-internal-mirror)); the environment's proxy
    applies.
@@ -281,6 +281,73 @@ OS, so no code from a Base Web ever runs on the box; switching one changes the p
   pages the installed Base Web doesn't fit, the box serves the new root's built-in pages until a
   fitting Base Web is installed.
 
+## The GitHub source
+
+A production box's built-in source is the project's GitHub Releases
+(`Sneakers-PAM/sneakers-appliance`): every appliance tag's Release carries the three units, the
+Base OS patch from the previous release on its channel, the signed index and `SHA256SUMS`
+([release.md](release.md#what-a-release-ships)). It's the default whenever the policy's source is
+`builtin`; an internal mirror (`manual`) takes its place ([an internal mirror](#an-internal-mirror)).
+A lab build has no GitHub source: its built-in list is the lab mirror it names (`LAB_MIRROR`),
+unchanged.
+
+- **The channel.** The box follows `stable` or `rc` (`UpgradePolicy.release_channel`):
+  - `stable` takes the newest published release that isn't marked prerelease and whose tag has
+    no pre-release part (`v0.2.0`).
+  - `rc` takes the newest of those and of the prereleases tagged `v<x.y.z>-rc.<n>`, so a box on rc
+    gets a newer stable release too. An rc box is offered pre-release units, which a stable
+    production box never is.
+  - A draft is never taken, and nor is any other pre-release kind (`-beta.1`).
+  - The default (an empty `release_channel`) is `rc` on a box running a pre-release (an rc, or a
+    lab build) and `stable` otherwise, so a box installed from an rc stays on rc until the owner
+    moves it. `GetUpgrades.mirror_status.release_channel` is the channel in effect and
+    `release_channel_default` whether it's the default.
+  - The mirror card on :8443 Updates shows and sets it (owner), and so does the closed shell's
+    `updates channel rc|stable|default` ([ssh-and-elevation.md](ssh-and-elevation.md#the-update-channel)).
+    A `SetUpgradePolicy` that leaves `release_channel` out keeps the stored one.
+- **Finding the release.** The box asks the GitHub API, unauthenticated:
+  `GET https://api.github.com/repos/Sneakers-PAM/sneakers-appliance/releases?per_page=30`
+  (`internal/ghrelease`). It keeps the answer and its ETag: Check now asks again with
+  `If-None-Match`, so an unchanged list is a 304 that costs no rate limit, and the other calls
+  (listing versions, a fetch) use the list for up to three hours before asking again on their own.
+  When the API answers that the rate limit is used up (`X-RateLimit-Remaining: 0`, or
+  `Retry-After`), the box asks nothing more until the reset, and `mirror_status.rate_limited_until`
+  says until when. `mirror_status.release_tag` is the release picked and `releases_checked_at`
+  when the list was last read.
+- **The files.** The index is `https://github.com/Sneakers-PAM/sneakers-appliance/releases/download/<tag>/sneakers-product-index.json`
+  and every `.bin` is under the same `releases/download/<tag>/`. When the API can't be read and
+  no list is kept, the box takes the latest stable release's files instead
+  (`releases/latest/download/<file>`), which need no API call; an rc box then misses a newer rc
+  until the API answers again.
+- **Trust.** HTTPS is checked against the system roots (Go's embedded Mozilla roots; the update
+  trust's private CAs are for internal mirrors only). The index must come with
+  `sneakers-product-index.json.sigstore.json`, a signature by the box's release key over it: an
+  unsigned index, or one another key signed (a lab key on a production box), is refused
+  (`UPGRADE_SIGNATURE`) and nothing is offered from it. Every `.bin` is verified as from any
+  source. GitHub answers a download with a redirect to its asset host; the box follows a redirect
+  only to `objects.githubusercontent.com` or `release-assets.githubusercontent.com` (over HTTPS,
+  on the default port), and refuses any other.
+- **Egress.** A box using the GitHub source needs HTTPS (443) out to `api.github.com`,
+  `github.com`, `objects.githubusercontent.com` and `release-assets.githubusercontent.com`,
+  directly or through the network settings' HTTPS proxy.
+
+### Testing the GitHub source
+
+A lab build may point its built-in source at another repository, to test the GitHub source
+against test releases: `UpgradePolicy.release_repo` (`owner/name`, set with the closed shell's
+`updates repo <owner>/<name>`, and cleared with `updates repo default`). With it set, the built-in
+list is that repository alone, read as above with the lab build's release key. A production
+build refuses the setting (`ACCESS_CONFIRM`), and ignores one found in its policy file, so a
+production box only ever reads the project's own Releases. The test repository must be public,
+since the box reads releases without a token. The `ghproof` test runs the same code against such
+a repository from a workstation:
+
+```sh
+GHPROOF_REPO=<owner>/<name> GHPROOF_KEY=<lab cosign.pub> GHPROOF_RUNNING=<the base the box runs> \
+GHPROOF_RC=<the rc tag it should pick> GHPROOF_STABLE=<the stable tag it should pick> \
+  go test -tags ghproof -run TestGitHubSourceAgainstARealRepository -v ./internal/osadmin/
+```
+
 ## An internal mirror
 
 An air-gapped site can serve the release files from a web server of its own and set it as the
@@ -310,10 +377,12 @@ policy's mirror (the design is in [update-mirror.md](update-mirror.md)).
   [release.md](release.md#the-product-bundle)) has a `base` section next to `products`.
   `ListBaseVersions` reads it from the mirror, then the release source when `direct` allows, and
   offers the base releases this box may stage: full or patch for its architecture and channel,
-  stable versions on a production box (every lab build on a lab box), newer than the running base,
+  stable versions on a production box (pre-releases too on the rc channel; every lab build on a
+  lab box), newer than the running base,
   and a patch only for the base it names. A release outside the installed product's base range is
   still listed, marked `outside_product_range` with the range, since staging it needs the owner's
-  override. The index is a menu only and isn't signed: the chosen `.bin` is fetched by name
+  override. From a mirror the index is a menu only and needn't be signed (the GitHub source's must
+  be): the chosen `.bin` is fetched by name
   (`FetchUpdate`) and verified at stage like an uploaded one. An index without a `base` section
   offers no base update.
 - **Logging:** every fetch attempt, from the mirror or the release source, is logged with its URL,

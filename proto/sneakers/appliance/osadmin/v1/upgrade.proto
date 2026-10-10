@@ -142,6 +142,19 @@ message UpgradePolicy {
   // in: a set mirror_url reads as manual, direct with no mirror as
   // builtin, neither as none.
   string source = 6;
+  // release_channel is the channel the GitHub source follows: stable
+  // (the newest release with no pre-release part) or rc (the newest rc or
+  // stable release, whichever is newer). Empty is the default: rc on a box
+  // running a pre-release, stable otherwise (MirrorStatus.release_channel
+  // is the one in effect). Left out of a SetUpgradePolicy, the stored one
+  // is kept.
+  optional string release_channel = 7;
+  // release_repo is a lab build's override of the GitHub repository the
+  // source reads (owner/name), for testing the GitHub source against
+  // another repository; with it set, the built-in list is that
+  // repository alone. A production build refuses it. Left out of a
+  // SetUpgradePolicy the stored one is kept; empty clears it.
+  optional string release_repo = 8;
 }
 
 // UpdateTarget is what an update changes: one of the three update units.
@@ -515,6 +528,22 @@ message MirrorStatus {
   string source = 15;
   string url = 16;
   repeated string builtin_urls = 17;
+  // The GitHub source: release_channel is the channel in effect (stable
+  // or rc) and release_channel_default whether it's the box's default;
+  // release_repo the repository (owner/name), empty when the build has no
+  // GitHub source; release_tag the release last picked, empty before a
+  // check or when the API couldn't be read and the latest stable release
+  // was fetched instead; releases_checked_at when the releases list was
+  // last read; rate_limited_until set while the API's rate limit is used
+  // up. release_repo_override_allowed is true on a lab build, which may
+  // set UpgradePolicy.release_repo.
+  string release_channel = 18;
+  bool release_channel_default = 19;
+  string release_repo = 20;
+  string release_tag = 21;
+  google.protobuf.Timestamp releases_checked_at = 22;
+  google.protobuf.Timestamp rate_limited_until = 23;
+  bool release_repo_override_allowed = 24;
 }
 
 message FetchUpdateRequest {
