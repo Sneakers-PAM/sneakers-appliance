@@ -152,7 +152,11 @@ has switched:
   after the restart the kubelet restarts every container in its old pod, all at once, and each
   shows a restart. The `quiesce` step at the start of every boot scales them to 0 and waits for
   their pods to go before the first phase, so the pods that serve are new ones, with no restarts,
-  started in order. The killed pods never served: 443 says starting throughout.
+  started in order. The killed pods never served: 443 says starting throughout. In the seconds
+  before the quiesce, each restarted pod sits in its `wait-phase` init container, which waits for
+  the cluster's DNS and the Services its phase needs ([release.md](release.md#productyaml)),
+  instead of starting against a database still in crash recovery. The same wait keeps the order
+  for a pod that starts again on its own (evicted, or its node's k0s restarted).
 - **Every apply and revert** comes up the same way, from `quiesce`, so the old version's
   workloads never start next to the new version's. A revert to a slot without phases comes up as
   before (every stack at once); an update from one starts at `quiesce` too, which stops the old

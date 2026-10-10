@@ -27,6 +27,9 @@
 # The stacks carry no secret value: every Secret they read is a box secret
 # product.yaml declares, made on each box (internal/boxsecrets).
 #
+# Every phased workload's first init container runs the release's
+# sneakers-migrate image's `wait` (product.yaml phases needs).
+#
 # The gateway gets the release's version (metadata.version) as
 # SNEAKERS_PRODUCT_VERSION, and the box's values (values.yaml) for the
 # product's About and diagnostics.
@@ -73,7 +76,7 @@ go run "$root/build/tools/stack" --release "$RELEASE" --product-yaml "$here/prod
   --off "$work/off.yaml" --on "$work/on.yaml" --out "$OUT" \
   --namespace sneakers --stack sneakers --switch-stack sneakers-mcp \
   --switch-configmap sneakers-mcp-switch --switch-from sneakers-gateway,sneakers-web-staff \
-  --data /var/lib/sneakers-data
+  --data /var/lib/sneakers-data --wait-job migrate
 mkdir -p "$OUT/sneakers-import"
 install -m 0644 "$here/import-stack.yaml" "$OUT/sneakers-import/sneakers-import.yaml"
 mkdir -p "$OUT/edge"

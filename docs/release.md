@@ -332,7 +332,18 @@ phases:
     stack: sneakers-front
     workloads: [sneakers-gateway, sneakers-web-staff, sneakers-web-admin, sneakers-mcp, sneakers-hydra]
     switch_stacks: [sneakers-mcp]   # switch-gated stacks placed with the phase, before its own
+    needs:                          # per workload, the Services of earlier phases it connects to
+      sneakers-hydra: [sneakers-postgres:5432]
 ```
+
+The render gives each phased workload a first init container, `wait-phase`, that runs the
+release's sneakers-migrate image (`spec.jobs.migrate`, `build/tools/stack --wait-job migrate`):
+`sneakers-migrate wait --dns kubernetes.default.svc.cluster.local --tcp <service>.<namespace>.svc:<port> ... --every 2s`
+resolves the cluster's DNS, then connects to each of the workload's needs in turn, retrying every
+2 seconds. A Service with no Ready endpoint refuses the connection, so the wait follows each
+dependency's own readiness, and the workload's NetworkPolicies already admit it. It has no timeout
+of its own: the phase's timeout bounds it. A need that isn't `<service>:<port number>`, or that
+names a workload of another phase, is refused.
 
 The box refuses a phase whose name isn't a lower-case word or comes twice, one without a label or
 workloads, a stack that another phase, a switch or the appliance has, a workload two phases name,
