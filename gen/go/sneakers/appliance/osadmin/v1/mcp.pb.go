@@ -66,8 +66,15 @@ type GetMcpResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	McpEnabled        bool                   `protobuf:"varint,1,opt,name=mcp_enabled,json=mcpEnabled,proto3" json:"mcp_enabled,omitempty"`
 	MachineApiEnabled bool                   `protobuf:"varint,2,opt,name=machine_api_enabled,json=machineApiEnabled,proto3" json:"machine_api_enabled,omitempty"`
-	// state is the MCP service's state, such as running or stopped.
-	State         string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	// state is the MCP switch as set: on, off, not installed or not in this
+	// product.
+	State string `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	// readiness is how far the product has come up with the switch on:
+	// starting (it rolls out), ready, or failed (it wasn't ready within the
+	// bound of the last switch-on); empty while the switch is off.
+	Readiness string `protobuf:"bytes,4,opt,name=readiness,proto3" json:"readiness,omitempty"`
+	// detail is what a starting or failed MCP waits for, in words.
+	Detail        string `protobuf:"bytes,5,opt,name=detail,proto3" json:"detail,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -119,6 +126,20 @@ func (x *GetMcpResponse) GetMachineApiEnabled() bool {
 func (x *GetMcpResponse) GetState() string {
 	if x != nil {
 		return x.State
+	}
+	return ""
+}
+
+func (x *GetMcpResponse) GetReadiness() string {
+	if x != nil {
+		return x.Readiness
+	}
+	return ""
+}
+
+func (x *GetMcpResponse) GetDetail() string {
+	if x != nil {
+		return x.Detail
 	}
 	return ""
 }
@@ -216,12 +237,14 @@ var File_sneakers_appliance_osadmin_v1_mcp_proto protoreflect.FileDescriptor
 const file_sneakers_appliance_osadmin_v1_mcp_proto_rawDesc = "" +
 	"\n" +
 	"'sneakers/appliance/osadmin/v1/mcp.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a+sneakers/appliance/osadmin/v1/options.proto\"\x0f\n" +
-	"\rGetMcpRequest\"w\n" +
+	"\rGetMcpRequest\"\xad\x01\n" +
 	"\x0eGetMcpResponse\x12\x1f\n" +
 	"\vmcp_enabled\x18\x01 \x01(\bR\n" +
 	"mcpEnabled\x12.\n" +
 	"\x13machine_api_enabled\x18\x02 \x01(\bR\x11machineApiEnabled\x12\x14\n" +
-	"\x05state\x18\x03 \x01(\tR\x05state\"`\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x1c\n" +
+	"\treadiness\x18\x04 \x01(\tR\treadiness\x12\x16\n" +
+	"\x06detail\x18\x05 \x01(\tR\x06detail\"`\n" +
 	"\rSetMcpRequest\x12\x1f\n" +
 	"\vmcp_enabled\x18\x01 \x01(\bR\n" +
 	"mcpEnabled\x12.\n" +

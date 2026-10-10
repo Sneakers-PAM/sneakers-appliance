@@ -244,8 +244,18 @@ is the same (admin) and a change writes the same `mcp.set` audit entry, with the
 MCP          off
 machine API  on
 > sneakers mcp on
-MCP is on; the machine API is on.
+MCP is on; the machine API is on. The product is ready with it.
+> sneakers mcp
+MCP          on
+machine API  on
+readiness    ready
 ```
+
+`on` and `off` answer once the product is ready with the change (the MCP server and the workloads
+the switch restarts have rolled out, and the product's health answers), or fail within about 90
+seconds with `PRODUCT_NOT_READY` and what the product still waits for; the setting stays saved.
+While MCP is on, `sneakers mcp` adds a `readiness` line: `starting` with what it waits for,
+`ready`, or `failed` with why the last switch-on gave up.
 
 A product that declares no MCP switch shows `not in this product`, and setting it answers
 `NOT_AVAILABLE`. Anything but `on` or `off`, or a second word other than `machine-api=on|off`, is

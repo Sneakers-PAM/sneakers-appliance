@@ -58,7 +58,7 @@ Example:
 
 Show or set the MCP switch, the one the MCP card on :8443 sets.
 
-Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit.
+Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit. With MCP on it also shows how far the product has come up with it: starting (with what it waits for), ready, or failed. on or off answers once the product is ready with the change, or fails within about 90 seconds with what it still waits for.
 
 Offered over: SSH and console.
 
