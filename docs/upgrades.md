@@ -116,6 +116,63 @@ that fails leaves the step where it was. When accessd restarts in the middle, it
 up again at start rather than failing it. Downloading from the mirror comes before all of this, as
 `receiving` and `held_upload` on `GetUpgrades`; unpacking is the `stage` step.
 
+### The phases
+
+A product whose product.yaml declares `phases` ([release.md](release.md#productyaml)) comes up one
+phase at a time, each Ready before the next, on every boot, update and revert alike; the Sneakers
+bundle has four. Its coming-up steps are the slot's own, and replace the six above once the slot
+has switched:
+
+| Step | Label | Done when |
+|---|---|---|
+| `k0s` | Starting k0s | the Kubernetes API answers |
+| `images` | Importing the images | containerd lists every image in the bundle's `images/` |
+| `quiesce` | Stopping what was left running | no workload of the product runs: the box scales every one an earlier run left running to 0 and waits for its pods to go |
+| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's (the always-on stack, the edge, k0s's own CoreDNS and kube-router) is applied and rolled out |
+| `phase:data` | Starting the database and the cache | PostgreSQL and Valkey |
+| `phase:identity` | Starting sign-in, identity and the vault | Kratos (with its migration), the identity service and the vault, whose root key preflight runs in the vault itself, so it's Ready only once the preflight passed |
+| `phase:services` | Starting the services | workflow, audit, notify, connector and the SSH broker |
+| `phase:front` | Starting the gateway and the web apps | the MCP switch's stack (when it's on), then the gateway and the two web apps |
+| `product_health` | Checking the product's health | as above |
+| `edge` | Opening the product on 443 | as above; the box says running and the gate opens |
+
+- **Placing a phase.** k0s-interim takes every phase's stack away before each k0s start (the
+  slot's `phase-stacks`, and the `phase-placed` list in `/var/lib/sneakers/platform` of what the
+  loop placed), so k0s never starts the whole product at once. Once the phase before is Ready,
+  the loop puts the phase's stacks in front of k0s, with the box's values, a switch's stack first
+  and each applied before the next. It waits until every workload in them runs the slot's pod
+  template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
+  hold it back), and waits until each has rolled out and every pod of the phase is Ready.
+- **Stopping, in reverse.** Before k0s stops, on every reboot, shutdown, product apply and revert,
+  its `pre-stop` (`sneakers-accessd quiesce`, [init.md](init.md#the-service-table)) scales the
+  product to 0 latest phase first. Each phase's pods are gone before the next is scaled, so the
+  database stops last and cleanly, with nothing connected. With the API down it does nothing. It's
+  bounded at 100 seconds, inside k0s's 2-minute stop timeout.
+- **A power loss.** When the box loses power, or k0s or the kernel dies, nothing ran the pre-stop:
+  after the restart the kubelet restarts every container in its old pod, all at once, and each
+  shows a restart. The `quiesce` step at the start of every boot scales them to 0 and waits for
+  their pods to go before the first phase, so the pods that serve are new ones, with no restarts,
+  started in order. The killed pods never served: 443 says starting throughout.
+- **Every apply and revert** comes up the same way, from `quiesce`, so the old version's
+  workloads never start next to the new version's. A revert to a slot without phases comes up as
+  before (every stack at once); an update from one starts at `quiesce` too, which stops the old
+  version's workloads that the new always-on stack no longer holds.
+- **The timeout of a phase** is its product.yaml `timeout` (5 minutes when it names none), from
+  when the step became the current one; the overall `ready.timeout` still bounds the whole.
+- **A phase that fails**, because it isn't Ready within its timeout or a pod of it can never start
+  (`ErrImageNeverPull`, `InvalidImageName`, `CreateContainerConfigError`,
+  `CreateContainerError`), stops the product there: the later phases are never placed. The step
+  fails with `UPGRADE_PRODUCT_START`, its detail naming the phase, the workload and why ("Starting
+  sign-in, identity and the vault: it isn't ready after 5m0s: 0 of 1 pods ready:
+  sneakers/sneakers-vault-7c9 CrashLoopBackOff: root KEK preflight: ..."). The history and the
+  audit log (`upgrade.product-not-ready`) record it, and the box state is `failed`, so 443 shows
+  "Sneakers-PAM failed to start" with the phase and the reason ([edge-fallback.md](edge-fallback.md#the-box-state)).
+  A crash loop waits for the timeout, since a service that retries may still come up. A revert,
+  applying the update again or a reboot starts over from `quiesce`.
+- **An open import** holds the product after the phase `import.after` names (`services` for
+  Sneakers): the later phases are scaled to 0, the box state is `maintenance`, and the hold never
+  times out. Closing the import brings them back ([import.md](import.md#how-it-works)).
+
 ### When the product is ready
 
 An install, an update or a revert of the product is done only when the product is ready, not when

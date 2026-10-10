@@ -34,9 +34,9 @@ func (r *stopWatch) Run(ctx context.Context, argv []string) error {
 			return ctx.Err()
 		}
 		if r.fail {
-			r.fakeRunner.mu.Lock()
-			r.fakeRunner.log = append(r.fakeRunner.log, "run "+strings.Join(argv, " ")+" (failed)")
-			r.fakeRunner.mu.Unlock()
+			r.mu.Lock()
+			r.log = append(r.log, "run "+strings.Join(argv, " ")+" (failed)")
+			r.mu.Unlock()
 			return context.DeadlineExceeded
 		}
 	}
