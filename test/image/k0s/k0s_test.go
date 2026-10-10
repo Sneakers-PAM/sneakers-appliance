@@ -189,6 +189,11 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	after.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
 	after.Expect(`lab-hook: hello pod ready`, 25*time.Minute)
 	phasesInOrder(t, after.Expect(`lab-hook: phase pods: .*`, time.Minute), "after a power loss")
+	// With every container restarting at once, no pod's network is set up
+	// twice at the same time (the CNI plugin's "exec: already started").
+	if bad := sandboxErrors(after.Expect(`lab-hook: sandbox events: .*`, time.Minute)); len(bad) > 0 {
+		t.Fatalf("after a power loss: %d FailedCreatePodSandBox events with exec: already started: %v", len(bad), bad)
+	}
 }
 
 // phasePod is one phased pod as the lab hook prints it.
@@ -197,13 +202,11 @@ type phasePod struct {
 	started, ready time.Time
 }
 
-var phasePodRE = regexp.MustCompile(`([\w-]+) restarts=(\d+) started=(\S+) ready=(\S+)`)
+// Each pod in the line ends with ';', with no space before the next.
+var phasePodRE = regexp.MustCompile(`([\w-]+) restarts=(\d+) started=([^;\s]+) ready=([^;\s]+)`)
 
-// phasesInOrder checks the lab hook's phase pods line: every phased pod
-// is Ready with no restarts, and the front phase's pod started only once
-// the data phase's was Ready.
-func phasesInOrder(t *testing.T, line, when string) {
-	t.Helper()
+// readPhasePods reads the lab hook's phase pods line, one pod per match.
+func readPhasePods(line string) (map[string]phasePod, error) {
 	pods := map[string]phasePod{}
 	for _, m := range phasePodRE.FindAllStringSubmatch(line, -1) {
 		var p phasePod
@@ -214,12 +217,26 @@ func phasesInOrder(t *testing.T, line, when string) {
 			}
 		}
 		if err != nil {
-			t.Fatalf("%s: %q doesn't read: %v", when, m[0], err)
-		}
-		if p.restarts != 0 {
-			t.Errorf("%s: the %s pod restarted %d times: %s", when, m[1], p.restarts, line)
+			return nil, fmt.Errorf("%q doesn't read: %w", m[0], err)
 		}
 		pods[m[1]] = p
+	}
+	return pods, nil
+}
+
+// phasesInOrder checks the lab hook's phase pods line: every phased pod
+// is Ready with no restarts, and the front phase's pod started only once
+// the data phase's was Ready.
+func phasesInOrder(t *testing.T, line, when string) {
+	t.Helper()
+	pods, err := readPhasePods(line)
+	if err != nil {
+		t.Fatalf("%s: %v", when, err)
+	}
+	for name, p := range pods {
+		if p.restarts != 0 {
+			t.Errorf("%s: the %s pod restarted %d times: %s", when, name, p.restarts, line)
+		}
 	}
 	data, okD := pods["lab-db"]
 	front, okF := pods["hello"]
@@ -230,6 +247,20 @@ func phasesInOrder(t *testing.T, line, when string) {
 		t.Fatalf("%s: the front phase started at %s, before the data phase was Ready at %s", when, front.started, data.ready)
 	}
 	t.Logf("%s: data Ready at %s, front started at %s, no restarts", when, data.ready, front.started)
+}
+
+// sandboxErrors are the FailedCreatePodSandBox event messages in the lab
+// hook's sandbox events line that carry the CNI plugin's "exec: already
+// started" race: a pod's network set up twice at once.
+func sandboxErrors(line string) []string {
+	var out []string
+	_, events, _ := strings.Cut(line, "sandbox events: ")
+	for _, e := range strings.Split(events, ";") {
+		if strings.Contains(e, "exec: already started") {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 var k0sRestarted = regexp.MustCompile(`services: exited .*restart=true service=k0s\b`)

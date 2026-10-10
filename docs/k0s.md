@@ -217,5 +217,8 @@ bundle, the API, the node, the hello pod and the edge pod. After three minutes o
 prints, once, the pods, the routes and the addresses. The test then fetches `https://<box>/` from
 the host through QEMU's port forward and expects the hello text, checks that 80 redirects to
 https, that SSH and :8443 still answer, that `GetUpgrades` shows the installed product running,
-and that k0s doesn't crash-loop. The lab bundle is the one the lab build writes next to the disk
+and that k0s doesn't crash-loop. After a power loss it boots the box again and checks the hook's
+phase pods line (every phased pod Ready with no restarts, the front phase started only once the
+data phase was Ready) and its sandbox events line (no FailedCreatePodSandBox event with the CNI
+plugin's "exec: already started"). The lab bundle is the one the lab build writes next to the disk
 (`SNEAKERS_PRODUCT`).
