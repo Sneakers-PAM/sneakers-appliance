@@ -227,3 +227,77 @@ func TestTheLocalHandlerTakesTheEdgesHandoff(t *testing.T) {
 		t.Fatalf("the 443 handler took a handoff: %d", rec.Code)
 	}
 }
+
+func gate(t *testing.T, s boxstate.State, uri, from string) *httptest.ResponseRecorder {
+	t.Helper()
+	h := edgefall.LocalHandler(edgefall.NewServer(func() boxstate.State { return s }), func() bool { return false })
+	req := httptest.NewRequest(http.MethodGet, edgefall.GatePath, nil)
+	req.Header.Set("X-Forwarded-Uri", uri)
+	req.Header.Set("X-Forwarded-Method", http.MethodGet)
+	req.Header.Set("X-Forwarded-For", from)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	return rec
+}
+
+// The gate is the edge's forward check for every request on 443: it lets
+// the request through only while the box is running (the product ready),
+// and answers the branded page with 503 and the state otherwise, so no one
+// signs in to, and no agent writes to, a product that isn't ready.
+func TestTheGateHoldsProductRequestsUntilTheBoxRuns(t *testing.T) {
+	for _, s := range boxstate.All {
+		for _, uri := range []string{"/", "/sign-in", "/secret/s-1", "/graphql", "/mcp", "/oauth/oauth2/token"} {
+			rec := gate(t, s, uri, "192.0.2.10")
+			if s == boxstate.Running {
+				if rec.Code != http.StatusNoContent {
+					t.Fatalf("%s %s: %d", s, uri, rec.Code)
+				}
+				continue
+			}
+			if rec.Code != http.StatusServiceUnavailable || rec.Header().Get(edgefall.StateHeader) != string(s) || rec.Header().Get("Retry-After") == "" {
+				t.Fatalf("%s %s: %d %v", s, uri, rec.Code, rec.Header())
+			}
+			if !strings.Contains(rec.Body.String(), edgefall.WordsFor(s).Title) || !strings.Contains(rec.Body.String(), "/_box/poll.js") {
+				t.Fatalf("%s %s: the page doesn't say what the box is doing", s, uri)
+			}
+		}
+	}
+}
+
+// The poller's own paths always pass, so an open tab learns the state
+// through the same origin, and so does the box itself on loopback: its
+// readiness check asks the product through the edge before the gate
+// opens.
+func TestTheGateLetsThePollerAndTheBoxThrough(t *testing.T) {
+	for _, uri := range []string{"/_box/state", "/_box/poll.js", "/_box/logo"} {
+		if rec := gate(t, boxstate.Updating, uri, "192.0.2.10"); rec.Code != http.StatusNoContent {
+			t.Fatalf("%s: %d", uri, rec.Code)
+		}
+	}
+	for _, from := range []string{"127.0.0.1", "::1", "192.0.2.10, 127.0.0.1"} {
+		if rec := gate(t, boxstate.Starting, "/", from); rec.Code != http.StatusNoContent {
+			t.Fatalf("from %q: %d", from, rec.Code)
+		}
+	}
+	for _, c := range []struct{ uri, from string }{
+		{"/_box/../secret/s-1", "192.0.2.10"},
+		{"/_box/%2e%2e/secret/s-1", "192.0.2.10"},
+		{"/_boxes", "192.0.2.10"},
+		{"/", "127.0.0.1, 192.0.2.10"},
+		{"/", ""},
+	} {
+		if rec := gate(t, boxstate.Starting, c.uri, c.from); rec.Code != http.StatusServiceUnavailable {
+			t.Fatalf("%q from %q: %d", c.uri, c.from, rec.Code)
+		}
+	}
+}
+
+// The gate is on the loopback listener only: on 443 edgefall itself
+// answers the page for it, as for any path.
+func TestTheGateIsNotOn443(t *testing.T) {
+	rec := httptest.NewRecorder()
+	edgefall.NewServer(func() boxstate.State { return boxstate.Running }).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, edgefall.GatePath, nil))
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("443 answered the gate: %d", rec.Code)
+	}
+}

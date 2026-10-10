@@ -13,11 +13,18 @@ takes over starting and stopping it around k0s.
 
 | State | When |
 |---|---|
-| `updating` | an update or a product update applies or reverts, through the reboot it ends in |
+| `updating` | an update or a product update applies or reverts, through the reboot it ends in; a product apply or revert until the product is ready |
 | `rebooting`, `shutting-down` | init has announced a reboot or a shutdown |
-| `running` | setup is done and the product's service (k0s) runs |
-| `starting` | otherwise: setup isn't done, or k0s doesn't run yet |
+| `running` | setup is done, the product's service (k0s) runs and the product is ready |
+| `starting` | otherwise: setup isn't done, k0s doesn't run yet, or k0s runs and the product isn't ready yet |
 | `maintenance` | reserved for platformd's maintenance mode; nothing answers it yet |
+
+**Ready** is the check a product apply waits on ([upgrades.md](upgrades.md)): every workload of
+the slot's stacks rolled out, the product's health check and the edge answering. After each k0s
+start accessd asks it in the background (every 3 seconds, never on a `GetPhase` itself) until it
+passes; during a product apply or revert the apply's own follower decides. A product that isn't
+ready within its ready bound (`ready.timeout`, else 10 minutes) counts as ready, with a warning in
+accessd's log, so a partly broken product stays reachable.
 
 Init writes the announcement to `/run/sneakers/box-state` (mode 0644, a tmpfs, so every boot starts
 without one) when it accepts a reboot or a shutdown, before the drain and before the screen
@@ -41,6 +48,7 @@ It serves exactly these, and nothing else:
 | `GET /_box/state` | `{"state":"rebooting"}`, with `"brand"` when the product has one (below), `Cache-Control: no-store` |
 | `GET /_box/poll.js` | the poller |
 | `POST /_box/edge-handoff` | loopback only: the edge asking for 80 and 443 (below); `204` |
+| `GET /_box/gate` | loopback only: the edge's check for every request on 443 ([the gate](#the-gate)); `204`, or the page |
 | `GET /_box/logo` | the product's logo for the poller's overlay, only when its brand has one, from edgefall's own copy (`Content-Security-Policy: default-src 'none'; sandbox`, `nosniff`) |
 | anything else, any path, method or host | the branded page, `503`, `Retry-After: 10`, `Sneakers-Box-State: <state>` |
 
@@ -81,6 +89,24 @@ poller, so a browser that lands on it goes back to the product by itself.
 - **Through the drain:** a reboot's or a shutdown's drain leaves edgefall running until the power
   goes ([init.md](init.md#the-service-table)), so once k0s has stopped, 443 still answers with the
   page.
+
+## The gate
+
+Every request on 443 passes edgefall's gate before it reaches a route: the edge's `box-gate`
+middleware, a Traefik `forwardAuth` to `GET /_box/gate` on the loopback listener, set on the
+`websecure` entry point so it covers every router, the product's Ingresses (pages, the API,
+sign-in, MCP and OAuth) included. The gate answers `204`, and the request goes on, while the state
+is `running`; otherwise it answers the branded page with `503`, `Retry-After` and
+`Sneakers-Box-State`, which the edge hands to the client as it is. So from k0s's start until the
+product is ready, and through a product apply or revert until the new version is ready, nobody
+signs in to a product that isn't ready and no agent writes to it: they get "Sneakers-PAM is
+starting" or "Sneakers-PAM is updating".
+
+- **Always through:** edgefall's own paths (`/_box/...`, plain, with no dot segments or escapes),
+  so the poller keeps reading the state on the same origin, and requests from the box's own
+  loopback (the last `X-Forwarded-For` entry, which Traefik sets itself), so the readiness check
+  can ask the product through the edge before the gate opens.
+- **Only on loopback:** on 443 edgefall itself answers `/_box/gate` with the page, like any path.
 
 ## The product's brand
 
@@ -132,6 +158,8 @@ page does.
 | k0s stopped, the box still draining | edgefall | the overlay; a new visit gets the page |
 | the power is off, firmware, early boot | nothing | the overlay, kept |
 | booted, k0s not started | edgefall (`starting`) | the overlay |
-| k0s starting, Traefik not bound yet | edgefall (`running`), until the edge's handoff | the overlay |
+| k0s starting, Traefik not bound yet | edgefall (`starting`), until the edge's handoff | the overlay |
 | the handoff, Traefik binding | nothing (about a second) | the overlay, kept |
-| Traefik and the product back | Traefik | the page reloads into the product |
+| Traefik up, the product's services still starting | Traefik, every request gated: the page (`starting`) | the overlay |
+| a product apply or revert, until the new version is ready | Traefik, every request gated: the page (`updating`) | the overlay |
+| the product ready | Traefik, the product | the page reloads into the product |

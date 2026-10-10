@@ -215,3 +215,60 @@ func TestTheEdgeReadsItsCertificateFromAWatchedDirectory(t *testing.T) {
 	}
 	t.Fatal("edge.yaml has no Deployment")
 }
+
+// Every request on 443 passes edgefall's gate first (a forwardAuth
+// middleware on the websecure entry point), so while the box is starting
+// or updating the product's own routes, sign-in and MCP included, answer
+// the box-state page instead of a product that isn't ready.
+func TestTheEdgeGatesEveryRequestOn443OnEdgefall(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "stacks", "edge", "edge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	var gated bool
+	var dynamic string
+	for {
+		var d struct {
+			Data           map[string]string `yaml:"data"`
+			edgeDeployment `yaml:",inline"`
+		}
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind == "ConfigMap" {
+			dynamic = d.Data["dynamic.yaml"]
+		}
+		if d.Kind != "Deployment" {
+			continue
+		}
+		for _, c := range d.Spec.Template.Spec.Containers {
+			for _, a := range c.Args {
+				if a == "--entryPoints.websecure.http.middlewares=box-gate@file" {
+					gated = true
+				}
+			}
+		}
+	}
+	if !gated {
+		t.Fatal("the websecure entry point doesn't use the box-gate middleware")
+	}
+	var cfg struct {
+		HTTP struct {
+			Middlewares map[string]struct {
+				ForwardAuth *struct {
+					Address string `yaml:"address"`
+				} `yaml:"forwardAuth"`
+			} `yaml:"middlewares"`
+		} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal([]byte(dynamic), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	fa := cfg.HTTP.Middlewares["box-gate"].ForwardAuth
+	if fa == nil || fa.Address != "http://127.0.0.1:9180/_box/gate" {
+		t.Fatalf("box-gate is %+v; want a forwardAuth to edgefall's /_box/gate", fa)
+	}
+}

@@ -52,7 +52,10 @@ func (h *status) GetPhase(ctx context.Context, _ *connect.Request[osadminv1.GetP
 // boxState is what the box is doing, as the product edge's box-state page
 // shows it. An update holds over the reboot it ends in, so the page says
 // why the box went away; init's announcement of a reboot or a shutdown
-// holds over everything else.
+// holds over everything else. A product apply or revert stays updating
+// until the product is ready, and after k0s starts the box stays starting
+// until the product is ready: the edge keeps every product request on the
+// box-state page until then.
 func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 	announced := boxstate.State("")
 	if s.o.BoxStateFile != "" {
@@ -64,6 +67,11 @@ func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 	case announced != "":
 		return announced
 	case phase != PhaseNormal || !productRunning:
+		s.productReadyNow(productRunning)
+		return boxstate.Starting
+	case s.productComingUp():
+		return boxstate.Updating
+	case !s.productReadyNow(productRunning):
 		return boxstate.Starting
 	default:
 		return boxstate.Running

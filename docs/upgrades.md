@@ -90,7 +90,10 @@ header is read, so a product stage never shows the base's slot, reboot or health
 Restarting the product only starts k0s; the product takes minutes more to be ready. So a product
 apply or revert goes on past `restart` with six more steps, and stays `in_progress` until the
 product is ready. Updates, the restart page and the console's maintenance screen show them like
-the others:
+the others. Until the product is ready the box state is `updating`, so 443 answers every product
+request, sign-in and MCP included, with "Sneakers-PAM is updating" ([edge-fallback.md](edge-fallback.md#the-gate)):
+nobody signs in to, and no agent writes to, a version that is still rolling out. The `edge` step's
+own ask comes from the box's loopback, which the gate lets through.
 
 | Step | Label | Done when |
 |---|---|---|
