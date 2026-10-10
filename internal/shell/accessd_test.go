@@ -33,6 +33,9 @@ type fakeAccessd struct {
 	headers  []http.Header
 	settings *netdv1.Settings
 	set      []*netdv1.Settings
+	// keptAtOnce answers a set as netd does for a change with no revert
+	// window (the time zone): no token, nothing to confirm.
+	keptAtOnce bool
 }
 
 func (f *fakeAccessd) saw(h http.Header) {
@@ -67,6 +70,9 @@ func (f *fakeAccessd) SetNetwork(_ context.Context, r *connect.Request[accessv1.
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.set = append(f.set, r.Msg.GetSettings())
+	if f.keptAtOnce {
+		return connect.NewResponse(&accessv1.SetNetworkResponse{}), nil
+	}
 	return connect.NewResponse(&accessv1.SetNetworkResponse{Token: "tok-1", RevertAfterSeconds: 120}), nil
 }
 
@@ -152,6 +158,17 @@ func TestNetworkSet(t *testing.T) {
 	_, _, err = runWith(t, s, "network set mtu=9000", "")
 	if !codes.Is(err, codes.ShellParse) {
 		t.Fatalf("%v", err)
+	}
+}
+
+// A change netd keeps at once (the time zone) has no revert window, so
+// network set says it's kept instead of "reverts in 0 seconds".
+func TestNetworkSetKeptAtOnce(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "box.sneakers.example.org"}, keptAtOnce: true}
+	s, _ := withAccessd(t, f)
+	out, _, err := runWith(t, s, "network set time-zone=America/New_York", "")
+	if err != nil || strings.Contains(out, "reverts") || !strings.Contains(out, "kept") {
+		t.Fatalf("%v %q", err, out)
 	}
 }
 
