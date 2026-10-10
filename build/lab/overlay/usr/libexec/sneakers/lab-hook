@@ -58,6 +58,9 @@ wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l
 # restarts, when it started and when it got Ready, for the suite to check
 # the order and that nothing restarted.
 say "phase pods: $(k get pods -A -l sneakers-appliance/phase -o jsonpath='{range .items[*]}{.metadata.labels.app} restarts={.status.containerStatuses[0].restartCount} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
+# Every FailedCreatePodSandBox event's message, for the suite to check no
+# pod's network was set up twice at once after a power loss.
+say "sandbox events: $(k get events -A --field-selector reason=FailedCreatePodSandBox -o jsonpath='{range .items[*]}{.message};{end}')"
 wait_for "edge pod ready" k -n sneakers-edge wait --for=condition=Ready pod -l app=edge --timeout=10s
 k get nodes -o wide
 k get pods -A -o wide
