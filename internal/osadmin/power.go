@@ -13,7 +13,9 @@ import (
 	initv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 )
 
 type power struct {
@@ -68,7 +70,9 @@ func (h *power) Reboot(ctx context.Context, r *connect.Request[osadminv1.RebootR
 		return nil, err
 	}
 	h.s.o.Logger.Info("osadmin: reboot requested", log.F("by", c.session.Admin), log.F("forced", forced), log.F("sessions", len(h.s.sessions.All())))
+	h.s.notifyBox(ctx, &edgefall.Phase{State: string(boxstate.Rebooting)})
 	if _, err := h.s.o.Power.Reboot(ctx, connect.NewRequest(&initv1.RebootRequest{Forced: forced})); err != nil {
+		h.s.notifyBox(ctx, &edgefall.Phase{Reset: true})
 		return nil, err
 	}
 	return connect.NewResponse(&osadminv1.RebootResponse{}), nil
@@ -81,7 +85,9 @@ func (h *power) Shutdown(ctx context.Context, r *connect.Request[osadminv1.Shutd
 		return nil, err
 	}
 	h.s.o.Logger.Info("osadmin: shutdown requested", log.F("by", c.session.Admin), log.F("forced", forced), log.F("sessions", len(h.s.sessions.All())))
+	h.s.notifyBox(ctx, &edgefall.Phase{State: string(boxstate.ShuttingDown)})
 	if _, err := h.s.o.Power.PowerOff(ctx, connect.NewRequest(&initv1.PowerOffRequest{Forced: forced})); err != nil {
+		h.s.notifyBox(ctx, &edgefall.Phase{Reset: true})
 		return nil, err
 	}
 	return connect.NewResponse(&osadminv1.ShutdownResponse{}), nil

@@ -46,7 +46,7 @@ const pollEvery = 500 * time.Millisecond
 const askTimeout = time.Second
 
 type config struct {
-	osadminDir, tlsDir, accessSock, boxState, brandDir, local, https, http string
+	osadminDir, tlsDir, accessSock, boxState, brandDir, local, https, http, push string
 }
 
 func main() {
@@ -60,6 +60,7 @@ func main() {
 	fs.StringVar(&c.local, "local", edgefall.LocalAddr, "the loopback address Traefik reaches for /_box/ and its error pages")
 	fs.StringVar(&c.https, "https", ":443", "the edge's https address, held while k0s doesn't run")
 	fs.StringVar(&c.http, "http", ":80", "the edge's http address, held with https")
+	fs.StringVar(&c.push, "push-socket", edgefall.PushSocket, "where accessd pushes the box state the moment it changes (only root and edgefall reach it)")
 	cmd := "serve"
 	args := os.Args[1:]
 	if len(args) > 0 && (args[0] == "prepare" || args[0] == "serve") {
@@ -107,6 +108,7 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 	src := phaseSource(c.accessSock)
 	w := edgefall.NewWatcher(src, c.boxState, lg)
 	h := edgefall.NewServer(w.State)
+	h.SetEvents(w.Events())
 
 	ln, err := net.Listen("tcp", c.local)
 	if err != nil {
@@ -137,7 +139,12 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 		}
 	}()
 	defer func() { _ = local.Close() }()
-	lg.Info("edgefall: serving", log.F("local", c.local), log.F("https", c.https), log.F("http", c.http))
+	pushSrv, err := servePush(c.push, w, func() { cl.Want(w.Claim()) }, lg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = pushSrv.Close() }()
+	lg.Info("edgefall: serving", log.F("push", c.push), log.F("local", c.local), log.F("https", c.https), log.F("http", c.http))
 
 	t := time.NewTicker(pollEvery)
 	defer t.Stop()
@@ -187,4 +194,27 @@ func phaseSource(sock string) edgefall.Source {
 		}
 		return edgefall.Phase{State: res.Msg.GetState(), ProductRunning: res.Msg.GetProductRunning(), ProductInstalled: res.Msg.GetProductInstalled()}, nil
 	}
+}
+
+// servePush listens on the push socket, in edgefall's own 0700 directory:
+// only root (accessd) and edgefall reach it.
+func servePush(path string, w *edgefall.Watcher, after func(), lg log.Logger) (*http.Server, error) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("the push socket %s: %w", path, err)
+	}
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
+	srv := &http.Server{Handler: edgefall.PushHandler(w, after), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second}
+	go func() {
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			lg.Error(err, "edgefall: the push socket stopped")
+		}
+	}()
+	return srv, nil
 }
