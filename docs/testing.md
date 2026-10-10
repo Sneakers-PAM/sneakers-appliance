@@ -22,7 +22,7 @@ set `build/keys/lab-keys.sh` makes for that run only: the lab product bundle
 (`build/product/build.sh`: the pinned k0s, `K0S_VERSION` in `build/ci/versions.env`, the images in
 `build/lab/images.txt`, each digest signed with the run's key, and the stacks in `build/lab/stacks`,
 the throwaway hello stack and the interim edge, [k0s.md](k0s.md)), sealed as
-`product/sneakers-product-<version>-amd64-LAB.bin` with its index; the root image (`build/root/build.sh`,
+`product/sneakers-product-lab-<label>-amd64.bin` with its index; the root image (`build/root/build.sh`,
 with no k0s or images, the static OpenSSH and busybox, and the static cryptsetup, veritysetup,
 mkfs.ext4 and sgdisk from `STATIC`, which first boot needs to make the state volumes, and the root
 shell's `watch` with its terminfo entries, plus
@@ -32,15 +32,18 @@ material, `release.yaml` and the artifact (`sneakers-artifact assemble`, then `c
 over the index blob and `sneakers-artifact attach`). It then builds a kit pinned to that run's keys
 and writes the raw disk with it, so every PR runs the kit's whole chain against a real release.
 Its version carries the build number, the short commit it was built from in git-describe form
-(`VERSION=0.0.0-lab.20261007d` from commit `1a2b3c4` builds `0.0.0-lab.20261007d-g1a2b3c4`), so
-every lab file name says which commit it is (`sneakers-0.0.0-lab.20261007d-g1a2b3c4-amd64-LAB.raw`,
-the `.ova` and the `.bin` likewise); the version it used is in `$OUT/version`. In
+(`VERSION=0.0.0-lab.20261007d` from commit `1a2b3c4` builds `0.0.0-lab.20261007d.r<UTC time>-g1a2b3c4`),
+which the signed headers and the index carry; a file name carries only the build's label
+(`sneakers-appliance-lab-d-amd64.raw`, the `.ova` and the `.bin` likewise,
+[release.md](release.md#file-names)). The version it used is in `$OUT/version`. In
 CI the keys live on a tmpfs that's unmounted at the end of the job; nothing built is uploaded.
 
 **The three units.** `build/lab/units.sh` then makes a lab build's update units (spec 7) from its
 output with the same keys: `OUT=<build output> KEYS=<keys> bash build/lab/units.sh` writes, in
 `$OUT/units` (or `UNITS`), the Base OS full `.bin` (`BRIDGE=1` also writes it under the old name and
-lists it in the index's legacy base section, for boxes from before the units), the Base Web `.bin`
+lists it in the index's legacy base section, for boxes from before the units; `OLD_NAMES=1`, the lab
+default, links every unit under the name earlier builds gave it too, so a box running one finds its
+update in the index), the Base Web `.bin`
 (when the build made pages, `WEB`), the product bundle, a Base OS patch from each build output in
 `PATCH_FROM`, and the format 2 index over them all (and over the `.bin` files of the directories in
 `INDEX_ALSO`). `CHECK_FROM` makes a patch that's built and checked but goes to `checked-only/`, out

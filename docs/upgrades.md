@@ -163,7 +163,8 @@ replaces the record.
 The Updates page drives the same flow for an uploaded or a fetched `.bin`:
 
 1. **Get the file.** Upload it (`POST /upload`, any admin) or fetch it (`UpgradeService.FetchUpdate`,
-   the file name such as `sneakers-appliance-0.2.0-amd64.bin`) from the configured mirror, then,
+   the file name the index lists, such as `sneakers-appliance-baseOS-0.2.0-amd64.bin`; the box never
+   works a name out itself) from the configured mirror, then,
    when the policy's `direct` is on, from the release source (the GitHub Release the box picked for
    its channel; production builds only, [the GitHub source](#the-github-source)). With no mirror and `direct` off the box is air-gapped: it
    never makes a network fetch (`UPGRADE_AIR_GAPPED`) and upload is the only path. The mirror is an
@@ -244,7 +245,7 @@ unstaging one there's no previous release to revert to until the next apply.
 ## Base OS patches
 
 A patch is a smaller way to deliver exactly the same Base OS release (spec 5, Section 2.10). Its
-`.bin` (`sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin`) carries the target's
+`.bin` (`sneakers-appliance-baseOS-patch-<base>-to-<target>-<arch>.bin`) carries the target's
 signed OCI layout without its two large blobs, the root image and the UKI, plus a `zstd
 --patch-from` delta of each against the base's. Its signed header names the base (version, the root
 image's size and SHA-256, the UKI's SHA-256), the target (the root image's and UKI's SHA-256) and
@@ -260,7 +261,8 @@ the full `.bin` of the same release.
    staged). The layout is then the one the full `.bin` unpacks, and the usual Stage runs on it, the
    whole verify chain included.
 4. **Fallback:** when a fetched patch is refused at step 2 or 3, osadmin fetches the full `.bin`
-   the header names from the same sources and stages it instead, with an `upgrade.patch-fallback`
+   of the same release from the same sources and stages it instead: the file the last checked
+   index lists for that version, or the one the header names when the index didn't list it, with an `upgrade.patch-fallback`
    audit entry (the version, the reason and the full file) and a `fallback` line in the history.
    An uploaded patch isn't followed by a fetch: the refusal names the full file to upload.
 
@@ -393,9 +395,10 @@ An air-gapped site can serve the release files from a web server of its own and 
 policy's mirror (the design is in [update-mirror.md](update-mirror.md)).
 
 - **What it serves:** the `.bin` files and the index side by side under one base URL,
-  the names exactly as released: `<base>/sneakers-appliance-<version>-<arch>.bin`,
-  `<base>/sneakers-product-<version>-<arch>.bin` and `<base>/sneakers-product-index.json`. Any
-  static web server will do.
+  the names exactly as released and as the index lists them: `<base>/sneakers-appliance-baseOS-<version>-<arch>.bin`,
+  `<base>/sneakers-product-<version>-<arch>.bin` and `<base>/sneakers-product-index.json`
+  ([release.md](release.md#file-names)). The box fetches only names the index lists, so a mirror
+  that still serves files under earlier builds' names keeps working. Any static web server will do.
 - **`http://` or `https://`.** The URL has a host and no user name, password or query. Over plain
   HTTP the box's only protection is the signature check, which every `.bin` gets anyway before
   anything is decrypted or unpacked: a changed file is refused (`UPGRADE_SIGNATURE`) and deleted.

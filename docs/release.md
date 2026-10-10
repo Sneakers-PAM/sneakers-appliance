@@ -9,16 +9,56 @@ with keys made for that run and publishes nothing.
 | Output | Where | Used by |
 |---|---|---|
 | `sneakers-os:<version>` | GHCR (`ghcr.io/<owner>/sneakers-os`), pushed by digest, with its signature | the kit, to build install media |
-| `sneakers-<version>-amd64.ova`, with `.sha256` and `.sigstore.json` (a signature by the release key) | the tag's GitHub Release | a new install on VMware: the production kit writes it in the sign job from the signed artifact (it verifies the artifact first), with the vApp host name and domain properties ([kit.md](kit.md)); check it with `sha256sum -c` and `cosign verify-blob --key keys/production/cosign.pub --bundle <ova>.sigstore.json --insecure-ignore-tlog=true <ova>` |
-| the three units: `sneakers-appliance-baseOS-<version>-g<commit>-<arch>.bin`, `sneakers-appliance-baseWeb-<version>-g<commit>-<arch>.bin` and `sneakers-product-<version>-<arch>.bin`, each with its `.inputs` | the tag's GitHub Release | the box: downloaded, or uploaded by hand on the Updates page |
-| a Base OS patch from the previous release on the tag's channel, `sneakers-appliance-baseOS-patch-<version>-g<commit>-from-<previous>-<arch>.bin`, with its `.inputs` (none for the first release on a channel) | the tag's GitHub Release | a box on the previous release: a small download in place of the full Base OS |
-| `sneakers-product-index.json` (format 2) and `SHA256SUMS` over the units, each with its signature by the release key (`sneakers-product-index.json.sigstore.json`, `SHA256SUMS.sigstore.json`) | the tag's GitHub Release | the box's GitHub source, which takes the index only when its signature verifies ([upgrades.md](upgrades.md#the-github-source)); a mirror, served next to the units |
+| `sneakers-appliance-<version>-amd64.ova`, with `.sha256`, its line in `SHA256SUMS` and `.sigstore.json` (a signature by the release key) | the tag's GitHub Release | a new install on VMware: the production kit writes it in the sign job from the signed artifact (it verifies the artifact first), with the vApp host name and domain properties ([kit.md](kit.md)); check it with `sha256sum -c` and `cosign verify-blob --key keys/production/cosign.pub --bundle <ova>.sigstore.json --insecure-ignore-tlog=true <ova>` |
+| the three units: `sneakers-appliance-baseOS-<version>-<arch>.bin`, `sneakers-appliance-baseWeb-<version>-<arch>.bin` and `sneakers-product-<version>-<arch>.bin`, each with its `.inputs` | the tag's GitHub Release | the box: downloaded, or uploaded by hand on the Updates page |
+| a Base OS patch from the previous release on the tag's channel, `sneakers-appliance-baseOS-patch-<previous>-to-<version>-<arch>.bin`, with its `.inputs` (none for the first release on a channel) | the tag's GitHub Release | a box on the previous release: a small download in place of the full Base OS |
+| `sneakers-product-index.json` (format 2) and `SHA256SUMS` over the units and the OVA, each with its signature by the release key (`sneakers-product-index.json.sigstore.json`, `SHA256SUMS.sigstore.json`) | the tag's GitHub Release | the box's GitHub source, which takes the index only when its signature verifies ([upgrades.md](upgrades.md#the-github-source)); a mirror, served next to the units |
 | `release.yaml`, `release.yaml.sigstore.json` and one `<digest hex>.sigstore.json` per pinned image | the tag's GitHub Release | anyone checking what the release pinned: the appliance's countersignatures, made with the release key |
 
 The GitHub Releases are the boxes' built-in update source: an rc tag (`v<x.y.z>-rc.<n>`) is made a
 prerelease, which boxes on the rc channel take and boxes on stable never do, and every asset must
 be under GitHub's 2 GiB limit (`build/release/check-asset-sizes.sh` refuses the publish otherwise,
-and the lab dry run checks its files, its lab OVA among them, the same way).
+and the lab dry run checks its files, its lab OVA among them, the same way). Every file has one of
+the names below (`build/release/check-names.sh`, run by the sign, publish and lab jobs and by
+`build/lab/units.sh`).
+
+## File names
+
+A file name carries the release and nothing else: the version on production (`0.1.0-rc.1`, and
+`0.1.0` for the stable release), and `lab-<build label>` on lab, where the label is the build's
+letter and rebuild number (`lab-n3`) or the product's own lab label (`lab-sneakers.10`). The build
+date, the build time and the commit are never in a name; they stay in the signed header and the
+index (`version`, `commit`), where the box and the :8443 pages read them. `<arch>` is `amd64` or
+`arm64`; in the table, `<v>` stands for the version or `lab-<label>`.
+
+| File | Production example | Lab example | State |
+|---|---|---|---|
+| Base OS `sneakers-appliance-baseOS-<v>-<arch>.bin` | `sneakers-appliance-baseOS-0.1.0-rc.1-amd64.bin` | `sneakers-appliance-baseOS-lab-n3-amd64.bin` | produced |
+| Base Web `sneakers-appliance-baseWeb-<v>-<arch>.bin` | `sneakers-appliance-baseWeb-0.1.0-rc.1-amd64.bin` | `sneakers-appliance-baseWeb-lab-n3-amd64.bin` | produced |
+| Base OS patch `sneakers-appliance-baseOS-patch-<from>-to-<to>-<arch>.bin` | `sneakers-appliance-baseOS-patch-0.1.0-rc.1-to-0.1.0-rc.2-amd64.bin` | `sneakers-appliance-baseOS-patch-lab-n2-to-n3-amd64.bin` | produced |
+| Product `sneakers-product-<v>-<arch>.bin` | `sneakers-product-0.1.0-rc.1-amd64.bin` | `sneakers-product-lab-sneakers.10-amd64.bin` | produced |
+| ESXi/vSphere `sneakers-appliance-<v>-amd64.ova` | `sneakers-appliance-0.1.0-rc.1-amd64.ova` | `sneakers-appliance-lab-n3-amd64.ova` | produced |
+| Proxmox/KVM `sneakers-appliance-<v>-amd64.qcow2` | `sneakers-appliance-0.1.0-amd64.qcow2` | `sneakers-appliance-lab-n3-amd64.qcow2` | reserved: the kit can write it (`--format qcow2`), but no release builds or publishes it until Proxmox support is built and proven |
+| ISO installer `sneakers-appliance-<v>-amd64.iso` | `sneakers-appliance-0.1.0-amd64.iso` | `sneakers-appliance-lab-n3-amd64.iso` | reserved: no ISO writer yet |
+| Raspberry Pi SD image `sneakers-appliance-<v>-arm64.img.xz` | `sneakers-appliance-0.1.0-arm64.img.xz` | `sneakers-appliance-lab-n3-arm64.img.xz` | reserved: no arm64 build yet |
+| Installed disk `sneakers-appliance-<v>-<arch>.raw` | none | `sneakers-appliance-lab-n3-amd64.raw` | lab build output only, never published |
+
+- **Sidecars** follow their file's name: `<file>.inputs` (a unit's input digest), `<file>.sha256`,
+  `<file>.sigstore.json` (a cosign signature bundle by the release key) and `<file>.sig`.
+- **Fixed names:** `sneakers-product-index.json`, `SHA256SUMS`, `release.yaml` (each with its
+  `.sigstore.json`) and one `<digest hex>.sigstore.json` per pinned image.
+- **Every produced image** gets its `.sha256`, a line in `SHA256SUMS` and its `.sigstore.json`. The
+  index lists only the update units; no image is in it, since a box never installs one.
+- **The check:** `build/release/check-names.sh --channel production|lab <file>...` takes these
+  shapes only, so an unknown name fails too, and refuses a name with a date (8 digits), a build
+  time (`r` and 14 digits) or a commit (`-g<hex>`), and a lab name on production or the reverse.
+- **Names from earlier builds:** the box finds every file through the index, never by working out
+  a name, so it reads an index that lists files under the names earlier builds used
+  (`-LAB` before `.bin`, the commit and the build date in the version,
+  `...-patch-<to>-from-<from>-...`; `updatepkg.PreviousFileName`). On lab, `build/lab/units.sh`
+  also links each unit under that earlier name and lists it in the index (`OLD_NAMES=1`, the lab
+  default), so a box still running one of those builds finds its update. A patch's fallback to
+  the full release takes the name the last checked index lists for it.
 
 Each `.bin` is an update package. The box downloads it from the GitHub Release, or an admin
 uploads the identical file through :8443 or the console on an air-gapped box. Both paths read it
@@ -30,13 +70,12 @@ From build m a box updates three units on their own, each its own signed `.bin`:
 
 | Unit | Holds | File name (full) | Patch |
 |---|---|---|---|
-| Base OS | the root image, the UKI, the loader and the Secure Boot files | `sneakers-appliance-baseOS-<version>-<arch>.bin` | `sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin` |
-| Base Web | the :8443 admin pages, static files with a signed manifest | `sneakers-appliance-baseWeb-<version>-<arch>.bin` | none yet |
-| Product | the product bundle | `sneakers-product-<version>-<arch>.bin`, unchanged | none yet |
+| Base OS | the root image, the UKI, the loader and the Secure Boot files | `sneakers-appliance-baseOS-<v>-<arch>.bin` | `sneakers-appliance-baseOS-patch-<base>-to-<target>-<arch>.bin` |
+| Base Web | the :8443 admin pages, static files with a signed manifest | `sneakers-appliance-baseWeb-<v>-<arch>.bin` | none yet |
+| Product | the product bundle | `sneakers-product-<v>-<arch>.bin` | none yet |
 
-- A lab file adds `-LAB` before `.bin`. A production Base OS or Base Web version carries the build's
-  short commit once, after the version (`sneakers-appliance-baseOS-0.3.0-g1a2b3c4-amd64.bin`); a lab
-  version already ends with it.
+- `<v>` is the version on production and `lab-<build label>` on lab ([File names](#file-names)); the
+  commit and the build time are in the header, not the name.
 - One version line: a release stamps the units it ships with its version, and a unit it doesn't
   ship keeps its earlier version. "Tied" means the same major.minor (below).
 - Base Web is one file per architecture, with the same pages in each.
@@ -117,8 +156,8 @@ it), it also decrypts, and with `--extract` unpacks the payload.
 
 ## The product bundle
 
-The product stack ships as its own `.bin`, never in the base image: `sneakers-product-<version>-<arch>.bin`
-(`-LAB` for a lab one), one per version and architecture. It's the same format, signed with the
+The product stack ships as its own `.bin`, never in the base image: `sneakers-product-<v>-<arch>.bin`
+(`sneakers-product-lab-<label>-<arch>.bin` for a lab one, [File names](#file-names)), one per version and architecture. It's the same format, signed with the
 same release key and encrypted to the same update key, with these header fields:
 
 | Field | Meaning |
@@ -409,7 +448,7 @@ key and TOTP key (`sneakers-box`) and the setup token it exposes. Its data path 
 - **A release:** the build job packs the bundle for the release's own version and newer
   (`product-header.json`, `product-payload.age`); the sign job signs its header, seals it, opens it
   with the key in the signed UKI, checks it and writes the index.
-- **A lab build:** `build/lab/build.sh` writes `product/sneakers-product-<version>-amd64-LAB.bin` and
+- **A lab build:** `build/lab/build.sh` writes `product/sneakers-product-lab-<label>-amd64.bin` and
   its index next to the disk, for the base it built and newer (`PRODUCT_MIN_BASE` and
   `PRODUCT_MAX_BASE` set another range, as a test of the refusal does), and checks it with the key in its signed UKI.
 
@@ -449,8 +488,8 @@ artifact, install media or a box's ESP) can read the update key out of its UKI. 
 authenticity comes from its signature, never from the encryption: a box installs only what the
 release key signed for its channel, whoever could decrypt it.
 
-A lab `.bin` is named `-LAB.bin`, after a version that carries its build number (`-g<short
-commit>`, [testing.md](testing.md#the-lab-release)), signed with the lab key and encrypted to the lab update key, so a
+A lab `.bin` is named `...-lab-<label>-<arch>.bin` ([File names](#file-names)); its version carries
+the build number (`-g<short commit>`, [testing.md](testing.md#the-lab-release)) in the header. It's signed with the lab key and encrypted to the lab update key, so a
 production box refuses it, and the reverse. The sign job runs `check-fingerprints.sh` and refuses
 any certificate or key that isn't the recorded production one.
 

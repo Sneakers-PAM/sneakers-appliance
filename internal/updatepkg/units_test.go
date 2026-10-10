@@ -29,6 +29,10 @@ func baseWeb(v, ch string) updatepkg.Header {
 	return updatepkg.Header{Unit: updatepkg.UnitBaseWeb, Version: v, Commit: "1a2b3c4", Arch: "amd64", Kind: updatepkg.KindFull, Channel: ch}
 }
 
+func product(v, ch string) updatepkg.Header {
+	return updatepkg.Header{Version: v, Arch: "amd64", Kind: updatepkg.KindProduct, Channel: ch}
+}
+
 func patch(target, base, ch string) updatepkg.Header {
 	h := baseOS(target, ch)
 	h.Kind, h.Bases, h.Method = updatepkg.KindPatch, []string{base}, updatepkg.MethodZstdPatch
@@ -37,19 +41,26 @@ func patch(target, base, ch string) updatepkg.Header {
 	return h
 }
 
-// Each unit and kind has its own name, with the build's commit once; a
-// lab version already ends with it. The product and the headers from
-// before the units keep their names.
+// Each unit and kind has its own name: the version alone on production,
+// lab-<build label> on lab, never the build date, time or commit (the
+// header and the index carry those). The headers from before the units
+// keep their names.
 func TestEveryUnitHasItsOwnFileName(t *testing.T) {
 	for want, h := range map[string]updatepkg.Header{
-		"sneakers-appliance-baseOS-0.3.0-g1a2b3c4-amd64.bin":                                                            baseOS("0.3.0", release.ChannelProduction),
-		"sneakers-appliance-baseWeb-0.3.2-g1a2b3c4-amd64.bin":                                                           baseWeb("0.3.2", release.ChannelProduction),
-		"sneakers-appliance-baseOS-patch-0.3.1-g1a2b3c4-from-0.3.0-amd64.bin":                                           patch("0.3.1", "0.3.0", release.ChannelProduction),
-		"sneakers-appliance-baseOS-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin":                                          baseOS("0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
-		"sneakers-appliance-baseWeb-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin":                                         baseWeb("0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
-		"sneakers-appliance-0.3.0-amd64.bin":                                                                            {Version: "0.3.0", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction},
-		"sneakers-product-0.2.0-amd64-LAB.bin":                                                                          productHeader(release.ChannelLab, "0.2.0"),
-		"sneakers-appliance-baseOS-patch-0.0.0-lab.20261012m1-g1a2b3c4-from-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin": patch("0.0.0-lab.20261012m1-g1a2b3c4", "0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
+		"sneakers-appliance-baseOS-0.3.0-amd64.bin":                          baseOS("0.3.0", release.ChannelProduction),
+		"sneakers-appliance-baseOS-0.1.0-rc.1-amd64.bin":                     baseOS("0.1.0-rc.1", release.ChannelProduction),
+		"sneakers-appliance-baseWeb-0.3.2-amd64.bin":                         baseWeb("0.3.2", release.ChannelProduction),
+		"sneakers-appliance-baseOS-patch-0.3.0-to-0.3.1-amd64.bin":           patch("0.3.1", "0.3.0", release.ChannelProduction),
+		"sneakers-appliance-baseOS-patch-0.1.0-rc.1-to-0.1.0-rc.2-amd64.bin": patch("0.1.0-rc.2", "0.1.0-rc.1", release.ChannelProduction),
+		"sneakers-appliance-baseOS-lab-n3-amd64.bin":                         baseOS("0.0.0-lab.20261010n3.r20261010105645-ga8df881", release.ChannelLab),
+		"sneakers-appliance-baseOS-lab-m-amd64.bin":                          baseOS("0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
+		"sneakers-appliance-baseWeb-lab-n3-amd64.bin":                        baseWeb("0.0.0-lab.20261010n3.r20261010105645-ga8df881", release.ChannelLab),
+		"sneakers-appliance-baseOS-patch-lab-n2-to-n3-amd64.bin":             patch("0.0.0-lab.20261010n3.r20261010105645-ga8df881", "0.0.0-lab.20261010n2.r20261010093945-g1eef5f2", release.ChannelLab),
+		"sneakers-appliance-0.3.0-amd64.bin":                                 {Version: "0.3.0", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction},
+		"sneakers-product-0.2.0-amd64.bin":                                   productHeader(release.ChannelProduction, "0.2.0"),
+		"sneakers-product-0.1.0-rc.1-amd64.bin":                              product("0.1.0-rc.1", release.ChannelProduction),
+		"sneakers-product-lab-sneakers.10-amd64.bin":                         product("0.1.0-lab.sneakers.10", release.ChannelLab),
+		"sneakers-product-lab-0.2.0-amd64.bin":                               productHeader(release.ChannelLab, "0.2.0"),
 	} {
 		if got := updatepkg.FileName(h); got != want {
 			t.Errorf("got %s, want %s", got, want)
@@ -61,10 +72,72 @@ func TestEveryUnitHasItsOwnFileName(t *testing.T) {
 	if got := updatepkg.LegacyFileName(baseOS("0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab)); got != "sneakers-appliance-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin" {
 		t.Fatalf("the bridge name: %s", got)
 	}
-	for _, bad := range []string{"../sneakers-appliance-0.3.0-amd64.bin", "sneakers-appliance-baseOS-0.3.0-riscv64.bin", "sneakers-other-0.3.0-amd64.bin"} {
+	for _, bad := range []string{"../sneakers-appliance-0.3.0-amd64.bin", "sneakers-appliance-baseOS-0.3.0-riscv64.bin", "sneakers-other-0.3.0-amd64.bin",
+		"sneakers-appliance-baseOS-lab-n3/../x-amd64.bin", "sneakers-appliance-baseOS-lab--amd64.bin"} {
 		if updatepkg.ValidFileName(bad) {
 			t.Errorf("%s passed", bad)
 		}
+	}
+}
+
+// The names before the version-only scheme (the build's commit in every
+// Base OS and Base Web name, -LAB on lab) are still what a box reads in an
+// index from those builds: PreviousFileName gives them, and they stay
+// valid file names.
+func TestThePreviousNamesStillRead(t *testing.T) {
+	for want, h := range map[string]updatepkg.Header{
+		"sneakers-appliance-baseOS-0.3.0-g1a2b3c4-amd64.bin":                                                            baseOS("0.3.0", release.ChannelProduction),
+		"sneakers-appliance-baseWeb-0.3.2-g1a2b3c4-amd64.bin":                                                           baseWeb("0.3.2", release.ChannelProduction),
+		"sneakers-appliance-baseOS-patch-0.3.1-g1a2b3c4-from-0.3.0-amd64.bin":                                           patch("0.3.1", "0.3.0", release.ChannelProduction),
+		"sneakers-appliance-baseOS-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin":                                          baseOS("0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
+		"sneakers-appliance-baseWeb-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin":                                         baseWeb("0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
+		"sneakers-product-0.2.0-amd64-LAB.bin":                                                                          productHeader(release.ChannelLab, "0.2.0"),
+		"sneakers-appliance-baseOS-patch-0.0.0-lab.20261012m1-g1a2b3c4-from-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin": patch("0.0.0-lab.20261012m1-g1a2b3c4", "0.0.0-lab.20261012m-g1a2b3c4", release.ChannelLab),
+	} {
+		if got := updatepkg.PreviousFileName(h); got != want {
+			t.Errorf("got %s, want %s", got, want)
+		}
+		if !updatepkg.ValidFileName(want) {
+			t.Errorf("%s isn't a valid name", want)
+		}
+		if !updatepkg.NamedFor(h, want) || !updatepkg.NamedFor(h, updatepkg.FileName(h)) || updatepkg.NamedFor(h, "sneakers-product-9.9.9-amd64.bin") {
+			t.Errorf("%s: the names its header takes", want)
+		}
+	}
+}
+
+// A box reads an index from before the version-only names: an entry under
+// its previous name is offered as before, and so is one under the new name.
+func TestAnIndexWithThePreviousNamesIsOffered(t *testing.T) {
+	n2, n3 := "0.0.0-lab.20261010n2.r20261010093945-g1eef5f2", "0.0.0-lab.20261010n3.r20261010105645-ga8df881"
+	full, web, p := baseOS(n3, release.ChannelLab), baseWeb(n3, release.ChannelLab), patch(n3, n2, release.ChannelLab)
+	prod := product("0.1.0-lab.sneakers.10", release.ChannelLab)
+	prod.MinBase = n2
+	for _, named := range []func(updatepkg.Header) string{updatepkg.PreviousFileName, updatepkg.FileName} {
+		var idx updatepkg.Index
+		for _, h := range []updatepkg.Header{full, web, p, prod} {
+			h.Name = updatepkg.NameFor(h.Kind)
+			if h.Unit == updatepkg.UnitBaseWeb {
+				h.Name = updatepkg.NameWeb
+			}
+			if err := idx.AddFile(h, 10, named(h)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		box := updatepkg.Box{Arch: "amd64", Channel: release.ChannelLab, BaseOS: n2, BaseWeb: n2}
+		if got := idx.OfferBaseOS(box); len(got) != 2 || got[0].File != named(p) || got[1].File != named(full) {
+			t.Errorf("Base OS offer %+v", got)
+		}
+		if got := idx.OfferBaseWeb(box); len(got) != 1 || got[0].File != named(web) {
+			t.Errorf("Base Web offer %+v", got)
+		}
+		if got := idx.OfferProducts(box, ""); len(got) != 1 || got[0].File != named(prod) {
+			t.Errorf("product offer %+v", got)
+		}
+	}
+	var idx updatepkg.Index
+	if err := idx.AddFile(full, 10, "sneakers-appliance-baseOS-lab-n9-amd64.bin"); err == nil {
+		t.Fatal("a name another header gives was taken")
 	}
 }
 
@@ -264,7 +337,7 @@ func TestIndexFormat2OffersEachUnit(t *testing.T) {
 	if len(os) != 2 || os[0].Kind != "patch" || os[0].Version != "0.3.1" || os[1].Kind != "full" || os[1].Version != "0.3.1" {
 		t.Fatalf("Base OS offer %+v", os)
 	}
-	if os[0].BaseRootSHA256 != sumA || os[0].File != "sneakers-appliance-baseOS-patch-0.3.1-g1a2b3c4-from-0.3.0-amd64.bin" {
+	if os[0].BaseRootSHA256 != sumA || os[0].File != "sneakers-appliance-baseOS-patch-0.3.0-to-0.3.1-amd64.bin" {
 		t.Fatalf("the patch entry %+v", os[0])
 	}
 	box.RootSHA256 = sumB
@@ -303,7 +376,7 @@ func TestTheBridgeEntryReachesBothKindsOfBox(t *testing.T) {
 		t.Fatalf("the old box's offer %+v", got)
 	}
 	got := idx.OfferBaseOS(updatepkg.Box{Arch: "amd64", Channel: release.ChannelLab, BaseOS: "0.0.0-lab.20261009l-g669baac"})
-	if len(got) != 1 || got[0].File != "sneakers-appliance-baseOS-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin" {
+	if len(got) != 1 || got[0].File != "sneakers-appliance-baseOS-lab-m-amd64.bin" {
 		t.Fatalf("the new box's offer %+v", got)
 	}
 }
@@ -316,13 +389,21 @@ func TestTheReleaseOfAFileName(t *testing.T) {
 		"sneakers-appliance-baseWeb-0.3.2-g1a2b3c4-arm64.bin":                  "0.3.2",
 		"sneakers-appliance-baseOS-patch-0.3.1-g1a2b3c4-from-0.3.0-amd64.bin":  "0.3.1",
 		"sneakers-appliance-baseOS-0.0.0-lab.20261012m-g1a2b3c4-amd64-LAB.bin": "0.0.0-lab.20261012m-g1a2b3c4",
+		"sneakers-appliance-baseOS-0.1.0-rc.1-amd64.bin":                       "0.1.0-rc.1",
+		"sneakers-appliance-baseWeb-0.1.0-arm64.bin":                           "0.1.0",
+		"sneakers-appliance-baseOS-patch-0.1.0-rc.1-to-0.1.0-rc.2-amd64.bin":   "0.1.0-rc.2",
+		"sneakers-product-0.1.0-rc.2-amd64.bin":                                "0.1.0-rc.2",
 	} {
 		if got, ok := updatepkg.ReleaseOf(name); !ok || got != want {
 			t.Errorf("%s: %q %v", name, got, ok)
 		}
 	}
-	if _, ok := updatepkg.ReleaseOf("index.html"); ok {
-		t.Fatal("not a release file")
+	// A lab name carries the build's label, not its version: only the index
+	// says which release it is.
+	for _, name := range []string{"index.html", "sneakers-appliance-baseOS-lab-n3-amd64.bin", "sneakers-product-lab-sneakers.10-amd64.bin"} {
+		if _, ok := updatepkg.ReleaseOf(name); ok {
+			t.Errorf("%s: not a release's name", name)
+		}
 	}
 }
 

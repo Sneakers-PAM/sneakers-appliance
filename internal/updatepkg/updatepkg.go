@@ -35,6 +35,7 @@ import (
 	"io"
 	"regexp"
 	"slices"
+	"strings"
 
 	"filippo.io/age"
 	"golang.org/x/mod/semver"
@@ -252,18 +253,44 @@ func nameOf(h Header) string {
 	return NameFor(h.Kind)
 }
 
-// FileName is the package's published name, with -LAB before the extension
-// for a lab package (spec 7, Section 2.2):
+// FileName is the package's published name (spec 7, Section 2.2). <v> is
+// the version on production and lab-<build label> on lab
+// (release.NameVersion): no build date, build time or commit, which the
+// signed header and the index carry.
 //
-//	sneakers-appliance-baseOS-<version>-<arch>.bin
-//	sneakers-appliance-baseOS-patch-<target>-from-<base>-<arch>.bin
-//	sneakers-appliance-baseWeb-<version>-<arch>.bin
-//	sneakers-product-<version>-<arch>.bin
+//	sneakers-appliance-baseOS-<v>-<arch>.bin
+//	sneakers-appliance-baseOS-patch-<base v>-to-<v>-<arch>.bin
+//	sneakers-appliance-baseWeb-<v>-<arch>.bin
+//	sneakers-product-<v>-<arch>.bin
 //
-// A Base OS or Base Web version carries -g<commit> once. A
+// A lab patch names lab once: ...-patch-lab-n2-to-n3-<arch>.bin. A
 // sneakers-appliance header without a unit, from before the units, keeps
 // its old name, sneakers-appliance-<version>-<arch>.bin (LegacyFileName).
 func FileName(h Header) string {
+	v := release.NameVersion(h.Version, h.Channel)
+	switch {
+	case h.IsProduct():
+		return fmt.Sprintf("%s-%s-%s.bin", NameProduct, v, h.Arch)
+	case UnitOf(h) == UnitBaseWeb:
+		return fmt.Sprintf("%s-baseWeb-%s-%s.bin", Name, v, h.Arch)
+	case h.Unit == "":
+		return LegacyFileName(h)
+	case h.Kind == KindPatch:
+		from := release.NameVersion(patchBase(h), h.Channel)
+		to := strings.TrimPrefix(v, "lab-")
+		if h.Channel != release.ChannelLab {
+			to = v
+		}
+		return fmt.Sprintf("%s-baseOS-patch-%s-to-%s-%s.bin", Name, from, to, h.Arch)
+	}
+	return fmt.Sprintf("%s-baseOS-%s-%s.bin", Name, v, h.Arch)
+}
+
+// PreviousFileName is the name the builds before the version-only names
+// published h under: -LAB before the extension for a lab package, and a
+// Base OS or Base Web version with -g<commit> once. An index from those
+// builds lists them, and a box still reads it (NamedFor).
+func PreviousFileName(h Header) string {
 	suffix := labSuffix(h.Channel)
 	switch {
 	case h.IsProduct():
@@ -273,15 +300,25 @@ func FileName(h Header) string {
 	case h.Unit == "":
 		return LegacyFileName(h)
 	case h.Kind == KindPatch:
-		base := ""
-		if h.Base != nil {
-			base = h.Base.Version
-		} else if len(h.Bases) > 0 {
-			base = h.Bases[0]
-		}
-		return fmt.Sprintf("%s-baseOS-patch-%s-from-%s-%s%s.bin", Name, stamped(h.Version, h.Commit), base, h.Arch, suffix)
+		return fmt.Sprintf("%s-baseOS-patch-%s-from-%s-%s%s.bin", Name, stamped(h.Version, h.Commit), patchBase(h), h.Arch, suffix)
 	}
 	return fmt.Sprintf("%s-baseOS-%s-%s%s.bin", Name, stamped(h.Version, h.Commit), h.Arch, suffix)
+}
+
+// NamedFor reports whether file is a name h is published under: its
+// FileName, or the name the builds before it used (PreviousFileName).
+func NamedFor(h Header, file string) bool {
+	return file == FileName(h) || file == PreviousFileName(h)
+}
+
+func patchBase(h Header) string {
+	if h.Base != nil {
+		return h.Base.Version
+	}
+	if len(h.Bases) > 0 {
+		return h.Bases[0]
+	}
+	return ""
 }
 
 // RecipientID is the fingerprint the header records for an age recipient.

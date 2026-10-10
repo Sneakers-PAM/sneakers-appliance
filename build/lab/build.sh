@@ -50,13 +50,15 @@
 #   LAB_MIRROR   the lab mirror the build names as its built-in update
 #                source (release.Mirrors; comma-separated; optional)
 #
-# Output: $OUT/version (the version with the build number, which every
-# file name below carries), $OUT/keys.txt (the SHA-256 fingerprint of each
-# key in the set this run used, in build/release/check-fingerprints.sh's
-# format), $OUT/disk/sneakers-<version>-amd64-LAB.raw, $OUT/artifact (the
+# Output: $OUT/version (the version with the build number, which the
+# signed headers carry; a file name carries only the build's label,
+# lab-<label>, docs/release.md#file-names), $OUT/keys.txt (the SHA-256
+# fingerprint of each key in the set this run used, in
+# build/release/check-fingerprints.sh's format),
+# $OUT/disk/sneakers-appliance-lab-<label>-amd64.raw, $OUT/artifact (the
 # signed OCI layout), $OUT/sneakers-kit (a kit pinned to this run's keys),
 # and the lab product bundle next to them:
-# $OUT/product/sneakers-product-<version>-amd64-LAB.bin with its
+# $OUT/product/sneakers-product-lab-<label>-amd64.bin with its
 # sneakers-product-index.json, to upload on the Updates page or serve from
 # a lab mirror. The signed UKI, $OUT/work/sneakers-<version>.efi, carries
 # the lab update key (internal/ukikey), which decrypts the bundle.
