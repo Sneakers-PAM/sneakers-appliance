@@ -78,10 +78,14 @@ var page = template.Must(template.New("page").Parse(pageSource))
 
 // Server is edgefall's handler.
 type Server struct {
-	state func() boxstate.State
-	look  atomic.Pointer[look]
-	key   string
+	state  func() boxstate.State
+	look   atomic.Pointer[look]
+	key    string
+	events *Hub
 }
+
+// SetEvents serves h's stream at EventsPath, on every listener.
+func (s *Server) SetEvents(h *Hub) { s.events = h }
 
 // NewServer serves the state state answers, with the base look until
 // LoadBrand finds a brand.
@@ -115,6 +119,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Brand *stateLook `json:"brand,omitempty"`
 		}{string(st), lk.state})
 		_, _ = w.Write(b)
+	case r.Method == http.MethodGet && r.URL.Path == EventsPath && r.URL.RawPath == "" && s.events != nil:
+		s.events.ServeEvents(w, r)
 	case read && r.URL.Path == PollerPath && r.URL.RawPath == "":
 		h.Set("Content-Type", "text/javascript; charset=utf-8")
 		_, _ = w.Write(poller)

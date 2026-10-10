@@ -93,7 +93,10 @@ product is ready. Updates, the restart page and the console's maintenance screen
 the others. Until the product is ready the box state is `updating`, so 443 answers every product
 request, sign-in and MCP included, with "Sneakers-PAM is updating" ([edge-fallback.md](edge-fallback.md#the-gate)):
 nobody signs in to, and no agent writes to, a version that is still rolling out. The `edge` step's
-own ask comes from the box's loopback, which the gate lets through.
+own ask comes from the box's loopback, which the gate lets through. The moment an apply or a revert starts, before
+the switch, the stop or the reboot, accessd pushes `updating` (with its kind, `update` or
+`product-apply`) to every open product tab through edgefall's event stream, and then each step
+([edge-fallback.md](edge-fallback.md#the-event-stream)).
 
 | Step | Label | Done when |
 |---|---|---|

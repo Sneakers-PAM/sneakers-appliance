@@ -37,6 +37,7 @@ lab=(
   sneakers-appliance-baseOS-lab-n3-amd64.bin
   sneakers-appliance-baseOS-lab-n3-amd64.bin.inputs
   sneakers-appliance-baseWeb-lab-n3-amd64.bin
+  sneakers-appliance-baseWeb-lab-n5w1-amd64.bin
   sneakers-appliance-baseOS-patch-lab-n2-to-n3-amd64.bin
   sneakers-product-lab-sneakers.10-amd64.bin
   sneakers-appliance-lab-n3-amd64.ova

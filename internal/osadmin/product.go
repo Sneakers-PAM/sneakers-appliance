@@ -25,6 +25,7 @@ import (
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
@@ -275,7 +276,7 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 	}
 	overrode := ""
 	if err == nil {
-		overrode, err = s.beginMaintenance(ctx, "product update applies", by, o)
+		overrode, err = s.beginMaintenance(ctx, "product update applies", edgefall.KindProductApply, by, o)
 		if err == nil {
 			s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
 			err = s.switchProduct(ctx, func() error { _, err := s.slots().Apply(); return err })
@@ -289,7 +290,7 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 
 // revertProduct goes back to the previous product slot.
 func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, string, error) {
-	overrode, err := s.beginMaintenance(ctx, "product update reverts", by, o)
+	overrode, err := s.beginMaintenance(ctx, "product update reverts", edgefall.KindProductApply, by, o)
 	v := ""
 	if err == nil {
 		s.beginProgress("revert", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, s.slots().Status().Previous, "")

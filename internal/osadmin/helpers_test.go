@@ -114,6 +114,8 @@ type fakeInit struct {
 	// of a patch only.
 	patches  []*initv1.StagePatch
 	patchErr error
+	// onReboot runs as Reboot is called, before rebootErr.
+	onReboot func()
 	// rebootErr fails Reboot; markGoodErr fails MarkGood.
 	rebootErr, markGoodErr error
 	// sealed are the items Seal stored, by name; seals counts the calls.
@@ -182,6 +184,9 @@ type fakePower struct {
 func (p fakePower) Reboot(_ context.Context, r *connect.Request[initv1.RebootRequest]) (*connect.Response[initv1.RebootResponse], error) {
 	p.f.mu.Lock()
 	defer p.f.mu.Unlock()
+	if p.f.onReboot != nil {
+		p.f.onReboot()
+	}
 	if p.f.rebootErr != nil {
 		return nil, p.f.rebootErr
 	}
@@ -464,6 +469,8 @@ type fakeServices struct {
 	mu      sync.Mutex
 	calls   []string
 	running bool
+	// onStop runs as Stop is called.
+	onStop func()
 }
 
 func (f *fakeServices) Start(_ context.Context, r *connect.Request[initv1.StartRequest]) (*connect.Response[initv1.StartResponse], error) {
@@ -479,6 +486,9 @@ func (f *fakeServices) Stop(_ context.Context, r *connect.Request[initv1.StopReq
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "stop "+r.Msg.GetName())
 	f.running = false
+	if f.onStop != nil {
+		f.onStop()
+	}
 	return connect.NewResponse(&initv1.StopResponse{}), nil
 }
 

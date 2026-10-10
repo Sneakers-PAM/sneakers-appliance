@@ -46,6 +46,7 @@ It serves exactly these, and nothing else:
 | Request | Answer |
 |---|---|
 | `GET /_box/state` | `{"state":"rebooting"}`, with `"brand"` when the product has one (below), `Cache-Control: no-store` |
+| `GET /_box/events` | the box state as a server-sent-events stream ([below](#the-event-stream)) |
 | `GET /_box/poll.js` | the poller |
 | `POST /_box/edge-handoff` | loopback only: the edge asking for 80 and 443 (below); `204` |
 | `GET /_box/gate` | loopback only: the edge's check for every request on 443 ([the gate](#the-gate)); `204`, or the page |
@@ -89,6 +90,41 @@ poller, so a browser that lands on it goes back to the product by itself.
 - **Through the drain:** a reboot's or a shutdown's drain leaves edgefall running until the power
   goes ([init.md](init.md#the-service-table)), so once k0s has stopped, 443 still answers with the
   page.
+
+## The event stream
+
+`GET /_box/events` streams the box state, so a product page learns at once that an update or a
+reboot started, instead of polling `/_box/state`. edgefall serves it on 443 while it holds the
+port and on its loopback listener, where the edge routes `/_box/` past the gate. No auth: it carries
+the box state only, like `/_box/state`.
+
+- **Headers:** `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering:
+  no`. Each write is flushed, and the stream lifts the listener's write timeout for itself.
+- **On connect:** `retry: 2000` once, then the current state at once.
+- **Each event:** `event: state` and one `data:` line of JSON:
+  `{"state":"updating","kind":"product-apply","step":"pods","detail":"Rolling out","since":"2026-10-10T16:00:00Z","seq":7}`.
+  `state` is a box state (above); `kind` is `update`, `product-apply`, `reboot`, `shutdown` or
+  `null`; `step` and `detail` are an update's active step id and its words (empty otherwise);
+  `since` is when this event began (RFC 3339, UTC); `seq` increases with every event. An event is
+  sent only when one of `state`, `kind`, `step` or `detail` changes; a slow client skips to the
+  newest.
+- **Heartbeat:** a `: hb` comment every 15 seconds, so idle proxies keep it open.
+- **The push:** accessd tells edgefall the moment it changes, on edgefall's push socket
+  (`/run/sneakers/edgefall/push.sock`, in edgefall's own 0700 directory, so only root and edgefall
+  reach it), and waits for the answer, which comes once every open stream was sent the event (or
+  after half a second). So every open tab hears it before anything stops:
+  - an update, a product apply or revert, or a product re-apply (email settings, a host name)
+    starting, as `updating` with its kind, pushed as maintenance begins, before the switch, the
+    product's stop or the reboot;
+  - a reboot or a shutdown from the Power page, before init is asked (a refused one is taken back);
+  - each step after that, and the end of the maintenance;
+  - `starting`, then `running` once the product is ready, on the way back.
+  A push edgefall doesn't take within a second never holds the update up (accessd logs it), and
+  edgefall's own poll of `GetPhase` and of init's announcement still runs, so the stream follows
+  whatever the push missed, init's own reboots and shutdowns from the closed shell included.
+- **A dropped stream:** while edgefall holds 443 itself and lets it go to the edge (the handoff),
+  or when the box goes down, the stream ends; the client reconnects (the poller and the product web
+  follow the client side of the contract).
 
 ## The gate
 
