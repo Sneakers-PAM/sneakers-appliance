@@ -61,7 +61,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -115,6 +115,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.updatesShow(ctx)
 	case "updates.set":
 		res, err = s.updatesSet(ctx, r.Flags)
+	case "disk.cleanup":
+		res, err = s.diskCleanup(ctx)
 	default:
 		return Result{}, false, nil
 	}
@@ -227,6 +229,44 @@ func (s *Services) updatesSet(ctx context.Context, flags map[string]string) (Res
 		return Result{}, err
 	}
 	return Result{Text: text, Data: flags}, nil
+}
+
+// diskCleanup runs the disk cleanup and prints what each step freed.
+func (s *Services) diskCleanup(ctx context.Context) (Result, error) {
+	out, err := s.Access.CleanUpDisk(ctx, connect.NewRequest(&accessv1.CleanUpDiskRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	c := out.Msg.GetCleanup()
+	var b strings.Builder
+	fmt.Fprintf(&b, "Freed %s.\n", diskBytes(c.GetFreedBytes()))
+	cats := []map[string]any{}
+	for _, cat := range c.GetCategories() {
+		line := fmt.Sprintf("  %-10s %s", Printable(cat.GetName()), diskBytes(cat.GetFreedBytes()))
+		switch {
+		case cat.GetError() != "":
+			line += "  failed: " + Printable(cat.GetError())
+		case cat.GetNote() != "":
+			line += "  " + Printable(cat.GetNote())
+		}
+		b.WriteString(line + "\n")
+		cats = append(cats, map[string]any{"name": cat.GetName(), "freedBytes": cat.GetFreedBytes(), "note": cat.GetNote(), "error": cat.GetError()})
+	}
+	return Result{Text: b.String(), Data: map[string]any{"freedBytes": c.GetFreedBytes(), "categories": cats}}, nil
+}
+
+// diskBytes is n in binary units, one decimal.
+func diskBytes(n uint64) string {
+	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
+	v, u := float64(n), 0
+	for v >= 1024 && u < len(units)-1 {
+		v /= 1024
+		u++
+	}
+	if u == 0 {
+		return fmt.Sprintf("%d B", n)
+	}
+	return fmt.Sprintf("%.1f %s", v, units[u])
 }
 
 func (s *Services) rootShell(ctx context.Context, r Request) (Result, error) {

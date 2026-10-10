@@ -238,8 +238,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		return err
 	}
 	settings := &boxsettings.Store{Dir: filepath.Join(c.state, "platform")}
+	// The disk guard: the volumes' alerts and the cleanup that runs every
+	// hour and when a volume passes 80% (docs/disk-layout.md).
+	guard := diskGuard(c.state, paths, audit, func() bool { return api != nil && api.UpdateBusy() }, lg)
 	api = osadmin.New(osadmin.Options{
-		Access: store, Audit: audit, Clock: clock.Real{},
+		Access: store, Audit: audit, Clock: clock.Real{}, Disk: guard,
 		RootSource: os.Getenv(switchroot.SourceEnv),
 		BootID:     bootID(lg),
 		KeyCustody: custody,
@@ -354,6 +357,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	defer func() { _ = os.Remove(ready) }()
 	lg.Info("accessd: ready", log.F("socket", c.socket))
 
+	go runDiskGuard(ctx, guard)
 	d.RefreshStatus(ctx)
 	api.ResumeProductUp()
 	// netd keeps the product's ports only while it runs: open them again
