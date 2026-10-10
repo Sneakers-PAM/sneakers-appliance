@@ -12,7 +12,10 @@ answers Connect `unavailable` ("the appliance services are unavailable").
 - **Transport.** HTTPS on port 8443 of each management address only, with the box's own certificate
   (ECDSA P-256, self-signed, names = the host name and the management addresses) until an owner
   assigns one from the certificate store. Check its SHA-256 fingerprint against the console on the
-  first visit.
+  first visit. The box keeps that certificate while it names the host name and every current
+  management address, so the fingerprint stays the same across reboots, when the addresses come
+  back one at a time; a new host name or an address it doesn't name makes a new one, and Status and
+  the console name the one :8443 serves.
 - **Session.** The `__Host-osadmin-session` cookie, set by `SignInService.PollSignIn` once the code
   is approved over SSH.
 - **CSRF.** Every call that changes something sends the session's `csrf_token` in the
