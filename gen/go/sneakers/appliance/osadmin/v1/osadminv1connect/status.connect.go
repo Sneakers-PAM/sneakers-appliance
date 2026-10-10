@@ -48,6 +48,9 @@ const (
 	// StatusServiceCleanUpDiskProcedure is the fully-qualified name of the StatusService's CleanUpDisk
 	// RPC.
 	StatusServiceCleanUpDiskProcedure = "/sneakers.appliance.osadmin.v1.StatusService/CleanUpDisk"
+	// StatusServiceHideProtectionNoticeProcedure is the fully-qualified name of the StatusService's
+	// HideProtectionNotice RPC.
+	StatusServiceHideProtectionNoticeProcedure = "/sneakers.appliance.osadmin.v1.StatusService/HideProtectionNotice"
 )
 
 // StatusServiceClient is a client for the sneakers.appliance.osadmin.v1.StatusService service.
@@ -66,6 +69,12 @@ type StatusServiceClient interface {
 	// CleanUpDisk runs the disk cleanup now (the hourly one's steps) and
 	// says what each step freed.
 	CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error)
+	// HideProtectionNotice hides the reduced-protection banner for the
+	// level and reason the box has now, for every admin, until either
+	// changes. reason is the protection_reason the banner was shown for;
+	// when it isn't the box's reason now, or protection is full, nothing is
+	// hidden. Status still gives the level, the reason and protection_detail.
+	HideProtectionNotice(context.Context, *connect.Request[v1.HideProtectionNoticeRequest]) (*connect.Response[v1.HideProtectionNoticeResponse], error)
 }
 
 // NewStatusServiceClient constructs a client for the sneakers.appliance.osadmin.v1.StatusService
@@ -105,15 +114,22 @@ func NewStatusServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(statusServiceMethods.ByName("CleanUpDisk")),
 			connect.WithClientOptions(opts...),
 		),
+		hideProtectionNotice: connect.NewClient[v1.HideProtectionNoticeRequest, v1.HideProtectionNoticeResponse](
+			httpClient,
+			baseURL+StatusServiceHideProtectionNoticeProcedure,
+			connect.WithSchema(statusServiceMethods.ByName("HideProtectionNotice")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // statusServiceClient implements StatusServiceClient.
 type statusServiceClient struct {
-	getStatus     *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
-	setSecureBoot *connect.Client[v1.SetSecureBootRequest, v1.SetSecureBootResponse]
-	getPhase      *connect.Client[v1.GetPhaseRequest, v1.GetPhaseResponse]
-	cleanUpDisk   *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
+	getStatus            *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	setSecureBoot        *connect.Client[v1.SetSecureBootRequest, v1.SetSecureBootResponse]
+	getPhase             *connect.Client[v1.GetPhaseRequest, v1.GetPhaseResponse]
+	cleanUpDisk          *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
+	hideProtectionNotice *connect.Client[v1.HideProtectionNoticeRequest, v1.HideProtectionNoticeResponse]
 }
 
 // GetStatus calls sneakers.appliance.osadmin.v1.StatusService.GetStatus.
@@ -136,6 +152,11 @@ func (c *statusServiceClient) CleanUpDisk(ctx context.Context, req *connect.Requ
 	return c.cleanUpDisk.CallUnary(ctx, req)
 }
 
+// HideProtectionNotice calls sneakers.appliance.osadmin.v1.StatusService.HideProtectionNotice.
+func (c *statusServiceClient) HideProtectionNotice(ctx context.Context, req *connect.Request[v1.HideProtectionNoticeRequest]) (*connect.Response[v1.HideProtectionNoticeResponse], error) {
+	return c.hideProtectionNotice.CallUnary(ctx, req)
+}
+
 // StatusServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.StatusService
 // service.
 type StatusServiceHandler interface {
@@ -153,6 +174,12 @@ type StatusServiceHandler interface {
 	// CleanUpDisk runs the disk cleanup now (the hourly one's steps) and
 	// says what each step freed.
 	CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error)
+	// HideProtectionNotice hides the reduced-protection banner for the
+	// level and reason the box has now, for every admin, until either
+	// changes. reason is the protection_reason the banner was shown for;
+	// when it isn't the box's reason now, or protection is full, nothing is
+	// hidden. Status still gives the level, the reason and protection_detail.
+	HideProtectionNotice(context.Context, *connect.Request[v1.HideProtectionNoticeRequest]) (*connect.Response[v1.HideProtectionNoticeResponse], error)
 }
 
 // NewStatusServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -188,6 +215,12 @@ func NewStatusServiceHandler(svc StatusServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(statusServiceMethods.ByName("CleanUpDisk")),
 		connect.WithHandlerOptions(opts...),
 	)
+	statusServiceHideProtectionNoticeHandler := connect.NewUnaryHandler(
+		StatusServiceHideProtectionNoticeProcedure,
+		svc.HideProtectionNotice,
+		connect.WithSchema(statusServiceMethods.ByName("HideProtectionNotice")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.StatusService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StatusServiceGetStatusProcedure:
@@ -198,6 +231,8 @@ func NewStatusServiceHandler(svc StatusServiceHandler, opts ...connect.HandlerOp
 			statusServiceGetPhaseHandler.ServeHTTP(w, r)
 		case StatusServiceCleanUpDiskProcedure:
 			statusServiceCleanUpDiskHandler.ServeHTTP(w, r)
+		case StatusServiceHideProtectionNoticeProcedure:
+			statusServiceHideProtectionNoticeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -221,4 +256,8 @@ func (UnimplementedStatusServiceHandler) GetPhase(context.Context, *connect.Requ
 
 func (UnimplementedStatusServiceHandler) CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk is not implemented"))
+}
+
+func (UnimplementedStatusServiceHandler) HideProtectionNotice(context.Context, *connect.Request[v1.HideProtectionNoticeRequest]) (*connect.Response[v1.HideProtectionNoticeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.StatusService.HideProtectionNotice is not implemented"))
 }

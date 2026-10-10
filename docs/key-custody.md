@@ -65,6 +65,13 @@ through it ([ssh-and-elevation.md](ssh-and-elevation.md)).
 | key-file mode | reduced (`no-tpm`) |
 | otherwise | full |
 
+At reduced protection the :8443 Status page shows a banner with the level in plain words and how to
+raise it. Any signed-in admin can hide it with **Hide this notice** and a plain confirm (no code);
+the box keeps that acknowledgement for the level and reason (it holds across reboots and updates)
+and audits it. Another reason, or protection raised to full and dropping again, shows the banner
+again. The Protection card on Status always keeps the level, the reason and how to raise it, and
+the console's protection line is unchanged ([osadmin-api.md](osadmin-api.md#methods)).
+
 ## Sealed items and the escrow
 
 `Seal(name, secret)` keeps a small secret (the vault root key first) under the state key: AES-256-GCM

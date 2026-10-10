@@ -47,6 +47,35 @@ service StatusService {
       audit: "disk.cleanup"
     };
   }
+  // HideProtectionNotice hides the reduced-protection banner for the
+  // level and reason the box has now, for every admin, until either
+  // changes. reason is the protection_reason the banner was shown for;
+  // when it isn't the box's reason now, or protection is full, nothing is
+  // hidden. Status still gives the level, the reason and protection_detail.
+  rpc HideProtectionNotice(HideProtectionNoticeRequest) returns (HideProtectionNoticeResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "status.protection-notice.hide"
+    };
+  }
+}
+
+message HideProtectionNoticeRequest {
+  string reason = 1;
+}
+
+message HideProtectionNoticeResponse {
+  // hidden is false when the request's reason isn't the box's reason now
+  // (reload Status and ask again) or protection is full.
+  bool hidden = 1;
+}
+
+// ProtectionNotice says whether an admin hid the reduced-protection
+// banner for the level and reason the box has now, who and when.
+message ProtectionNotice {
+  bool hidden = 1;
+  string hidden_by = 2;
+  google.protobuf.Timestamp hidden_at = 3;
 }
 
 message CleanUpDiskRequest {}
@@ -154,6 +183,9 @@ enum WarningKind {
   // WARNING_KIND_EXPOSURE: a public management address and a wide
   // allow-list.
   WARNING_KIND_EXPOSURE = 1;
+  // WARNING_KIND_REDUCED_PROTECTION: protection is reduced. It is left
+  // out while an admin has hidden it (HideProtectionNotice); the only
+  // warning that can be hidden.
   WARNING_KIND_REDUCED_PROTECTION = 2;
   WARNING_KIND_SELF_SIGNED_TLS = 3;
   WARNING_KIND_NTP_UNSYNCED = 4;
@@ -271,6 +303,14 @@ message GetStatusResponse {
   repeated DataPath data_paths = 29;
   // last_cleanup is the disk cleanup's last run since accessd started.
   DiskCleanup last_cleanup = 30;
+  // protection_detail is the reduced level in plain words with how to
+  // raise it (the reduced-protection warning's text); empty for full. It
+  // is set whether or not the notice is hidden.
+  string protection_detail = 31;
+  // protection_notice is set while the reduced-protection banner is
+  // hidden for the level and reason the box has now; Status then leaves
+  // WARNING_KIND_REDUCED_PROTECTION out of warnings.
+  ProtectionNotice protection_notice = 32;
 }
 
 // NetworkChange is the state of the network change window.

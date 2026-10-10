@@ -138,7 +138,10 @@ const (
 	WarningKind_WARNING_KIND_UNSPECIFIED WarningKind = 0
 	// WARNING_KIND_EXPOSURE: a public management address and a wide
 	// allow-list.
-	WarningKind_WARNING_KIND_EXPOSURE           WarningKind = 1
+	WarningKind_WARNING_KIND_EXPOSURE WarningKind = 1
+	// WARNING_KIND_REDUCED_PROTECTION: protection is reduced. It is left
+	// out while an admin has hidden it (HideProtectionNotice); the only
+	// warning that can be hidden.
 	WarningKind_WARNING_KIND_REDUCED_PROTECTION WarningKind = 2
 	WarningKind_WARNING_KIND_SELF_SIGNED_TLS    WarningKind = 3
 	WarningKind_WARNING_KIND_NTP_UNSYNCED       WarningKind = 4
@@ -246,6 +249,158 @@ func (WarningKind) EnumDescriptor() ([]byte, []int) {
 	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{2}
 }
 
+type HideProtectionNoticeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reason        string                 `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HideProtectionNoticeRequest) Reset() {
+	*x = HideProtectionNoticeRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HideProtectionNoticeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HideProtectionNoticeRequest) ProtoMessage() {}
+
+func (x *HideProtectionNoticeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HideProtectionNoticeRequest.ProtoReflect.Descriptor instead.
+func (*HideProtectionNoticeRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *HideProtectionNoticeRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type HideProtectionNoticeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// hidden is false when the request's reason isn't the box's reason now
+	// (reload Status and ask again) or protection is full.
+	Hidden        bool `protobuf:"varint,1,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HideProtectionNoticeResponse) Reset() {
+	*x = HideProtectionNoticeResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HideProtectionNoticeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HideProtectionNoticeResponse) ProtoMessage() {}
+
+func (x *HideProtectionNoticeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HideProtectionNoticeResponse.ProtoReflect.Descriptor instead.
+func (*HideProtectionNoticeResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *HideProtectionNoticeResponse) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
+// ProtectionNotice says whether an admin hid the reduced-protection
+// banner for the level and reason the box has now, who and when.
+type ProtectionNotice struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hidden        bool                   `protobuf:"varint,1,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	HiddenBy      string                 `protobuf:"bytes,2,opt,name=hidden_by,json=hiddenBy,proto3" json:"hidden_by,omitempty"`
+	HiddenAt      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=hidden_at,json=hiddenAt,proto3" json:"hidden_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProtectionNotice) Reset() {
+	*x = ProtectionNotice{}
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProtectionNotice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProtectionNotice) ProtoMessage() {}
+
+func (x *ProtectionNotice) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProtectionNotice.ProtoReflect.Descriptor instead.
+func (*ProtectionNotice) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProtectionNotice) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
+func (x *ProtectionNotice) GetHiddenBy() string {
+	if x != nil {
+		return x.HiddenBy
+	}
+	return ""
+}
+
+func (x *ProtectionNotice) GetHiddenAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.HiddenAt
+	}
+	return nil
+}
+
 type CleanUpDiskRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -254,7 +409,7 @@ type CleanUpDiskRequest struct {
 
 func (x *CleanUpDiskRequest) Reset() {
 	*x = CleanUpDiskRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -266,7 +421,7 @@ func (x *CleanUpDiskRequest) String() string {
 func (*CleanUpDiskRequest) ProtoMessage() {}
 
 func (x *CleanUpDiskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[0]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -279,7 +434,7 @@ func (x *CleanUpDiskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanUpDiskRequest.ProtoReflect.Descriptor instead.
 func (*CleanUpDiskRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{0}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{3}
 }
 
 type CleanUpDiskResponse struct {
@@ -291,7 +446,7 @@ type CleanUpDiskResponse struct {
 
 func (x *CleanUpDiskResponse) Reset() {
 	*x = CleanUpDiskResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -303,7 +458,7 @@ func (x *CleanUpDiskResponse) String() string {
 func (*CleanUpDiskResponse) ProtoMessage() {}
 
 func (x *CleanUpDiskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -316,7 +471,7 @@ func (x *CleanUpDiskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanUpDiskResponse.ProtoReflect.Descriptor instead.
 func (*CleanUpDiskResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{1}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *CleanUpDiskResponse) GetCleanup() *DiskCleanup {
@@ -342,7 +497,7 @@ type DiskCleanup struct {
 
 func (x *DiskCleanup) Reset() {
 	*x = DiskCleanup{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -354,7 +509,7 @@ func (x *DiskCleanup) String() string {
 func (*DiskCleanup) ProtoMessage() {}
 
 func (x *DiskCleanup) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -367,7 +522,7 @@ func (x *DiskCleanup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskCleanup.ProtoReflect.Descriptor instead.
 func (*DiskCleanup) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{2}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DiskCleanup) GetTime() *timestamppb.Timestamp {
@@ -420,7 +575,7 @@ type DiskCleanupCategory struct {
 
 func (x *DiskCleanupCategory) Reset() {
 	*x = DiskCleanupCategory{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +587,7 @@ func (x *DiskCleanupCategory) String() string {
 func (*DiskCleanupCategory) ProtoMessage() {}
 
 func (x *DiskCleanupCategory) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +600,7 @@ func (x *DiskCleanupCategory) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskCleanupCategory.ProtoReflect.Descriptor instead.
 func (*DiskCleanupCategory) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{3}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DiskCleanupCategory) GetName() string {
@@ -499,7 +654,7 @@ type Volume struct {
 
 func (x *Volume) Reset() {
 	*x = Volume{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -511,7 +666,7 @@ func (x *Volume) String() string {
 func (*Volume) ProtoMessage() {}
 
 func (x *Volume) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -524,7 +679,7 @@ func (x *Volume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Volume.ProtoReflect.Descriptor instead.
 func (*Volume) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{4}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Volume) GetName() string {
@@ -608,7 +763,7 @@ type DataPath struct {
 
 func (x *DataPath) Reset() {
 	*x = DataPath{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +775,7 @@ func (x *DataPath) String() string {
 func (*DataPath) ProtoMessage() {}
 
 func (x *DataPath) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,7 +788,7 @@ func (x *DataPath) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DataPath.ProtoReflect.Descriptor instead.
 func (*DataPath) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{5}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DataPath) GetName() string {
@@ -686,7 +841,7 @@ type GetPhaseRequest struct {
 
 func (x *GetPhaseRequest) Reset() {
 	*x = GetPhaseRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -698,7 +853,7 @@ func (x *GetPhaseRequest) String() string {
 func (*GetPhaseRequest) ProtoMessage() {}
 
 func (x *GetPhaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -711,7 +866,7 @@ func (x *GetPhaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPhaseRequest.ProtoReflect.Descriptor instead.
 func (*GetPhaseRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{6}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{9}
 }
 
 type GetPhaseResponse struct {
@@ -740,7 +895,7 @@ type GetPhaseResponse struct {
 
 func (x *GetPhaseResponse) Reset() {
 	*x = GetPhaseResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -752,7 +907,7 @@ func (x *GetPhaseResponse) String() string {
 func (*GetPhaseResponse) ProtoMessage() {}
 
 func (x *GetPhaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -765,7 +920,7 @@ func (x *GetPhaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPhaseResponse.ProtoReflect.Descriptor instead.
 func (*GetPhaseResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{7}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetPhaseResponse) GetPhase() string {
@@ -811,7 +966,7 @@ type GetStatusRequest struct {
 
 func (x *GetStatusRequest) Reset() {
 	*x = GetStatusRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +978,7 @@ func (x *GetStatusRequest) String() string {
 func (*GetStatusRequest) ProtoMessage() {}
 
 func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +991,7 @@ func (x *GetStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetStatusRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{8}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{11}
 }
 
 type Warning struct {
@@ -852,7 +1007,7 @@ type Warning struct {
 
 func (x *Warning) Reset() {
 	*x = Warning{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +1019,7 @@ func (x *Warning) String() string {
 func (*Warning) ProtoMessage() {}
 
 func (x *Warning) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +1032,7 @@ func (x *Warning) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Warning.ProtoReflect.Descriptor instead.
 func (*Warning) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{9}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *Warning) GetKind() WarningKind {
@@ -913,7 +1068,7 @@ type Component struct {
 
 func (x *Component) Reset() {
 	*x = Component{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -925,7 +1080,7 @@ func (x *Component) String() string {
 func (*Component) ProtoMessage() {}
 
 func (x *Component) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -938,7 +1093,7 @@ func (x *Component) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Component.ProtoReflect.Descriptor instead.
 func (*Component) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{10}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *Component) GetName() string {
@@ -977,7 +1132,7 @@ type Disk struct {
 
 func (x *Disk) Reset() {
 	*x = Disk{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -989,7 +1144,7 @@ func (x *Disk) String() string {
 func (*Disk) ProtoMessage() {}
 
 func (x *Disk) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1002,7 +1157,7 @@ func (x *Disk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Disk.ProtoReflect.Descriptor instead.
 func (*Disk) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{11}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Disk) GetPath() string {
@@ -1087,14 +1242,22 @@ type GetStatusResponse struct {
 	Volumes   []*Volume   `protobuf:"bytes,28,rep,name=volumes,proto3" json:"volumes,omitempty"`
 	DataPaths []*DataPath `protobuf:"bytes,29,rep,name=data_paths,json=dataPaths,proto3" json:"data_paths,omitempty"`
 	// last_cleanup is the disk cleanup's last run since accessd started.
-	LastCleanup   *DiskCleanup `protobuf:"bytes,30,opt,name=last_cleanup,json=lastCleanup,proto3" json:"last_cleanup,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LastCleanup *DiskCleanup `protobuf:"bytes,30,opt,name=last_cleanup,json=lastCleanup,proto3" json:"last_cleanup,omitempty"`
+	// protection_detail is the reduced level in plain words with how to
+	// raise it (the reduced-protection warning's text); empty for full. It
+	// is set whether or not the notice is hidden.
+	ProtectionDetail string `protobuf:"bytes,31,opt,name=protection_detail,json=protectionDetail,proto3" json:"protection_detail,omitempty"`
+	// protection_notice is set while the reduced-protection banner is
+	// hidden for the level and reason the box has now; Status then leaves
+	// WARNING_KIND_REDUCED_PROTECTION out of warnings.
+	ProtectionNotice *ProtectionNotice `protobuf:"bytes,32,opt,name=protection_notice,json=protectionNotice,proto3" json:"protection_notice,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
 	*x = GetStatusResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1106,7 +1269,7 @@ func (x *GetStatusResponse) String() string {
 func (*GetStatusResponse) ProtoMessage() {}
 
 func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1119,7 +1282,7 @@ func (x *GetStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetStatusResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{12}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetStatusResponse) GetVersion() string {
@@ -1332,6 +1495,20 @@ func (x *GetStatusResponse) GetLastCleanup() *DiskCleanup {
 	return nil
 }
 
+func (x *GetStatusResponse) GetProtectionDetail() string {
+	if x != nil {
+		return x.ProtectionDetail
+	}
+	return ""
+}
+
+func (x *GetStatusResponse) GetProtectionNotice() *ProtectionNotice {
+	if x != nil {
+		return x.ProtectionNotice
+	}
+	return nil
+}
+
 // NetworkChange is the state of the network change window.
 type NetworkChange struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1353,7 +1530,7 @@ type NetworkChange struct {
 
 func (x *NetworkChange) Reset() {
 	*x = NetworkChange{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1365,7 +1542,7 @@ func (x *NetworkChange) String() string {
 func (*NetworkChange) ProtoMessage() {}
 
 func (x *NetworkChange) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1378,7 +1555,7 @@ func (x *NetworkChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NetworkChange.ProtoReflect.Descriptor instead.
 func (*NetworkChange) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{13}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *NetworkChange) GetPending() bool {
@@ -1433,7 +1610,7 @@ type SetSecureBootRequest struct {
 
 func (x *SetSecureBootRequest) Reset() {
 	*x = SetSecureBootRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1445,7 +1622,7 @@ func (x *SetSecureBootRequest) String() string {
 func (*SetSecureBootRequest) ProtoMessage() {}
 
 func (x *SetSecureBootRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1458,7 +1635,7 @@ func (x *SetSecureBootRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecureBootRequest.ProtoReflect.Descriptor instead.
 func (*SetSecureBootRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{14}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *SetSecureBootRequest) GetOn() bool {
@@ -1483,7 +1660,7 @@ type SetSecureBootResponse struct {
 
 func (x *SetSecureBootResponse) Reset() {
 	*x = SetSecureBootResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1495,7 +1672,7 @@ func (x *SetSecureBootResponse) String() string {
 func (*SetSecureBootResponse) ProtoMessage() {}
 
 func (x *SetSecureBootResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_osadmin_v1_status_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1508,14 +1685,22 @@ func (x *SetSecureBootResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecureBootResponse.ProtoReflect.Descriptor instead.
 func (*SetSecureBootResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{15}
+	return file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP(), []int{18}
 }
 
 var File_sneakers_appliance_osadmin_v1_status_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\n" +
-	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\x14\n" +
+	"*sneakers/appliance/osadmin/v1/status.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a)sneakers/appliance/osadmin/v1/power.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"5\n" +
+	"\x1bHideProtectionNoticeRequest\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"6\n" +
+	"\x1cHideProtectionNoticeResponse\x12\x16\n" +
+	"\x06hidden\x18\x01 \x01(\bR\x06hidden\"\x80\x01\n" +
+	"\x10ProtectionNotice\x12\x16\n" +
+	"\x06hidden\x18\x01 \x01(\bR\x06hidden\x12\x1b\n" +
+	"\thidden_by\x18\x02 \x01(\tR\bhiddenBy\x127\n" +
+	"\thidden_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\bhiddenAt\"\x14\n" +
 	"\x12CleanUpDiskRequest\"[\n" +
 	"\x13CleanUpDiskResponse\x12D\n" +
 	"\acleanup\x18\x01 \x01(\v2*.sneakers.appliance.osadmin.v1.DiskCleanupR\acleanup\"\xe2\x01\n" +
@@ -1578,7 +1763,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"used_bytes\x18\x02 \x01(\x04R\tusedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x04R\n" +
 	"totalBytes\x12/\n" +
-	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xa4\f\n" +
+	"\x14growth_bytes_per_day\x18\x04 \x01(\x03R\x11growthBytesPerDay\"\xaf\r\n" +
 	"\x11GetStatusResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x18\n" +
 	"\achannel\x18\x02 \x01(\tR\achannel\x12\x1a\n" +
@@ -1617,7 +1802,9 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\avolumes\x18\x1c \x03(\v2%.sneakers.appliance.osadmin.v1.VolumeR\avolumes\x12F\n" +
 	"\n" +
 	"data_paths\x18\x1d \x03(\v2'.sneakers.appliance.osadmin.v1.DataPathR\tdataPaths\x12M\n" +
-	"\flast_cleanup\x18\x1e \x01(\v2*.sneakers.appliance.osadmin.v1.DiskCleanupR\vlastCleanup\"\xf6\x01\n" +
+	"\flast_cleanup\x18\x1e \x01(\v2*.sneakers.appliance.osadmin.v1.DiskCleanupR\vlastCleanup\x12+\n" +
+	"\x11protection_detail\x18\x1f \x01(\tR\x10protectionDetail\x12\\\n" +
+	"\x11protection_notice\x18  \x01(\v2/.sneakers.appliance.osadmin.v1.ProtectionNoticeR\x10protectionNotice\"\xf6\x01\n" +
 	"\rNetworkChange\x12\x18\n" +
 	"\apending\x18\x01 \x01(\bR\apending\x12.\n" +
 	"\x13revert_seconds_left\x18\x02 \x01(\x05R\x11revertSecondsLeft\x12\x1b\n" +
@@ -1657,12 +1844,13 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x17WARNING_KIND_DISK_SPACE\x10\r\x12\x1c\n" +
 	"\x18WARNING_KIND_DISK_GROWTH\x10\x0e\x12\x19\n" +
 	"\x15WARNING_KIND_DATA_WAL\x10\x0f\x12\x1e\n" +
-	"\x1aWARNING_KIND_AUDIT_ARCHIVE\x10\x102\xb0\x04\n" +
+	"\x1aWARNING_KIND_AUDIT_ARCHIVE\x10\x102\xe9\x05\n" +
 	"\rStatusService\x12y\n" +
 	"\tGetStatus\x12/.sneakers.appliance.osadmin.v1.GetStatusRequest\x1a0.sneakers.appliance.osadmin.v1.GetStatusResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
 	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.set\x12v\n" +
 	"\bGetPhase\x12..sneakers.appliance.osadmin.v1.GetPhaseRequest\x1a/.sneakers.appliance.osadmin.v1.GetPhaseResponse\"\t\xc2\xf3\x18\x02\b\x01\x90\x02\x01\x12\x8c\x01\n" +
-	"\vCleanUpDisk\x121.sneakers.appliance.osadmin.v1.CleanUpDiskRequest\x1a2.sneakers.appliance.osadmin.v1.CleanUpDiskResponse\"\x16\xc2\xf3\x18\x12\x10\x01\x18\x01\"\fdisk.cleanupB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\vCleanUpDisk\x121.sneakers.appliance.osadmin.v1.CleanUpDiskRequest\x1a2.sneakers.appliance.osadmin.v1.CleanUpDiskResponse\"\x16\xc2\xf3\x18\x12\x10\x01\x18\x01\"\fdisk.cleanup\x12\xb6\x01\n" +
+	"\x14HideProtectionNotice\x12:.sneakers.appliance.osadmin.v1.HideProtectionNoticeRequest\x1a;.sneakers.appliance.osadmin.v1.HideProtectionNoticeResponse\"%\xc2\xf3\x18!\x10\x01\"\x1dstatus.protection-notice.hideB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_status_proto_rawDescOnce sync.Once
@@ -1677,66 +1865,73 @@ func file_sneakers_appliance_osadmin_v1_status_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_status_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_sneakers_appliance_osadmin_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_sneakers_appliance_osadmin_v1_status_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_sneakers_appliance_osadmin_v1_status_proto_goTypes = []any{
-	(DiskLevel)(0),                // 0: sneakers.appliance.osadmin.v1.DiskLevel
-	(Protection)(0),               // 1: sneakers.appliance.osadmin.v1.Protection
-	(WarningKind)(0),              // 2: sneakers.appliance.osadmin.v1.WarningKind
-	(*CleanUpDiskRequest)(nil),    // 3: sneakers.appliance.osadmin.v1.CleanUpDiskRequest
-	(*CleanUpDiskResponse)(nil),   // 4: sneakers.appliance.osadmin.v1.CleanUpDiskResponse
-	(*DiskCleanup)(nil),           // 5: sneakers.appliance.osadmin.v1.DiskCleanup
-	(*DiskCleanupCategory)(nil),   // 6: sneakers.appliance.osadmin.v1.DiskCleanupCategory
-	(*Volume)(nil),                // 7: sneakers.appliance.osadmin.v1.Volume
-	(*DataPath)(nil),              // 8: sneakers.appliance.osadmin.v1.DataPath
-	(*GetPhaseRequest)(nil),       // 9: sneakers.appliance.osadmin.v1.GetPhaseRequest
-	(*GetPhaseResponse)(nil),      // 10: sneakers.appliance.osadmin.v1.GetPhaseResponse
-	(*GetStatusRequest)(nil),      // 11: sneakers.appliance.osadmin.v1.GetStatusRequest
-	(*Warning)(nil),               // 12: sneakers.appliance.osadmin.v1.Warning
-	(*Component)(nil),             // 13: sneakers.appliance.osadmin.v1.Component
-	(*Disk)(nil),                  // 14: sneakers.appliance.osadmin.v1.Disk
-	(*GetStatusResponse)(nil),     // 15: sneakers.appliance.osadmin.v1.GetStatusResponse
-	(*NetworkChange)(nil),         // 16: sneakers.appliance.osadmin.v1.NetworkChange
-	(*SetSecureBootRequest)(nil),  // 17: sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	(*SetSecureBootResponse)(nil), // 18: sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
-	(*UpgradeProgress)(nil),       // 20: sneakers.appliance.osadmin.v1.UpgradeProgress
-	(*FactoryReset)(nil),          // 21: sneakers.appliance.osadmin.v1.FactoryReset
-	(*ProductSlots)(nil),          // 22: sneakers.appliance.osadmin.v1.ProductSlots
+	(DiskLevel)(0),                       // 0: sneakers.appliance.osadmin.v1.DiskLevel
+	(Protection)(0),                      // 1: sneakers.appliance.osadmin.v1.Protection
+	(WarningKind)(0),                     // 2: sneakers.appliance.osadmin.v1.WarningKind
+	(*HideProtectionNoticeRequest)(nil),  // 3: sneakers.appliance.osadmin.v1.HideProtectionNoticeRequest
+	(*HideProtectionNoticeResponse)(nil), // 4: sneakers.appliance.osadmin.v1.HideProtectionNoticeResponse
+	(*ProtectionNotice)(nil),             // 5: sneakers.appliance.osadmin.v1.ProtectionNotice
+	(*CleanUpDiskRequest)(nil),           // 6: sneakers.appliance.osadmin.v1.CleanUpDiskRequest
+	(*CleanUpDiskResponse)(nil),          // 7: sneakers.appliance.osadmin.v1.CleanUpDiskResponse
+	(*DiskCleanup)(nil),                  // 8: sneakers.appliance.osadmin.v1.DiskCleanup
+	(*DiskCleanupCategory)(nil),          // 9: sneakers.appliance.osadmin.v1.DiskCleanupCategory
+	(*Volume)(nil),                       // 10: sneakers.appliance.osadmin.v1.Volume
+	(*DataPath)(nil),                     // 11: sneakers.appliance.osadmin.v1.DataPath
+	(*GetPhaseRequest)(nil),              // 12: sneakers.appliance.osadmin.v1.GetPhaseRequest
+	(*GetPhaseResponse)(nil),             // 13: sneakers.appliance.osadmin.v1.GetPhaseResponse
+	(*GetStatusRequest)(nil),             // 14: sneakers.appliance.osadmin.v1.GetStatusRequest
+	(*Warning)(nil),                      // 15: sneakers.appliance.osadmin.v1.Warning
+	(*Component)(nil),                    // 16: sneakers.appliance.osadmin.v1.Component
+	(*Disk)(nil),                         // 17: sneakers.appliance.osadmin.v1.Disk
+	(*GetStatusResponse)(nil),            // 18: sneakers.appliance.osadmin.v1.GetStatusResponse
+	(*NetworkChange)(nil),                // 19: sneakers.appliance.osadmin.v1.NetworkChange
+	(*SetSecureBootRequest)(nil),         // 20: sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	(*SetSecureBootResponse)(nil),        // 21: sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	(*timestamppb.Timestamp)(nil),        // 22: google.protobuf.Timestamp
+	(*UpgradeProgress)(nil),              // 23: sneakers.appliance.osadmin.v1.UpgradeProgress
+	(*FactoryReset)(nil),                 // 24: sneakers.appliance.osadmin.v1.FactoryReset
+	(*ProductSlots)(nil),                 // 25: sneakers.appliance.osadmin.v1.ProductSlots
 }
 var file_sneakers_appliance_osadmin_v1_status_proto_depIdxs = []int32{
-	5,  // 0: sneakers.appliance.osadmin.v1.CleanUpDiskResponse.cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
-	19, // 1: sneakers.appliance.osadmin.v1.DiskCleanup.time:type_name -> google.protobuf.Timestamp
-	6,  // 2: sneakers.appliance.osadmin.v1.DiskCleanup.categories:type_name -> sneakers.appliance.osadmin.v1.DiskCleanupCategory
-	0,  // 3: sneakers.appliance.osadmin.v1.Volume.level:type_name -> sneakers.appliance.osadmin.v1.DiskLevel
-	19, // 4: sneakers.appliance.osadmin.v1.Volume.level_since:type_name -> google.protobuf.Timestamp
-	20, // 5: sneakers.appliance.osadmin.v1.GetPhaseResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
-	2,  // 6: sneakers.appliance.osadmin.v1.Warning.kind:type_name -> sneakers.appliance.osadmin.v1.WarningKind
-	1,  // 7: sneakers.appliance.osadmin.v1.GetStatusResponse.protection:type_name -> sneakers.appliance.osadmin.v1.Protection
-	14, // 8: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
-	13, // 9: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
-	19, // 10: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
-	12, // 11: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
-	21, // 12: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
-	19, // 13: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
-	20, // 14: sneakers.appliance.osadmin.v1.GetStatusResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
-	22, // 15: sneakers.appliance.osadmin.v1.GetStatusResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
-	16, // 16: sneakers.appliance.osadmin.v1.GetStatusResponse.network_change:type_name -> sneakers.appliance.osadmin.v1.NetworkChange
-	7,  // 17: sneakers.appliance.osadmin.v1.GetStatusResponse.volumes:type_name -> sneakers.appliance.osadmin.v1.Volume
-	8,  // 18: sneakers.appliance.osadmin.v1.GetStatusResponse.data_paths:type_name -> sneakers.appliance.osadmin.v1.DataPath
-	5,  // 19: sneakers.appliance.osadmin.v1.GetStatusResponse.last_cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
-	11, // 20: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
-	17, // 21: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
-	9,  // 22: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
-	3,  // 23: sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk:input_type -> sneakers.appliance.osadmin.v1.CleanUpDiskRequest
-	15, // 24: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	18, // 25: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
-	10, // 26: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
-	4,  // 27: sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk:output_type -> sneakers.appliance.osadmin.v1.CleanUpDiskResponse
-	24, // [24:28] is the sub-list for method output_type
-	20, // [20:24] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	22, // 0: sneakers.appliance.osadmin.v1.ProtectionNotice.hidden_at:type_name -> google.protobuf.Timestamp
+	8,  // 1: sneakers.appliance.osadmin.v1.CleanUpDiskResponse.cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
+	22, // 2: sneakers.appliance.osadmin.v1.DiskCleanup.time:type_name -> google.protobuf.Timestamp
+	9,  // 3: sneakers.appliance.osadmin.v1.DiskCleanup.categories:type_name -> sneakers.appliance.osadmin.v1.DiskCleanupCategory
+	0,  // 4: sneakers.appliance.osadmin.v1.Volume.level:type_name -> sneakers.appliance.osadmin.v1.DiskLevel
+	22, // 5: sneakers.appliance.osadmin.v1.Volume.level_since:type_name -> google.protobuf.Timestamp
+	23, // 6: sneakers.appliance.osadmin.v1.GetPhaseResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	2,  // 7: sneakers.appliance.osadmin.v1.Warning.kind:type_name -> sneakers.appliance.osadmin.v1.WarningKind
+	1,  // 8: sneakers.appliance.osadmin.v1.GetStatusResponse.protection:type_name -> sneakers.appliance.osadmin.v1.Protection
+	17, // 9: sneakers.appliance.osadmin.v1.GetStatusResponse.disk:type_name -> sneakers.appliance.osadmin.v1.Disk
+	16, // 10: sneakers.appliance.osadmin.v1.GetStatusResponse.health:type_name -> sneakers.appliance.osadmin.v1.Component
+	22, // 11: sneakers.appliance.osadmin.v1.GetStatusResponse.tls_expires:type_name -> google.protobuf.Timestamp
+	15, // 12: sneakers.appliance.osadmin.v1.GetStatusResponse.warnings:type_name -> sneakers.appliance.osadmin.v1.Warning
+	24, // 13: sneakers.appliance.osadmin.v1.GetStatusResponse.factory_reset:type_name -> sneakers.appliance.osadmin.v1.FactoryReset
+	22, // 14: sneakers.appliance.osadmin.v1.GetStatusResponse.reverted_at:type_name -> google.protobuf.Timestamp
+	23, // 15: sneakers.appliance.osadmin.v1.GetStatusResponse.upgrade_progress:type_name -> sneakers.appliance.osadmin.v1.UpgradeProgress
+	25, // 16: sneakers.appliance.osadmin.v1.GetStatusResponse.product:type_name -> sneakers.appliance.osadmin.v1.ProductSlots
+	19, // 17: sneakers.appliance.osadmin.v1.GetStatusResponse.network_change:type_name -> sneakers.appliance.osadmin.v1.NetworkChange
+	10, // 18: sneakers.appliance.osadmin.v1.GetStatusResponse.volumes:type_name -> sneakers.appliance.osadmin.v1.Volume
+	11, // 19: sneakers.appliance.osadmin.v1.GetStatusResponse.data_paths:type_name -> sneakers.appliance.osadmin.v1.DataPath
+	8,  // 20: sneakers.appliance.osadmin.v1.GetStatusResponse.last_cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
+	5,  // 21: sneakers.appliance.osadmin.v1.GetStatusResponse.protection_notice:type_name -> sneakers.appliance.osadmin.v1.ProtectionNotice
+	14, // 22: sneakers.appliance.osadmin.v1.StatusService.GetStatus:input_type -> sneakers.appliance.osadmin.v1.GetStatusRequest
+	20, // 23: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:input_type -> sneakers.appliance.osadmin.v1.SetSecureBootRequest
+	12, // 24: sneakers.appliance.osadmin.v1.StatusService.GetPhase:input_type -> sneakers.appliance.osadmin.v1.GetPhaseRequest
+	6,  // 25: sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk:input_type -> sneakers.appliance.osadmin.v1.CleanUpDiskRequest
+	3,  // 26: sneakers.appliance.osadmin.v1.StatusService.HideProtectionNotice:input_type -> sneakers.appliance.osadmin.v1.HideProtectionNoticeRequest
+	18, // 27: sneakers.appliance.osadmin.v1.StatusService.GetStatus:output_type -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	21, // 28: sneakers.appliance.osadmin.v1.StatusService.SetSecureBoot:output_type -> sneakers.appliance.osadmin.v1.SetSecureBootResponse
+	13, // 29: sneakers.appliance.osadmin.v1.StatusService.GetPhase:output_type -> sneakers.appliance.osadmin.v1.GetPhaseResponse
+	7,  // 30: sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk:output_type -> sneakers.appliance.osadmin.v1.CleanUpDiskResponse
+	4,  // 31: sneakers.appliance.osadmin.v1.StatusService.HideProtectionNotice:output_type -> sneakers.appliance.osadmin.v1.HideProtectionNoticeResponse
+	27, // [27:32] is the sub-list for method output_type
+	22, // [22:27] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_status_proto_init() }
@@ -1753,7 +1948,7 @@ func file_sneakers_appliance_osadmin_v1_status_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_status_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_status_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   16,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
