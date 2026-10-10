@@ -27,6 +27,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/consoleui/tui/tuitest"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/network"
 )
 
 var now = time.Date(2026, 10, 7, 18, 3, 0, 0, time.UTC)
@@ -661,5 +662,17 @@ func TestDiskWarningsShowOnTheStatusView(t *testing.T) {
 	}
 	if !crit || !warn {
 		t.Fatalf("critical in the alert colour %v, plain in the warning colour %v", crit, warn)
+	}
+}
+
+// The console's clock and times follow the box's time zone setting; with
+// none, or one it can't load, they stay in UTC.
+func TestTheClockFollowsTheTimeZoneSetting(t *testing.T) {
+	for zone, want := range map[string]string{"America/New_York": "14:03 EDT", "": "18:03 UTC", "Mars/Olympus": "18:03 UTC"} {
+		e := newEnv()
+		e.deps.Chrome.Now = nil
+		e.deps.Network = &consoletest.Network{Current: network.Settings{TimeZone: zone}}
+		d := start(t, e)
+		d.Expect(t, want)
 	}
 }

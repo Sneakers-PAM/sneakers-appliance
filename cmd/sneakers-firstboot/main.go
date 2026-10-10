@@ -16,6 +16,9 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	// The root has no zoneinfo; the box's time zone setting is read from
+	// the copy linked in.
+	_ "time/tzdata"
 
 	log "github.com/Bugs5382/go-log"
 
