@@ -40,6 +40,13 @@ wait_for() {
   say "$what"
 }
 
+# box_running <host> <port>: whether edgefall's loopback listener says
+# the box runs (/_box/state). accessd says so only once the phase loop has
+# brought every phase of the product up (docs/upgrades.md#the-phases).
+box_running() {
+  printf 'GET /_box/state HTTP/1.0\r\nHost: %s\r\n\r\n' "$1" | nc -w 5 "$1" "$2" 2>/dev/null | grep -q '"state":"running"'
+}
+
 # The kernel host name init set at boot: with no name configured and none
 # from DHCP, the box's own, never "(none)".
 say "host name $(uname -n)"
@@ -54,10 +61,16 @@ wait_for "product bundle installed" test -s "$product/bundle.json"
 wait_for "api up" k get --raw /readyz
 wait_for "node ready" k wait --for=condition=Ready node --all --timeout=10s
 wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l app=hello --timeout=10s
+# After a power loss the first Ready hello pod is the old one, restarted
+# in place by the kubelet before the box quiesced it: sample the phases
+# only once the box says running.
+wait_for "box running" box_running 127.0.0.1 9180
 # The lab product's phases (build/lab/product.yaml): each phased pod's
 # restarts, when it started and when it got Ready, for the suite to check
-# the order and that nothing restarted.
+# the order and that nothing restarted, and the scaling the box did (its
+# quiesce, then each phase), for the log.
 say "phase pods: $(k get pods -A -l sneakers-appliance/phase -o jsonpath='{range .items[*]}{.metadata.labels.app} restarts={.status.containerStatuses[0].restartCount} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
+say "scaling events: $(k get events -n sneakers-hello --field-selector reason=ScalingReplicaSet --sort-by=.lastTimestamp -o jsonpath='{range .items[*]}{.lastTimestamp} {.message};{end}')"
 # Every FailedCreatePodSandBox event's message, for the suite to check no
 # pod's network was set up twice at once after a power loss.
 say "sandbox events: $(k get events -A --field-selector reason=FailedCreatePodSandBox -o jsonpath='{range .items[*]}{.message};{end}')"
