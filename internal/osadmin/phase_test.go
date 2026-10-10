@@ -292,11 +292,11 @@ func TestThePhaseSaysUpdatingUntilAProductApplyIsReady(t *testing.T) {
 	p := &fakeProbe{step: productup.StepPods, detail: "Rolling out (12 of 17 ready): waiting for sneakers/sneakers-audit"}
 	b, alice := applyProductWith(t, p)
 	b.finishSetup()
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	if got := b.phase(); got.GetState() != string(boxstate.Updating) || !got.GetProductRunning() {
 		t.Fatalf("rolling out: %v", got)
 	}
 	p.set("", "", nil)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 	b.waitState(boxstate.Running)
 }

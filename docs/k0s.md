@@ -64,8 +64,9 @@ it for a box's first start, when the copy is empty; then there's no CNI config u
 has finished (`install-cniconf` runs after it), so nothing runs a plugin mid-write. A k0s update
 that brings new plugins puts them in the copy at the next k0s start.
 
-The product's progress also waits for the pod network and CoreDNS before it counts the rollout
-(the `cluster_dns` step, [upgrades.md](upgrades.md#the-product-coming-up)).
+A phased product's first phase waits for kube-router and CoreDNS to be ready (the `cluster` step,
+[upgrades.md](upgrades.md#the-phases)), so a sandbox that failed here holds the product's pods back
+rather than starting them with no cluster DNS.
 
 ### Cluster DNS with no DNS server
 

@@ -75,7 +75,7 @@ func applyProductWith(t *testing.T, p *fakeProbe) (*box, *browser) {
 	if err := stage(alice, id); err != nil {
 		t.Fatal(err)
 	}
-	if got := steps(alice.progress(t)); got != "verify:DONE stage:DONE switch:PENDING restart:PENDING k0s:PENDING images:PENDING manifests:PENDING cluster_dns:PENDING pods:PENDING product_health:PENDING edge:PENDING" {
+	if got := steps(alice.progress(t)); got != "verify:DONE stage:DONE switch:PENDING restart:PENDING k0s:PENDING images:PENDING manifests:PENDING pods:PENDING product_health:PENDING edge:PENDING" {
 		t.Fatalf("staged: %s", got)
 	}
 	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
@@ -90,7 +90,7 @@ func applyProductWith(t *testing.T, p *fakeProbe) (*box, *browser) {
 func TestAProductApplyFollowsTheProductComingUp(t *testing.T) {
 	p := &fakeProbe{step: productup.StepK0s, detail: "The Kubernetes API doesn't answer yet."}
 	_, alice := applyProductWith(t, p)
-	got := waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:ACTIVE images:PENDING manifests:PENDING cluster_dns:PENDING pods:PENDING product_health:PENDING edge:PENDING")
+	got := waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:ACTIVE images:PENDING manifests:PENDING pods:PENDING product_health:PENDING edge:PENDING")
 	if !got.GetInProgress() || got.GetFailed() {
 		t.Fatalf("coming up %+v", got)
 	}
@@ -98,24 +98,24 @@ func TestAProductApplyFollowsTheProductComingUp(t *testing.T) {
 		t.Fatalf("detail %q", d)
 	}
 	p.set(productup.StepPods, "2 of 5 pods ready", nil)
-	got = waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	got = waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	if d := step(t, got, "pods").GetDetail(); d != "2 of 5 pods ready" {
 		t.Fatalf("detail %q", d)
 	}
 	// A pod that falls over again takes the record back to it, never
 	// leaving a later step active.
 	p.set(productup.StepEdge, "", nil)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:ACTIVE")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:ACTIVE")
 	p.set(productup.StepPods, "4 of 5 pods ready", nil)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	// A probe that fails leaves the step where it was.
 	p.set("", "", errors.New("k0s kubectl: exit status 1"))
 	time.Sleep(30 * time.Millisecond)
-	if got := steps(alice.progress(t)); got != "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING" {
+	if got := steps(alice.progress(t)); got != "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING" {
 		t.Fatalf("after a failed probe: %s", got)
 	}
 	p.set("", "", nil)
-	got = waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	got = waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 	if got.GetInProgress() || got.GetFailed() {
 		t.Fatalf("up %+v", got)
 	}
@@ -126,12 +126,12 @@ func TestAProductApplyFollowsTheProductComingUp(t *testing.T) {
 func TestThePhaseCarriesTheProductComingUp(t *testing.T) {
 	p := &fakeProbe{step: productup.StepImages, detail: "3 of 7 images imported"}
 	b, alice := applyProductWith(t, p)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:ACTIVE manifests:PENDING cluster_dns:PENDING pods:PENDING product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:ACTIVE manifests:PENDING pods:PENDING product_health:PENDING edge:PENDING")
 	ph, err := osadminv1connect.NewStatusServiceClient(b.browser().hc, b.ts.URL).GetPhase(context.Background(), connect.NewRequest(&osadminv1.GetPhaseRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := steps(ph.Msg.GetUpgradeProgress()); got != "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:ACTIVE manifests:PENDING cluster_dns:PENDING pods:PENDING product_health:PENDING edge:PENDING" {
+	if got := steps(ph.Msg.GetUpgradeProgress()); got != "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:ACTIVE manifests:PENDING pods:PENDING product_health:PENDING edge:PENDING" {
 		t.Fatalf("phase %s", got)
 	}
 }
@@ -141,11 +141,11 @@ func TestThePhaseCarriesTheProductComingUp(t *testing.T) {
 func TestAProductThatNeverComesUpFails(t *testing.T) {
 	p := &fakeProbe{step: productup.StepPods, detail: "1 of 5 pods ready"}
 	b, alice := applyProductWith(t, p)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	b.clk.Advance(osadmin.ProductUpBound + time.Minute)
 	alice = b.browser()
 	alice.signIn("alice")
-	got := waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:FAILED product_health:PENDING edge:PENDING")
+	got := waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:FAILED product_health:PENDING edge:PENDING")
 	if got.GetInProgress() || !got.GetFailed() || got.GetCode() != "UPGRADE_PRODUCT_START" {
 		t.Fatalf("failed %+v", got)
 	}
@@ -156,7 +156,7 @@ func TestAProductThatNeverComesUpFails(t *testing.T) {
 func TestARestartResumesFollowingTheProduct(t *testing.T) {
 	p := &fakeProbe{step: productup.StepManifests}
 	b, alice := applyProductWith(t, p)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:ACTIVE cluster_dns:PENDING pods:PENDING product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:ACTIVE pods:PENDING product_health:PENDING edge:PENDING")
 	after := newBox(t, false, withProbe(p))
 	rec, err := os.ReadFile(filepath.Join(b.state, "osadmin-api", "upgrade-progress.json"))
 	if err != nil {
@@ -170,12 +170,12 @@ func TestARestartResumesFollowingTheProduct(t *testing.T) {
 	}
 	owner := after.browser()
 	owner.signIn("alice")
-	if got := steps(owner.progress(t)); got != "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:ACTIVE cluster_dns:PENDING pods:PENDING product_health:PENDING edge:PENDING" {
+	if got := steps(owner.progress(t)); got != "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:ACTIVE pods:PENDING product_health:PENDING edge:PENDING" {
 		t.Fatalf("after the restart: %s", got)
 	}
 	after.srv.ResumeProductUp()
 	p.set("", "", nil)
-	waitSteps(t, owner, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	waitSteps(t, owner, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 }
 
 // The wait is the installed product.yaml's ready.timeout: past it the
@@ -184,7 +184,7 @@ func TestARestartResumesFollowingTheProduct(t *testing.T) {
 func TestTheProductsOwnTimeoutFailsTheInstallWithTheReason(t *testing.T) {
 	p := &fakeProbe{step: productup.StepPods, detail: "Rolling out (3 of 5 ready): waiting for app/api, 0 of 1 updated, 1 running"}
 	b, alice := applyProductWith(t, p)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	if got := step(t, alice.progress(t), "pods").GetLabel(); got != "Rolling out" {
 		t.Fatalf("label %q", got)
 	}
@@ -194,7 +194,7 @@ func TestTheProductsOwnTimeoutFailsTheInstallWithTheReason(t *testing.T) {
 	b.clk.Advance(3 * time.Minute)
 	alice = b.browser()
 	alice.signIn("alice")
-	got := waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:FAILED product_health:PENDING edge:PENDING")
+	got := waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:FAILED product_health:PENDING edge:PENDING")
 	if got.GetInProgress() || !got.GetFailed() || got.GetCode() != "UPGRADE_PRODUCT_START" {
 		t.Fatalf("failed %+v", got)
 	}
@@ -212,7 +212,7 @@ func TestTheProductsOwnTimeoutFailsTheInstallWithTheReason(t *testing.T) {
 func TestAProductRevertWaitsForTheProduct(t *testing.T) {
 	p := &fakeProbe{}
 	b, alice := applyProductWith(t, p)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.3.0", "0.1.0"))
 	if err := stage(alice, id); err != nil {
 		t.Fatal(err)
@@ -220,19 +220,19 @@ func TestAProductRevertWaitsForTheProduct(t *testing.T) {
 	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 	p.set(productup.StepPods, "Rolling out (0 of 1 ready): waiting for app/api, the new version isn't applied yet", nil)
 	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
-	got := waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	got := waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	if got.GetAction() != "revert" || !got.GetInProgress() {
 		t.Fatalf("revert %+v", got)
 	}
 	p.set(productup.StepHealth, "app/api:http /readyz doesn't answer ready yet", nil)
-	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:ACTIVE edge:PENDING")
+	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:ACTIVE edge:PENDING")
 	p.set("", "", nil)
-	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 }
 
 // waitHistory polls the history until its latest entry is action, or
@@ -256,7 +256,7 @@ func waitHistory(t *testing.T, br *browser, action string) *osadminv1.UpgradeEve
 func TestAProductApplyIsInTheHistoryOnlyOnceReady(t *testing.T) {
 	p := &fakeProbe{step: productup.StepPods, detail: "Rolling out (3 of 5 ready): waiting for app/api, 0 of 1 updated, 1 running"}
 	_, alice := applyProductWith(t, p)
-	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	if h := alice.upgrades(t).GetHistory()[0]; h.GetAction() != "stage" {
 		t.Fatalf("the apply is in the history while it rolls out: %+v", h)
 	}
@@ -286,7 +286,7 @@ func TestAProductRevertIsInTheHistoryOnlyOnceReady(t *testing.T) {
 	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
 		t.Fatal(err)
 	}
-	got := waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	got := waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
 	if !got.GetInProgress() {
 		t.Fatalf("revert %+v", got)
 	}
@@ -295,7 +295,7 @@ func TestAProductRevertIsInTheHistoryOnlyOnceReady(t *testing.T) {
 		t.Fatalf("the revert is in the history while it rolls out: %+v", h)
 	}
 	p.set("", "", nil)
-	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE cluster_dns:DONE pods:DONE product_health:DONE edge:DONE")
+	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 	if h := waitHistory(t, alice, "revert"); h.GetOutcome() != "ok" || h.GetVersion() != "0.2.0" || h.GetActor() != "alice" {
 		t.Fatalf("history %+v", h)
 	}

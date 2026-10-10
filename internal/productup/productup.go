@@ -3,8 +3,7 @@
 
 // Package productup tells how far the installed product has come up after
 // a product apply or revert restarted k0s: k0s's API answers, the bundle's
-// images are imported, its stacks are applied, the pod network and
-// cluster DNS are ready, every workload in them runs
+// images are imported, its stacks are applied, every workload in them runs
 // the slot's version and has rolled out, the product's own health check
 // answers, and the edge answers 443 with the product, not the box-state
 // page. accessd's osadmin backend (root) asks it every few seconds and
@@ -37,17 +36,16 @@ import (
 // The steps, in the order the product comes up, as UpgradeStep.id names
 // them.
 const (
-	StepK0s        = "k0s"
-	StepImages     = "images"
-	StepManifests  = "manifests"
-	StepClusterDNS = "cluster_dns"
-	StepPods       = "pods"
-	StepHealth     = "product_health"
-	StepEdge       = "edge"
+	StepK0s       = "k0s"
+	StepImages    = "images"
+	StepManifests = "manifests"
+	StepPods      = "pods"
+	StepHealth    = "product_health"
+	StepEdge      = "edge"
 )
 
 // Steps are every step, in order.
-var Steps = []string{StepK0s, StepImages, StepManifests, StepClusterDNS, StepPods, StepHealth, StepEdge}
+var Steps = []string{StepK0s, StepImages, StepManifests, StepPods, StepHealth, StepEdge}
 
 // Result is the first step that isn't done, with what it waits for; Step
 // is empty once the product answers on 443.
@@ -153,11 +151,6 @@ func (p *Probe) Check(ctx context.Context) (Result, error) {
 		return Result{}, err
 	} else if len(missing) > 0 {
 		return Result{Step: StepManifests, Detail: "Waiting for " + strings.Join(missing, ", ")}, nil
-	}
-	if waiting, err := p.clusterDNS(ctx); err != nil {
-		return Result{}, err
-	} else if waiting != "" {
-		return Result{Step: StepClusterDNS, Detail: waiting}, nil
 	}
 	if waiting, err := p.rollout(ctx, on); err != nil {
 		return Result{}, err
@@ -546,72 +539,6 @@ func rolledOut(w workload) string {
 		return "the new revision isn't current yet"
 	}
 	return ""
-}
-
-// The kube-system workloads the product's pods need first: kube-router
-// runs the pod network (and installs the CNI plugins), CoreDNS answers
-// the cluster's names.
-const (
-	podNetwork = "kube-router"
-	clusterDNS = "coredns"
-)
-
-type systemWorkload struct {
-	Kind     string `json:"kind"`
-	Metadata struct {
-		Name string `json:"name"`
-	} `json:"metadata"`
-	Spec struct {
-		Replicas *int64 `json:"replicas"`
-	} `json:"spec"`
-	Status struct {
-		DesiredNumberScheduled int64 `json:"desiredNumberScheduled"`
-		NumberReady            int64 `json:"numberReady"`
-		ReadyReplicas          int64 `json:"readyReplicas"`
-	} `json:"status"`
-}
-
-// clusterDNS says what the pod network and cluster DNS wait for, or ""
-// once kube-router is ready on every node and at least one CoreDNS is
-// ready (the kube-dns Service has an endpoint). After a reboot every pod
-// starts at once, and a product service that looks a name up before
-// CoreDNS answers gets "connection refused"; the detail names which of the
-// two holds the product, which is what a timeout reports.
-func (p *Probe) clusterDNS(ctx context.Context) (string, error) {
-	out, err := p.kubectl(ctx, "get", "daemonsets,deployments", "--namespace", "kube-system", "-o", "json")
-	if err != nil {
-		return "", err
-	}
-	var l struct {
-		Items []systemWorkload `json:"items"`
-	}
-	if err := json.Unmarshal(out, &l); err != nil {
-		return "", fmt.Errorf("the kube-system workload list doesn't parse: %w", err)
-	}
-	var network, dns *systemWorkload
-	for i, w := range l.Items {
-		switch {
-		case w.Kind == "DaemonSet" && w.Metadata.Name == podNetwork:
-			network = &l.Items[i]
-		case w.Kind == "Deployment" && w.Metadata.Name == clusterDNS:
-			dns = &l.Items[i]
-		}
-	}
-	switch {
-	case network == nil:
-		return "The pod network isn't ready: kube-router isn't there yet", nil
-	case network.Status.DesiredNumberScheduled == 0 || network.Status.NumberReady < network.Status.DesiredNumberScheduled:
-		return fmt.Sprintf("The pod network isn't ready: kube-router %d of %d ready", network.Status.NumberReady, network.Status.DesiredNumberScheduled), nil
-	case dns == nil:
-		return "Cluster DNS isn't ready: CoreDNS isn't there yet", nil
-	case dns.Status.ReadyReplicas < 1:
-		want := int64(1)
-		if dns.Spec.Replicas != nil {
-			want = *dns.Spec.Replicas
-		}
-		return fmt.Sprintf("Cluster DNS isn't ready: CoreDNS %d of %d ready", dns.Status.ReadyReplicas, want), nil
-	}
-	return "", nil
 }
 
 // images counts the bundle's images that containerd has: each archive is

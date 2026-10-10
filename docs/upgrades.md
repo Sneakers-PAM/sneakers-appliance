@@ -88,7 +88,7 @@ header is read, so a product stage never shows the base's slot, reboot or health
 ### The product coming up
 
 Restarting the product only starts k0s; the product takes minutes more to be ready. So a product
-apply or revert goes on past `restart` with seven more steps, and stays `in_progress` until the
+apply or revert goes on past `restart` with six more steps, and stays `in_progress` until the
 product is ready. Updates, the restart page and the console's maintenance screen show them like
 the others. Until the product is ready the box state is `updating`, so 443 answers every product
 request, sign-in and MCP included, with "Sneakers-PAM is updating" ([edge-fallback.md](edge-fallback.md#the-gate)):
@@ -103,7 +103,6 @@ the switch, the stop or the reboot, accessd pushes `updating` (with its kind, `u
 | `k0s` | Starting k0s | the Kubernetes API answers (`/readyz`) |
 | `images` | Importing the images | containerd lists every image in the bundle's `images/` (the detail counts them) |
 | `manifests` | Applying the product's stacks | every stack in the bundle's `manifests/` (but those a switch has off) has an object labelled `k0s.k0sproject.io/stack` (the detail names those still missing) |
-| `cluster_dns` | Waiting for the pod network and cluster DNS | kube-router's DaemonSet is ready on every node and at least one CoreDNS is ready, so the product's services find cluster DNS when they start. The detail names which one holds it ("The pod network isn't ready: kube-router 0 of 1 ready", "Cluster DNS isn't ready: CoreDNS 0 of 2 ready"); when the product's bound runs out here, that's the reason the update fails with |
 | `pods` | Rolling out | every Deployment, StatefulSet and DaemonSet in the slot's stacks is there and its pod template is the slot's (with the box's values put in: each container's image, command, arguments and environment, and the template's annotations, where a chart puts its config checksums, so a change that keeps the image counts too), and it and every other workload k0s labels with a stack has rolled out (the controller saw the latest spec, every replica is updated and available, a StatefulSet's revision is current); then every pod that should run is Ready and no old pod is still stopping. The detail reads "Rolling out (n of m ready): waiting for `<namespace>/<name>`, why", or counts the pods and names one that waits ("1 of 14 pods ready: app/api-7c9 CrashLoopBackOff") |
 | `product_health` | Checking the product's health | the health check the slot's product.yaml declares (`ready.health`) answers 2xx; done at once when it declares none |
 | `edge` | Opening the product on 443 | `https://127.0.0.1:443/` answers without `Sneakers-Box-State` and not with 502 to 504: the product, not edgefall's page or an edge error |
