@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The box-state poller (docs/edge-fallback.md). A product page loads it
-// from /_box/poll.js. It asks /_box/state every second and, while the box
-// isn't running or doesn't answer, lays the branded box-state page over
+// from /_box/poll.js. It asks /_box/state about every 45 seconds while the
+// box runs, and every second while it doesn't, can't be reached, or one of
+// the page's own requests just failed; a hidden tab doesn't ask. While the
+// box isn't running or doesn't answer, it lays the branded box-state page over
 // the product, in the installed product's colours and logo when its
 // bundle carries a brand (the state answer names them). It never navigates while the box is away, so the tab never
 // shows a browser error page; once the box answers running and the page
@@ -14,8 +16,20 @@
   if (window.__sneakersBox) return;
   window.__sneakersBox = true;
 
-  var POLL_MS = 1000;
-  var TIMEOUT_MS = 1500;
+  // Every second while something is under way; about every 45 seconds,
+  // spread by up to 7.5 seconds either way so open tabs don't ask in step,
+  // while the box runs.
+  var FAST_MS = 1000;
+  var STEADY_MS = 45000;
+  var JITTER_MS = 7500;
+  // How long the poller keeps asking every second after a page request
+  // answered with the box-state header or failed.
+  var ALERT_MS = 30000;
+  // Long enough for a box under load or a browser queueing the ask behind
+  // the page's own requests: a shorter one gave up on answers that were on
+  // their way, and each miss made it ask faster. Only one ask is out at a
+  // time.
+  var TIMEOUT_MS = 5000;
   // A single lost answer isn't the box going away.
   var MISSES = 2;
   // After this long the page offers a reload, which is how the browser
@@ -39,6 +53,10 @@
   var misses = 0;
   var shownAt = onPage ? Date.now() : 0;
   var busy = false;
+  var seen = last;
+  var alertAt = -ALERT_MS;
+  var timer = null;
+  var realFetch = window.fetch.bind(window);
   var reloading = false;
   var ui = null;
   // The base look; the state answer's brand replaces it.
@@ -150,7 +168,7 @@
   function get(url, method) {
     var ctl = window.AbortController ? new AbortController() : null;
     var timer = setTimeout(function () { if (ctl) ctl.abort(); }, TIMEOUT_MS);
-    return fetch(url, { method: method, cache: "no-store", credentials: "same-origin", signal: ctl ? ctl.signal : undefined })
+    return realFetch(url, { method: method, cache: "no-store", credentials: "same-origin", signal: ctl ? ctl.signal : undefined })
       .finally(function () { clearTimeout(timer); });
   }
 
@@ -165,6 +183,43 @@
     }, function () {});
   }
 
+  function steady() {
+    return seen === "running" && !ui && !onPage && misses === 0 && Date.now() - alertAt >= ALERT_MS;
+  }
+
+  function delay() {
+    return steady() ? Math.round(STEADY_MS - JITTER_MS + Math.random() * 2 * JITTER_MS) : FAST_MS;
+  }
+
+  function schedule(ms) {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    if (document.hidden || reloading) return;
+    timer = setTimeout(function () { timer = null; tick(); }, ms);
+  }
+
+  // One of the page's own requests met the box's fallback or no answer at
+  // all: ask now, and every second for a while.
+  function alert() {
+    alertAt = Date.now();
+    if (!busy) schedule(0);
+  }
+
+  window.fetch = function () {
+    return realFetch.apply(window, arguments).then(function (res) {
+      if (res && res.headers && res.headers.get(STATE_HEADER)) alert();
+      return res;
+    }, function (err) {
+      if (!err || err.name !== "AbortError") alert();
+      throw err;
+    });
+  };
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) schedule(0);
+    else if (!busy) tick();
+  });
+
   function tick() {
     if (busy || reloading) return;
     busy = true;
@@ -177,6 +232,7 @@
         misses = 0;
         if (j) brand(j.brand);
         var state = j && typeof j.state === "string" ? j.state : "";
+        seen = state;
         if (state === "running") {
           if (ui || onPage) return back();
           return;
@@ -185,12 +241,17 @@
         last = state;
         show(state, true);
       }, function () {
+        // A browser holds back a hidden tab's requests and timers, so an
+        // ask that fails while hidden says nothing about the box.
+        if (document.hidden) return;
         misses++;
         if (ui || onPage || misses >= MISSES || WORDS[last]) show(last, false);
       })
-      .finally(function () { busy = false; });
+      .finally(function () {
+        busy = false;
+        schedule(delay());
+      });
   }
 
-  setInterval(tick, POLL_MS);
   tick();
 })();

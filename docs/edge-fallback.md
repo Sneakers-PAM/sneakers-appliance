@@ -138,8 +138,17 @@ A product page includes it:
 <script src="/_box/poll.js" defer></script>
 ```
 
-It asks `/_box/state` every second (each ask times out after 1.5 seconds). While the state isn't
-`running`, it lays the branded page over the product (a closed shadow root, styled through the DOM,
+It asks `/_box/state` once when the page loads (one ask at a time, each given up after 5 seconds), then:
+
+- about every 45 seconds while the box answers `running`, spread by up to 7.5 seconds either way so
+  open tabs don't ask in step;
+- every second while the state isn't `running`, while the box doesn't answer, and for 30 seconds
+  after one of the page's own `fetch` requests answers with the `Sneakers-Box-State` header or
+  fails with a network error (the poller watches the page's `fetch` for that, and asks at once);
+- never while the tab is hidden (an ask that fails while it is hidden doesn't count as a miss); when
+  the tab is shown again it asks at once.
+
+While the state isn't `running`, it lays the branded page over the product (a closed shadow root, styled through the DOM,
 so a product's CSP needs only `script-src 'self'` and `connect-src 'self'`). When nothing answers,
 it keeps the last state it saw; two missed answers in a row with nothing seen yet say "Sneakers-PAM
 can't be reached", and after a shutdown "Sneakers-PAM has shut down". It never navigates while the
@@ -154,7 +163,7 @@ page does.
 | Window | What answers 443 | What an open tab shows |
 |---|---|---|
 | running | Traefik, the product | the product; the poller asks Traefik's `/_box/state` |
-| reboot or shutdown accepted, k0s still stopping | Traefik, `/_box/state` from edgefall | the overlay, within about 2 seconds |
+| reboot or shutdown accepted, k0s still stopping | Traefik, `/_box/state` from edgefall | the overlay at the next ask (within about 50 seconds), or at once when a page request meets the fallback |
 | k0s stopped, the box still draining | edgefall | the overlay; a new visit gets the page |
 | the power is off, firmware, early boot | nothing | the overlay, kept |
 | booted, k0s not started | edgefall (`starting`) | the overlay |
