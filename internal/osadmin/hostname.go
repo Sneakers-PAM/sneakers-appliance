@@ -28,6 +28,8 @@ type BoxValues interface {
 	Recorded() string
 	// Ensure records the FQDN now, and says whether it changed.
 	Ensure(ctx context.Context) (string, bool, error)
+	// RecordVersions records the Base OS and Base Web versions now.
+	RecordVersions() error
 }
 
 // hostNameRetry is how long the host name follower waits before it looks
@@ -35,11 +37,15 @@ type BoxValues interface {
 const hostNameRetry = time.Minute
 
 // recordBoxValues records the box's values for the stacks a product apply
-// or revert puts in place; when netd doesn't answer the recorded ones
-// stay, and the product starts with them.
+// or revert puts in place (its Base OS and Base Web versions, and its
+// FQDN); when netd doesn't answer the recorded FQDN stays, and the product
+// starts with it.
 func (s *Server) recordBoxValues(ctx context.Context) {
 	if s.o.BoxValues == nil {
 		return
+	}
+	if err := s.o.BoxValues.RecordVersions(); err != nil {
+		s.o.Logger.Warn("osadmin: the box's versions weren't recorded; the product keeps the recorded ones", log.F("error", err.Error()))
 	}
 	fqdn, changed, err := s.o.BoxValues.Ensure(ctx)
 	if err != nil {

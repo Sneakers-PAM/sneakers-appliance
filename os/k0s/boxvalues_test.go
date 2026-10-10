@@ -108,3 +108,37 @@ func TestK0sInterimPutsTheBoxsValuesInTheStacks(t *testing.T) {
 		})
 	}
 }
+
+// The Base OS and Base Web versions the box recorded go into a stack the
+// same way as its FQDN.
+func TestK0sInterimPutsTheBoxsVersionsInTheStacks(t *testing.T) {
+	dir := t.TempDir()
+	src, dst := filepath.Join(dir, "slot")+"/", filepath.Join(dir, "k0s")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	stack := "env:\n  SNEAKERS_APPLIANCE_VERSION: baseos-version.invalid\n  SNEAKERS_APPLIANCE_WEB_VERSION: baseweb-version.invalid\n  SNEAKERS_APPLIANCE_FQDN: " + placeholder + "\n" // scrub:allow=fqdn -- the reserved .invalid placeholders, never resolved
+	if err := os.WriteFile(filepath.Join(src, "sneakers.yaml"), []byte(stack), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	placeholders := filepath.Join(dir, "box-values.slot")
+	if err := os.WriteFile(placeholders, []byte(placeholder+" box.fqdn\nbaseos-version.invalid box.os.version\nbaseweb-version.invalid box.web.version\n"), 0o644); err != nil { // scrub:allow=fqdn -- the reserved .invalid placeholders, never resolved
+		t.Fatal(err)
+	}
+	state := t.TempDir()
+	if err := boxvalues.Write(state, map[string]string{productspec.BoxFQDN: "box1.example.org"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := boxvalues.RecordVersions(state, "0.1.0-m+lab.2", "0.1.0-m"); err != nil {
+		t.Fatal(err)
+	}
+	placeStack(t, src, dst, placeholders, filepath.Join(state, boxvalues.File), "sneakers-0a1b2c3d")
+	got, err := os.ReadFile(filepath.Join(dst, "sneakers.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "env:\n  SNEAKERS_APPLIANCE_VERSION: 0.1.0-m+lab.2\n  SNEAKERS_APPLIANCE_WEB_VERSION: 0.1.0-m\n  SNEAKERS_APPLIANCE_FQDN: box1.example.org\n"
+	if string(got) != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}

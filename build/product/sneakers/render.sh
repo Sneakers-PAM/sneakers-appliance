@@ -27,6 +27,10 @@
 # The stacks carry no secret value: every Secret they read is a box secret
 # product.yaml declares, made on each box (internal/boxsecrets).
 #
+# The gateway gets the release's version (metadata.version) as
+# SNEAKERS_PRODUCT_VERSION, and the box's values (values.yaml) for the
+# product's About and diagnostics.
+#
 # Inputs (environment):
 #   CHARTS        a sneakers-release checkout (its charts/ are copied, never changed)
 #   RELEASE       the release.yaml every image is pinned in, by digest (for a
@@ -58,6 +62,10 @@ echo "render: charts from $(git -C "$CHARTS" rev-parse HEAD 2>/dev/null || echo 
 PATH="$work/bin:$PATH" bash "$work/release/scripts/build-deps.sh" >/dev/null
 values=(-f "$chart/examples/values-small-box.yaml" -f "$CHARTS/migrate/deploy/migrate-callers-values.yaml" -f "$here/values.yaml")
 [ -z "${EXTRA_VALUES:-}" ] || values+=(-f "$EXTRA_VALUES")
+# The product's own version for its About: the release's.
+product_version="$(go run "$root/build/tools/bundle" version --release "$RELEASE")"
+values+=(--set-string "gateway.env.SNEAKERS_PRODUCT_VERSION=$product_version")
+echo "render: product version $product_version"
 "$helm" template sneakers "$chart" -n sneakers --skip-tests "${values[@]}" > "$work/off.yaml"
 "$helm" template sneakers "$chart" -n sneakers --skip-tests "${values[@]}" -f "$here/values-mcp-on.yaml" > "$work/on.yaml"
 mkdir -p "$OUT"

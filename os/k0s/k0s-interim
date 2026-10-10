@@ -82,10 +82,11 @@ switched_off() {
 # place_stack <slot stack dir/> <stack dir> <slot box-values> <box values>
 # <kernel host>: the stack's files, with each placeholder the bundle
 # declares (product.yaml box_values) replaced by the box's own value: the
-# one recorded at the last apply or host name change, else, for box.fqdn,
-# the kernel's host name. internal/boxvalues does the same in Go for
-# productswitch. The values are host names and addresses ([a-z0-9.:[]-]),
-# so they need no quoting in sed; the placeholders' dots are escaped.
+# one recorded at the last apply, host name change or (for the Base OS and
+# Base Web versions) boot, else, for box.fqdn, the kernel's host name.
+# internal/boxvalues does the same in Go for productswitch. The values are
+# host names, addresses and versions ([A-Za-z0-9.:[]+_-]), so they need no
+# quoting in sed; the placeholders' dots are escaped.
 place_stack() {
   expr=""
   if [ -s "$3" ]; then
