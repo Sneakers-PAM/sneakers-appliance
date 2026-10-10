@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -173,4 +174,33 @@ func applyProductOpts(t *testing.T, opts ...func(*box, *osadmin.Options)) (*box,
 		t.Fatal(err)
 	}
 	return b, alice
+}
+
+// Opening an import on a running product asks the product again, so a
+// phased one is held (maintenance) while it's open; closing it asks again,
+// and the held phases come back before the box says running.
+func TestOpeningAndClosingAnImportAsksTheProductAgain(t *testing.T) {
+	p := &phasedProbe{}
+	ib := newImportBox(t, withPhased(p))
+	b := ib.b
+	b.finishSetup()
+	b.setRunning(true)
+	b.waitState(boxstate.Running)
+	ctx := context.Background()
+	alice := b.browser()
+	alice.signIn("alice")
+	alice.stepUp("alice")
+	ic := osadminv1connect.NewImportServiceClient(alice.hc, b.ts.URL)
+	p.set(productup.Result{Step: "phase:front", Detail: "Held while an import is open", Held: true})
+	if _, err := ic.OpenImport(ctx, connect.NewRequest(&osadminv1.OpenImportRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	b.waitState(boxstate.Maintenance)
+	p.set(productup.Result{Step: "phase:front", Detail: "1 of 2 pods ready", Timeout: time.Minute})
+	if _, err := ic.CloseImport(ctx, connect.NewRequest(&osadminv1.CloseImportRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	b.waitState(boxstate.Starting)
+	p.set(productup.Result{})
+	b.waitState(boxstate.Running)
 }
