@@ -57,6 +57,7 @@ func (s *Server) productReadyNow(running bool) bool {
 	}
 	if bound := s.productUpBound(); now.Sub(r.since) > bound {
 		r.ready = true
+		go s.boxChanged()
 		s.o.Logger.Warn("osadmin: the product isn't ready within its bound; the box says running so what works can be reached", log.F("bound", bound.String()))
 		return true
 	}
@@ -87,6 +88,7 @@ func (s *Server) askReady(since time.Time, every time.Duration) {
 	}
 	if ok {
 		r.ready = true
+		defer s.boxChanged()
 		s.o.Logger.Info("osadmin: the product is ready; the box says running", log.F("seconds", int(s.o.Clock.Now().Sub(since).Seconds())))
 		return
 	}
@@ -104,6 +106,7 @@ func (s *Server) productWaitsAgain() {
 // productIsReady records the product ready, as a product apply's or
 // revert's follower saw it.
 func (s *Server) productIsReady() {
+	defer s.boxChanged()
 	s.ready.mu.Lock()
 	defer s.ready.mu.Unlock()
 	s.ready.ready = true

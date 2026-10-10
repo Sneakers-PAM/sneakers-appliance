@@ -15,6 +15,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
@@ -156,7 +157,7 @@ func (h *emailSvc) SetEmail(ctx context.Context, r *connect.Request[osadminv1.Se
 	}
 	by := c.by("product.email.set")
 	v := s.slots().Status().Installed
-	overrode, err := s.beginMaintenance(ctx, "product email settings apply", by, r.Msg.GetElevationOverride())
+	overrode, err := s.beginMaintenance(ctx, "product email settings apply", edgefall.KindProductApply, by, r.Msg.GetElevationOverride())
 	if err != nil {
 		return nil, err
 	}

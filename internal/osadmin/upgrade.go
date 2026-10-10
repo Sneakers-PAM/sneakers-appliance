@@ -36,6 +36,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/basepatch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -171,6 +172,9 @@ type upgrades struct {
 	// or fetch (UPGRADE_BUSY).
 	receiving int
 	staging   bool
+	// maintKind is what the maintenance is for, as the box-state stream
+	// names it (edgefall.KindUpdate or KindProductApply).
+	maintKind string
 }
 
 // Maintenance reports an update being applied or reverted: the elevation
@@ -188,11 +192,13 @@ func (s *Server) Maintenance() bool {
 // and waited for before maintenance goes ahead. Any other active session
 // still refuses. Setting maintenance before the check means none can start
 // in between. It returns the id of the session the override ended.
-func (s *Server) beginMaintenance(ctx context.Context, what string, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, error) {
+func (s *Server) beginMaintenance(ctx context.Context, what, kind string, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, error) {
 	s.upgrades.mu.Lock()
 	s.upgrades.maintUntil = s.o.Clock.Now().Add(MaintenanceBound)
+	s.upgrades.maintKind = kind
 	s.upgrades.mu.Unlock()
 	if s.o.Elevation == nil {
+		s.notifyBox(ctx, nil)
 		return "", nil
 	}
 	var held *elevation.Request
@@ -215,6 +221,8 @@ func (s *Server) beginMaintenance(ctx context.Context, what string, by osaudit.E
 		}
 	}
 	s.o.Logger.Info("osadmin: maintenance on", log.F("what", what))
+	// Every open product tab hears that it started before anything stops.
+	s.notifyBox(ctx, nil)
 	if held == nil {
 		return "", nil
 	}
@@ -270,6 +278,7 @@ func (s *Server) overrideElevation(ctx context.Context, r elevation.Request, by 
 }
 
 func (s *Server) endMaintenance() {
+	defer s.boxChanged()
 	s.upgrades.mu.Lock()
 	defer s.upgrades.mu.Unlock()
 	if !s.upgrades.maintUntil.IsZero() {
@@ -1273,7 +1282,7 @@ func (s *Server) apply(ctx context.Context, by osaudit.Entry, o *osadminv1.Eleva
 	}
 	overrode := ""
 	if err == nil {
-		overrode, err = s.beginMaintenance(ctx, "update applies", by, o)
+		overrode, err = s.beginMaintenance(ctx, "update applies", edgefall.KindUpdate, by, o)
 	}
 	if err == nil {
 		s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_BASE, v, s.otherSlot())
@@ -1471,7 +1480,7 @@ func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadmi
 		return connect.NewResponse(&osadminv1.RevertUpdateResponse{}), nil
 	}
 	c.note("box")
-	overrode, err := h.s.beginMaintenance(ctx, "update reverts", c.by("upgrade.revert"), r.Msg.GetElevationOverride())
+	overrode, err := h.s.beginMaintenance(ctx, "update reverts", edgefall.KindUpdate, c.by("upgrade.revert"), r.Msg.GetElevationOverride())
 	if overrode != "" {
 		c.note("box", "overrode", overrode)
 	}
