@@ -274,6 +274,59 @@ func TestGrowthAndWALWarnings(t *testing.T) {
 	}
 }
 
+// A one-off fill isn't a day's growth: two samples an hour apart don't
+// warn that the volume "grew" 24 times the jump in the last day. Steady
+// growth over hours warns with what it really grew, over that span.
+func TestGrowthWarningSaysWhatReallyGrew(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 40}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	growth := func(r diskguard.Report) string {
+		for _, w := range r.Warnings {
+			if w.Kind == diskguard.WarnGrowth {
+				return w.Detail
+			}
+		}
+		return ""
+	}
+	g.Tick(context.Background())
+	clk.t = clk.t.Add(time.Hour)
+	d.set("/state", 77)
+	if w := growth(g.Tick(context.Background())); w != "" {
+		t.Fatalf("a one-hour fill warns as a day's growth: %q", w)
+	}
+	for range 6 {
+		clk.t = clk.t.Add(time.Hour)
+		d.set("/state", d.pct["/state"]+1)
+		g.Tick(context.Background())
+	}
+	w := growth(g.Tick(context.Background()))
+	if !strings.Contains(w, "in the last 7 hours") || strings.Contains(w, "in the last day") || strings.Contains(w, "about less") {
+		t.Fatalf("growth warning %q", w)
+	}
+}
+
+// A data path the last sample doesn't have yet (the product's paths came
+// after it) is measured for the report, not shown as 0 B until the next
+// hourly sample.
+func TestADataPathNewerThanTheLastSampleIsMeasured(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 40}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	g.DirSize = func(string) (int64, error) { return 5 << 30, nil }
+	g.Tick(context.Background())
+	g.Watches = func() []diskguard.Watch {
+		return []diskguard.Watch{{Name: "database", Label: "The database", Path: "/data/db"}}
+	}
+	clk.t = clk.t.Add(time.Minute)
+	r := g.Tick(context.Background())
+	if len(r.Watches) != 1 || r.Watches[0].Size != 5<<30 {
+		t.Fatalf("%+v", r.Watches)
+	}
+}
+
 // The OS audit archive's flagged files show as a warning before they move.
 func TestAuditArchiveWarning(t *testing.T) {
 	d := &disks{pct: map[string]float64{"/state": 40}, dev: map[string]uint64{}}
