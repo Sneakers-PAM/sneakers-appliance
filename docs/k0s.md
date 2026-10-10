@@ -213,12 +213,17 @@ lab product bundle through the Updates API (`POST /upload`, `StageUpdate`, `Appl
 target product). The lab image's hook (`build/lab/overlay/.../lab-hook`) does nothing unless the
 ESP holds a `lab-hook` file, which only the suite writes: then it reports on the serial line (the
 console service owns the consoles) whether k0s ran before a bundle was installed, and waits for the
-bundle, the API, the node, the hello pod and the edge pod. After three minutes of waiting it
+bundle, the API, the node, the hello pod, the box saying running (edgefall's `/_box/state` on
+127.0.0.1:9180, which says so only once the phase loop has brought every phase up) and the edge
+pod. It samples the phase pods only then: after a power loss the first Ready hello pod is the old
+one, restarted in place by the kubelet before the box quiesced it. After three minutes of waiting it
 prints, once, the pods, the routes and the addresses. The test then fetches `https://<box>/` from
 the host through QEMU's port forward and expects the hello text, checks that 80 redirects to
 https, that SSH and :8443 still answer, that `GetUpgrades` shows the installed product running,
 and that k0s doesn't crash-loop. After a power loss it boots the box again and checks the hook's
 phase pods line (every phased pod Ready with no restarts, the front phase started only once the
-data phase was Ready) and its sandbox events line (no FailedCreatePodSandBox event with the CNI
+data phase was Ready, and none is a pod the first install started: the box quiesced those and
+started new ones), logs its scaling events line (the quiesce, then each phase) and checks its
+sandbox events line (no FailedCreatePodSandBox event with the CNI
 plugin's "exec: already started"). The lab bundle is the one the lab build writes next to the disk
 (`SNEAKERS_PRODUCT`).
