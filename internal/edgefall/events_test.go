@@ -265,12 +265,14 @@ func TestAPushIsSentBeforeItIsAnswered(t *testing.T) {
 	s := openStream(t, eventsServer(t, w).URL+edgefall.EventsPath)
 	s.next()
 	push(t, pushServer(t, w), edgefall.Phase{ProductInstalled: true, ProductRunning: true, State: "updating", Kind: "product-apply", Step: "switch", Detail: "Switching slots"})
+	// The event was flushed before the push was answered; the stream's
+	// reader may still be handing it over, so wait a moment for it.
 	select {
 	case e := <-s.events:
 		if e.State != "updating" || kind(e) != "product-apply" || e.Step != "switch" {
 			t.Fatalf("%+v", e)
 		}
-	default:
+	case <-time.After(time.Second):
 		t.Fatal("the push was answered before the stream had the event")
 	}
 	if w.State() != boxstate.Updating {

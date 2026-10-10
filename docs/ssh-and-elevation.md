@@ -152,7 +152,9 @@ commands and subcommands, the flags (`--admin`, `-o`), and the values the shell 
 time zones after `time-zone=` (the IANA names of tzdata's `zone1970.tab`, and `UTC`), the admins
 after `--admin`, `on` and `off` and `machine-api=` for `<product> mcp`, and `json` or `text`
 after `-o`. `snea` and Tab gives `sneakers `. When Tab can't add anything because more than one
-word fits, a second Tab lists them under the line and draws the prompt again. Only what the login
+word fits, a second Tab keeps the typed line, lists them under it one per line with what each
+does, and draws the prompt again; the value in effect is marked, as in `on   turn the MCP on
+(current)` for `<product> mcp`. A long list of bare words (the time zones) goes in columns. Only what the login
 may run is offered: the other origin's commands never, and an admin who isn't an owner isn't
 offered the owner-only commands (`network set`, `network confirm`, `setup recovery-key`), which
 `help` doesn't list for them either; accessd still checks the role of every call. It's plain Tab
@@ -164,8 +166,20 @@ can start a program. Spaces and tabs separate words, single quotes keep everythi
 quote, double quotes keep everything to the next unescaped double quote (`\"` and `\\` are the only
 escapes inside them), and a backslash outside quotes keeps the next character. `$`, `` ` ``, `;`,
 `|`, `&`, `<`, `>`, `*` and `?` are ordinary characters: `status; id` is the unknown command
-`status;`. A line longer than 64 KiB, with an open quote, a trailing backslash, invalid UTF-8 or a
-control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UNKNOWN`.
+`status;`. The one exception is `?` as the last word: `<command> ?` shows the command's help and the
+values its next argument takes (`sneakers mcp ?` lists `off` and `on`, `network ?` the network
+commands, `updates channel ?` the channels), and asks the appliance nothing; `network set ?` lists
+its keys. A line longer than 64 KiB, with an open quote, a trailing backslash, invalid UTF-8 or a
+control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UNKNOWN`. A usage
+error (`SHELL_PARSE` from a command, such as `updates channel` with no channel) prints its line with
+the code and message as before, then a blank line, the command's usage, examples and flags, and a
+blank line; `-o json` gives the error alone.
+
+`history` lists the command lines typed in this SSH session, numbered, oldest first; a password in a
+URL (an HTTPS proxy's) shows as `***`. The list ends with the session; nothing is written to disk,
+and the answers typed at a prompt (a root-shell code, a confirmation) aren't in it. Up and Down
+recall the menu's command lines the same way: an answer typed at a command's prompt never comes
+back with Up.
 
 | Command | Console | SSH | In this release |
 |---|---|---|---|
@@ -181,6 +195,7 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
 | `updates`, `updates channel rc\|stable\|default`, `updates repo <owner>/<name>\|default` | yes | yes | accessd; see [The update channel](#the-update-channel) |
+| `history` | no | yes | the session itself; this session's command lines |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
 | `<product> mcp [on\|off] [machine-api=on\|off]` (`sneakers mcp ...`) | no | yes | accessd; only while a product is installed; see [The MCP switch](#the-mcp-switch) |
 
@@ -297,7 +312,7 @@ closed shell:
    (`RootShellService.IssueRootShellCode`) and gets an 8-character code: the first 40 bits of the root
    key's ed25519 signature over the challenge, the admin, the SSH source and the expiry. It is bound
    to that login and works once.
-3. The admin types the code into the SSH session (`OpenRootShell`). Three wrong codes close the
+3. The admin types the code into the SSH session (`OpenRootShell`); it isn't echoed. Three wrong codes close the
    challenge, and they count toward the account's lockout. A right one gives a one-minute ticket.
 4. The shell connects to `/run/sneakers/rootshell.sock` with the ticket and the terminal size; accessd
    starts `/usr/libexec/sneakers-elevated` as root with the connection as its terminal and relays
@@ -319,6 +334,8 @@ and `ls -l --full-time` for a file's size and time, because busybox `stat` has n
 also says why `helm list -A` is empty: the product's stacks are k0s manifests the appliance applies
 from the installed bundle, not Helm releases, because the update slots and revert track the
 manifests directly and Helm's release state would sit outside them.
+`history`, ash's own, lists the session's commands, numbered; the history is kept in memory for the
+session only and never written to a file.
 
 With a product installed, `kubectl` and `helm` work in the root shell against its k0s with no setup:
 `KUBECONFIG` is k0s's admin kubeconfig ([k0s.md](k0s.md#kubectl-and-helm-in-the-root-shell)).

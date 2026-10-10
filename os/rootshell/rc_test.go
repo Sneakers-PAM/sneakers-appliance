@@ -33,7 +33,7 @@ func TestHelpListsTheTroubleshootingCommands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	for _, want := range []string{"kubectl get pods -A", "kubectl logs", "k0s status", "helm list -A is empty", "k0s\nmanifests", "exit leaves"} {
+	for _, want := range []string{"kubectl get pods -A", "kubectl logs", "k0s status", "helm list -A is empty", "k0s\nmanifests", "exit leaves", "history "} {
 		if !strings.Contains(out, want) {
 			t.Errorf("help lacks %q:\n%s", want, out)
 		}

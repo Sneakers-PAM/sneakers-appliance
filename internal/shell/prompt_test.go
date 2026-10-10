@@ -22,7 +22,7 @@ func (t *termIO) Read(p []byte) (int, error)  { return t.in.Read(p) }
 func (t *termIO) Write(p []byte) (int, error) { return t.out.Write(p) }
 
 // On the interactive terminal a command's own question (the root shell's
-// "Code:") is its own line: the menu's prompt doesn't follow it on the same
+// "Code:", read without echo) is its own line: the menu's prompt doesn't follow it on the same
 // line, and the menu comes back on a new line after it.
 func TestTheCodePromptAndTheMenuPromptAreSeparateLines(t *testing.T) {
 	b := &recordingBackend{
@@ -37,7 +37,8 @@ func TestTheCodePromptAndTheMenuPromptAreSeparateLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := rw.out.String()
-	if strings.Contains(out, "Code: alice@box1> ") || !strings.Contains(out, "Code: Q7XD-2PNR\r\n") {
+	// The code isn't echoed; the line still ends before the menu comes back.
+	if strings.Contains(out, "Code: alice@box1> ") || !strings.Contains(out, "Code: \r\n") || strings.Contains(out, "Q7XD-2PNR") {
 		t.Fatalf("the code prompt runs into the menu's:\n%q", out)
 	}
 	if !strings.Contains(out, "back in the menu.\r\nalice@box1> ") {
