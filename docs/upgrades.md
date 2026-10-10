@@ -87,31 +87,56 @@ header is read, so a product stage never shows the base's slot, reboot or health
 
 ### The product coming up
 
-Restarting the product only starts k0s; the product takes minutes more to answer. So a product
-apply or revert goes on past `restart` with five more steps, and stays `in_progress` until the
-product answers on 443. Updates, the restart page and the console's maintenance screen show them
-like the others:
+Restarting the product only starts k0s; the product takes minutes more to be ready. So a product
+apply or revert goes on past `restart` with six more steps, and stays `in_progress` until the
+product is ready. Updates, the restart page and the console's maintenance screen show them like
+the others:
 
 | Step | Label | Done when |
 |---|---|---|
 | `k0s` | Starting k0s | the Kubernetes API answers (`/readyz`) |
 | `images` | Importing the images | containerd lists every image in the bundle's `images/` (the detail counts them) |
-| `manifests` | Applying the product's stacks | every stack in the bundle's `manifests/` has an object labelled `k0s.k0sproject.io/stack` (the detail names those still missing) |
-| `pods` | Waiting for the pods to be ready | every stack's Deployment, StatefulSet and DaemonSet has rolled out (the controller saw the latest spec, every replica is updated and available, a StatefulSet's revision is current), every pod that should run is Ready, and no old pod is still stopping; a finished Job's pod doesn't count (the detail names the workload or counts the pods) |
+| `manifests` | Applying the product's stacks | every stack in the bundle's `manifests/` (but those a switch has off) has an object labelled `k0s.k0sproject.io/stack` (the detail names those still missing) |
+| `pods` | Rolling out | every Deployment, StatefulSet and DaemonSet in the slot's stacks is there and its pods run the slot's images, and it and every other workload k0s labels with a stack has rolled out (the controller saw the latest spec, every replica is updated and available, a StatefulSet's revision is current); then every pod that should run is Ready and no old pod is still stopping. The detail reads "Rolling out (n of m ready): waiting for `<namespace>/<name>`, why", or counts the pods and names one that waits ("1 of 14 pods ready: app/api-7c9 CrashLoopBackOff") |
+| `product_health` | Checking the product's health | the health check the slot's product.yaml declares (`ready.health`) answers 2xx; done at once when it declares none |
 | `edge` | Opening the product on 443 | `https://127.0.0.1:443/` answers without `Sneakers-Box-State` and not with 502 to 504: the product, not edgefall's page or an edge error |
 
 accessd (root) asks the installed bundle's own k0s (`k0s kubectl` with
 `/var/lib/k0s/pki/admin.conf`, `k0s ctr` on `/run/k0s/containerd.sock`) every 3 seconds
-(`internal/productup`); the apply has answered by then, and the record follows on its own. The
-edge answering isn't proof on its own: on an update over a running product the old pods answer
-while they drain, so it counts only once the rollout above is done and the old pods are gone. A
-step can go back (a
-pod falls over), and the step after it is pending again. A check that fails leaves the step where
-it was. When the product hasn't come up 20 minutes (`ProductUpBound`) after following began, the
-step it's on fails with `UPGRADE_PRODUCT_START`; the root shell's `kubectl` shows what holds it.
-When accessd restarts in the middle, it picks the record up again at start rather than failing it.
-Downloading from the mirror comes before all of this, as `receiving` and `held_upload` on
-`GetUpgrades`; unpacking is the `stage` step.
+(`internal/productup`); the apply has answered by then, and the record follows on its own. It
+reads the stacks and their workloads from the slot's files, so the appliance names no product's
+workloads. A step can go back (a pod falls over), and the steps after it are pending again. A check
+that fails leaves the step where it was. When accessd restarts in the middle, it picks the record
+up again at start rather than failing it. Downloading from the mirror comes before all of this, as
+`receiving` and `held_upload` on `GetUpgrades`; unpacking is the `stage` step.
+
+### When the product is ready
+
+An install, an update or a revert of the product is done only when the product is ready, not when
+something answers. Right after the restart k0s hasn't applied the new slot's stacks yet (it takes
+it some seconds), so the old workloads look rolled out at their own generation and the old pods
+answer on 443; on an update the old pods keep answering while they drain. So the `pods` step
+compares each workload's images with the slot's before its rollout counts, waits for the rollout
+and the old pods to go, and only then are the product's health check and 443 asked.
+
+The product declares its health check and how long the box waits in its product.yaml:
+
+```yaml
+ready:
+  health:
+    service: app/app-api:http   # <namespace>/<service>:<port>, asked through the service proxy
+    path: /readyz
+  timeout: 15m                  # from 1m to 2h; the box's default is 10 minutes (ProductUpBound)
+```
+
+When the product isn't ready within the timeout after following began, the step it's on fails with
+`UPGRADE_PRODUCT_START`, and its detail says what it waited for ("the product isn't ready after
+15m0s: Rolling out (13 of 14 ready): waiting for app/api, 0 of 1 updated, 1 running"). The record
+is failed, not done, the history gets a failed entry by `osadmin`, and the audit log
+`upgrade.product-not-ready`; the root shell's `kubectl` shows what holds it. A revert waits the same
+way. An import's Verify step waits too: the import restarts the workloads that load the imported
+data, and Verify is refused with `PRODUCT_NOT_READY`, naming what it waits for, until the product is
+ready again.
 
 Each step is pending, active, done or failed, and `in_progress` is set while one is active. A
 failed step carries why in its detail and the failure's code (`UPGRADE_SIGNATURE`, say) in the

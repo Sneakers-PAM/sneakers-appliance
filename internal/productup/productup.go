@@ -3,10 +3,12 @@
 
 // Package productup tells how far the installed product has come up after
 // a product apply or revert restarted k0s: k0s's API answers, the bundle's
-// images are imported, its stacks are applied, the pods are ready and the
-// edge answers 443 with the product, not the box-state page. accessd's
-// osadmin backend (root) asks it every few seconds and shows the answer as
-// the update's steps (docs/upgrades.md).
+// images are imported, its stacks are applied, every workload in them runs
+// the slot's version and has rolled out, the product's own health check
+// answers, and the edge answers 443 with the product, not the box-state
+// page. accessd's osadmin backend (root) asks it every few seconds and
+// shows the answer as the update's steps (docs/upgrades.md). It reads the
+// stacks and their workloads generically; the product names nothing here.
 package productup
 
 import (
@@ -14,7 +16,9 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,6 +27,9 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 )
 
@@ -33,11 +40,12 @@ const (
 	StepImages    = "images"
 	StepManifests = "manifests"
 	StepPods      = "pods"
+	StepHealth    = "product_health"
 	StepEdge      = "edge"
 )
 
 // Steps are every step, in order.
-var Steps = []string{StepK0s, StepImages, StepManifests, StepPods, StepEdge}
+var Steps = []string{StepK0s, StepImages, StepManifests, StepPods, StepHealth, StepEdge}
 
 // Result is the first step that isn't done, with what it waits for; Step
 // is empty once the product answers on 443.
@@ -103,8 +111,11 @@ func (p *Probe) kubectl(ctx context.Context, args ...string) ([]byte, error) {
 
 // Check answers the first step that isn't done. The edge answering isn't
 // proof on its own: on an update over a running product the old pods keep
-// answering while they drain, so every stack's workloads must have rolled
-// out and no old pod may still be stopping before it counts.
+// answering while they drain, and right after the restart k0s hasn't
+// applied the new slot's stacks yet, so the old workloads look rolled out.
+// Every workload in the slot's stacks must run the slot's version and have
+// rolled out, no old pod may still be stopping, and the product's own
+// health check must answer before it counts.
 func (p *Probe) Check(ctx context.Context) (Result, error) {
 	if _, err := p.kubectl(ctx, "get", "--raw", "/readyz"); err != nil {
 		return Result{Step: StepK0s, Detail: "The Kubernetes API doesn't answer yet."}, nil
@@ -114,30 +125,52 @@ func (p *Probe) Check(ctx context.Context) (Result, error) {
 	} else if have < want {
 		return Result{Step: StepImages, Detail: fmt.Sprintf("%d of %d images imported", have, want)}, nil
 	}
-	if missing, err := p.stacks(ctx); err != nil {
+	on, err := p.onStacks()
+	if err != nil {
+		return Result{}, err
+	}
+	if missing, err := p.stacks(ctx, on); err != nil {
 		return Result{}, err
 	} else if len(missing) > 0 {
 		return Result{Step: StepManifests, Detail: "Waiting for " + strings.Join(missing, ", ")}, nil
 	}
-	if waiting, err := p.rollout(ctx); err != nil {
+	if waiting, err := p.rollout(ctx, on); err != nil {
 		return Result{}, err
 	} else if waiting != "" {
 		return Result{Step: StepPods, Detail: waiting}, nil
 	}
-	ready, total, stopping, err := p.pods(ctx)
+	ready, total, stopping, why, err := p.pods(ctx)
 	if err != nil {
 		return Result{}, err
 	}
 	if total == 0 || ready < total {
-		return Result{Step: StepPods, Detail: fmt.Sprintf("%d of %d pods ready", ready, total)}, nil
+		d := fmt.Sprintf("%d of %d pods ready", ready, total)
+		if why != "" {
+			d += ": " + why
+		}
+		return Result{Step: StepPods, Detail: d}, nil
 	}
 	if stopping > 0 {
 		return Result{Step: StepPods, Detail: fmt.Sprintf("%d old %s still stopping", stopping, plural(stopping, "pod", "pods"))}, nil
+	}
+	if h := p.spec().Health(); h != nil {
+		if _, err := p.kubectl(ctx, "get", "--raw", "/api/v1/namespaces/"+h.Namespace()+"/services/"+h.ProxyName()+"/proxy"+h.Path); err != nil {
+			return Result{Step: StepHealth, Detail: h.Service + " " + h.Path + " doesn't answer ready yet"}, nil
+		}
 	}
 	if p.edgeAnswers(ctx) {
 		return Result{}, nil
 	}
 	return Result{Step: StepEdge, Detail: "443 doesn't answer with the product yet."}, nil
+}
+
+// spec is the slot's product.yaml; one that doesn't read declares nothing.
+func (p *Probe) spec() productspec.Spec {
+	s, err := productspec.Load(p.Slot)
+	if err != nil {
+		return productspec.Spec{}
+	}
+	return s
 }
 
 func plural(n int, one, many string) string {
@@ -147,37 +180,156 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-type workloadList struct {
-	Items []struct {
-		Kind     string `json:"kind"`
-		Metadata struct {
-			Namespace  string `json:"namespace"`
-			Name       string `json:"name"`
-			Generation int64  `json:"generation"`
-		} `json:"metadata"`
-		Spec struct {
-			Replicas *int64 `json:"replicas"`
-		} `json:"spec"`
-		Status struct {
-			ObservedGeneration int64  `json:"observedGeneration"`
-			Replicas           int64  `json:"replicas"`
-			UpdatedReplicas    int64  `json:"updatedReplicas"`
-			AvailableReplicas  int64  `json:"availableReplicas"`
-			ReadyReplicas      int64  `json:"readyReplicas"`
-			CurrentRevision    string `json:"currentRevision"`
-			UpdateRevision     string `json:"updateRevision"`
-			// DaemonSets count by nodes.
-			DesiredNumberScheduled int64 `json:"desiredNumberScheduled"`
-			UpdatedNumberScheduled int64 `json:"updatedNumberScheduled"`
-			NumberAvailable        int64 `json:"numberAvailable"`
-		} `json:"status"`
-	} `json:"items"`
+type container struct {
+	Name  string `json:"name" yaml:"name"`
+	Image string `json:"image" yaml:"image"`
 }
 
-// rollout names the first of the stacks' workloads that hasn't rolled out
-// yet: its controller hasn't seen the latest spec, or not every replica is
-// updated and available (the old ones gone); empty when all have.
-func (p *Probe) rollout(ctx context.Context) (string, error) {
+type podSpec struct {
+	InitContainers []container `json:"initContainers" yaml:"initContainers"`
+	Containers     []container `json:"containers" yaml:"containers"`
+}
+
+// images are a pod spec's images by container name.
+func (s podSpec) images() map[string]string {
+	out := map[string]string{}
+	for _, c := range append(append([]container(nil), s.InitContainers...), s.Containers...) {
+		out[c.Name] = c.Image
+	}
+	return out
+}
+
+type workload struct {
+	Kind     string `json:"kind"`
+	Metadata struct {
+		Namespace  string `json:"namespace"`
+		Name       string `json:"name"`
+		Generation int64  `json:"generation"`
+	} `json:"metadata"`
+	Spec struct {
+		Replicas *int64 `json:"replicas"`
+		Template struct {
+			Spec podSpec `json:"spec"`
+		} `json:"template"`
+	} `json:"spec"`
+	Status struct {
+		ObservedGeneration int64  `json:"observedGeneration"`
+		Replicas           int64  `json:"replicas"`
+		UpdatedReplicas    int64  `json:"updatedReplicas"`
+		AvailableReplicas  int64  `json:"availableReplicas"`
+		ReadyReplicas      int64  `json:"readyReplicas"`
+		CurrentRevision    string `json:"currentRevision"`
+		UpdateRevision     string `json:"updateRevision"`
+		// DaemonSets count by nodes.
+		DesiredNumberScheduled int64 `json:"desiredNumberScheduled"`
+		UpdatedNumberScheduled int64 `json:"updatedNumberScheduled"`
+		NumberAvailable        int64 `json:"numberAvailable"`
+	} `json:"status"`
+}
+
+type workloadList struct {
+	Items []workload `json:"items"`
+}
+
+// workloadKinds are the kinds that roll out.
+var workloadKinds = []string{"Deployment", "StatefulSet", "DaemonSet"}
+
+// wanted is a workload in the slot's stacks, with the images its pods
+// run at the slot's version.
+type wanted struct {
+	kind, ns, name string
+	images         map[string]string
+}
+
+func (w wanted) key() string { return w.kind + " " + w.ns + "/" + w.name }
+
+// onStacks are the slot's stacks k0s applies: those whose switch, if any,
+// is on.
+func (p *Probe) onStacks() ([]string, error) {
+	dirs, err := os.ReadDir(filepath.Join(p.Slot, "manifests"))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	off := productswitch.OffStacks(p.Slot, p.SwitchDir)
+	var on []string
+	for _, d := range dirs {
+		if d.IsDir() && !slices.Contains(off, d.Name()) {
+			on = append(on, d.Name())
+		}
+	}
+	return on, nil
+}
+
+// wantedWorkloads are the Deployments, StatefulSets and DaemonSets the
+// slot's stacks hold, read from their files.
+func (p *Probe) wantedWorkloads(stacks []string) ([]wanted, error) {
+	var out []wanted
+	for _, st := range stacks {
+		files, err := filepath.Glob(filepath.Join(p.Slot, "manifests", st, "*.y*ml"))
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			ws, err := readWorkloads(f)
+			if err != nil {
+				return nil, fmt.Errorf("the stack %s doesn't read: %w", st, err)
+			}
+			out = append(out, ws...)
+		}
+	}
+	return out, nil
+}
+
+func readWorkloads(file string) ([]wanted, error) {
+	b, err := os.ReadFile(file) // #nosec G304 -- a stack of the installed slot
+	if err != nil {
+		return nil, err
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	var out []wanted
+	for {
+		var doc struct {
+			Kind     string `yaml:"kind"`
+			Metadata struct {
+				Namespace string `yaml:"namespace"`
+				Name      string `yaml:"name"`
+			} `yaml:"metadata"`
+			Spec struct {
+				Template struct {
+					Spec podSpec `yaml:"spec"`
+				} `yaml:"template"`
+			} `yaml:"spec"`
+		}
+		err := dec.Decode(&doc)
+		if errors.Is(err, io.EOF) {
+			return out, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", filepath.Base(file), err)
+		}
+		if !slices.Contains(workloadKinds, doc.Kind) {
+			continue
+		}
+		ns := doc.Metadata.Namespace
+		if ns == "" {
+			ns = "default"
+		}
+		out = append(out, wanted{kind: doc.Kind, ns: ns, name: doc.Metadata.Name, images: doc.Spec.Template.Spec.images()})
+	}
+}
+
+// rollout says what the stacks' workloads wait for, "Rolling out (n of m
+// ready): waiting for <namespace>/<name>, <why>", or "" once every one has
+// rolled out. A workload of the slot's stacks must be there and its pods
+// must run the slot's images (k0s has applied the new version); then it,
+// like every workload k0s labels with a stack, must have rolled out: its
+// controller has seen the latest spec, and every replica is updated and
+// available (the old ones gone).
+func (p *Probe) rollout(ctx context.Context, stacks []string) (string, error) {
+	want, err := p.wantedWorkloads(stacks)
+	if err != nil {
+		return "", err
+	}
 	out, err := p.kubectl(ctx, "get", "deployments,statefulsets,daemonsets", "--all-namespaces", "-l", StackLabel, "-o", "json")
 	if err != nil {
 		return "", err
@@ -186,30 +338,83 @@ func (p *Probe) rollout(ctx context.Context) (string, error) {
 	if err := json.Unmarshal(out, &l); err != nil {
 		return "", fmt.Errorf("the workload list doesn't parse: %w", err)
 	}
+	live := map[string]workload{}
 	for _, w := range l.Items {
-		name := w.Metadata.Namespace + "/" + w.Metadata.Name
-		st := w.Status
-		if st.ObservedGeneration < w.Metadata.Generation {
-			return "Rolling out " + name + ": the new version isn't picked up yet", nil
-		}
-		if w.Kind == "DaemonSet" {
-			if st.UpdatedNumberScheduled < st.DesiredNumberScheduled || st.NumberAvailable < st.DesiredNumberScheduled {
-				return fmt.Sprintf("Rolling out %s: %d of %d updated", name, st.UpdatedNumberScheduled, st.DesiredNumberScheduled), nil
-			}
+		live[w.Kind+" "+w.Metadata.Namespace+"/"+w.Metadata.Name] = w
+	}
+	var waiting []string
+	seen := map[string]bool{}
+	total := 0
+	for _, w := range want {
+		if seen[w.key()] {
 			continue
 		}
-		want := int64(1)
-		if w.Spec.Replicas != nil {
-			want = *w.Spec.Replicas
-		}
-		if st.UpdatedReplicas < want || st.Replicas > want || st.AvailableReplicas < want && st.ReadyReplicas < want {
-			return fmt.Sprintf("Rolling out %s: %d of %d updated, %d running", name, st.UpdatedReplicas, want, st.Replicas), nil
-		}
-		if w.Kind == "StatefulSet" && st.UpdateRevision != "" && st.CurrentRevision != st.UpdateRevision {
-			return "Rolling out " + name + ": the new revision isn't current yet", nil
+		seen[w.key()] = true
+		total++
+		name := w.ns + "/" + w.name
+		got, ok := live[w.key()]
+		switch {
+		case !ok:
+			waiting = append(waiting, name+", not created yet")
+		case !sameImages(w.images, got.Spec.Template.Spec.images()):
+			waiting = append(waiting, name+", the new version isn't applied yet")
+		default:
+			if why := rolledOut(got); why != "" {
+				waiting = append(waiting, name+", "+why)
+			}
 		}
 	}
-	return "", nil
+	for _, w := range l.Items {
+		key := w.Kind + " " + w.Metadata.Namespace + "/" + w.Metadata.Name
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		total++
+		if why := rolledOut(w); why != "" {
+			waiting = append(waiting, w.Metadata.Namespace+"/"+w.Metadata.Name+", "+why)
+		}
+	}
+	if len(waiting) == 0 {
+		return "", nil
+	}
+	return fmt.Sprintf("Rolling out (%d of %d ready): waiting for %s", total-len(waiting), total, waiting[0]), nil
+}
+
+// sameImages is whether every container the slot names runs the slot's
+// image.
+func sameImages(want, got map[string]string) bool {
+	for name, img := range want {
+		if got[name] != img {
+			return false
+		}
+	}
+	return true
+}
+
+// rolledOut says why w hasn't rolled out yet, or "".
+func rolledOut(w workload) string {
+	st := w.Status
+	if st.ObservedGeneration < w.Metadata.Generation {
+		return "the new version isn't picked up yet"
+	}
+	if w.Kind == "DaemonSet" {
+		if st.UpdatedNumberScheduled < st.DesiredNumberScheduled || st.NumberAvailable < st.DesiredNumberScheduled {
+			return fmt.Sprintf("%d of %d updated", st.UpdatedNumberScheduled, st.DesiredNumberScheduled)
+		}
+		return ""
+	}
+	want := int64(1)
+	if w.Spec.Replicas != nil {
+		want = *w.Spec.Replicas
+	}
+	if st.UpdatedReplicas < want || st.Replicas > want || st.AvailableReplicas < want && st.ReadyReplicas < want {
+		return fmt.Sprintf("%d of %d updated, %d running", st.UpdatedReplicas, want, st.Replicas)
+	}
+	if w.Kind == "StatefulSet" && st.UpdateRevision != "" && st.CurrentRevision != st.UpdateRevision {
+		return "the new revision isn't current yet"
+	}
+	return ""
 }
 
 // images counts the bundle's images that containerd has: each archive is
@@ -232,21 +437,13 @@ func (p *Probe) images(ctx context.Context) (have, want int, err error) {
 	return have, len(tars), nil
 }
 
-// stacks are the bundle's stacks k0s hasn't applied anything of yet.
-func (p *Probe) stacks(ctx context.Context) ([]string, error) {
-	dirs, err := os.ReadDir(filepath.Join(p.Slot, "manifests"))
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-	off := productswitch.OffStacks(p.Slot, p.SwitchDir)
+// stacks are the stacks k0s hasn't applied anything of yet.
+func (p *Probe) stacks(ctx context.Context, on []string) ([]string, error) {
 	var missing []string
-	for _, d := range dirs {
-		if !d.IsDir() || slices.Contains(off, d.Name()) {
-			continue
-		}
-		out, err := p.kubectl(ctx, "get", "namespaces,deployments,daemonsets,statefulsets,services,configmaps", "--all-namespaces", "-l", StackLabel+"="+d.Name(), "-o", "name")
+	for _, st := range on {
+		out, err := p.kubectl(ctx, "get", "namespaces,deployments,daemonsets,statefulsets,services,configmaps,serviceaccounts,roles,rolebindings", "--all-namespaces", "-l", StackLabel+"="+st, "-o", "name")
 		if err != nil || len(bytes.TrimSpace(out)) == 0 {
-			missing = append(missing, d.Name())
+			missing = append(missing, st)
 		}
 	}
 	return missing, nil
@@ -255,6 +452,8 @@ func (p *Probe) stacks(ctx context.Context) ([]string, error) {
 type podList struct {
 	Items []struct {
 		Metadata struct {
+			Namespace         string  `json:"namespace"`
+			Name              string  `json:"name"`
 			DeletionTimestamp *string `json:"deletionTimestamp"`
 		} `json:"metadata"`
 		Status struct {
@@ -263,24 +462,33 @@ type podList struct {
 				Type   string `json:"type"`
 				Status string `json:"status"`
 			} `json:"conditions"`
+			ContainerStatuses []struct {
+				State struct {
+					Waiting *struct {
+						Reason string `json:"reason"`
+					} `json:"waiting"`
+				} `json:"state"`
+			} `json:"containerStatuses"`
 		} `json:"status"`
 	} `json:"items"`
 }
 
 // pods counts the pods that should run and how many of them are ready,
-// and the old ones still stopping (Terminating); a finished pod (a Job's)
-// counts as none of them.
-func (p *Probe) pods(ctx context.Context) (ready, total, stopping int, err error) {
+// and the old ones still stopping (Terminating); why names the first pod
+// that isn't ready and why its container waits (CrashLoopBackOff, say). A
+// finished pod (a Job's) or one that failed for good (evicted) counts as
+// none of them: its controller has replaced it.
+func (p *Probe) pods(ctx context.Context) (ready, total, stopping int, why string, err error) {
 	out, err := p.kubectl(ctx, "get", "pods", "--all-namespaces", "-o", "json")
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, "", err
 	}
 	var l podList
 	if err := json.Unmarshal(out, &l); err != nil {
-		return 0, 0, 0, fmt.Errorf("the pod list doesn't parse: %w", err)
+		return 0, 0, 0, "", fmt.Errorf("the pod list doesn't parse: %w", err)
 	}
 	for _, it := range l.Items {
-		if it.Status.Phase == "Succeeded" {
+		if it.Status.Phase == "Succeeded" || it.Status.Phase == "Failed" {
 			continue
 		}
 		if it.Metadata.DeletionTimestamp != nil {
@@ -288,13 +496,27 @@ func (p *Probe) pods(ctx context.Context) (ready, total, stopping int, err error
 			continue
 		}
 		total++
+		isReady := false
 		for _, c := range it.Status.Conditions {
 			if c.Type == "Ready" && c.Status == "True" {
-				ready++
+				isReady = true
+			}
+		}
+		if isReady {
+			ready++
+			continue
+		}
+		if why != "" {
+			continue
+		}
+		for _, cs := range it.Status.ContainerStatuses {
+			if w := cs.State.Waiting; w != nil && w.Reason != "" {
+				why = it.Metadata.Namespace + "/" + it.Metadata.Name + " " + w.Reason
+				break
 			}
 		}
 	}
-	return ready, total, stopping, nil
+	return ready, total, stopping, why, nil
 }
 
 // edgeAnswers is whether 443 answers with something other than edgefall's

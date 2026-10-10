@@ -30,7 +30,10 @@ one-time setup value its own setup consumes, and what to restart after an import
 - **After an import passes**, the box records it (`/var/lib/sneakers/platform/imported.json`: the
   bundle, the step and the mode; audited as `import.done`) and restarts what the product names (the
   vault, which loads the imported state on start). That is imported-users mode: the product's setup
-  value counts as consumed, so the product's own first-run setup is never offered.
+  value counts as consumed, so the product's own first-run setup is never offered. `verify` waits
+  for the restart: until the product is ready again (every workload rolled out and its health check
+  answering, as after an update: [upgrades.md](upgrades.md#when-the-product-is-ready)), it's refused
+  with `PRODUCT_NOT_READY`, naming what it waits for; try it again once it's ready.
 - **The first admin's password** (`ImportService.TakeOwnerPassword`, step-up,
   `import.owner-password`): an import with the first admin's email makes a one-time password, which
   the Job writes to its own file (`MIGRATE_OWNER_PASSWORD_FILE`), never to the output. The page

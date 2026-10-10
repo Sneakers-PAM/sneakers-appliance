@@ -43,7 +43,7 @@ type importBox struct {
 	restarts []string
 }
 
-func newImportBox(t *testing.T) *importBox {
+func newImportBox(t *testing.T, mods ...func(*box, *osadmin.Options)) *importBox {
 	t.Helper()
 	ib := &importBox{}
 	k := &fakeKube{secrets: map[string]map[string]string{"sneakers/sneakers-setup-token": {"SETUP_TOKEN": "stp_value"}}, state: `{"needsSetup": true}`}
@@ -56,6 +56,9 @@ func newImportBox(t *testing.T) *importBox {
 				return nil
 			}}
 		o.Switches = ib.sw
+		for _, m := range mods {
+			m(b, o)
+		}
 	})
 	dir := filepath.Join(ib.b.state, "product")
 	installProduct(t, dir, importYAML)
@@ -230,5 +233,41 @@ func TestNoImportOpensAfterTheProductsOwnSetup(t *testing.T) {
 	symbolIn(t, err, connect.CodeFailedPrecondition, "NOT_AVAILABLE")
 	if e := lastEntry(t, ib.b.log, "import.open"); e.Outcome == "ok" {
 		t.Fatalf("audit %+v", e)
+	}
+}
+
+// The vault restarts once an import passes, so Verify waits until the
+// product is ready again: while it rolls out, Verify is refused with what
+// it waits for, and runs once it's ready.
+func TestVerifyWaitsForTheProductToBeReady(t *testing.T) {
+	p := &fakeProbe{}
+	ib := newImportBox(t, withProbe(p))
+	ctx := context.Background()
+	alice := ib.b.browser()
+	alice.signIn("alice")
+	alice.stepUp("alice")
+	ic := osadminv1connect.NewImportServiceClient(alice.hc, ib.b.ts.URL)
+	if _, err := ic.OpenImport(ctx, connect.NewRequest(&osadminv1.OpenImportRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if alice.importUpload(t, "bundle", []byte("age-encrypted export")) != http.StatusOK || alice.importUpload(t, "mapping", []byte(`{"format":"sneakers-migrate-mapping"}`)) != http.StatusOK {
+		t.Fatal("the uploads failed")
+	}
+	run, err := ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "import", Wipe: true, OwnerEmail: "owner@example.org"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ib.stepDone(t, run.Msg.GetJob(), 0, map[string]string{".report.json": `{"bundle_id":"b-42","mode":"cutover"}`})
+	if _, err := ic.GetImport(ctx, connect.NewRequest(&osadminv1.GetImportRequest{})); err != nil || len(ib.restarts) != 1 {
+		t.Fatalf("the vault didn't restart: %v %v", ib.restarts, err)
+	}
+	p.set("pods", "Rolling out (4 of 5 ready): waiting for app/vault, 0 of 1 updated, 1 running", nil)
+	_, err = ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "verify"}))
+	if err == nil || !strings.Contains(err.Error(), "PRODUCT_NOT_READY") || !strings.Contains(err.Error(), "waiting for app/vault") {
+		t.Fatalf("verify while the product rolls out: %v", err)
+	}
+	p.set("", "", nil)
+	if _, err := ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "verify"})); err != nil {
+		t.Fatalf("verify once the product is ready: %v", err)
 	}
 }

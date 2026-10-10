@@ -138,8 +138,9 @@ shell, the console and :8443 show the same sentence.
 | 2513 | `UPGRADE_PRODUCT_BASE` | the product bundle doesn't fit the base version this box runs, or a base release is outside the installed product's base range |
 | 2514 | `UPGRADE_NO_REBOOT` | an apply or revert was accepted, but the box didn't reboot within the bound |
 | 2515 | `UPGRADE_BUSY` | a file is already coming in or waiting, or a stage is under way; verify or cancel it first |
-| 2516 | `UPGRADE_PRODUCT_START` | a product apply or revert restarted the product, but it didn't come up and answer on 443 within the bound |
+| 2516 | `UPGRADE_PRODUCT_START` | a product apply or revert restarted the product, but it wasn't ready within the bound: its workloads hadn't rolled out, its health check didn't answer, or 443 didn't answer with it; the failed step says which ([upgrades.md](upgrades.md#when-the-product-is-ready)) |
 | 2517 | `PRODUCT_VALUE_UNAVAILABLE` | the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there ([ssh-and-elevation.md](ssh-and-elevation.md#product-values)) |
+| 2518 | `PRODUCT_NOT_READY` | the product is still coming up or rolling out after an install, an update, a revert or an import's restart; try again once it's ready ([upgrades.md](upgrades.md#when-the-product-is-ready)) |
 | 2520 | `UPGRADE_MIRROR_UNTRUSTED` | the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host; the refusal names the presented certificate's issuer and SHA-256 ([update-mirror.md](update-mirror.md)) |
 | 2521 | `UPGRADE_MIRROR_PIN` | the HTTPS mirror's certificate isn't the one the update trust pins; the refusal names the presented SHA-256 |
 | 2530 | `UPGRADE_COMPAT` | an update unit doesn't fit the other units this box runs, such as a Base Web built for another Base OS; the refusal says what it needs and what to install first ([release.md](release.md#the-three-update-units)) |

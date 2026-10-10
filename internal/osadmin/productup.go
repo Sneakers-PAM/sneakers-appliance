@@ -9,7 +9,9 @@ import (
 
 	log "github.com/Bugs5382/go-log"
 
+	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 )
 
@@ -18,9 +20,10 @@ type ProductProbe interface {
 	Check(ctx context.Context) (productup.Result, error)
 }
 
-// ProductUpBound is how long a product may take to come up after its
-// restart before the step it's on fails with UPGRADE_PRODUCT_START.
-const ProductUpBound = 20 * time.Minute
+// ProductUpBound is how long a product may take to be ready after its
+// restart before the step it's on fails with UPGRADE_PRODUCT_START, unless
+// the installed product.yaml says otherwise (ready.timeout).
+const ProductUpBound = 10 * time.Minute
 
 // DefaultProductUpEvery is how often the product is asked while it comes
 // up.
@@ -31,7 +34,8 @@ var productUpSteps = []progressStep{
 	{ID: productup.StepK0s, Label: "Starting k0s", State: statePending},
 	{ID: productup.StepImages, Label: "Importing the images", State: statePending},
 	{ID: productup.StepManifests, Label: "Applying the product's stacks", State: statePending},
-	{ID: productup.StepPods, Label: "Waiting for the pods to be ready", State: statePending},
+	{ID: productup.StepPods, Label: "Rolling out", State: statePending},
+	{ID: productup.StepHealth, Label: "Checking the product's health", State: statePending},
 	{ID: productup.StepEdge, Label: "Opening the product on 443", State: statePending},
 }
 
@@ -106,8 +110,37 @@ func (s *Server) Close() {
 	s.progress.done.Wait()
 }
 
-// productUpLoop asks the probe until the product answers on 443, the
-// bound passes or another update replaces the record.
+// productUpBound is how long the installed product may take to be ready:
+// its product.yaml's ready.timeout, else ProductUpBound.
+func (s *Server) productUpBound() time.Duration {
+	if _, spec := s.installedSpec(); spec.ReadyTimeout() > 0 {
+		return spec.ReadyTimeout()
+	}
+	return ProductUpBound
+}
+
+// productReady answers whether the product is ready now, and what it
+// waits for when it isn't; with no probe it counts as ready.
+func (s *Server) productReady(ctx context.Context) (bool, string) {
+	if s.o.ProductUp == nil {
+		return true, ""
+	}
+	res, err := s.o.ProductUp.Check(ctx)
+	switch {
+	case err != nil:
+		return false, "its state isn't known: " + err.Error()
+	case res.Step != "":
+		if res.Detail != "" {
+			return false, res.Detail
+		}
+		return false, "it's at the step " + res.Step
+	}
+	return true, ""
+}
+
+// productUpLoop asks the probe until the product is ready (every workload
+// rolled out, its health check and 443 answering), the bound passes or
+// another update replaces the record.
 func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 	every := s.o.Upgrade.ProductUpEvery
 	if every <= 0 {
@@ -137,8 +170,17 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 			at = res.Step
 			s.setStep(res.Step, res.Detail)
 		}
-		if s.o.Clock.Now().Sub(since) > ProductUpBound {
-			s.failStep(at, codes.New(codes.UpgradeProductStart, "the product didn't come up within %s; Status and the root shell's kubectl show what holds it", ProductUpBound))
+		if bound := s.productUpBound(); s.o.Clock.Now().Sub(since) > bound {
+			waiting := last.Detail
+			if waiting == "" {
+				waiting = "the step " + at + " didn't finish"
+			}
+			err := codes.New(codes.UpgradeProductStart, "the product isn't ready after %s: %s; Status and the root shell's kubectl show what holds it", bound, waiting)
+			s.failStep(at, err)
+			s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, r.Action, r.Version, "osadmin", err, "not ready after "+bound.String())
+			s.write(osaudit.Entry{Actor: "osadmin", Action: "upgrade.product-not-ready", Target: "product", Detail: map[string]string{"version": r.Version, "action": r.Action, "step": at, "waited": bound.String()}}, err)
+			s.o.Logger.Warn("osadmin: the product isn't ready within the bound; the update failed", log.F("action", r.Action), log.F("version", r.Version), log.F("step", at), log.F("waiting", waiting), log.F("bound", bound.String()))
+			s.consoleChanged()
 			return
 		}
 		select {

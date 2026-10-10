@@ -202,9 +202,15 @@ func (h *importSvc) RunImportStep(ctx context.Context, r *connect.Request[osadmi
 	s, c := h.s, callFrom(ctx)
 	q := r.Msg
 	c.note("import step", "step", q.GetStep(), "rehearsal", strconv.FormatBool(q.GetRehearsal()), "wipe", strconv.FormatBool(q.GetWipe()), "owner", q.GetOwnerEmail())
-	m, _, _, err := s.importer()
+	m, info, _, err := s.importer()
 	if err != nil {
 		return nil, err
+	}
+	if productimport.Step(q.GetStep()) == productimport.Verify {
+		if ready, waiting := s.productReady(ctx); !ready {
+			s.o.Logger.Info("osadmin: verify waits for the product to be ready", log.F("waiting", waiting))
+			return nil, codes.New(codes.ProductNotReady, "%s isn't ready yet (%s); Verify runs once it is, so try again in a minute", info.Title, waiting)
+		}
 	}
 	run, err := m.Start(productimport.Step(q.GetStep()), productimport.Options{Rehearsal: q.GetRehearsal(), Wipe: q.GetWipe(), OwnerEmail: q.GetOwnerEmail(),
 		Parent: q.GetNewFolderParent(), Personal: q.GetPersonal()})

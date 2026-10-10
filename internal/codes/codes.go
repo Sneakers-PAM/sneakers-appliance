@@ -68,6 +68,8 @@ const (
 	UpgradeProductStart  = 2516
 	// ProductValueUnavailable: an exposed product value can't be read yet.
 	ProductValueUnavailable = 2517
+	// ProductNotReady: the product is still coming up or rolling out.
+	ProductNotReady = 2518
 	// The internal mirror's TLS refusals sit apart from the run above, so
 	// other upgrade codes can follow 2514.
 	UpgradeMirrorUntrusted = 2520
@@ -132,7 +134,8 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeProductBase, Symbol: "UPGRADE_PRODUCT_BASE", Title: "upgrade", Cause: "the product bundle doesn't fit the base version this box runs, or a base release is outside the installed product's base range"},
 	{Code: UpgradeNoReboot, Symbol: "UPGRADE_NO_REBOOT", Title: "upgrade", Cause: "an apply or revert was accepted, but the box didn't reboot within the bound"},
 	{Code: UpgradeBusy, Symbol: "UPGRADE_BUSY", Title: "upgrade", Cause: "a file is already coming in or waiting, or a stage is under way; verify or cancel it first"},
-	{Code: UpgradeProductStart, Symbol: "UPGRADE_PRODUCT_START", Title: "upgrade", Cause: "a product apply or revert restarted the product, but it didn't come up and answer on 443 within the bound"},
+	{Code: UpgradeProductStart, Symbol: "UPGRADE_PRODUCT_START", Title: "upgrade", Cause: "a product apply or revert restarted the product, but it wasn't ready within the bound: its workloads hadn't rolled out, its health check didn't answer, or 443 didn't answer with it"},
+	{Code: ProductNotReady, Symbol: "PRODUCT_NOT_READY", Title: "upgrade", Cause: "the product is still coming up or rolling out after an install, an update, a revert or an import's restart; try again once it's ready"},
 	{Code: ProductValueUnavailable, Symbol: "PRODUCT_VALUE_UNAVAILABLE", Title: "upgrade", Cause: "the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there"},
 	{Code: UpgradeMirrorUntrusted, Symbol: "UPGRADE_MIRROR_UNTRUSTED", Title: "upgrade", Cause: "the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host"},
 	{Code: UpgradeMirrorPin, Symbol: "UPGRADE_MIRROR_PIN", Title: "upgrade", Cause: "the HTTPS mirror's certificate isn't the one the update trust pins"},

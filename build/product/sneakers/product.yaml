@@ -181,3 +181,14 @@ data:
     path: postgres
     wal: pgdata/pg_wal
     wal_warn: 1GiB
+
+# When an install, update or revert counts as done (docs/upgrades.md): once
+# every workload in the stacks runs this bundle's version and has rolled
+# out, the gateway's readiness must answer, and it fails only while a
+# dependency it needs is down. A first install imports every image inside
+# the wait, so it gets 15 minutes rather than the box's default 10.
+ready:
+  health:
+    service: sneakers/sneakers-gateway:http
+    path: /readyz
+  timeout: 15m
