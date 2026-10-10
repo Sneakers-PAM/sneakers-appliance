@@ -13,6 +13,9 @@
 #     (build/tools/stack refuses otherwise);
 #   - no lab value: no lab registry or host, no debug or console logging, no
 #     dev-only switch, no "lab" in a name or value;
+#   - the box's own host name: every host-dependent value carries the
+#     box.fqdn placeholder, and the box's place_stack leaves no placeholder
+#     and no fixed host for any FQDN;
 #   - render.sh refuses a non-empty OUT, and a values overlay that brings
 #     a Secret no box makes.
 #
@@ -97,6 +100,50 @@ if grep -h '^ *image: ' "$out"/*/*.yaml | grep -vE 'image: (ghcr\.io|docker\.io|
   fail "an image from a registry that isn't ghcr.io, docker.io or quay.io"
 fi
 echo "ok: no lab value"
+
+# The box's own host name. Every host-dependent value carries the
+# placeholder product.yaml declares for box.fqdn, never a host of its own;
+# the box's place_stack (os/k0s/k0s-interim) puts each box's FQDN in its
+# place, which leaves no placeholder and no other fixed host, for any FQDN.
+ph="$(sed -n 's/^ *placeholder: *\([a-z0-9.-]*\).*/\1/p' "$here/product.yaml")"
+[ -n "$ph" ] || fail "product.yaml declares no placeholder for box.fqdn"
+sed -n '/^place_stack() {$/,/^}$/p' "$root/os/k0s/k0s-interim" > "$work/place_stack.sh"
+[ -s "$work/place_stack.sh" ] || fail "k0s-interim has no place_stack"
+printf '%s box.fqdn\n' "$ph" > "$work/slot-box-values"
+for fqdn in sneakers.example.org pam.example.net; do
+  printf 'box.fqdn %s\n' "$fqdn" > "$work/box-values"
+  placed="$work/placed-$fqdn"
+  for d in "$out"/*/; do
+    bash -c '. "$1"; place_stack "$2" "$3" "$4" "$5" unused' sh "$work/place_stack.sh" "$d" "$placed/$(basename "$d")" "$work/slot-box-values" "$work/box-values" \
+      || fail "place_stack failed on $d"
+  done
+  if grep -n '\.invalid' "$placed"/*/*.yaml > "$work/left.txt"; then
+    head -3 "$work/left.txt" >&2
+    fail "a placeholder is left after the box put $fqdn in place"
+  fi
+  for want in "sneakers:WEBAUTHN_RP_ID: $fqdn" "sneakers:WEBAUTHN_RP_ORIGINS: https://$fqdn" \
+    "sneakers:SSHBROKER_PUBLIC_WS_URL: wss://$fqdn/ssh/session" "sneakers:default_browser_return_url: https://$fqdn/" \
+    "sneakers:- https://$fqdn/" "sneakers:ui_url: https://$fqdn/login" "sneakers:from_address: no-reply@$fqdn" \
+    "sneakers-mcp:OAUTH_PUBLIC_URL: https://$fqdn" "sneakers-mcp:MCP_URL: https://$fqdn/mcp" \
+    "sneakers-mcp:MCP_AUTHORIZATION_SERVER: https://$fqdn" "sneakers-mcp:HYDRA_ISSUER: https://hydra.$fqdn/" \
+    "sneakers-mcp:issuer: https://hydra.$fqdn/"; do
+    st="${want%%:*}" line="${want#*:}"
+    grep -qxF -e "$line" <(sed 's/^ *//' "$placed/$st/$st.yaml") || fail "the $st stack has no \"$line\" for $fqdn"
+  done
+  # Every URL names the box, Hydra under it, or a cluster Service; a JSON
+  # schema's own id isn't a host the box reaches.
+  grep -hv '"\$id"\|"\$schema"' "$placed"/sneakers*/*.yaml | grep -oE '(https?|wss?)://[^/" :]+' | sed -E 's#^[a-z]+://##' | sort -u > "$work/hosts"
+  while read -r h; do
+    case "$h" in
+      "$fqdn" | "hydra.$fqdn" | *.svc | *.svc.cluster.local) ;;
+      *.*) fail "a stack names the fixed host $h" ;;
+    esac
+  done < "$work/hosts"
+done
+diff -r <(cd "$work/placed-sneakers.example.org" && grep -r . | sed 's/sneakers\.example\.org/FQDN/g') \
+  <(cd "$work/placed-pam.example.net" && grep -r . | sed 's/pam\.example\.net/FQDN/g') > "$work/fqdn.diff" \
+  || fail "two boxes' stacks differ by more than their FQDN: $(head -3 "$work/fqdn.diff")"
+echo "ok: every host-dependent value takes the box's FQDN (sneakers.example.org, pam.example.net), and no placeholder or fixed host is left"
 
 # Refusals.
 if CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > /dev/null 2>&1; then
