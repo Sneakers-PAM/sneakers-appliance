@@ -191,8 +191,9 @@ invariant applies.
 
 It reads :8443's Status data from accessd (or, while accessd is down, its last saved copy, with the
 time it was saved), the protection and the custody mode from init, the root slot from init's
-environment, the host keys from the state volume and the node count from the platform, every 5
-seconds. In order: health, the base, the product, protection and the clock, each a status word in
+environment, the host keys from the state volume, the node count from the platform and the time
+zone from the network settings, every 5 seconds. The clock and every time on the screen are shown in
+that zone ("synced 14:03 EDT" for `America/New_York`), UTC when none is set. In order: health, the base, the product, protection and the clock, each a status word in
 its colour with the details dim; the admin page on the first management address and, on the line under it, on
 the box's FQDN once one is set; SSH on port 22, with a dim line under it saying the key comes from
 :8443's Access page and a TOTP code follows ([ssh-and-elevation.md](ssh-and-elevation.md#the-first-ssh-login)); the fingerprints of the page's

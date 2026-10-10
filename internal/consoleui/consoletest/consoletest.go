@@ -62,6 +62,8 @@ func (s *Services) Starts() []string {
 // Network is netd for the console: two NICs, and checks that report what
 // Results says.
 type Network struct {
+	// Current is what Get answers.
+	Current  network.Settings
 	mu       sync.Mutex
 	Applied  []network.Settings
 	Kept     []string
@@ -91,7 +93,9 @@ func (n *Network) Get(context.Context) (network.Settings, error) {
 	if n.NoNetd {
 		return network.Settings{}, errNoNetd
 	}
-	return network.Settings{}, nil
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.Current, nil
 }
 
 // Set records s.
