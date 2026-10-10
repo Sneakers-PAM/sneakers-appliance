@@ -41,6 +41,16 @@ has publish '\*\.bin\.inputs' "attach each unit's inputs"
 has publish 'sneakers-product-index\.json' "attach the index"
 has publish 'release\.yaml\.sigstore\.json' "attach the release.yaml countersignature"
 has publish 'image-sigs/\*\.sigstore\.json' "attach the image countersignatures"
+# The Releases are the boxes' update source: each carries a Base OS patch
+# from the previous release on its channel, the index and SHA256SUMS signed
+# with the release key, and an rc tag is a prerelease.
+has sign 'release-previous --releases' "find the previous release on the tag's channel"
+has sign 'PATCH_FROM="\$patch_from"' "make the Base OS patch from the previous release"
+has sign 'for f in sneakers-product-index\.json SHA256SUMS' "sign the index and SHA256SUMS"
+has publish 'sneakers-product-index\.json\.sigstore\.json' "attach the index signature"
+has publish 'SHA256SUMS\.sigstore\.json' "attach the SHA256SUMS signature"
+has publish 'check-asset-sizes\.sh' "check every asset is under 2 GiB"
+has publish '--prerelease' "make an rc tag a prerelease"
 
 for id in build sign publish; do
   if job "$id" | grep -qE 'sneakers-appliance-\$VERSION-amd64\.bin|--recipient keys/production/update.pub --version "\$VERSION" --arch amd64 --channel production --out'; then

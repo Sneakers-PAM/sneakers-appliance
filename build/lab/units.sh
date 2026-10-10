@@ -46,7 +46,12 @@
 #   BRIDGE     1 also writes the Base OS file under its old name and lists it
 #              in the index's legacy base section, for boxes before the units
 #   PATCH_FROM build/lab/build.sh outputs to make a published patch from
-#              (space-separated)
+#              (space-separated); a base may also be an earlier release's
+#              Base OS unpacked (version and artifact/ only, as the release
+#              job makes from the previous release): it's then opened with
+#              UPDATE_KEY instead of its UKI, and checked by this build's
+#              kit alone
+#   UPDATE_KEY the update key, for a base without its UKI
 #   CHECK_FROM outputs to make a patch from that is built and checked but not
 #              published: it goes to $UNITS/checked-only, out of the index
 #   INDEX_ALSO directories whose .bin files the index lists too (an earlier
@@ -194,8 +199,13 @@ patch() { # base dir
   # Open it as a box on the base does, with the base's own UKI, rebuild the
   # target from the base, and verify the result with the base's kit.
   rm -rf "$w/rebuilt"
-  "$tool" patch-check --base "$base/artifact" --release-key "$KEYS/cosign.pub" --channel "$channel" --identity-uki "$base/work/sneakers-$bv.efi" --extract "$w/rebuilt" "$pbin"
-  "$base/sneakers-kit" verify "$w/rebuilt"
+  local opener=(--identity-uki "$base/work/sneakers-$bv.efi")
+  if [ ! -f "$base/work/sneakers-$bv.efi" ]; then
+    : "${UPDATE_KEY:?the base $bv has no UKI; UPDATE_KEY opens its patch}"
+    opener=(--identity "$UPDATE_KEY")
+  fi
+  "$tool" patch-check --base "$base/artifact" --release-key "$KEYS/cosign.pub" --channel "$channel" "${opener[@]}" --extract "$w/rebuilt" "$pbin"
+  if [ -x "$base/sneakers-kit" ]; then "$base/sneakers-kit" verify "$w/rebuilt"; fi
   "$OUT/sneakers-kit" verify "$w/rebuilt"
   local ps fs
   ps="$(stat -c %s "$pbin")" fs="$(stat -c %s "$osbin")"
