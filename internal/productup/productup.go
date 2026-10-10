@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 )
@@ -181,8 +182,42 @@ func plural(n int, one, many string) string {
 }
 
 type container struct {
-	Name  string `json:"name" yaml:"name"`
-	Image string `json:"image" yaml:"image"`
+	Name    string   `json:"name" yaml:"name"`
+	Image   string   `json:"image" yaml:"image"`
+	Command []string `json:"command" yaml:"command"`
+	Args    []string `json:"args" yaml:"args"`
+	Env     []envVar `json:"env" yaml:"env"`
+	EnvFrom []envSrc `json:"envFrom" yaml:"envFrom"`
+}
+
+// envVar is an environment entry as far as the slot decides it: the
+// value, or where it comes from (the API server fills in defaults such as
+// a fieldRef's apiVersion, which aren't compared).
+type envVar struct {
+	Name      string `json:"name" yaml:"name"`
+	Value     string `json:"value" yaml:"value"`
+	ValueFrom *struct {
+		FieldRef *struct {
+			FieldPath string `json:"fieldPath" yaml:"fieldPath"`
+		} `json:"fieldRef" yaml:"fieldRef"`
+		ConfigMapKeyRef *keyRef `json:"configMapKeyRef" yaml:"configMapKeyRef"`
+		SecretKeyRef    *keyRef `json:"secretKeyRef" yaml:"secretKeyRef"`
+	} `json:"valueFrom" yaml:"valueFrom"`
+}
+
+type keyRef struct {
+	Name string `json:"name" yaml:"name"`
+	Key  string `json:"key" yaml:"key"`
+}
+
+type envSrc struct {
+	Prefix       string `json:"prefix" yaml:"prefix"`
+	ConfigMapRef *struct {
+		Name string `json:"name" yaml:"name"`
+	} `json:"configMapRef" yaml:"configMapRef"`
+	SecretRef *struct {
+		Name string `json:"name" yaml:"name"`
+	} `json:"secretRef" yaml:"secretRef"`
 }
 
 type podSpec struct {
@@ -190,13 +225,83 @@ type podSpec struct {
 	Containers     []container `json:"containers" yaml:"containers"`
 }
 
-// images are a pod spec's images by container name.
-func (s podSpec) images() map[string]string {
-	out := map[string]string{}
+// podTemplate is what a workload's pods are made from, as far as the
+// slot sets it: the template's annotations (where a chart puts its
+// config checksums) and the containers.
+type podTemplate struct {
+	Metadata struct {
+		Annotations map[string]string `json:"annotations" yaml:"annotations"`
+	} `json:"metadata" yaml:"metadata"`
+	Spec podSpec `json:"spec" yaml:"spec"`
+}
+
+// containers are a pod spec's containers by name.
+func (s podSpec) containers() map[string]container {
+	out := map[string]container{}
 	for _, c := range append(append([]container(nil), s.InitContainers...), s.Containers...) {
-		out[c.Name] = c.Image
+		out[c.Name] = c
 	}
 	return out
+}
+
+// sameTemplate is whether the live template is the slot's: every
+// annotation the slot sets has its value (others, such as a restart
+// stamp, may be added), and every container the slot names runs its
+// image, command, arguments and environment.
+func sameTemplate(want, got podTemplate) bool {
+	for k, v := range want.Metadata.Annotations {
+		if got.Metadata.Annotations[k] != v {
+			return false
+		}
+	}
+	live := got.Spec.containers()
+	for name, w := range want.Spec.containers() {
+		g, ok := live[name]
+		if !ok || g.Image != w.Image || !slices.Equal(g.Command, w.Command) || !slices.Equal(g.Args, w.Args) ||
+			!slices.EqualFunc(g.Env, w.Env, sameEnv) || !slices.EqualFunc(g.EnvFrom, w.EnvFrom, sameEnvFrom) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameEnv(a, b envVar) bool {
+	if a.Name != b.Name || a.Value != b.Value || (a.ValueFrom == nil) != (b.ValueFrom == nil) {
+		return false
+	}
+	if a.ValueFrom == nil {
+		return true
+	}
+	x, y := a.ValueFrom, b.ValueFrom
+	return fieldPath(x.FieldRef) == fieldPath(y.FieldRef) && sameRef(x.ConfigMapKeyRef, y.ConfigMapKeyRef) && sameRef(x.SecretKeyRef, y.SecretKeyRef)
+}
+
+func fieldPath(f *struct {
+	FieldPath string `json:"fieldPath" yaml:"fieldPath"`
+}) string {
+	if f == nil {
+		return ""
+	}
+	return f.FieldPath
+}
+
+func sameRef(a, b *keyRef) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func sameEnvFrom(a, b envSrc) bool {
+	name := func(r *struct {
+		Name string `json:"name" yaml:"name"`
+	}) string {
+		if r == nil {
+			return ""
+		}
+		return r.Name
+	}
+	return a.Prefix == b.Prefix && name(a.ConfigMapRef) == name(b.ConfigMapRef) && name(a.SecretRef) == name(b.SecretRef)
 }
 
 type workload struct {
@@ -207,10 +312,8 @@ type workload struct {
 		Generation int64  `json:"generation"`
 	} `json:"metadata"`
 	Spec struct {
-		Replicas *int64 `json:"replicas"`
-		Template struct {
-			Spec podSpec `json:"spec"`
-		} `json:"template"`
+		Replicas *int64      `json:"replicas"`
+		Template podTemplate `json:"template"`
 	} `json:"spec"`
 	Status struct {
 		ObservedGeneration int64  `json:"observedGeneration"`
@@ -234,11 +337,11 @@ type workloadList struct {
 // workloadKinds are the kinds that roll out.
 var workloadKinds = []string{"Deployment", "StatefulSet", "DaemonSet"}
 
-// wanted is a workload in the slot's stacks, with the images its pods
-// run at the slot's version.
+// wanted is a workload in the slot's stacks, with the pod template its
+// pods are made from at the slot's version.
 type wanted struct {
 	kind, ns, name string
-	images         map[string]string
+	template       podTemplate
 }
 
 func (w wanted) key() string { return w.kind + " " + w.ns + "/" + w.name }
@@ -261,8 +364,11 @@ func (p *Probe) onStacks() ([]string, error) {
 }
 
 // wantedWorkloads are the Deployments, StatefulSets and DaemonSets the
-// slot's stacks hold, read from their files.
+// slot's stacks hold, read from their files with the box's own values put
+// in, as k0s-interim and productswitch hand them to k0s.
 func (p *Probe) wantedWorkloads(stacks []string) ([]wanted, error) {
+	kernel, _ := os.Hostname()
+	values := boxvalues.Table(p.Slot, boxvalues.Read(p.SwitchDir), kernel)
 	var out []wanted
 	for _, st := range stacks {
 		files, err := filepath.Glob(filepath.Join(p.Slot, "manifests", st, "*.y*ml"))
@@ -270,7 +376,7 @@ func (p *Probe) wantedWorkloads(stacks []string) ([]wanted, error) {
 			return nil, err
 		}
 		for _, f := range files {
-			ws, err := readWorkloads(f)
+			ws, err := readWorkloads(f, values)
 			if err != nil {
 				return nil, fmt.Errorf("the stack %s doesn't read: %w", st, err)
 			}
@@ -280,11 +386,12 @@ func (p *Probe) wantedWorkloads(stacks []string) ([]wanted, error) {
 	return out, nil
 }
 
-func readWorkloads(file string) ([]wanted, error) {
+func readWorkloads(file string, values []boxvalues.Pair) ([]wanted, error) {
 	b, err := os.ReadFile(file) // #nosec G304 -- a stack of the installed slot
 	if err != nil {
 		return nil, err
 	}
+	b = boxvalues.Substitute(b, values)
 	dec := yaml.NewDecoder(bytes.NewReader(b))
 	var out []wanted
 	for {
@@ -295,9 +402,7 @@ func readWorkloads(file string) ([]wanted, error) {
 				Name      string `yaml:"name"`
 			} `yaml:"metadata"`
 			Spec struct {
-				Template struct {
-					Spec podSpec `yaml:"spec"`
-				} `yaml:"template"`
+				Template podTemplate `yaml:"template"`
 			} `yaml:"spec"`
 		}
 		err := dec.Decode(&doc)
@@ -314,14 +419,16 @@ func readWorkloads(file string) ([]wanted, error) {
 		if ns == "" {
 			ns = "default"
 		}
-		out = append(out, wanted{kind: doc.Kind, ns: ns, name: doc.Metadata.Name, images: doc.Spec.Template.Spec.images()})
+		out = append(out, wanted{kind: doc.Kind, ns: ns, name: doc.Metadata.Name, template: doc.Spec.Template})
 	}
 }
 
 // rollout says what the stacks' workloads wait for, "Rolling out (n of m
 // ready): waiting for <namespace>/<name>, <why>", or "" once every one has
-// rolled out. A workload of the slot's stacks must be there and its pods
-// must run the slot's images (k0s has applied the new version); then it,
+// rolled out. A workload of the slot's stacks must be there and its pod
+// template must be the slot's (k0s has applied the new version: images,
+// commands, arguments, environment and template annotations, so a change
+// that keeps the image counts too); then it,
 // like every workload k0s labels with a stack, must have rolled out: its
 // controller has seen the latest spec, and every replica is updated and
 // available (the old ones gone).
@@ -356,7 +463,7 @@ func (p *Probe) rollout(ctx context.Context, stacks []string) (string, error) {
 		switch {
 		case !ok:
 			waiting = append(waiting, name+", not created yet")
-		case !sameImages(w.images, got.Spec.Template.Spec.images()):
+		case !sameTemplate(w.template, got.Spec.Template):
 			waiting = append(waiting, name+", the new version isn't applied yet")
 		default:
 			if why := rolledOut(got); why != "" {
@@ -379,17 +486,6 @@ func (p *Probe) rollout(ctx context.Context, stacks []string) (string, error) {
 		return "", nil
 	}
 	return fmt.Sprintf("Rolling out (%d of %d ready): waiting for %s", total-len(waiting), total, waiting[0]), nil
-}
-
-// sameImages is whether every container the slot names runs the slot's
-// image.
-func sameImages(want, got map[string]string) bool {
-	for name, img := range want {
-		if got[name] != img {
-			return false
-		}
-	}
-	return true
 }
 
 // rolledOut says why w hasn't rolled out yet, or "".
