@@ -10,10 +10,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
@@ -81,7 +83,23 @@ type Env struct {
 	// owner. help and Tab offer an admin no owner-only command; accessd
 	// still checks the role of every call.
 	Role string
+	// History is this session's command lines, for history; nil outside
+	// an interactive session.
+	History *History
 }
+
+// History is the command lines of one interactive session, as history
+// lists them: what a line carries that's secret is masked when it's kept.
+type History struct{ lines []string }
+
+// Add keeps line, masked.
+func (h *History) Add(line string) { h.lines = append(h.lines, HistoryLine(line)) }
+
+// urlPassword is the password of a URL with credentials (an HTTPS proxy's).
+var urlPassword = regexp.MustCompile(`(://[^/\s:@]+):[^@\s/]+@`)
+
+// HistoryLine is line as history keeps it, with a URL's password masked.
+func HistoryLine(line string) string { return urlPassword.ReplaceAllString(line, "$1:***@") }
 
 type flagSpec struct {
 	name, usage, def string
@@ -112,6 +130,9 @@ type spec struct {
 	keys          []Key
 	// owner marks a command only owners may run.
 	owner bool
+	// question marks a command that answers ? itself (network set lists
+	// its keys).
+	question bool
 	// complete offers the values of the command's arguments.
 	complete func(ctx context.Context, e *Env, args []string, partial string) ([]string, cobra.ShellCompDirective)
 	run      func(ctx context.Context, e *Env, c *Command, args []string, flags map[string]string) (Result, error)
@@ -131,7 +152,7 @@ var specs = []spec{
 	{path: "network show", short: "Show the network settings", action: "network.show", origins: both,
 		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.",
 		example: "  network show\n  network show -o json"},
-	{path: "network set", owner: true, use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet, complete: completeKeys(networkKeys),
+	{path: "network set", owner: true, use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet, question: true, complete: completeKeys(networkKeys),
 		long:    "Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.",
 		example: "  network set ?\n  network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org\n  network set time-zone=America/New_York\n  network set https-proxy="},
 	{path: "network confirm", owner: true, use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
@@ -183,6 +204,9 @@ var specs = []spec{
 	{path: "support-bundle", short: "Stream a support bundle to standard output", action: "support.bundle", origins: []Origin{OriginSSH}, later: true,
 		long:    "Streams a support bundle (status, logs and settings, with no secrets) to standard output. Over SSH only. Not available in this release.",
 		example: "  ssh admin@box1.sneakers.example.org support-bundle > support.tar"},
+	{path: "history", short: "List this session's commands", action: "history", origins: []Origin{OriginSSH}, run: runHistory,
+		long:    "Lists the command lines typed in this session, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list ends with the session.",
+		example: "  history"},
 	{path: "reboot", short: "Reboot the appliance", action: "power.reboot", origins: both, confirm: "reboot",
 		long:    "Reboots the box gracefully: the services stop first. Type reboot to confirm.",
 		example: "  reboot"},
@@ -370,13 +394,18 @@ func Run(ctx context.Context, e *Env, line string) error {
 	if len(words) == 0 {
 		return nil
 	}
+	if words[len(words)-1] == "?" {
+		if done := explain(e, words[:len(words)-1]); done {
+			return nil
+		}
+	}
 	jsonOut := slices.Contains(words, "-o=json") || hasPair(words, "-o", "json") || hasPair(words, "--output", "json") || slices.Contains(words, "--output=json")
 	root := newRoot(ctx, e)
 	root.SetArgs(words)
 	root.SetIn(e.In)
 	root.SetOut(e.Out)
 	root.SetErr(e.Err)
-	if err := root.ExecuteContext(ctx); err != nil {
+	if cmd, err := root.ExecuteContextC(ctx); err != nil {
 		var ran ranError
 		_, coded := codes.Of(err)
 		switch {
@@ -386,9 +415,74 @@ func Run(ctx context.Context, e *Env, line string) error {
 			err = codes.Wrap(codes.ShellUnknown, err)
 		}
 		report(e, jsonOut, err)
+		if !jsonOut && codes.Is(err, codes.ShellParse) && cmd != nil && cmd != root {
+			_, _ = fmt.Fprintf(e.Err, "\n%s\n\n", usageBlock(root, cmd))
+		}
 		return err
 	}
 	return nil
+}
+
+// usageBlock is what a usage error shows under its line: the command's
+// usage, its examples and its own flags.
+func usageBlock(root, cmd *cobra.Command) string {
+	b := "Usage:\n  " + strings.TrimPrefix(cmd.UseLine(), root.Name()+" ")
+	if cmd.Example != "" {
+		b += "\n\nExamples:\n" + strings.TrimRight(cmd.Example, "\n")
+	}
+	own := pflag.NewFlagSet(cmd.Name(), pflag.ContinueOnError)
+	cmd.LocalNonPersistentFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Name != "help" {
+			own.AddFlag(f)
+		}
+	})
+	if own.HasFlags() {
+		b += "\n\nFlags:\n" + strings.TrimRight(own.FlagUsages(), "\n")
+	}
+	return b
+}
+
+// explain answers a line that ends in ?: a command's help and the values
+// its next argument takes, or after some of its arguments those values
+// alone. It asks the appliance nothing. It returns false for a command
+// that answers ? itself, or words that name no command, which then run as
+// typed.
+func explain(e *Env, words []string) bool {
+	session := *e
+	session.Backend = nil
+	root := newRoot(context.Background(), &session)
+	root.SetOut(e.Out)
+	cmd, rest, err := root.Find(words)
+	if err != nil || cmd == root && len(rest) > 0 {
+		return false
+	}
+	for _, s := range specsFor(e.Product, e.Values, e.Switches) {
+		if s.question && strings.Join(words[:min(len(words), 2)], " ") == s.path {
+			return false
+		}
+	}
+	cands, _ := complete(&session, words, "")
+	if len(rest) > 0 && len(cands) > 0 {
+		_, _ = fmt.Fprintf(e.Out, "%s takes:\n%s", strings.Join(words, " "), listing(cands))
+		return true
+	}
+	_ = cmd.Help()
+	if !cmd.HasAvailableSubCommands() && len(cands) > 0 {
+		_, _ = fmt.Fprintf(e.Out, "\nTakes:\n%s", listing(cands))
+	}
+	return true
+}
+
+// runHistory lists this session's command lines, numbered.
+func runHistory(_ context.Context, e *Env, _ *Command, _ []string, _ map[string]string) (Result, error) {
+	if e.History == nil || len(e.History.lines) == 0 {
+		return Result{Text: "There's no history outside an interactive session.", Data: []string{}}, nil
+	}
+	var b strings.Builder
+	for i, l := range e.History.lines {
+		fmt.Fprintf(&b, "%5d  %s\n", i+1, l)
+	}
+	return Result{Text: b.String(), Data: slices.Clone(e.History.lines)}, nil
 }
 
 func hasPair(words []string, k, v string) bool {

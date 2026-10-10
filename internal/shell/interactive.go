@@ -30,18 +30,23 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 			return "", 0, false
 		}
 		head := line[:pos]
-		done, options := Completions(e, head)
+		done, options := completions(e, head)
 		if done != head {
 			tabbed = false
 			return done + line[pos:], len(done), true
 		}
 		if tabbed && lastTab == head && len(options) > 1 {
-			_, _ = io.WriteString(t, listing(options))
+			// The typed line stays above the list, as in a shell; the
+			// terminal draws the prompt and the line again under it.
+			_, _ = io.WriteString(t, prompt+line+"\n"+listing(options))
 		}
 		tabbed, lastTab = true, head
 		return "", 0, false
 	}
 	session := *e
+	if session.History == nil {
+		session.History = &History{}
+	}
 	session.Out, session.Err = t, t
 	session.In = &termLines{t: t, prompt: prompt}
 	_, _ = io.WriteString(t, "Type help for the commands, exit to leave.\n")
@@ -62,6 +67,7 @@ func Interactive(ctx context.Context, e *Env, rw io.ReadWriter, prompt string) e
 		case "exit", "quit", "logout":
 			return nil
 		}
+		session.History.Add(line)
 		_ = Run(ctx, &session, line)
 	}
 }
@@ -107,20 +113,41 @@ func CompleteFor(o Origin, p productinfo.Info, typed string, values ...Value) st
 	return line
 }
 
-// listing is the candidates a second Tab shows, in columns.
-func listing(options []string) string {
-	w := 0
+// listColumns is how many candidates without descriptions a list shows
+// per line; past manyCandidates (the time zones) they go in columns
+// rather than one per line.
+const (
+	listColumns    = 4
+	manyCandidates = 24
+)
+
+// listing is the candidates a second Tab shows: one per line with what
+// each does, the way a shell lists them, or, for a long list of bare
+// words, in columns.
+func listing(options []Candidate) string {
+	w, notes := 0, false
 	for _, o := range options {
-		w = max(w, len(o))
+		w = max(w, len(o.Word))
+		notes = notes || o.Note != ""
 	}
 	var b strings.Builder
-	for i, o := range options {
-		b.WriteString("  " + o)
-		if (i+1)%4 == 0 || i == len(options)-1 {
-			b.WriteString("\n")
-		} else {
-			b.WriteString(strings.Repeat(" ", w-len(o)))
+	if !notes && len(options) > manyCandidates {
+		for i, o := range options {
+			b.WriteString("  " + o.Word)
+			if (i+1)%listColumns == 0 || i == len(options)-1 {
+				b.WriteString("\n")
+			} else {
+				b.WriteString(strings.Repeat(" ", w-len(o.Word)))
+			}
 		}
+		return b.String()
+	}
+	for _, o := range options {
+		if o.Note == "" {
+			b.WriteString("  " + o.Word + "\n")
+			continue
+		}
+		b.WriteString("  " + o.Word + strings.Repeat(" ", w-len(o.Word)) + "  " + o.Note + "\n")
 	}
 	return b.String()
 }
