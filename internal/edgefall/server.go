@@ -63,6 +63,7 @@ var words = map[boxstate.State]Words{
 	boxstate.ShuttingDown: {"Sneakers-PAM is shutting down", "It powers off by itself. Power it on again to use it."},
 	boxstate.Updating:     {"Sneakers-PAM is updating", "It comes back by itself when the update is done. This page reloads when it's ready."},
 	boxstate.Maintenance:  {"Sneakers-PAM is in maintenance", "It comes back when the maintenance is over. This page reloads when it's ready."},
+	boxstate.Failed:       {"Sneakers-PAM failed to start", "The box's administrator can revert or reapply the update on the admin pages. This page reloads when it's back."},
 }
 
 // WordsFor is what the page says for s; a running box behind a product
@@ -79,10 +80,15 @@ var page = template.Must(template.New("page").Parse(pageSource))
 // Server is edgefall's handler.
 type Server struct {
 	state  func() boxstate.State
+	detail func() string
 	look   atomic.Pointer[look]
 	key    string
 	events *Hub
 }
+
+// SetDetail gives the page what accessd says of a failed product: the
+// phase and the reason, shown under the words.
+func (s *Server) SetDetail(d func() string) { s.detail = d }
 
 // SetEvents serves h's stream at EventsPath, on every listener.
 func (s *Server) SetEvents(h *Hub) { s.events = h }
@@ -144,12 +150,16 @@ func (s *Server) page(w http.ResponseWriter, st boxstate.State, lk *look) {
 	h.Set("Connection", "close")
 	var b bytes.Buffer
 	wd := WordsFor(st)
+	detail := ""
+	if st == boxstate.Failed && s.detail != nil {
+		detail = s.detail()
+	}
 	_ = page.Execute(&b, struct {
-		State       string
-		Title, Note string
-		Style       template.CSS
-		LogoURI     template.URL
-	}{string(st), wd.Title, wd.Note, template.CSS(lk.style), template.URL(lk.logoURI)}) // #nosec G203 -- the embedded stylesheet and validated #rrggbb colours, pinned by the CSP's hash; the checked logo as a data: URI
+		State               string
+		Title, Note, Detail string
+		Style               template.CSS
+		LogoURI             template.URL
+	}{string(st), wd.Title, wd.Note, detail, template.CSS(lk.style), template.URL(lk.logoURI)}) // #nosec G203 -- the embedded stylesheet and validated #rrggbb colours, pinned by the CSP's hash; the checked logo as a data: URI
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_, _ = w.Write(b.Bytes())
 }

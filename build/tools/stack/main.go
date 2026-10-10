@@ -21,7 +21,11 @@
 //     secret, key and all;
 //   - the switch's stack holds what only the on render has, and a
 //     ConfigMap with the settings the named ConfigMaps change when it's on
-//     (the workloads load it, optional).
+//     (the workloads load it, optional);
+//   - with phases in product.yaml, every workload goes in its phase's own
+//     stack (a switch's stays in the switch's stack, which its phase must
+//     place), labelled with the phase and its place in the order, and a
+//     workload no phase names is refused (phases.go).
 //
 // It prints every image the stacks run.
 package main
@@ -145,9 +149,18 @@ func render(o options, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	offDocs, phased, err := phaseSplit(o, spec, offDocs, switchDocs)
+	if err != nil {
+		return err
+	}
 	ns := doc{"apiVersion": "v1", "kind": "Namespace", "metadata": doc{"name": o.Namespace, "labels": partOf(o)}}
 	if err := write(filepath.Join(o.Out, o.Stack, o.Stack+".yaml"), append([]doc{ns}, offDocs...)); err != nil {
 		return err
+	}
+	for _, p := range spec.Phases {
+		if err := write(filepath.Join(o.Out, p.Stack, p.Stack+".yaml"), phased[p.Stack]); err != nil {
+			return err
+		}
 	}
 	if err := write(filepath.Join(o.Out, o.SwitchStack, o.SwitchStack+".yaml"), switchDocs); err != nil {
 		return err

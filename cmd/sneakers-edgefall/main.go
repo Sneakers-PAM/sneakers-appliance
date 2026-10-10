@@ -108,6 +108,7 @@ func serve(ctx context.Context, c config, lg log.Logger) error {
 	src := phaseSource(c.accessSock)
 	w := edgefall.NewWatcher(src, c.boxState, lg)
 	h := edgefall.NewServer(w.State)
+	h.SetDetail(w.Detail)
 	h.SetEvents(w.Events())
 
 	ln, err := net.Listen("tcp", c.local)

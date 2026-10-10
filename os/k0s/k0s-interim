@@ -79,6 +79,32 @@ switched_off() {
   return 1
 }
 
+# phase_stack <slot> <stack>: whether the stack is one of a phase's
+# (productspec.PhaseStacksFile, "<order> <phase> <stack>" per line). The
+# box's phase loop (internal/productup) places those one phase at a time
+# once the cluster is up, so k0s never starts the whole product at once.
+phase_stack() {
+  [ -s "$1/phase-stacks" ] || return 1
+  while read -r _ _ st; do
+    [ "$st" = "$2" ] && return 0
+  done < "$1/phase-stacks"
+  return 1
+}
+
+# unplace_phases <list> <manifests>: take away every stack the phase loop
+# placed (productup.PlacedFile, one stack name per line) and empty the
+# list, so a stack the next slot has no phase for doesn't stay behind; the
+# slot's own phase stacks wait for the loop again. A name with a slash is
+# never one of them.
+unplace_phases() {
+  [ -s "$1" ] || return 0
+  while read -r st; do
+    case "$st" in */*|.*|"") continue ;; esac
+    rm -rf "${2:?}/$st"
+  done < "$1"
+  : > "$1"
+}
+
 # place_stack <slot stack dir/> <stack dir> <slot box-values> <box values>
 # <kernel host>: the stack's files, with each placeholder the bundle
 # declares (product.yaml box_values) replaced by the box's own value: the
@@ -206,10 +232,16 @@ prepare() {
 
   # Stacks k0s applies on its own: each <slot>/manifests/<name>/ is copied
   # to $data/manifests/<name>/, replacing what an earlier bundle put there.
+  # A phase's stacks are taken away and left to the phase loop.
+  unplace_phases /var/lib/sneakers/platform/phase-placed "$data/manifests"
   for d in "$slot"/manifests/*/; do
     [ -d "$d" ] || continue
     stack="$(basename "$d")"
     rm -rf "$data/manifests/$stack"
+    if phase_stack "$slot" "$stack"; then
+      say "stack $stack waits for its phase"
+      continue
+    fi
     if switched_off "$slot" "$stack" /var/lib/sneakers/platform/switches; then
       say "stack $stack is off (its switch on :8443)"
       continue

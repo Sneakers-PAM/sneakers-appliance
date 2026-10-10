@@ -5,6 +5,7 @@ package osadmin
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	log "github.com/Bugs5382/go-log"
@@ -39,13 +40,57 @@ var productUpSteps = []progressStep{
 	{ID: productup.StepEdge, Label: "Opening the product on 443", State: statePending},
 }
 
-func isProductUpStep(id string) bool {
-	for _, s := range productUpSteps {
-		if s.ID == id {
-			return true
+func isProductUpStep(id string) bool { return productup.IsStep(id) }
+
+// productStepper is a probe that knows the installed slot's own steps: a
+// phased product has one per phase (productup.Probe.Steps).
+type productStepper interface {
+	Steps() []productup.Step
+}
+
+// useSlotSteps puts the installed slot's steps in place of the record's
+// coming-up steps, once the slot has switched.
+func (s *Server) useSlotSteps() {
+	st, ok := s.o.ProductUp.(productStepper)
+	if !ok {
+		return
+	}
+	steps := st.Steps()
+	s.progress.mu.Lock()
+	defer s.progress.mu.Unlock()
+	s.loadProgress()
+	r := s.progress.rec
+	if r == nil {
+		return
+	}
+	var kept []progressStep
+	for _, x := range r.Steps {
+		if !isProductUpStep(x.ID) {
+			kept = append(kept, x)
 		}
 	}
-	return false
+	for _, x := range steps {
+		kept = append(kept, progressStep{ID: x.ID, Label: x.Label, State: statePending})
+	}
+	r.Steps = kept
+	s.saveProgressLocked()
+}
+
+// stepLabel is the record's label for step id, or id.
+func (s *Server) stepLabel(id string) string {
+	if r := s.progressSnapshot(); r != nil {
+		if i := r.find(id); i >= 0 {
+			return r.Steps[i].Label
+		}
+	}
+	if st, ok := s.o.ProductUp.(productStepper); ok {
+		for _, x := range st.Steps() {
+			if x.ID == id {
+				return x.Label
+			}
+		}
+	}
+	return id
 }
 
 // startProductUp begins following the product after its restart: the
@@ -53,6 +98,7 @@ func isProductUpStep(id string) bool {
 // answers while Updates and the console show the product coming up.
 func (s *Server) startProductUp() {
 	s.productWaitsAgain()
+	s.useSlotSteps()
 	s.setStep(productup.StepK0s, "")
 	s.followProductUp()
 }
@@ -120,8 +166,9 @@ func (s *Server) productUpBound() time.Duration {
 	return ProductUpBound
 }
 
-// productReady answers whether the product is ready now, and what it
-// waits for when it isn't; with no probe it counts as ready.
+// productReady answers whether the product is ready now for the import's
+// verify, and what it waits for when it isn't: held while the import is
+// open counts as ready. With no probe it counts as ready.
 func (s *Server) productReady(ctx context.Context) (bool, string) {
 	if s.o.ProductUp == nil {
 		return true, ""
@@ -130,6 +177,10 @@ func (s *Server) productReady(ctx context.Context) (bool, string) {
 	switch {
 	case err != nil:
 		return false, "its state isn't known: " + err.Error()
+	case res.Held:
+		// An open import holds the product after the phases it writes
+		// to: for the import's own steps that's ready.
+		return true, ""
 	case res.Step != "":
 		if res.Detail != "" {
 			return false, res.Detail
@@ -148,6 +199,7 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 		every = DefaultProductUpEvery
 	}
 	since := s.o.Clock.Now()
+	stepSince := since
 	last := productup.Result{Step: "-"}
 	for {
 		r := s.progressSnapshot()
@@ -159,37 +211,46 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 		ctx, cancel := context.WithTimeout(context.Background(), every+10*time.Second)
 		res, err := s.o.ProductUp.Check(ctx)
 		cancel()
+		now := s.o.Clock.Now()
 		switch {
 		case err != nil:
 			s.o.Logger.Debug("osadmin: the product's progress isn't known this time", log.F("step", at), log.F("error", err.Error()))
-		case res.Step == "":
-			s.productIsReady()
+		case res.Step == "" || res.Held:
+			if res.Held {
+				s.productHeld(res)
+				s.o.Logger.Info("osadmin: the product is held while an import is open", log.F("step", res.Step))
+			} else {
+				s.productIsReady()
+			}
 			s.finishSteps(productup.StepEdge)
 			if h := s.takeHeld(started); h != nil {
 				s.writeHeld(h, nil, "")
 			}
-			s.o.Logger.Info("osadmin: the product is up", log.F("version", r.Version), log.F("seconds", int(s.o.Clock.Now().Sub(since).Seconds())))
+			s.o.Logger.Info("osadmin: the product is up", log.F("version", r.Version), log.F("seconds", int(now.Sub(since).Seconds())))
 			return
 		case res != last:
+			if res.Step != last.Step {
+				stepSince = now
+			}
 			last = res
 			at = res.Step
 			s.setStep(res.Step, res.Detail)
 		}
-		if bound := s.productUpBound(); s.o.Clock.Now().Sub(since) > bound {
+		var why string
+		switch {
+		case err == nil && res.Failed:
+			why = "it can't start: " + res.Detail
+		case err == nil && res.Timeout > 0 && now.Sub(stepSince) > res.Timeout:
+			why = fmt.Sprintf("it isn't ready after %s: %s", res.Timeout, res.Detail)
+		case now.Sub(since) > s.productUpBound():
 			waiting := last.Detail
 			if waiting == "" {
 				waiting = "the step " + at + " didn't finish"
 			}
-			err := codes.New(codes.UpgradeProductStart, "the product isn't ready after %s: %s; Status and the root shell's kubectl show what holds it", bound, waiting)
-			s.failStep(at, err)
-			if h := s.takeHeld(started); h != nil {
-				s.writeHeld(h, err, "not ready after "+bound.String())
-			} else {
-				s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, r.Action, r.Version, "osadmin", err, "not ready after "+bound.String())
-			}
-			s.write(osaudit.Entry{Actor: "osadmin", Action: "upgrade.product-not-ready", Target: "product", Detail: map[string]string{"version": r.Version, "action": r.Action, "step": at, "waited": bound.String()}}, err)
-			s.o.Logger.Warn("osadmin: the product isn't ready within the bound; the update failed", log.F("action", r.Action), log.F("version", r.Version), log.F("step", at), log.F("waiting", waiting), log.F("bound", bound.String()))
-			s.consoleChanged()
+			why = fmt.Sprintf("the product isn't ready after %s: %s", s.productUpBound(), waiting)
+		}
+		if why != "" {
+			s.productUpFailed(r, started, at, why)
 			return
 		}
 		select {
@@ -199,6 +260,24 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 		case <-time.After(every):
 		}
 	}
+}
+
+// productUpFailed fails a product apply's or revert's step at with why:
+// the record, the history, the audit log and the box state, which says
+// failed with the step's label and why until k0s starts again.
+func (s *Server) productUpFailed(r *progressRecord, started time.Time, at, why string) {
+	label := s.stepLabel(at)
+	err := codes.New(codes.UpgradeProductStart, "%s: %s; Status and the root shell's kubectl show what holds it", label, why)
+	s.failStep(at, err)
+	if h := s.takeHeld(started); h != nil {
+		s.writeHeld(h, err, why)
+	} else {
+		s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, r.Action, r.Version, "osadmin", err, why)
+	}
+	s.write(osaudit.Entry{Actor: "osadmin", Action: "upgrade.product-not-ready", Target: "product", Detail: map[string]string{"version": r.Version, "action": r.Action, "step": at, "why": why}}, err)
+	s.o.Logger.Warn("osadmin: the product didn't come up; the update failed", log.F("action", r.Action), log.F("version", r.Version), log.F("step", at), log.F("why", why))
+	s.productFailed(at, label+": "+why)
+	s.consoleChanged()
 }
 
 // productHistory records a product apply's or revert's outcome. One that

@@ -106,6 +106,12 @@ func (s *Switches) Set(ctx context.Context, spec productspec.Spec, name string, 
 		lg.Info("productswitch: k0s hasn't started; its next start applies the switch", log.F("switch", name))
 		return nil
 	}
+	if on {
+		if ph, waits := waitsForPhase(spec, w, s.Manifests); waits {
+			lg.Info("productswitch: the switch's phase hasn't been reached; the phase loop places its stacks", log.F("switch", name), log.F("phase", ph))
+			return nil
+		}
+	}
 	for _, stack := range w.Stacks {
 		if err := s.place(stack, on); err != nil {
 			return err
@@ -133,17 +139,45 @@ func (s *Switches) Set(ctx context.Context, spec productspec.Spec, name string, 
 	return errors.Join(errs...)
 }
 
+// waitsForPhase is whether a stack of w belongs to a phase whose own
+// stack isn't in front of k0s yet: the product hasn't come up that far,
+// and the phase loop places it in order.
+func waitsForPhase(spec productspec.Spec, w productspec.Switch, manifests string) (string, bool) {
+	for _, ph := range spec.Phases {
+		for _, st := range w.Stacks {
+			if !slices.Contains(ph.SwitchStacks, st) {
+				continue
+			}
+			if _, err := os.Stat(filepath.Join(manifests, ph.Stack)); err != nil {
+				return ph.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
 // place puts the slot's stack in front of k0s, with the box's values in
 // place of the bundle's placeholders (package boxvalues), or takes it away.
 func (s *Switches) place(stack string, on bool) error {
-	dst := filepath.Join(s.Manifests, stack)
+	if !on {
+		if err := os.RemoveAll(filepath.Join(s.Manifests, stack)); err != nil {
+			return fmt.Errorf("productswitch: %w", err)
+		}
+		return nil
+	}
+	return PlaceStack(s.Slot, s.Dir, s.Manifests, stack)
+}
+
+// PlaceStack puts the stack of slot in front of k0s in manifests, replacing
+// what was there, with the box's values (from the platform settings
+// directory dir) in place of the bundle's placeholders: what k0s-interim
+// does for the stacks it places, and the phase loop for each phase's.
+func PlaceStack(slot, dir, manifests, stack string) error {
+	dst := filepath.Join(manifests, stack)
 	if err := os.RemoveAll(dst); err != nil {
 		return fmt.Errorf("productswitch: %w", err)
 	}
-	if !on {
-		return nil
-	}
-	src := filepath.Join(s.Slot, "manifests", stack)
+	src := filepath.Join(slot, "manifests", stack)
 	files, err := filepath.Glob(filepath.Join(src, "*.yaml"))
 	if err != nil {
 		return fmt.Errorf("productswitch: %w", err)
@@ -152,7 +186,7 @@ func (s *Switches) place(stack string, on bool) error {
 		return fmt.Errorf("productswitch: %w", err)
 	}
 	kernel, _ := os.Hostname()
-	values := boxvalues.Table(s.Slot, boxvalues.Read(s.Dir), kernel)
+	values := boxvalues.Table(slot, boxvalues.Read(dir), kernel)
 	for _, f := range files {
 		b, err := os.ReadFile(f) // #nosec G304 -- the installed slot's own stack
 		if err != nil {
