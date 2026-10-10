@@ -91,3 +91,41 @@ func TestTheBaseNamesLeaveTheProductOut(t *testing.T) {
 		t.Fatal("Names differs from NamesFor with no product")
 	}
 }
+
+// The mcp command's help, examples and completion offer only the switches
+// the installed product declares: a product with no machine-api switch
+// isn't offered machine-api=, and one that declares it is.
+func TestMcpOffersOnlyTheDeclaredSwitches(t *testing.T) {
+	help := func(switches []string) (string, error) {
+		var out bytes.Buffer
+		e := &shell.Env{Origin: shell.OriginSSH, Backend: &shell.Services{}, In: strings.NewReader(""), Out: &out, Err: &out, Product: sneakers, Switches: switches}
+		err := shell.Run(context.Background(), e, "help sneakers mcp")
+		return out.String(), err
+	}
+	out, err := help([]string{"mcp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "machine-api") {
+		t.Errorf("help for a product without a machine API switch offers it:\n%s", out)
+	}
+	if !strings.Contains(out, "sneakers mcp off") {
+		t.Errorf("help has no mcp example:\n%s", out)
+	}
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: &recordingBackend{}, Product: sneakers, Role: "owner", Switches: []string{"mcp"}}
+	if got, _ := shell.Completions(e, "sneakers mcp on m"); got != "sneakers mcp on m" {
+		t.Errorf("completes %q for a product without a machine API switch", got)
+	}
+	if _, options := shell.Completions(e, "sneakers mcp on "); len(options) != 0 {
+		t.Errorf("offers %v after on for a product without a machine API switch", options)
+	}
+
+	out, err = help([]string{"mcp", "machine-api"})
+	if err != nil || !strings.Contains(out, "sneakers mcp off machine-api=off") {
+		t.Errorf("help for a product with a machine API switch (%v):\n%s", err, out)
+	}
+	e.Switches = []string{"mcp", "machine-api"}
+	if got, _ := shell.Completions(e, "sneakers mcp on m"); got != "sneakers mcp on machine-api=" {
+		t.Errorf("completes %q for a product with a machine API switch", got)
+	}
+}
