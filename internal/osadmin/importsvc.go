@@ -188,6 +188,10 @@ func (h *importSvc) OpenImport(ctx context.Context, _ *connect.Request[osadminv1
 	if err := s.o.Switches.Set(ctx, spec, spec.Import.Switch, true); err != nil && codes.Is(err, codes.NotAvailable) {
 		return nil, err
 	}
+	// A phased product holds after the phases the import writes to while
+	// it's open (productspec.Import.After): asked again, the product's
+	// probe stops the later phases and the box says maintenance.
+	s.productWaitsAgain()
 	rcpt, err := m.Open()
 	if err != nil {
 		return nil, err
@@ -246,6 +250,9 @@ func (h *importSvc) CloseImport(ctx context.Context, _ *connect.Request[osadminv
 	if err := s.o.Switches.Set(ctx, spec, spec.Import.Switch, false); err != nil && codes.Is(err, codes.NotAvailable) {
 		return nil, err
 	}
+	// The held phases come back; the box says running once they're ready.
+	s.productWaitsAgain()
+	s.boxChanged()
 	if err := m.Close(); err != nil {
 		return nil, err
 	}

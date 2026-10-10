@@ -199,7 +199,7 @@ done
 # predate the range.
 product_inputs="$(RELEASE="$work/release.yaml" STACKS="$here/stacks" bash "$here/units.sh" inputs product)"
 INPUTS="$product_inputs" VERSION="$version" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
-  SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" OUT="$work/product" \
+  SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$here/stacks" PRODUCT_YAML="$here/product.yaml" OUT="$work/product" \
   BRAND="${BRAND:-}" bash "$root/build/product/build.sh"
 sign_blob "$work/product/bin/header.json" "$work/product/bin/header.sigstore.json"
 rm -rf "$OUT/product"

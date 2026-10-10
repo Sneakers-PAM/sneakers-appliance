@@ -69,7 +69,6 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
-	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
@@ -97,6 +96,14 @@ func main() {
 	lg := log.NewLoggerWithOptions("sneakers-accessd", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatJSON), log.WithDefaultLevel(log.LevelError))
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
+	if flag.Arg(0) == "quiesce" {
+		if err := quiesce(ctx, c, lg); err != nil {
+			lg.Error(err, "accessd: the product didn't stop in order")
+			_, _ = fmt.Fprintln(os.Stderr, "sneakers-accessd quiesce:", codes.Describe(err))
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(ctx, c, lg); err != nil {
 		lg.Error(err, "accessd: fatal")
 		_, _ = fmt.Fprintln(os.Stderr, "sneakers-accessd:", codes.Describe(err))
@@ -260,11 +267,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Network:  netd,
 		// accessd is root, so it may ask the installed bundle's k0s how
 		// far the product has come up after an apply (docs/upgrades.md).
-		ProductUp: &productup.Probe{
-			Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s",
-			Containerd: "/run/k0s/containerd.sock", Edge: "127.0.0.1:443",
-			SwitchDir: filepath.Join(c.state, "platform"),
-		},
+		ProductUp: productProbe(c),
 		// edgefall's push socket: the box state goes to every open product
 		// tab before an update, a reboot or a shutdown stops anything
 		// (docs/edge-fallback.md#the-event-stream).

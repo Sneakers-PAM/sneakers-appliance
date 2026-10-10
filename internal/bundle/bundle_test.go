@@ -225,3 +225,37 @@ func TestABundleCarriesItsImportJob(t *testing.T) {
 		}
 	}
 }
+
+// A bundle with phases carries every phase's own stack, and each workload
+// in it carries its phase's labels, on itself and on its pods, as the
+// render puts them; the box stops the product by them.
+func TestABundleCarriesItsPhaseStacks(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	const spec = "format: 2\nphases:\n  - {name: data, label: The database, stack: app-data, workloads: [app-db]}\n"
+	const good = "apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: app-db\n  namespace: app\n  labels: {sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"}\n" +
+		"spec:\n  template:\n    metadata:\n      labels: {app: db, sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"}\n"
+	with := func(stack string) func(fstest.MapFS) {
+		return func(m fstest.MapFS) {
+			m["product.yaml"] = &fstest.MapFile{Data: []byte(spec), Mode: 0o644}
+			if stack != "" {
+				m[bundle.ProductManifests+"/app-data/app-data.yaml"] = &fstest.MapFile{Data: []byte(stack), Mode: 0o644}
+			}
+		}
+	}
+	tree, _ := fixtures.ProductTree(t, k, "amd64", with(good))
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatal(err)
+	}
+	for name, stack := range map[string]string{
+		"no phase stack":            "",
+		"no labels on the pods":     strings.Replace(good, "app: db, sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"", "app: db", 1),
+		"another phase's order":     strings.Replace(good, "phase-order: \"1\"}\nspec", "phase-order: \"2\"}\nspec", 1),
+		"a workload no phase names": strings.Replace(good, "name: app-db", "name: app-other", 1),
+	} {
+		tree, _ := fixtures.ProductTree(t, k, "amd64", with(stack))
+		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "app-") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

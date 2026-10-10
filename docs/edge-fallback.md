@@ -17,14 +17,19 @@ takes over starting and stopping it around k0s.
 | `rebooting`, `shutting-down` | init has announced a reboot or a shutdown |
 | `running` | setup is done, the product's service (k0s) runs and the product is ready |
 | `starting` | otherwise: setup isn't done, k0s doesn't run yet, or k0s runs and the product isn't ready yet |
-| `maintenance` | reserved for platformd's maintenance mode; nothing answers it yet |
+| `maintenance` | an open import holds a phased product after the phases it writes to ([upgrades.md](upgrades.md#the-phases)) |
+| `failed` | the product failed to start since k0s last started: a phase failed or wasn't Ready within its timeout, or the product wasn't ready within its ready bound; it holds until k0s starts again (a revert, a re-apply or a reboot) |
 
 **Ready** is the check a product apply waits on ([upgrades.md](upgrades.md)): every workload of
 the slot's stacks rolled out, the product's health check and the edge answering. After each k0s
 start accessd asks it in the background (every 3 seconds, never on a `GetPhase` itself) until it
-passes; during a product apply or revert the apply's own follower decides. A product that isn't
-ready within its ready bound (`ready.timeout`, else 10 minutes) counts as ready, with a warning in
-accessd's log, so a partly broken product stays reachable.
+passes; during a product apply or revert the apply's own follower decides. For a phased product
+the same ask moves it on to its next phase. A product that isn't ready within its ready bound
+(`ready.timeout`, else 10 minutes), or a phase that fails or isn't Ready within its own timeout,
+leaves the box `failed`: 443 stays on the box-state page, which says "Sneakers-PAM failed to
+start" and, under it, the phase and the reason accessd pushed ("Starting sign-in, identity and the
+vault: ..."), so a half-started product is never served. The reason comes with accessd's push and
+holds while the box stays failed; GetPhase's answer carries none.
 
 Init writes the announcement to `/run/sneakers/box-state` (mode 0644, a tmpfs, so every boot starts
 without one) when it accepts a reboot or a shutdown, before the drain and before the screen

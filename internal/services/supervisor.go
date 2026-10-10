@@ -509,8 +509,9 @@ func (s *Supervisor) Drain(ctx context.Context, keep ...string) error {
 	return nil
 }
 
-// stop ends a service: SIGTERM, then SIGKILL after its stop-timeout (the
-// supervisor's StopTimeout when the entry sets none).
+// stop ends a service: its pre-stop, if it has one, then SIGTERM, then
+// SIGKILL after its stop-timeout (the supervisor's StopTimeout when the
+// entry sets none). The pre-stop gets the stop-timeout too.
 func (s *Supervisor) stop(name string) {
 	s.mu.Lock()
 	u := s.units[name]
@@ -520,12 +521,15 @@ func (s *Supervisor) stop(name string) {
 	if proc == nil {
 		return
 	}
-	s.o.Logger.Info("services: stopping", log.F("service", name))
-	_ = proc.Signal(syscall.SIGTERM)
 	timeout := s.o.StopTimeout
 	if t := s.table[name].StopTimeout; t > 0 {
 		timeout = t
 	}
+	if pre := s.table[name].PreStop; len(pre) > 0 {
+		s.preStop(name, pre, timeout)
+	}
+	s.o.Logger.Info("services: stopping", log.F("service", name))
+	_ = proc.Signal(syscall.SIGTERM)
 	select {
 	case <-done:
 	case <-time.After(timeout):
@@ -533,6 +537,20 @@ func (s *Supervisor) stop(name string) {
 		_ = proc.Signal(syscall.SIGKILL)
 		<-done
 	}
+}
+
+// preStop runs a service's pre-stop within timeout; a failure is logged
+// and never keeps the service from stopping.
+func (s *Supervisor) preStop(name string, argv []string, timeout time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	start := time.Now()
+	s.o.Logger.Info("services: pre-stop", log.F("service", name), log.F("exec", argv[0]), log.F("timeout", timeout.String()))
+	if err := s.r.Run(ctx, argv); err != nil {
+		s.o.Logger.Warn("services: pre-stop failed; stopping anyway", log.F("service", name), log.F("exec", argv[0]), log.F("took", time.Since(start).String()), log.F("error", err.Error()))
+		return
+	}
+	s.o.Logger.Info("services: pre-stop done", log.F("service", name), log.F("took", time.Since(start).String()))
 }
 
 func errString(err error) string {
