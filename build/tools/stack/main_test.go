@@ -37,6 +37,16 @@ box_secrets:
     keys: [{key: KEK, generate: key32}]
 `
 
+const emailProductYAML = productYAML + `  - secret: sneakers/sneakers-mail
+    keys: [{key: SMTP_PASS, setting: email.password}]
+email: {}
+box_settings:
+  - configmap: sneakers/sneakers-email
+    keys: [{key: SMTP_HOST, setting: email.host}]
+  - configmap: sneakers/sneakers-other
+    keys: [{key: X, setting: email.port}]
+`
+
 // off is what helm renders with the switch off: a Deployment reading a
 // box secret, the chart's own generated Secret, a PostgreSQL StatefulSet
 // with a volume claim, an Ingress with a host and TLS, and the gateway's
@@ -216,10 +226,12 @@ func toStrings(v any) []string {
 
 func TestRenderRefuses(t *testing.T) {
 	for name, tc := range map[string]struct{ off, product, want string }{
-		"a Secret no box makes":           {off + "---\napiVersion: v1\nkind: Secret\nmetadata: {name: sneakers-lab}\ndata: {a: Yg==}\n", productYAML, "Secret sneakers-lab"},
-		"an unpinned image":               {strings.Replace(off, "postgres:18.6@", "redis:7@", 1), productYAML, "redis"},
-		"a Secret read that no box makes": {strings.Replace(off, "name: sneakers-box, key: KEK", "name: sneakers-lab-secrets, key: KEK", 1), productYAML, "sneakers-lab-secrets"},
-		"a box secret key not declared":   {strings.Replace(off, "name: sneakers-box, key: KEK", "name: sneakers-box, key: TOTP", 1), productYAML, "sneakers-box"},
+		"a Secret no box makes":             {off + "---\napiVersion: v1\nkind: Secret\nmetadata: {name: sneakers-lab}\ndata: {a: Yg==}\n", productYAML, "Secret sneakers-lab"},
+		"an unpinned image":                 {strings.Replace(off, "postgres:18.6@", "redis:7@", 1), productYAML, "redis"},
+		"a Secret read that no box makes":   {strings.Replace(off, "name: sneakers-box, key: KEK", "name: sneakers-lab-secrets, key: KEK", 1), productYAML, "sneakers-lab-secrets"},
+		"a box secret key not declared":     {strings.Replace(off, "name: sneakers-box, key: KEK", "name: sneakers-box, key: TOTP", 1), productYAML, "sneakers-box"},
+		"the relay password in a ConfigMap": {off + "---\napiVersion: v1\nkind: ConfigMap\nmetadata: {name: sneakers-identity}\ndata: {SMTP_PASS: x}\n", emailProductYAML, "SMTP_PASS"},
+		"a ConfigMap the box writes":        {off + "---\napiVersion: v1\nkind: ConfigMap\nmetadata: {name: sneakers-email}\ndata: {SMTP_HOST: smtp.example.org}\n", emailProductYAML, "sneakers-email"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, _, err := run(t, tc.off, tc.off+strings.TrimPrefix(on, off), tc.product)
