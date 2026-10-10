@@ -281,12 +281,15 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 	next.ExpectScreen(`Health `, 5*time.Minute)
 	next.ExpectScreen(`Admin https://`+leasedHost+`:8443`, 3*time.Minute)
 	deadline = time.Now().Add(3 * time.Minute)
+	// The status answer is kept apart from the interactive login below:
+	// the :8443 fingerprint is checked against what status names.
+	var status string
 	for {
-		if out, err = ssh(ctx, sshPort, "alice", alice, codes.next()+"\n", "status", "-o", "json"); err == nil && strings.Contains(out, `"normal"`) {
+		if status, err = ssh(ctx, sshPort, "alice", alice, codes.next()+"\n", "status", "-o", "json"); err == nil && strings.Contains(status, `"normal"`) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("status after the reboot: %v: %s", err, out)
+			t.Fatalf("status after the reboot: %v: %s", err, status)
 		}
 		time.Sleep(3 * time.Second)
 	}
@@ -307,7 +310,7 @@ func TestFirstBootToAWorkingAppliance(t *testing.T) {
 	}
 	sum := sha256.Sum256(cert)
 	fp := strings.ToUpper(hex.EncodeToString(sum[:]))
-	if !strings.Contains(strings.ReplaceAll(out, ":", ""), fp) {
-		t.Fatalf("the :8443 certificate %s isn't the one status names: %s", fp, out)
+	if !strings.Contains(strings.ReplaceAll(status, ":", ""), fp) {
+		t.Fatalf("the :8443 certificate %s isn't the one status names: %s", fp, status)
 	}
 }
