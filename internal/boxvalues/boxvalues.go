@@ -4,7 +4,8 @@
 // Package boxvalues offers a product the values of the box itself, such as
 // its host name, so no bundle names a box and one bundle fits every box.
 // A product's stacks carry a placeholder for each value they read
-// (product.yaml box_values); the box replaces it with its own value
+// (product.yaml box_values: its FQDN, and its Base OS and Base Web
+// versions); the box replaces it with its own value
 // whenever it puts a stack in front of k0s: k0s-interim at every k0s start
 // and productswitch when a switch turns on. The values are recorded on the
 // state volume at each product apply and revert, and again when the host
@@ -16,9 +17,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -129,6 +132,33 @@ func Write(dir string, values map[string]string) error {
 	return nil
 }
 
+// versionRE is what a recorded version may look like: k0s-interim puts it
+// into the stacks with sed, so nothing that sed or YAML would read as
+// syntax.
+var versionRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$`)
+
+// RecordVersions records the Base OS version the box runs and the Base Web
+// version it serves in dir, next to the values already there. A version
+// that doesn't look like one is left out rather than recorded, so its
+// placeholder stays and the product shows it as unknown. Init records them
+// at every boot, before k0s starts, and osadmin at each product apply and
+// revert.
+func RecordVersions(dir, osVersion, webVersion string) error {
+	values := Read(dir)
+	was := maps.Clone(values)
+	for name, v := range map[string]string{productspec.BoxOSVersion: osVersion, productspec.BoxWebVersion: webVersion} {
+		if versionRE.MatchString(v) {
+			values[name] = v
+		} else {
+			delete(values, name)
+		}
+	}
+	if maps.Equal(was, values) {
+		return nil
+	}
+	return Write(dir, values)
+}
+
 // Box is the box's values as the product gets them.
 type Box struct {
 	// Dir is the platform settings directory (/var/lib/sneakers/platform).
@@ -137,6 +167,18 @@ type Box struct {
 	Names func(ctx context.Context) (host string, addrs []string, err error)
 	// Own is the box's own name (internal/boxname).
 	Own func() string
+	// Versions are the Base OS version the box runs and the Base Web
+	// version it serves; nil records none.
+	Versions func() (osVersion, webVersion string)
+}
+
+// RecordVersions records the box's versions now (RecordVersions).
+func (b *Box) RecordVersions() error {
+	if b.Versions == nil {
+		return nil
+	}
+	osVersion, webVersion := b.Versions()
+	return RecordVersions(b.Dir, osVersion, webVersion)
 }
 
 // FQDN is the box's FQDN now.

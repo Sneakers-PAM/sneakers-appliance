@@ -52,6 +52,13 @@ gateway:
     MCP_HEALTH_URL: ''
     OAUTH_PUBLIC_URL: ''
     MCP_ENABLED: 'false'
+    # The box for the product's About and diagnostics: the placeholders
+    # product.yaml's box_values declare, which the box replaces with its
+    # Base OS and Base Web versions and its FQDN. render.sh adds
+    # SNEAKERS_PRODUCT_VERSION, the release's own version.
+    SNEAKERS_APPLIANCE_VERSION: baseos-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+    SNEAKERS_APPLIANCE_WEB_VERSION: baseweb-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+    SNEAKERS_APPLIANCE_FQDN: sneakers.box.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
   secretEnv:
     SETUP_TOKEN:
       secretName: sneakers-setup-token

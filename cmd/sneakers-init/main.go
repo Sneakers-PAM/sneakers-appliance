@@ -204,6 +204,11 @@ func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 		} else {
 			lg.Info("init: host name set", log.F("hostname", host))
 		}
+		if err := recordBoxVersions(stateRoot, release.Version); err != nil {
+			lg.Error(err, "init: the box's versions weren't recorded for the product")
+		} else {
+			lg.Info("init: the box's versions are recorded for the product", log.F("baseOS", release.Version))
+		}
 	}
 
 	tbl, err := services.Load(os.DirFS("/"), services.Dir)
