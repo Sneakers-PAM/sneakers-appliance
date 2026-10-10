@@ -306,6 +306,11 @@ type Import struct {
 	// Restart are the workloads restarted after an import, so they load
 	// what it wrote.
 	Restart []string `yaml:"restart"`
+	// After, with phases, is the phase the product holds after while an
+	// import is open: the phases through it run (what the import writes
+	// to), the later ones are stopped until it's closed, and the box says
+	// maintenance meanwhile.
+	After string `yaml:"after"`
 }
 
 var jobRE = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*\.ya?ml$`)

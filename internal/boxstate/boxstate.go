@@ -30,10 +30,15 @@ const (
 	ShuttingDown State = "shutting-down"
 	Updating     State = "updating"
 	Maintenance  State = "maintenance"
+	// Failed is a product that couldn't start: a phase failed or timed out
+	// (docs/upgrades.md#the-phases). 443 stays on the box-state page,
+	// which names the phase and the reason, until a revert, a re-apply or
+	// a reboot.
+	Failed State = "failed"
 )
 
 // All lists every state.
-var All = []State{Running, Starting, Rebooting, ShuttingDown, Updating, Maintenance}
+var All = []State{Running, Starting, Rebooting, ShuttingDown, Updating, Maintenance, Failed}
 
 // Valid is whether s names a state.
 func Valid(s string) bool {

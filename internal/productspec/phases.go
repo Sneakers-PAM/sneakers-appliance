@@ -139,6 +139,9 @@ func (s Spec) checkPhases() error {
 			}
 		}
 	}
+	if im := s.Import; im != nil && im.After != "" && !names[im.After] {
+		return bad("import: after %q isn't one of the phases", im.After)
+	}
 	return nil
 }
 

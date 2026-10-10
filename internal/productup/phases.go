@@ -145,9 +145,16 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 	if waiting := rolloutWith(alwaysWant, live, notPhased); waiting != "" {
 		return Result{Step: StepCluster, Detail: waiting}, nil
 	}
-	for _, ph := range spec.Phases {
+	importOpen := false
+	if st, ok := spec.ImportStack(); ok && spec.Import.After != "" {
+		importOpen = slices.Contains(on, st)
+	}
+	for i, ph := range spec.Phases {
 		if r, done, err := p.phase(ctx, ph, on, live, pods); err != nil || !done {
 			return r, err
+		}
+		if importOpen && ph.Name == spec.Import.After && i+1 < len(spec.Phases) {
+			return p.hold(ctx, spec.Phases[i+1:], live)
 		}
 	}
 	if h := spec.Health(); h != nil {
@@ -224,6 +231,24 @@ func (p *Probe) phase(ctx context.Context, ph productspec.Phase, on []string, li
 		return at(fmt.Sprintf("%d old %s still stopping", stopping, plural(stopping, "pod", "pods"))), false, nil
 	}
 	return Result{}, true, nil
+}
+
+// hold keeps the phases after an open import's phase stopped: their
+// workloads are scaled to 0, and the answer, at the first of them, says
+// the product is held until the import is closed.
+func (p *Probe) hold(ctx context.Context, later []productspec.Phase, live []workload) (Result, error) {
+	names := map[string]bool{}
+	for _, ph := range later {
+		names[ph.Name] = true
+	}
+	for _, w := range live {
+		if names[w.Metadata.Labels[productspec.PhaseLabel]] && replicasOf(w) > 0 {
+			if err := p.scale(ctx, w.Metadata.Namespace, w.Kind, w.Metadata.Name, 0); err != nil {
+				return Result{}, err
+			}
+		}
+	}
+	return Result{Step: PhaseStep(later[0].Name), Detail: "Held while an import is open; it starts once the import is closed", Held: true}, nil
 }
 
 func replicasOf(w workload) int64 {

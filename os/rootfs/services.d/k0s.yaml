@@ -18,4 +18,8 @@ after: [netd]
 restart: always
 start-when: [/var/lib/sneakers/setup/done, /var/lib/sneakers/product/current/bundle.json]
 pre-start: [/bin/sh, /usr/libexec/sneakers/k0s-interim, prepare]
+# Before every stop (a reboot, a shutdown, a product apply or revert) the
+# product stops latest phase first, so the database stops last and cleanly
+# (docs/upgrades.md#the-phases); it gets the stop-timeout too.
+pre-stop: [/usr/bin/sneakers-accessd, quiesce]
 stop-timeout: 2m

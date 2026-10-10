@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,5 +155,42 @@ func TestTheSneakersBundleDeclaresItsPhases(t *testing.T) {
 	}
 	if !slices.Contains(s.Phases[3].SwitchStacks, "sneakers-mcp") {
 		t.Errorf("the front phase places the MCP switch's stack: %v", s.Phases[3].SwitchStacks)
+	}
+}
+
+// An import holds the product after the phase import.after names: what
+// the import writes to runs, and nothing past it (no sign-in, no agent)
+// until it's closed. It must name a phase.
+func TestTheImportHoldsAfterAPhase(t *testing.T) {
+	doc := withImport + "phases:\n  - {name: data, label: x, stack: app-data, workloads: [a]}\n  - {name: front, label: y, stack: app-front, workloads: [b]}\n"
+	s, err := productspec.Parse([]byte(strings.Replace(doc, "import:\n", "import:\n  after: data\n", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Import.After != "data" {
+		t.Fatalf("after %q", s.Import.After)
+	}
+	if _, err := productspec.Parse([]byte(strings.Replace(doc, "import:\n", "import:\n  after: nope\n", 1))); !codes.Is(err, codes.KitBundleMismatch) {
+		t.Fatalf("an after that names no phase: %v", err)
+	}
+	if _, err := productspec.Parse([]byte(strings.Replace(withImport, "import:\n", "import:\n  after: data\n", 1))); !codes.Is(err, codes.KitBundleMismatch) {
+		t.Fatalf("an after without phases: %v", err)
+	}
+}
+
+// The Sneakers import holds the product after the services phase: the
+// import writes to the vault and the audit service, and the gateway and
+// the web apps (sign-in, MCP) stay down until it's closed.
+func TestTheSneakersImportHoldsAfterTheServices(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Import == nil || s.Import.After != "services" {
+		t.Fatalf("%+v", s.Import)
 	}
 }

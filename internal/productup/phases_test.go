@@ -555,3 +555,58 @@ func TestAnEarlierVersionsUnphasedWorkloadsStopFirst(t *testing.T) {
 		t.Fatal("a phase was placed while the old database ran")
 	}
 }
+
+// While an import is open the product holds after the phase import.after
+// names: the later phases' workloads are scaled to 0 and the answer says
+// held, at the next phase's step; once it's closed they come back.
+func TestAnOpenImportHoldsAfterItsPhase(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	p, manifests := phasedProbe(t, c)
+	product := strings.Replace(phasedProduct, "switches:\n", "switches:\n  - {name: import, label: Import, stacks: [app-import]}\n", 1) +
+		"exposed_values:\n  - {name: setup, secret: app/s, key: K, roles: [admin], one_time: true, consumed_when: {service: app/gw:http, path: /setup/state, field: needsSetup, equals: false}}\n" +
+		"import: {switch: import, job: import/job.yaml, uid: 65532, setup: setup, after: data}\n"
+	writeSlot(t, p.Slot, map[string]string{"product.yaml": product, "manifests/app-import/sa.yaml": "apiVersion: v1\nkind: ServiceAccount\nmetadata: {name: migrate, namespace: app}\n"})
+	if err := productspec.WriteRBAC(p.Slot); err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range []string{"app", "edge", "app-data", "app-front"} {
+		c.apply(t, p.Slot, st)
+		if err := os.MkdirAll(filepath.Join(manifests, st), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, k := range []string{"Deployment edge/edge", "StatefulSet app/app-db", "Deployment app/app-web"} {
+		c.setReady(k, true, "")
+	}
+	ctx := context.Background()
+	if r, _ := p.Check(ctx); r.Step != "" {
+		t.Fatalf("up with the import closed: %+v", r)
+	}
+	if err := os.MkdirAll(p.SwitchDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "switches"), []byte("import on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.apply(t, p.Slot, "app-import")
+	r, _ := p.Check(ctx)
+	if r.Step != "phase:front" || !r.Held || r.Timeout != 0 {
+		t.Fatalf("an open import: %+v", r)
+	}
+	if got := c.callsMatching("scale --namespace app deployment/app-web --replicas=0"); len(got) != 1 {
+		t.Fatalf("the front phase wasn't stopped: %v", c.callsMatching("scale "))
+	}
+	if c.workloads["StatefulSet app/app-db"].replicas != 1 {
+		t.Fatal("the data phase was stopped")
+	}
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "switches"), []byte("import off\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := p.Check(ctx); r.Step != "phase:front" || r.Held {
+		t.Fatalf("the import closed: %+v", r)
+	}
+	if got := c.callsMatching("scale --namespace app deployment/app-web --replicas=1"); len(got) != 1 {
+		t.Fatalf("the front phase wasn't started again: %v", c.callsMatching("scale "))
+	}
+}

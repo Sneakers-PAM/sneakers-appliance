@@ -59,6 +59,10 @@ type Result struct {
 	// waits for a reason no retry clears (its image isn't on the box, its
 	// spec is wrong). Detail names it.
 	Failed bool
+	// Held is a phased product held after the phase its import names
+	// while an import is open (productspec.Import.After): the phases
+	// through it run, the later ones wait, and the box says maintenance.
+	Held bool
 }
 
 // StackLabel is the label k0s's manifest applier puts on every object of a

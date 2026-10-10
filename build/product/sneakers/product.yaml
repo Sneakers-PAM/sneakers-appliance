@@ -76,6 +76,11 @@ import:
   setup: setup-token
   restart:
     - sneakers/deployment/sneakers-vault
+  # While an import is open the product holds after the services phase:
+  # the vault, the audit service, PostgreSQL and Kratos the import writes
+  # to run, and the gateway and the web apps (sign-in, the MCP) stay down
+  # until it's closed (docs/import.md).
+  after: services
 
 # The keys Sneakers' data can't be opened without: the vault's root key
 # and the identity service's TOTP key. The box seals each under
