@@ -633,6 +633,27 @@ Example:
   tls show
 ```
 
+## `updates`
+
+Show or set the channel the GitHub update source follows, as the mirror card on :8443 does.
+
+Shows the update source, the channel the GitHub source follows (stable, or rc, which takes a newer stable too), the repository and the release last picked. updates channel sets the channel, and default goes back to this build's own (rc on a pre-release build). updates repo points a lab build at a test repository; a production build refuses it. Owners only for a change.
+
+Offered over: SSH and console.
+
+```text
+updates [channel rc|stable|default] [repo <owner>/<name>|default]
+```
+
+Example:
+
+```text
+  updates
+  updates channel rc
+  updates channel default
+  updates repo example/test-releases
+```
+
 ## `upgrade`
 
 Upgrades.
