@@ -99,9 +99,9 @@ func main() {
 	}
 }
 
-// releaseSource is where a production build fetches directly from, when
-// the update policy allows it: the project's GitHub Releases.
-const releaseSource = "https://github.com/Sneakers-PAM/sneakers-appliance/releases"
+// releaseRepo is where a production build fetches from by default: the
+// project's GitHub Releases (docs/upgrades.md#the-github-source).
+const releaseRepo = "Sneakers-PAM/sneakers-appliance"
 
 func unixClient(sock string) *http.Client { return unixClientWith(sock, 30*time.Second) }
 
@@ -313,8 +313,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			UpdateKey: func() (age.Identity, error) {
 				return ukikey.Running(secureboot.Efivarfs{Dir: secureboot.DefaultEfivarfs}, os.DirFS(c.esp))
 			},
-			DirectURL: directURL(pins.Channel),
-			Arch:      runtime.GOARCH,
+			ReleaseRepo: releaseRepoFor(pins.Channel),
+			Arch:        runtime.GOARCH,
 			// sneakers-osadmin serves the pages and says which it serves.
 			WebServedFile:  filepath.Join(paths.OwnDir(), osadmin.WebServedFile),
 			BuiltinMirrors: builtinMirrors(),
@@ -507,8 +507,6 @@ func bootID(lg log.Logger) string {
 	return strings.TrimSpace(string(b))
 }
 
-// directURL is the release source a build fetches from directly; a lab
-// build has none (lab packages are never published).
 // builtinMirrors is the built-in source list a lab build names.
 func builtinMirrors() []string {
 	var out []string
@@ -520,9 +518,12 @@ func builtinMirrors() []string {
 	return out
 }
 
-func directURL(channel string) string {
+// releaseRepoFor is the GitHub repository a build fetches from; a lab
+// build has none (lab packages are never published there), unless its
+// update policy names a test repository.
+func releaseRepoFor(channel string) string {
 	if channel == release.ChannelProduction {
-		return releaseSource
+		return releaseRepo
 	}
 	return ""
 }

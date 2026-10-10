@@ -91,6 +91,35 @@ func (h *accessH) SetMcp(ctx context.Context, r *connect.Request[accessv1.SetMcp
 	return connect.NewResponse(&accessv1.SetMcpResponse{}), nil
 }
 
+func (h *accessH) GetUpdateChannel(ctx context.Context, r *connect.Request[accessv1.GetUpdateChannelRequest]) (*connect.Response[accessv1.GetUpdateChannelResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceGetUpdateChannelProcedure, osadminv1connect.UpgradeServiceGetUpgradesProcedure, h.s.h.Upgrade.GetUpgrades, &osadminv1.GetUpgradesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.GetUpdateChannelResponse{Policy: out.GetPolicy(), MirrorStatus: out.GetMirrorStatus()}), nil
+}
+
+// SetUpdateChannel sets the channel or the lab repository override and
+// keeps the rest of the policy: it's read, then written back with only
+// those changed, as the caller.
+func (h *accessH) SetUpdateChannel(ctx context.Context, r *connect.Request[accessv1.SetUpdateChannelRequest]) (*connect.Response[accessv1.SetUpdateChannelResponse], error) {
+	l, err := h.s.caller(ctx, r.Header(), accessv1connect.AccessServiceSetUpdateChannelProcedure)
+	if err != nil {
+		return nil, err
+	}
+	cur, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceGetUpgradesProcedure, h.s.h.Upgrade.GetUpgrades, &osadminv1.GetUpgradesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	p := cur.GetPolicy()
+	p.ReleaseChannel, p.ReleaseRepo = r.Msg.ReleaseChannel, r.Msg.ReleaseRepo
+	if _, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceSetUpgradePolicyProcedure, h.s.h.Upgrade.SetUpgradePolicy, &osadminv1.SetUpgradePolicyRequest{Policy: p}); err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("accessd: update channel set from the shell", log.F("admin", l.Admin), log.F("channel", r.Msg.GetReleaseChannel()), log.F("repo", r.Msg.GetReleaseRepo()))
+	return connect.NewResponse(&accessv1.SetUpdateChannelResponse{}), nil
+}
+
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
 	m := r.Msg
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceAddAdminProcedure, osadminv1connect.AccessServiceAddAdminProcedure, h.s.h.Access.AddAdmin,

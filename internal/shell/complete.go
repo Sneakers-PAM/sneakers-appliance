@@ -67,6 +67,20 @@ func completeMcp(_ context.Context, _ *Env, args []string, partial string) ([]st
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
+// completeUpdates offers updates' two settings, then the channel's values
+// or the repository's default.
+func completeUpdates(_ context.Context, _ *Env, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+	switch {
+	case len(args) == 0:
+		return []string{"channel\tthe channel the GitHub source follows", "repo\ta lab build's test repository"}, cobra.ShellCompDirectiveNoFileComp
+	case len(args) == 1 && args[0] == "channel":
+		return []string{"default\tthis build's own", "rc\trelease candidates, and newer stable releases", "stable\tstable releases only"}, cobra.ShellCompDirectiveNoFileComp
+	case len(args) == 1 && args[0] == "repo":
+		return []string{"default\tthe build's own"}, cobra.ShellCompDirectiveNoFileComp
+	}
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
 // adminNames are the admins accessd lists, for --admin; nothing when it
 // can't be asked.
 func adminNames(ctx context.Context, e *Env) []string {

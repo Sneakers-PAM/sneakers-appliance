@@ -131,6 +131,7 @@ jobs:
         run: |
           bash build/release/guard_test.sh
           bash build/release/check-fingerprints_test.sh
+          bash build/release/check-asset-sizes_test.sh
           bash build/release/check-production-keys_test.sh
           bash build/release/check-production-keys.sh --allow-empty keys/production
           bash build/release/build_test.sh

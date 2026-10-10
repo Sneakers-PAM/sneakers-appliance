@@ -30,6 +30,7 @@ import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/product.proto";
 import "sneakers/appliance/osadmin/v1/setup.proto";
 import "sneakers/appliance/osadmin/v1/status.proto";
+import "sneakers/appliance/osadmin/v1/upgrade.proto";
 
 option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1;accessv1";
 
@@ -72,6 +73,15 @@ service AccessService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc SetMcp(SetMcpRequest) returns (SetMcpResponse);
+  // GetUpdateChannel and SetUpdateChannel are the closed shell's "updates":
+  // osadmin's UpgradeService.GetUpgrades and SetUpgradePolicy run as the
+  // login's admin, so the shell shows and sets the same channel (and, on a
+  // lab build, the GitHub repository override) as the mirror card on
+  // :8443, under the same role and audit.
+  rpc GetUpdateChannel(GetUpdateChannelRequest) returns (GetUpdateChannelResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SetUpdateChannel(SetUpdateChannelRequest) returns (SetUpdateChannelResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -745,3 +755,23 @@ message SetMcpRequest {
 }
 
 message SetMcpResponse {}
+
+message GetUpdateChannelRequest {}
+
+message GetUpdateChannelResponse {
+  // policy is the update policy and mirror_status the source's status,
+  // as GetUpgrades answers them.
+  sneakers.appliance.osadmin.v1.UpgradePolicy policy = 1;
+  sneakers.appliance.osadmin.v1.MirrorStatus mirror_status = 2;
+}
+
+message SetUpdateChannelRequest {
+  // release_channel is stable, rc, or empty for the box's default; left
+  // out, it's kept.
+  optional string release_channel = 1;
+  // release_repo is a lab build's GitHub repository override (owner/name),
+  // empty to clear it; left out, it's kept.
+  optional string release_repo = 2;
+}
+
+message SetUpdateChannelResponse {}

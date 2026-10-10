@@ -91,6 +91,12 @@ const (
 	AccessServiceGetMcpProcedure = "/sneakers.appliance.access.v1.AccessService/GetMcp"
 	// AccessServiceSetMcpProcedure is the fully-qualified name of the AccessService's SetMcp RPC.
 	AccessServiceSetMcpProcedure = "/sneakers.appliance.access.v1.AccessService/SetMcp"
+	// AccessServiceGetUpdateChannelProcedure is the fully-qualified name of the AccessService's
+	// GetUpdateChannel RPC.
+	AccessServiceGetUpdateChannelProcedure = "/sneakers.appliance.access.v1.AccessService/GetUpdateChannel"
+	// AccessServiceSetUpdateChannelProcedure is the fully-qualified name of the AccessService's
+	// SetUpdateChannel RPC.
+	AccessServiceSetUpdateChannelProcedure = "/sneakers.appliance.access.v1.AccessService/SetUpdateChannel"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -226,6 +232,13 @@ type AccessServiceClient interface {
 	// and audit.
 	GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error)
 	SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error)
+	// GetUpdateChannel and SetUpdateChannel are the closed shell's "updates":
+	// osadmin's UpgradeService.GetUpgrades and SetUpgradePolicy run as the
+	// login's admin, so the shell shows and sets the same channel (and, on a
+	// lab build, the GitHub repository override) as the mirror card on
+	// :8443, under the same role and audit.
+	GetUpdateChannel(context.Context, *connect.Request[v1.GetUpdateChannelRequest]) (*connect.Response[v1.GetUpdateChannelResponse], error)
+	SetUpdateChannel(context.Context, *connect.Request[v1.SetUpdateChannelRequest]) (*connect.Response[v1.SetUpdateChannelResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -309,22 +322,37 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("SetMcp")),
 			connect.WithClientOptions(opts...),
 		),
+		getUpdateChannel: connect.NewClient[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse](
+			httpClient,
+			baseURL+AccessServiceGetUpdateChannelProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("GetUpdateChannel")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		setUpdateChannel: connect.NewClient[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse](
+			httpClient,
+			baseURL+AccessServiceSetUpdateChannelProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("SetUpdateChannel")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accessServiceClient implements AccessServiceClient.
 type accessServiceClient struct {
-	getStatus       *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
-	listAdmins      *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
-	addAdmin        *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
-	removeAdmin     *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
-	listKeys        *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
-	addKey          *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
-	removeKey       *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
-	addRecoveryKey  *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
-	getExposedValue *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
-	getMcp          *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
-	setMcp          *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
+	getStatus        *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	listAdmins       *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
+	addAdmin         *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
+	removeAdmin      *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
+	listKeys         *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
+	addKey           *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
+	removeKey        *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
+	addRecoveryKey   *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getExposedValue  *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
+	getMcp           *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
+	setMcp           *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
+	getUpdateChannel *connect.Client[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse]
+	setUpdateChannel *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -384,6 +412,16 @@ func (c *accessServiceClient) SetMcp(ctx context.Context, req *connect.Request[v
 	return c.setMcp.CallUnary(ctx, req)
 }
 
+// GetUpdateChannel calls sneakers.appliance.access.v1.AccessService.GetUpdateChannel.
+func (c *accessServiceClient) GetUpdateChannel(ctx context.Context, req *connect.Request[v1.GetUpdateChannelRequest]) (*connect.Response[v1.GetUpdateChannelResponse], error) {
+	return c.getUpdateChannel.CallUnary(ctx, req)
+}
+
+// SetUpdateChannel calls sneakers.appliance.access.v1.AccessService.SetUpdateChannel.
+func (c *accessServiceClient) SetUpdateChannel(ctx context.Context, req *connect.Request[v1.SetUpdateChannelRequest]) (*connect.Response[v1.SetUpdateChannelResponse], error) {
+	return c.setUpdateChannel.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -415,6 +453,13 @@ type AccessServiceHandler interface {
 	// and audit.
 	GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error)
 	SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error)
+	// GetUpdateChannel and SetUpdateChannel are the closed shell's "updates":
+	// osadmin's UpgradeService.GetUpgrades and SetUpgradePolicy run as the
+	// login's admin, so the shell shows and sets the same channel (and, on a
+	// lab build, the GitHub repository override) as the mirror card on
+	// :8443, under the same role and audit.
+	GetUpdateChannel(context.Context, *connect.Request[v1.GetUpdateChannelRequest]) (*connect.Response[v1.GetUpdateChannelResponse], error)
+	SetUpdateChannel(context.Context, *connect.Request[v1.SetUpdateChannelRequest]) (*connect.Response[v1.SetUpdateChannelResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -494,6 +539,19 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("SetMcp")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceGetUpdateChannelHandler := connect.NewUnaryHandler(
+		AccessServiceGetUpdateChannelProcedure,
+		svc.GetUpdateChannel,
+		connect.WithSchema(accessServiceMethods.ByName("GetUpdateChannel")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceSetUpdateChannelHandler := connect.NewUnaryHandler(
+		AccessServiceSetUpdateChannelProcedure,
+		svc.SetUpdateChannel,
+		connect.WithSchema(accessServiceMethods.ByName("SetUpdateChannel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -518,6 +576,10 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceGetMcpHandler.ServeHTTP(w, r)
 		case AccessServiceSetMcpProcedure:
 			accessServiceSetMcpHandler.ServeHTTP(w, r)
+		case AccessServiceGetUpdateChannelProcedure:
+			accessServiceGetUpdateChannelHandler.ServeHTTP(w, r)
+		case AccessServiceSetUpdateChannelProcedure:
+			accessServiceSetUpdateChannelHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -569,6 +631,14 @@ func (UnimplementedAccessServiceHandler) GetMcp(context.Context, *connect.Reques
 
 func (UnimplementedAccessServiceHandler) SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.SetMcp is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) GetUpdateChannel(context.Context, *connect.Request[v1.GetUpdateChannelRequest]) (*connect.Response[v1.GetUpdateChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.GetUpdateChannel is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) SetUpdateChannel(context.Context, *connect.Request[v1.SetUpdateChannelRequest]) (*connect.Response[v1.SetUpdateChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.SetUpdateChannel is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

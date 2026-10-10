@@ -174,6 +174,9 @@ func (e *pinError) Error() string {
 // which then serves every source.
 func (s *Server) fetchClient(src source) (*http.Client, error) {
 	if hc := s.o.Upgrade.HTTPClient; hc != nil {
+		if src.direct {
+			return s.githubClient(hc), nil
+		}
 		return hc, nil
 	}
 	roots := s.o.Upgrade.SystemRoots
@@ -208,7 +211,7 @@ func (s *Server) fetchClient(src source) (*http.Client, error) {
 			}
 		}
 	}
-	return &http.Client{
+	hc := &http.Client{
 		Timeout:   time.Hour,
 		Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, TLSClientConfig: cfg},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -220,7 +223,11 @@ func (s *Server) fetchClient(src source) (*http.Client, error) {
 			}
 			return nil
 		},
-	}, nil
+	}
+	if src.direct {
+		return s.githubClient(hc), nil
+	}
+	return hc, nil
 }
 
 // open starts a GET of src's URL. It returns the 200 response, and the
@@ -319,7 +326,9 @@ func (s *Server) mirrorStatus(p Policy) *osadminv1.MirrorStatus {
 	if base == "" {
 		return nil
 	}
-	out := &osadminv1.MirrorStatus{Scheme: "https", Source: effectiveSource(p, s.o.Upgrade.DirectURL != ""), Url: base, BuiltinUrls: s.builtinList()}
+	_, web, _ := s.releaseURLs(p)
+	out := &osadminv1.MirrorStatus{Scheme: "https", Source: effectiveSource(p, web != ""), Url: base, BuiltinUrls: s.builtinList()}
+	s.githubStatus(p, out)
 	if strings.HasPrefix(base, "http://") {
 		out.Scheme, out.Note = "http", httpNote
 	}

@@ -193,6 +193,8 @@ var shellMethods = map[string]bool{
 	accessv1connect.AccessServiceGetExposedValueProcedure:   true,
 	accessv1connect.AccessServiceGetMcpProcedure:            true,
 	accessv1connect.AccessServiceSetMcpProcedure:            true,
+	accessv1connect.AccessServiceGetUpdateChannelProcedure:  true,
+	accessv1connect.AccessServiceSetUpdateChannelProcedure:  true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceSetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceConfirmNetworkProcedure:   true,

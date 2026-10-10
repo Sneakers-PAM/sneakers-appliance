@@ -78,7 +78,17 @@ type UpgradeOptions struct {
 	ElevationEndWait time.Duration
 	// DirectURL is the release source (a production build's GitHub
 	// Releases URL); empty when the build has none, as a lab build.
-	DirectURL string
+	// ReleaseAPIURL is its releases list on the GitHub API. ReleaseRepo is
+	// the repository (owner/name): with it set, either left empty is
+	// GitHub's own. RedirectHosts are the hosts a download may redirect to;
+	// nil is GitHub's asset hosts (ghrelease.AssetHosts).
+	DirectURL     string
+	ReleaseAPIURL string
+	ReleaseRepo   string
+	RedirectHosts []string
+	// BuildVersion is the running build's version, for the default
+	// release channel; empty is release.Version.
+	BuildVersion string
 	// ProductDir holds the product slots; empty is product.Dir.
 	ProductDir string
 	// Arch is the box's architecture; empty is amd64.
@@ -120,6 +130,11 @@ type Policy struct {
 	// Source is builtin, manual or none; empty is a policy from before it
 	// (effectiveSource).
 	Source string `json:"source,omitempty"`
+	// ReleaseChannel is the GitHub source's channel, stable or rc; empty
+	// is the build's default. ReleaseRepo is a lab build's override of the
+	// GitHub repository; a production build ignores it.
+	ReleaseChannel string `json:"releaseChannel,omitempty"`
+	ReleaseRepo    string `json:"releaseRepo,omitempty"`
 }
 
 // DefaultPolicy is a new box's: automatic in a daily 02:00 window of two
@@ -601,13 +616,14 @@ type upgradeSvc struct {
 
 func policyToWire(p Policy, directAvailable bool) *osadminv1.UpgradePolicy {
 	return &osadminv1.UpgradePolicy{Mode: p.Mode, WindowStart: p.WindowStart, WindowMinutes: int32(min(p.WindowMinutes, 1<<30)), MirrorUrl: p.MirrorURL, Direct: p.Direct, // #nosec G115 -- clamped
-		Source: effectiveSource(p, directAvailable)}
+		Source: effectiveSource(p, directAvailable), ReleaseChannel: &p.ReleaseChannel, ReleaseRepo: &p.ReleaseRepo}
 }
 
 func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadminv1.GetUpgradesRequest]) (*connect.Response[osadminv1.GetUpgradesResponse], error) {
 	p := h.s.policy()
-	direct := h.s.o.Upgrade.DirectURL != ""
-	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p, direct), AirGapped: len(h.s.sources(updatepkg.IndexName, updatepkg.IndexName)) == 0, History: h.s.readHistory(100),
+	_, web, _ := h.s.releaseURLs(p)
+	direct := web != ""
+	out := &osadminv1.GetUpgradesResponse{Policy: policyToWire(p, direct), AirGapped: len(h.s.sources(updatepkg.IndexName)) == 0, History: h.s.readHistory(100),
 		Product: h.s.productSlots(ctx), DirectAvailable: direct, MirrorStatus: h.s.mirrorStatus(p), HeldUpload: h.s.heldUpload(), BaseWeb: h.s.baseWebStatus(ctx),
 		LastCheck: h.s.lastCheck(), FetchProgress: h.s.fetchProgress()}
 	h.s.upgrades.mu.Lock()
@@ -639,8 +655,20 @@ func (h *upgradeSvc) GetUpgrades(ctx context.Context, _ *connect.Request[osadmin
 
 func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[osadminv1.SetUpgradePolicyRequest]) (*connect.Response[osadminv1.SetUpgradePolicyResponse], error) {
 	w := r.Msg.GetPolicy()
-	p := Policy{Mode: w.GetMode(), WindowStart: w.GetWindowStart(), WindowMinutes: int(w.GetWindowMinutes()), MirrorURL: strings.TrimRight(strings.TrimSpace(w.GetMirrorUrl()), "/"), Direct: w.GetDirect(), Source: w.GetSource()}
-	callFrom(ctx).note("policy", "mode", p.Mode, "window", p.WindowStart+"+"+itoa(p.WindowMinutes)+"m", "mirror", p.MirrorURL, "direct", strconv.FormatBool(p.Direct), "source", p.Source)
+	was := h.s.policy()
+	p := Policy{Mode: w.GetMode(), WindowStart: w.GetWindowStart(), WindowMinutes: int(w.GetWindowMinutes()), MirrorURL: strings.TrimRight(strings.TrimSpace(w.GetMirrorUrl()), "/"), Direct: w.GetDirect(), Source: w.GetSource(),
+		ReleaseChannel: was.ReleaseChannel, ReleaseRepo: was.ReleaseRepo}
+	if w.ReleaseChannel != nil {
+		p.ReleaseChannel = strings.TrimSpace(w.GetReleaseChannel())
+	}
+	if w.ReleaseRepo != nil {
+		p.ReleaseRepo = strings.TrimSpace(w.GetReleaseRepo())
+	}
+	callFrom(ctx).note("policy", "mode", p.Mode, "window", p.WindowStart+"+"+itoa(p.WindowMinutes)+"m", "mirror", p.MirrorURL, "direct", strconv.FormatBool(p.Direct), "source", p.Source,
+		"channel", p.ReleaseChannel, "repo", p.ReleaseRepo)
+	if err := h.s.validReleasePolicy(p); err != nil {
+		return nil, err
+	}
 	switch p.Source {
 	case "", SourceBuiltIn, SourceNone:
 	case SourceManual:
@@ -669,7 +697,12 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 	if err := writeAtomic(h.s.ownPath(policyFile), b); err != nil {
 		return nil, err
 	}
-	h.s.o.Logger.Info("osadmin: update policy set", log.F("mode", p.Mode), log.F("mirror", p.MirrorURL), log.F("direct", p.Direct), log.F("source", p.Source))
+	if p.ReleaseRepo != was.ReleaseRepo || p.ReleaseChannel != was.ReleaseChannel {
+		h.s.forgetGitHub()
+		h.s.forgetMirrorCheck()
+	}
+	h.s.o.Logger.Info("osadmin: update policy set", log.F("mode", p.Mode), log.F("mirror", p.MirrorURL), log.F("direct", p.Direct), log.F("source", p.Source),
+		log.F("channel", p.ReleaseChannel), log.F("repo", p.ReleaseRepo))
 	return connect.NewResponse(&osadminv1.SetUpgradePolicyResponse{}), nil
 }
 
@@ -680,7 +713,7 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	c := callFrom(ctx)
 	name := r.Msg.GetFileName()
 	c.note(name)
-	srcs := h.s.sources(name, directPath(name))
+	srcs := h.s.sources(name)
 	if len(srcs) == 0 {
 		return nil, codes.New(codes.UpgradeAirGapped, "no mirror is configured and direct fetches are off, so this box never fetches; upload the .bin instead")
 	}
@@ -720,7 +753,14 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 // until StageUpdate verifies it, whichever way it came.
 func (s *Server) fetch(ctx context.Context, src source, meta uploadMeta) (id string, n int64, err error) {
 	started := time.Now()
-	resp, peer, err := s.open(ctx, src, ".bin")
+	var (
+		resp *http.Response
+		peer *x509.Certificate
+	)
+	src, err = s.resolve(ctx, src, false)
+	if err == nil {
+		resp, peer, err = s.open(ctx, src, ".bin")
+	}
 	if err == nil {
 		s.fetchState(func(f *osadminv1.FetchProgress) { f.State, f.TotalBytes = "downloading", max(resp.ContentLength, 0) })
 		id, n, err = s.saveUpload(&progressReader{r: resp.Body, s: s, total: resp.ContentLength, started: time.Now()}, meta)
@@ -993,13 +1033,13 @@ func (s *Server) patchFallback(ctx context.Context, pkg *osadminv1.UpdatePackage
 	s.o.Logger.Warn("osadmin: a patch didn't apply; fetching the full .bin", log.F("version", pkg.GetVersion()), log.F("full", full), log.F("reason", codes.Symbol(code)))
 	var id string
 	var ferr error
-	for _, src := range s.sources(full, directPath(full)) {
+	for _, src := range s.sources(full) {
 		s.beginFetch(full, src.name)
 		if id, _, ferr = s.fetch(ctx, src, uploadMeta{Name: full, Source: src.name}); ferr == nil {
 			break
 		}
 	}
-	if len(s.sources(full, directPath(full))) == 0 {
+	if len(s.sources(full)) == 0 {
 		ferr = codes.New(codes.UpgradeAirGapped, "no source to fetch %s from", full)
 	}
 	s.write(e, ferr)

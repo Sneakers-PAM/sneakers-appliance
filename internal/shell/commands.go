@@ -161,6 +161,9 @@ var specs = []spec{
 	{path: "upgrade", use: "upgrade [...]", short: "Upgrades", action: "upgrade", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Stages and applies updates from the shell. Not available in this release; updates are done on :8443.",
 		example: "  upgrade status"},
+	{path: "updates", use: "updates [channel rc|stable|default] [repo <owner>/<name>|default]", short: "Show or set the channel the GitHub update source follows, as the mirror card on :8443 does", action: "updates.set", origins: both, nargs: [2]int{0, 2}, run: runUpdates, complete: completeUpdates,
+		long:    "Shows the update source, the channel the GitHub source follows (stable, or rc, which takes a newer stable too), the repository and the release last picked. updates channel sets the channel, and default goes back to this build's own (rc on a pre-release build). updates repo points a lab build at a test repository; a production build refuses it. Owners only for a change.",
+		example: "  updates\n  updates channel rc\n  updates channel default\n  updates repo example/test-releases"},
 	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp, complete: completeMcp,
 		long:    "Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit.",
 		example: "  {product} mcp\n  {product} mcp on\n  {product} mcp off machine-api=off"},
@@ -259,7 +262,7 @@ func Resolve(words []string) *Command {
 // Actions are every backend call a command line can make. Nothing else
 // leaves the shell.
 func Actions() []string {
-	out := []string{"rootshell.open", "network.confirm", "product.value", "mcp.show"}
+	out := []string{"rootshell.open", "network.confirm", "product.value", "mcp.show", "updates.show"}
 	for _, s := range specs {
 		if !slices.Contains(out, s.action) {
 			out = append(out, s.action)
@@ -681,6 +684,31 @@ func runMcp(ctx context.Context, e *Env, _ *Command, args []string, _ map[string
 		api = v
 	}
 	return e.Backend.Call(ctx, Request{Action: "mcp.set", Args: []string{map[bool]string{true: "on", false: "off"}[on]}, Flags: map[string]string{"machine-api": api}})
+}
+
+// runUpdates shows the GitHub source's channel, or sets the channel or a
+// lab build's repository override; "default" sets either back.
+func runUpdates(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
+	if len(args) == 0 {
+		return e.Backend.Call(ctx, Request{Action: "updates.show"})
+	}
+	if len(args) != 2 {
+		return Result{}, codes.New(codes.ShellParse, "updates takes channel rc|stable|default or repo <owner>/<name>|default")
+	}
+	v := args[1]
+	if v == "default" {
+		v = ""
+	}
+	switch args[0] {
+	case "channel":
+		if v != "" && v != "rc" && v != "stable" {
+			return Result{}, codes.New(codes.ShellParse, "the channel is rc, stable or default, not %q", Printable(args[1]))
+		}
+		return e.Backend.Call(ctx, Request{Action: "updates.set", Flags: map[string]string{"channel": v}})
+	case "repo":
+		return e.Backend.Call(ctx, Request{Action: "updates.set", Flags: map[string]string{"repo": v}})
+	}
+	return Result{}, codes.New(codes.ShellParse, "updates takes channel or repo, not %q", Printable(args[0]))
 }
 
 func onOff(v string) (bool, bool) {

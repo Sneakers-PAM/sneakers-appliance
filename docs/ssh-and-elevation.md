@@ -179,6 +179,7 @@ control character is refused with `SHELL_PARSE`; an unknown command is `SHELL_UN
 | `shell` | no | yes | accessd; root operators; see [The root shell](#the-root-shell) |
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `resources ...` | yes | yes | Not available in this release |
 | `logs export`, `support-bundle` | no | yes | Not available in this release |
+| `updates`, `updates channel rc\|stable\|default`, `updates repo <owner>/<name>\|default` | yes | yes | accessd; see [The update channel](#the-update-channel) |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
 | `<product> mcp [on\|off] [machine-api=on\|off]` (`sneakers mcp ...`) | no | yes | accessd; only while a product is installed; see [The MCP switch](#the-mcp-switch) |
 
@@ -209,6 +210,19 @@ the `<name>-product` header name without `-product`) when the login starts. With
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
 `sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp` and the product's exposed
 values.
+
+### The update channel
+
+`updates` shows the update source, the channel the GitHub source follows (and whether it's this
+build's default), the repository and the release last picked, and the rate limit's end while the
+GitHub API's is used up. `updates channel rc` or `updates channel stable` sets the channel, and
+`updates channel default` goes back to the build's default (rc on a pre-release build, stable
+otherwise). `updates repo <owner>/<name>` points a lab build's built-in source at a test
+repository and `updates repo default` clears it; a production build refuses it (`ACCESS_CONFIRM`).
+These are the settings the mirror card on :8443 Updates shows ([upgrades.md](upgrades.md#the-github-source)):
+accessd runs `UpgradeService.GetUpgrades` and `SetUpgradePolicy` as the login's admin, changing
+only the channel or the repository and keeping the rest of the policy, so setting either is for
+owners, and the change is audited as `upgrade.policy.set` like one made on :8443.
 
 ### The MCP switch
 

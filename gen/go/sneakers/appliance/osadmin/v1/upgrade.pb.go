@@ -184,7 +184,20 @@ type UpgradePolicy struct {
 	// when direct is on, as before. GetUpgrades always answers it filled
 	// in: a set mirror_url reads as manual, direct with no mirror as
 	// builtin, neither as none.
-	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	// release_channel is the channel the GitHub source follows: stable
+	// (the newest release with no pre-release part) or rc (the newest rc or
+	// stable release, whichever is newer). Empty is the default: rc on a box
+	// running a pre-release, stable otherwise (MirrorStatus.release_channel
+	// is the one in effect). Left out of a SetUpgradePolicy, the stored one
+	// is kept.
+	ReleaseChannel *string `protobuf:"bytes,7,opt,name=release_channel,json=releaseChannel,proto3,oneof" json:"release_channel,omitempty"`
+	// release_repo is a lab build's override of the GitHub repository the
+	// source reads (owner/name), for testing the GitHub source against
+	// another repository; with it set, the built-in list is that
+	// repository alone. A production build refuses it. Left out of a
+	// SetUpgradePolicy the stored one is kept; empty clears it.
+	ReleaseRepo   *string `protobuf:"bytes,8,opt,name=release_repo,json=releaseRepo,proto3,oneof" json:"release_repo,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -257,6 +270,20 @@ func (x *UpgradePolicy) GetDirect() bool {
 func (x *UpgradePolicy) GetSource() string {
 	if x != nil {
 		return x.Source
+	}
+	return ""
+}
+
+func (x *UpgradePolicy) GetReleaseChannel() string {
+	if x != nil && x.ReleaseChannel != nil {
+		return *x.ReleaseChannel
+	}
+	return ""
+}
+
+func (x *UpgradePolicy) GetReleaseRepo() string {
+	if x != nil && x.ReleaseRepo != nil {
+		return *x.ReleaseRepo
 	}
 	return ""
 }
@@ -1939,11 +1966,27 @@ type MirrorStatus struct {
 	PinMatched bool `protobuf:"varint,14,opt,name=pin_matched,json=pinMatched,proto3" json:"pin_matched,omitempty"`
 	// source is the policy's source (builtin or manual) and url the mirror
 	// this status is for; builtin_urls is the built-in list, in order.
-	Source        string   `protobuf:"bytes,15,opt,name=source,proto3" json:"source,omitempty"`
-	Url           string   `protobuf:"bytes,16,opt,name=url,proto3" json:"url,omitempty"`
-	BuiltinUrls   []string `protobuf:"bytes,17,rep,name=builtin_urls,json=builtinUrls,proto3" json:"builtin_urls,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Source      string   `protobuf:"bytes,15,opt,name=source,proto3" json:"source,omitempty"`
+	Url         string   `protobuf:"bytes,16,opt,name=url,proto3" json:"url,omitempty"`
+	BuiltinUrls []string `protobuf:"bytes,17,rep,name=builtin_urls,json=builtinUrls,proto3" json:"builtin_urls,omitempty"`
+	// The GitHub source: release_channel is the channel in effect (stable
+	// or rc) and release_channel_default whether it's the box's default;
+	// release_repo the repository (owner/name), empty when the build has no
+	// GitHub source; release_tag the release last picked, empty before a
+	// check or when the API couldn't be read and the latest stable release
+	// was fetched instead; releases_checked_at when the releases list was
+	// last read; rate_limited_until set while the API's rate limit is used
+	// up. release_repo_override_allowed is true on a lab build, which may
+	// set UpgradePolicy.release_repo.
+	ReleaseChannel             string                 `protobuf:"bytes,18,opt,name=release_channel,json=releaseChannel,proto3" json:"release_channel,omitempty"`
+	ReleaseChannelDefault      bool                   `protobuf:"varint,19,opt,name=release_channel_default,json=releaseChannelDefault,proto3" json:"release_channel_default,omitempty"`
+	ReleaseRepo                string                 `protobuf:"bytes,20,opt,name=release_repo,json=releaseRepo,proto3" json:"release_repo,omitempty"`
+	ReleaseTag                 string                 `protobuf:"bytes,21,opt,name=release_tag,json=releaseTag,proto3" json:"release_tag,omitempty"`
+	ReleasesCheckedAt          *timestamppb.Timestamp `protobuf:"bytes,22,opt,name=releases_checked_at,json=releasesCheckedAt,proto3" json:"releases_checked_at,omitempty"`
+	RateLimitedUntil           *timestamppb.Timestamp `protobuf:"bytes,23,opt,name=rate_limited_until,json=rateLimitedUntil,proto3" json:"rate_limited_until,omitempty"`
+	ReleaseRepoOverrideAllowed bool                   `protobuf:"varint,24,opt,name=release_repo_override_allowed,json=releaseRepoOverrideAllowed,proto3" json:"release_repo_override_allowed,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *MirrorStatus) Reset() {
@@ -2093,6 +2136,55 @@ func (x *MirrorStatus) GetBuiltinUrls() []string {
 		return x.BuiltinUrls
 	}
 	return nil
+}
+
+func (x *MirrorStatus) GetReleaseChannel() string {
+	if x != nil {
+		return x.ReleaseChannel
+	}
+	return ""
+}
+
+func (x *MirrorStatus) GetReleaseChannelDefault() bool {
+	if x != nil {
+		return x.ReleaseChannelDefault
+	}
+	return false
+}
+
+func (x *MirrorStatus) GetReleaseRepo() string {
+	if x != nil {
+		return x.ReleaseRepo
+	}
+	return ""
+}
+
+func (x *MirrorStatus) GetReleaseTag() string {
+	if x != nil {
+		return x.ReleaseTag
+	}
+	return ""
+}
+
+func (x *MirrorStatus) GetReleasesCheckedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReleasesCheckedAt
+	}
+	return nil
+}
+
+func (x *MirrorStatus) GetRateLimitedUntil() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RateLimitedUntil
+	}
+	return nil
+}
+
+func (x *MirrorStatus) GetReleaseRepoOverrideAllowed() bool {
+	if x != nil {
+		return x.ReleaseRepoOverrideAllowed
+	}
+	return false
 }
 
 type FetchUpdateRequest struct {
@@ -3056,7 +3148,7 @@ var File_sneakers_appliance_osadmin_v1_upgrade_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\n" +
-	"+sneakers/appliance/osadmin/v1/upgrade.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a-sneakers/appliance/osadmin/v1/elevation.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\xbc\x01\n" +
+	"+sneakers/appliance/osadmin/v1/upgrade.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a-sneakers/appliance/osadmin/v1/elevation.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\"\xb7\x02\n" +
 	"\rUpgradePolicy\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12!\n" +
 	"\fwindow_start\x18\x02 \x01(\tR\vwindowStart\x12%\n" +
@@ -3064,7 +3156,11 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\n" +
 	"mirror_url\x18\x04 \x01(\tR\tmirrorUrl\x12\x16\n" +
 	"\x06direct\x18\x05 \x01(\bR\x06direct\x12\x16\n" +
-	"\x06source\x18\x06 \x01(\tR\x06source\"\xfd\x02\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\x12,\n" +
+	"\x0frelease_channel\x18\a \x01(\tH\x00R\x0ereleaseChannel\x88\x01\x01\x12&\n" +
+	"\frelease_repo\x18\b \x01(\tH\x01R\vreleaseRepo\x88\x01\x01B\x12\n" +
+	"\x10_release_channelB\x0f\n" +
+	"\r_release_repo\"\xfd\x02\n" +
 	"\rBaseWebStatus\x12'\n" +
 	"\x0frunning_version\x18\x01 \x01(\tR\x0erunningVersion\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x12\n" +
@@ -3229,7 +3325,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\abase_os\x18\x05 \x03(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\x06baseOs\x12C\n" +
 	"\bbase_web\x18\x06 \x03(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\abaseWeb\x12B\n" +
 	"\aproduct\x18\a \x03(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\aproduct\x12$\n" +
-	"\x0ebase_web_waits\x18\b \x01(\tR\fbaseWebWaits\"\xa3\x04\n" +
+	"\x0ebase_web_waits\x18\b \x01(\tR\fbaseWebWaits\"\xa1\a\n" +
 	"\fMirrorStatus\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x12\n" +
 	"\x04note\x18\x02 \x01(\tR\x04note\x12\x1b\n" +
@@ -3250,7 +3346,15 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"pinMatched\x12\x16\n" +
 	"\x06source\x18\x0f \x01(\tR\x06source\x12\x10\n" +
 	"\x03url\x18\x10 \x01(\tR\x03url\x12!\n" +
-	"\fbuiltin_urls\x18\x11 \x03(\tR\vbuiltinUrls\"1\n" +
+	"\fbuiltin_urls\x18\x11 \x03(\tR\vbuiltinUrls\x12'\n" +
+	"\x0frelease_channel\x18\x12 \x01(\tR\x0ereleaseChannel\x126\n" +
+	"\x17release_channel_default\x18\x13 \x01(\bR\x15releaseChannelDefault\x12!\n" +
+	"\frelease_repo\x18\x14 \x01(\tR\vreleaseRepo\x12\x1f\n" +
+	"\vrelease_tag\x18\x15 \x01(\tR\n" +
+	"releaseTag\x12J\n" +
+	"\x13releases_checked_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\x11releasesCheckedAt\x12H\n" +
+	"\x12rate_limited_until\x18\x17 \x01(\v2\x1a.google.protobuf.TimestampR\x10rateLimitedUntil\x12A\n" +
+	"\x1drelease_repo_override_allowed\x18\x18 \x01(\bR\x1areleaseRepoOverrideAllowed\"1\n" +
 	"\x12FetchUpdateRequest\x12\x1b\n" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\"J\n" +
 	"\x13FetchUpdateResponse\x12\x1b\n" +
@@ -3412,40 +3516,42 @@ var file_sneakers_appliance_osadmin_v1_upgrade_proto_depIdxs = []int32{
 	14, // 27: sneakers.appliance.osadmin.v1.CheckUpdatesResponse.product:type_name -> sneakers.appliance.osadmin.v1.UnitOffer
 	36, // 28: sneakers.appliance.osadmin.v1.MirrorStatus.checked_at:type_name -> google.protobuf.Timestamp
 	36, // 29: sneakers.appliance.osadmin.v1.MirrorStatus.server_not_after:type_name -> google.protobuf.Timestamp
-	6,  // 30: sneakers.appliance.osadmin.v1.StageUpdateResponse.package:type_name -> sneakers.appliance.osadmin.v1.UpdatePackage
-	22, // 31: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	0,  // 32: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	22, // 33: sneakers.appliance.osadmin.v1.RevertUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	0,  // 34: sneakers.appliance.osadmin.v1.RevertUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	0,  // 35: sneakers.appliance.osadmin.v1.DiscardUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
-	30, // 36: sneakers.appliance.osadmin.v1.ListBaseVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.BaseVersion
-	5,  // 37: sneakers.appliance.osadmin.v1.ListProductVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.ProductVersion
-	2,  // 38: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
-	11, // 39: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:input_type -> sneakers.appliance.osadmin.v1.GetUpgradesRequest
-	18, // 40: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:input_type -> sneakers.appliance.osadmin.v1.FetchUpdateRequest
-	20, // 41: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:input_type -> sneakers.appliance.osadmin.v1.StageUpdateRequest
-	23, // 42: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:input_type -> sneakers.appliance.osadmin.v1.ApplyUpdateRequest
-	25, // 43: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:input_type -> sneakers.appliance.osadmin.v1.RevertUpdateRequest
-	26, // 44: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:input_type -> sneakers.appliance.osadmin.v1.DiscardUpdateRequest
-	31, // 45: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:input_type -> sneakers.appliance.osadmin.v1.ListProductVersionsRequest
-	28, // 46: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:input_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsRequest
-	15, // 47: sneakers.appliance.osadmin.v1.UpgradeService.CheckUpdates:input_type -> sneakers.appliance.osadmin.v1.CheckUpdatesRequest
-	34, // 48: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:input_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
-	12, // 49: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:output_type -> sneakers.appliance.osadmin.v1.GetUpgradesResponse
-	19, // 50: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:output_type -> sneakers.appliance.osadmin.v1.FetchUpdateResponse
-	21, // 51: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:output_type -> sneakers.appliance.osadmin.v1.StageUpdateResponse
-	24, // 52: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:output_type -> sneakers.appliance.osadmin.v1.ApplyUpdateResponse
-	33, // 53: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:output_type -> sneakers.appliance.osadmin.v1.RevertUpdateResponse
-	27, // 54: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:output_type -> sneakers.appliance.osadmin.v1.DiscardUpdateResponse
-	32, // 55: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:output_type -> sneakers.appliance.osadmin.v1.ListProductVersionsResponse
-	29, // 56: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:output_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsResponse
-	16, // 57: sneakers.appliance.osadmin.v1.UpgradeService.CheckUpdates:output_type -> sneakers.appliance.osadmin.v1.CheckUpdatesResponse
-	35, // 58: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:output_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
-	49, // [49:59] is the sub-list for method output_type
-	39, // [39:49] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	36, // 30: sneakers.appliance.osadmin.v1.MirrorStatus.releases_checked_at:type_name -> google.protobuf.Timestamp
+	36, // 31: sneakers.appliance.osadmin.v1.MirrorStatus.rate_limited_until:type_name -> google.protobuf.Timestamp
+	6,  // 32: sneakers.appliance.osadmin.v1.StageUpdateResponse.package:type_name -> sneakers.appliance.osadmin.v1.UpdatePackage
+	22, // 33: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	0,  // 34: sneakers.appliance.osadmin.v1.ApplyUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	22, // 35: sneakers.appliance.osadmin.v1.RevertUpdateRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	0,  // 36: sneakers.appliance.osadmin.v1.RevertUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	0,  // 37: sneakers.appliance.osadmin.v1.DiscardUpdateRequest.target:type_name -> sneakers.appliance.osadmin.v1.UpdateTarget
+	30, // 38: sneakers.appliance.osadmin.v1.ListBaseVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.BaseVersion
+	5,  // 39: sneakers.appliance.osadmin.v1.ListProductVersionsResponse.versions:type_name -> sneakers.appliance.osadmin.v1.ProductVersion
+	2,  // 40: sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
+	11, // 41: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:input_type -> sneakers.appliance.osadmin.v1.GetUpgradesRequest
+	18, // 42: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:input_type -> sneakers.appliance.osadmin.v1.FetchUpdateRequest
+	20, // 43: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:input_type -> sneakers.appliance.osadmin.v1.StageUpdateRequest
+	23, // 44: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:input_type -> sneakers.appliance.osadmin.v1.ApplyUpdateRequest
+	25, // 45: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:input_type -> sneakers.appliance.osadmin.v1.RevertUpdateRequest
+	26, // 46: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:input_type -> sneakers.appliance.osadmin.v1.DiscardUpdateRequest
+	31, // 47: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:input_type -> sneakers.appliance.osadmin.v1.ListProductVersionsRequest
+	28, // 48: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:input_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsRequest
+	15, // 49: sneakers.appliance.osadmin.v1.UpgradeService.CheckUpdates:input_type -> sneakers.appliance.osadmin.v1.CheckUpdatesRequest
+	34, // 50: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:input_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyRequest
+	12, // 51: sneakers.appliance.osadmin.v1.UpgradeService.GetUpgrades:output_type -> sneakers.appliance.osadmin.v1.GetUpgradesResponse
+	19, // 52: sneakers.appliance.osadmin.v1.UpgradeService.FetchUpdate:output_type -> sneakers.appliance.osadmin.v1.FetchUpdateResponse
+	21, // 53: sneakers.appliance.osadmin.v1.UpgradeService.StageUpdate:output_type -> sneakers.appliance.osadmin.v1.StageUpdateResponse
+	24, // 54: sneakers.appliance.osadmin.v1.UpgradeService.ApplyUpdate:output_type -> sneakers.appliance.osadmin.v1.ApplyUpdateResponse
+	33, // 55: sneakers.appliance.osadmin.v1.UpgradeService.RevertUpdate:output_type -> sneakers.appliance.osadmin.v1.RevertUpdateResponse
+	27, // 56: sneakers.appliance.osadmin.v1.UpgradeService.DiscardUpdate:output_type -> sneakers.appliance.osadmin.v1.DiscardUpdateResponse
+	32, // 57: sneakers.appliance.osadmin.v1.UpgradeService.ListProductVersions:output_type -> sneakers.appliance.osadmin.v1.ListProductVersionsResponse
+	29, // 58: sneakers.appliance.osadmin.v1.UpgradeService.ListBaseVersions:output_type -> sneakers.appliance.osadmin.v1.ListBaseVersionsResponse
+	16, // 59: sneakers.appliance.osadmin.v1.UpgradeService.CheckUpdates:output_type -> sneakers.appliance.osadmin.v1.CheckUpdatesResponse
+	35, // 60: sneakers.appliance.osadmin.v1.UpgradeService.SetUpgradePolicy:output_type -> sneakers.appliance.osadmin.v1.SetUpgradePolicyResponse
+	51, // [51:61] is the sub-list for method output_type
+	41, // [41:51] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_upgrade_proto_init() }
@@ -3455,6 +3561,7 @@ func file_sneakers_appliance_osadmin_v1_upgrade_proto_init() {
 	}
 	file_sneakers_appliance_osadmin_v1_elevation_proto_init()
 	file_sneakers_appliance_osadmin_v1_options_proto_init()
+	file_sneakers_appliance_osadmin_v1_upgrade_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

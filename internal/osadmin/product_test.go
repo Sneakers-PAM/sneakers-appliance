@@ -262,7 +262,7 @@ func TestListThenFetchFromTheMirrorThenDirect(t *testing.T) {
 	v2, v3, other := productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"), productBin(t, b.sign, b.enc, "0.3.0", "0.1.0"), productBin(t, b.sign, b.enc, "0.4.0", "0.0.9")
 	// The mirror has the index; direct fetches are allowed too.
 	b.mirrorFiles[updatepkg.IndexName] = index(t, v2, v3, other)
-	b.mirrorFiles["direct/download/v0.3.0/sneakers-product-0.3.0-amd64.bin"] = v3
+	b.mirrorFiles["direct/latest/download/sneakers-product-0.3.0-amd64.bin"] = v3
 	pol := &osadminv1.UpgradePolicy{Mode: "manual", WindowStart: "02:00", WindowMinutes: 120, MirrorUrl: b.mirror.URL, Direct: true}
 	if _, err := alice.upgrade().SetUpgradePolicy(ctx, connect.NewRequest(&osadminv1.SetUpgradePolicyRequest{Policy: pol})); err != nil {
 		t.Fatal(err)
@@ -289,7 +289,9 @@ func TestListThenFetchFromTheMirrorThenDirect(t *testing.T) {
 
 	// Without a mirror, the index comes from the release source.
 	delete(b.mirrorFiles, updatepkg.IndexName)
-	b.mirrorFiles["direct/latest/download/"+updatepkg.IndexName] = index(t, v2)
+	idx := index(t, v2)
+	b.mirrorFiles["direct/latest/download/"+updatepkg.IndexName] = idx
+	b.mirrorFiles["direct/latest/download/"+updatepkg.IndexName+".sigstore.json"] = b.sign.BlobBundle(t, idx)
 	pol.MirrorUrl = ""
 	if _, err := alice.upgrade().SetUpgradePolicy(ctx, connect.NewRequest(&osadminv1.SetUpgradePolicyRequest{Policy: pol})); err != nil {
 		t.Fatal(err)
