@@ -55,7 +55,8 @@ func (h *status) GetPhase(ctx context.Context, _ *connect.Request[osadminv1.GetP
 // holds over everything else. A product apply or revert stays updating
 // until the product is ready, and after k0s starts the box stays starting
 // until the product is ready: the edge keeps every product request on the
-// box-state page until then.
+// box-state page until then. A product that failed to come up says
+// failed, and one an import holds says maintenance.
 func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 	announced := boxstate.State("")
 	if s.o.BoxStateFile != "" {
@@ -71,10 +72,17 @@ func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 		return boxstate.Starting
 	case s.productComingUp():
 		return boxstate.Updating
-	case !s.productReadyNow(productRunning):
-		return boxstate.Starting
-	default:
+	}
+	ready := s.productReadyNow(productRunning)
+	switch {
+	case ready:
 		return boxstate.Running
+	case s.productFailedNow():
+		return boxstate.Failed
+	case s.productHeldNow():
+		return boxstate.Maintenance
+	default:
+		return boxstate.Starting
 	}
 }
 
@@ -140,4 +148,11 @@ func isAsset(assets fs.FS, p string) bool {
 	}
 	st, err := fs.Stat(assets, name)
 	return err == nil && !st.IsDir()
+}
+
+// productFailedNow is whether a phase of the product failed since k0s
+// last started.
+func (s *Server) productFailedNow() bool {
+	_, why := s.productFailure()
+	return why != ""
 }

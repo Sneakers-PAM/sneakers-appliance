@@ -29,6 +29,13 @@ func TestAFailedBoxSaysWhichPhaseAndWhy(t *testing.T) {
 	if got := w.Detail(); !strings.Contains(got, "sneakers-vault") {
 		t.Fatalf("detail %q", got)
 	}
+	// A poll answers no detail; the pushed one holds while the box stays
+	// failed.
+	src.p.Detail, src.p.Step = "", ""
+	w.Poll(context.Background())
+	if got := w.Detail(); !strings.Contains(got, "sneakers-vault") {
+		t.Fatalf("detail after a poll %q", got)
+	}
 	s := edgefall.NewServer(w.State)
 	s.SetDetail(w.Detail)
 	rec := httptest.NewRecorder()
