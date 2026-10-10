@@ -115,8 +115,10 @@ func patchMakeCmd() *cobra.Command {
 }
 
 // readPatchSpec fills h as a patch from the spec patch-make wrote; the
-// full release it falls back to is h's Base OS full file.
-func readPatchSpec(p string, h *updatepkg.Header) error {
+// full release it falls back to is h's Base OS full file, by its earlier
+// name when previous is set (a lab patch for boxes before the
+// version-only names, which refuse the new name).
+func readPatchSpec(p string, h *updatepkg.Header, previous bool) error {
 	b, err := os.ReadFile(p) // #nosec G304 -- the build's own spec
 	if err != nil {
 		return err
@@ -134,6 +136,9 @@ func readPatchSpec(p string, h *updatepkg.Header) error {
 	full := *h
 	full.Kind, full.Bases, full.Method, full.Base, full.Target = updatepkg.KindFull, nil, "", nil, nil
 	h.Target.FullBin = updatepkg.FileName(full)
+	if previous {
+		h.Target.FullBin = updatepkg.PreviousFileName(full)
+	}
 	return nil
 }
 

@@ -55,7 +55,8 @@
 #              in the index's legacy base section, for boxes before the units
 #   OLD_NAMES  1 (the lab default) also links each unit under the name the
 #              builds before the version-only names gave it and lists it in
-#              the index, for boxes running those builds; 0 leaves them out.
+#              the index, and has each patch name its full release by that
+#              name, for boxes running those builds; 0 leaves them out.
 #              Lab only
 #   PATCH_FROM build/lab/build.sh outputs to make a published patch from
 #              (space-separated); a base may also be an earlier release's
@@ -206,8 +207,12 @@ patch() { # base dir
   local w="$work/patch-$bv"
   rm -rf "$w"
   "$tool" patch-make --base "$base/artifact" --target "$OUT/artifact" --out "$w" --zstd "${ZSTD:-zstd}"
-  local pbin
-  pbin="$(seal "patch-$bv" "$w/payload" "$dir" "$osin" --unit baseOS --version "$version" --includes-baseweb "$version" --patch-spec "$w/patch-spec.json")"
+  local pbin prev=()
+  # A box from before the version-only names checks the patch's full .bin
+  # against the names it knows, so with OLD_NAMES the patch names its full
+  # release by the earlier name, which the mirror also has.
+  if [ "$channel" = lab ] && [ "${OLD_NAMES:-1}" = 1 ]; then prev=(--previous-full-name); fi
+  pbin="$(seal "patch-$bv" "$w/payload" "$dir" "$osin" --unit baseOS --version "$version" --includes-baseweb "$version" --patch-spec "$w/patch-spec.json" "${prev[@]}")"
   # Open it as a box on the base does, with the base's own UKI, rebuild the
   # target from the base, and verify the result with the base's kit.
   rm -rf "$w/rebuilt"
