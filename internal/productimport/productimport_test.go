@@ -211,3 +211,27 @@ func TestTheImportedMarker(t *testing.T) {
 		t.Fatalf("%+v", mk)
 	}
 }
+
+// The step's log is written for a terminal; the Import page shows it as
+// plain text, so colour codes are dropped when it's read.
+func TestRunsDropColourCodesFromTheOutput(t *testing.T) {
+	m := manager(t)
+	if _, err := m.Open(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Save(productimport.Bundle, strings.NewReader("age-encrypted")); err != nil {
+		t.Fatal(err)
+	}
+	r, err := m.Start(productimport.Review, productimport.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finish(t, m, r.Job, "\x1b[90m11:24:13\x1b[0m \x1b[32mINF\x1b[0m review done \x1b[36mtables=\x1b[0m29\x1b[K\n", 0, nil)
+	runs, err := m.Runs()
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("runs %+v %v", runs, err)
+	}
+	if want := "11:24:13 INF review done tables=29\n"; runs[0].Output != want {
+		t.Fatalf("output %q, want %q", runs[0].Output, want)
+	}
+}
