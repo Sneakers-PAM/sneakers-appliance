@@ -733,6 +733,8 @@ func readLine(in io.Reader) string {
 // its own.
 type asker interface {
 	AskLine(prompt string) (string, error)
+	// AskSecret reads a code or password without echo.
+	AskSecret(prompt string) (string, error)
 }
 
 // ask prints prompt and reads one line: on the interactive terminal as
@@ -856,7 +858,7 @@ func runRootShell(ctx context.Context, e *Env, _ *Command, _ []string, flags map
 	var lines *bufio.Reader
 	readCode := func() string {
 		if a, ok := e.In.(asker); ok {
-			line, _ := a.AskLine("Code: ")
+			line, _ := a.AskSecret("Code: ")
 			return strings.TrimSpace(line)
 		}
 		if lines == nil {
