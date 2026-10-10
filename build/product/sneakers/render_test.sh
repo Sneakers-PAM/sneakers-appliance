@@ -78,6 +78,19 @@ grep -q '^ghcr.io/sneakers-pam/sneakers-migrate sha256:' "$work/pinned" || fail 
 grep -q 'sneakers/sneakers-migrate' "$out/sneakers/sneakers.yaml" || fail "the vault and audit don't list the migrate caller"
 echo "ok: every component is pinned, every service image runs in a stack, and the import's image and caller are in place"
 
+# The import's Job reads only box secrets product.yaml declares, key and all
+# (no stack carries it, so build/tools/stack never sees it).
+job="$here/import-job.yaml"
+refs="$(awk '/secretKeyRef:/ { r = 1; next } r && /name:/ { n = $2 } r && /key:/ { print n, $2; r = 0 }' "$job")"
+[ -n "$refs" ] || fail "the import Job reads no Secret"
+while read -r name key; do
+  awk -v s="sneakers/$name" -v k="$key" '
+    /^  - secret: / { in_s = ($3 == s) }
+    in_s && $0 ~ "\\{key: " k "," { found = 1 }
+    END { exit !found }' "$here/product.yaml" || fail "the import Job reads $key from the Secret $name, which product.yaml doesn't declare as a box secret key"
+done <<<"$refs"
+echo "ok: the import Job reads only box secrets"
+
 # The product's About: the release's version, and the box's placeholders
 # for its Base OS, Base Web and FQDN, each one product.yaml declares.
 # The chart puts each service's settings in its ConfigMap, a "NAME: value" line each.
