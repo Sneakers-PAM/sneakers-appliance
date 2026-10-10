@@ -168,7 +168,7 @@ func TestASwitchThatDoesntSettleStillRestarts(t *testing.T) {
 // place of the bundle's placeholders, as k0s-interim's do.
 func TestASwitchedOnStackCarriesTheBoxsValues(t *testing.T) {
 	b := newBox(t)
-	stack := "data:\n  MCP_URL: https://sneakers.box.invalid/mcp\n  HYDRA_ISSUER: https://hydra.sneakers.box.invalid/\n" // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+	stack := "data:\n  MCP_URL: https://sneakers.box.invalid/mcp\n  HYDRA_ISSUER: https://sneakers.box.invalid/oauth\n" // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
 	if err := os.WriteFile(filepath.Join(b.slot, "manifests", "sneakers-mcp", "mcp.yaml"), []byte(stack), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestASwitchedOnStackCarriesTheBoxsValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "data:\n  MCP_URL: https://box1.example.org/mcp\n  HYDRA_ISSUER: https://hydra.box1.example.org/\n"; string(got) != want {
+	if want := "data:\n  MCP_URL: https://box1.example.org/mcp\n  HYDRA_ISSUER: https://box1.example.org/oauth\n"; string(got) != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
 }
