@@ -205,7 +205,7 @@ var specs = []spec{
 		long:    "Streams a support bundle (status, logs and settings, with no secrets) to standard output. Over SSH only. Not available in this release.",
 		example: "  ssh admin@box1.sneakers.example.org support-bundle > support.tar"},
 	{path: "history", short: "List this session's commands", action: "history", origins: []Origin{OriginSSH}, run: runHistory,
-		long:    "Lists the command lines typed in this session, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list ends with the session.",
+		long:    "Lists the command lines typed since you signed in, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list is cleared when you sign out.",
 		example: "  history"},
 	{path: "reboot", short: "Reboot the appliance", action: "power.reboot", origins: both, confirm: "reboot",
 		long:    "Reboots the box gracefully: the services stop first. Type reboot to confirm.",
