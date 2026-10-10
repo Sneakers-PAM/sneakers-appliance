@@ -198,7 +198,7 @@ Example:
 
 List this session's commands.
 
-Lists the command lines typed in this session, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list ends with the session.
+Lists the command lines typed since this login, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list ends at logout.
 
 Offered over: SSH.
 
