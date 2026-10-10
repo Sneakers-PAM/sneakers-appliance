@@ -133,3 +133,77 @@ func TestTabCompletionOnATerminal(t *testing.T) {
 		t.Fatal("exit didn't end the session")
 	}
 }
+
+// startTerminal runs the interactive shell for e on a pseudo-terminal.
+func startTerminal(t *testing.T, e *shell.Env, prompt string) (*screen, chan error) {
+	t.Helper()
+	m, s := openPTY(t)
+	old, err := term.MakeRaw(int(s.Fd()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = term.Restore(int(s.Fd()), old) })
+	sc := &screen{t: t, m: m, got: make(chan string, 64)}
+	go sc.read()
+	done := make(chan error, 1)
+	go func() { done <- shell.Interactive(context.Background(), e, s, prompt) }()
+	sc.waitFor(prompt)
+	return sc, done
+}
+
+func exitTerminal(t *testing.T, sc *screen, done chan error) {
+	t.Helper()
+	sc.send("\x15exit\r")
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("exit didn't end the session")
+	}
+}
+
+// A double Tab lists the candidates one per line under the typed line,
+// each with what it does, and marks the value in effect.
+func TestADoubleTabListsOnePerLineAndMarksTheCurrentValue(t *testing.T) {
+	b := &recordingBackend{reply: map[string]shell.Result{"mcp.show": {Data: map[string]any{"state": "on", "mcp": true, "machineApi": true}}}}
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, Product: sneakers, Switches: []string{"mcp"}}
+	sc, done := startTerminal(t, e, "alice@box1> ")
+	sc.send("sneakers mcp \t\t\t")
+	listed := sc.waitFor("(current)")
+	listed += sc.waitFor("alice@box1> sneakers mcp o")
+	norm := strings.ReplaceAll(listed, "\r\n", "\n")
+	if !strings.Contains(norm, "alice@box1> sneakers mcp o\n") {
+		t.Errorf("the typed line isn't kept above the list:\n%q", norm)
+	}
+	off := strings.Index(norm, "\n  off  ")
+	on := strings.Index(norm, "\n  on   turn the MCP on (current)")
+	if off < 0 || on < 0 || on < off || !strings.Contains(norm[off:on], "turn the MCP off") || strings.Contains(norm[off:on], "(current)") {
+		t.Errorf("not one candidate per line with the current one marked:\n%q", norm)
+	}
+	exitTerminal(t, sc, done)
+}
+
+// history lists this session's command lines, numbered, with a URL's
+// password masked.
+func TestHistoryListsTheSessionsCommands(t *testing.T) {
+	e := &shell.Env{Origin: shell.OriginSSH, Backend: &recordingBackend{}, Product: sneakers}
+	sc, done := startTerminal(t, e, "alice@box1> ")
+	sc.send("status\r")
+	sc.waitFor("alice@box1> ")
+	sc.send("network set https-proxy=http://proxyuser:" + fakePassword + "@192.0.2.8:3128\r")
+	sc.waitFor("alice@box1> ")
+	sc.send("history\r")
+	sc.waitFor("history\r\n")
+	listed := strings.ReplaceAll(sc.waitFor("alice@box1> "), "\r\n", "\n")
+	for _, want := range []string{"    1  status\n", "    2  network set https-proxy=http://proxyuser:***@192.0.2.8:3128\n", "    3  history\n"} {
+		if !strings.Contains(listed, want) {
+			t.Errorf("history lacks %q:\n%q", want, listed)
+		}
+	}
+	if strings.Contains(listed, fakePassword) {
+		t.Errorf("history shows the password:\n%q", listed)
+	}
+	exitTerminal(t, sc, done)
+}
