@@ -6,6 +6,13 @@
 # changes become that stack's sneakers-mcp-switch ConfigMap.
 mcp:
   enabled: true
+  # The resource the MCP server names in its protected-resource metadata
+  # (RFC 9728), at the box's own name: an OAuth MCP client reads
+  # /.well-known/oauth-protected-resource to find the authorization server
+  # (MCP_AUTHORIZATION_SERVER, the gateway at https://<fqdn>). Without it
+  # the server serves no metadata.
+  env:
+    MCP_RESOURCE_URL: https://{{ .Values.global.host }}/mcp
   ingress:
     enabled: true
     className: traefik

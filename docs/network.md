@@ -206,8 +206,11 @@ the product its own name.
   token's issuer against `https://<fqdn>/oauth`. The MCP's own sign-in stays at the root: the
   gateway's `/.well-known/oauth-authorization-server` (issuer `https://<fqdn>`) and `/oauth2/`,
   which the `/oauth/` routes never take. Nor do they take `/oauth/consent`, the staff app's MCP
-  consent page, where the gateway's `/oauth2/authorize` sends the browser. All of it runs only
-  while the MCP switch is on.
+  consent page, where the gateway's `/oauth2/authorize` sends the browser. An OAuth MCP client
+  finds that sign-in from the MCP server's protected-resource metadata (RFC 9728): an
+  unauthenticated `GET https://<fqdn>/.well-known/oauth-protected-resource` answers JSON with
+  `resource` `https://<fqdn>/mcp` and `authorization_servers` `["https://<fqdn>"]`, and a 401 from
+  `/mcp` points at it. All of it runs only while the MCP switch is on.
 - **The 443 certificate** must cover the host name, not only an address: the product endpoint warns
   (`names-not-covered`, and a Status warning on every :8443 page) when its certificate doesn't,
   naming the host name and what the certificate covers. A wildcard for the host name's domain
