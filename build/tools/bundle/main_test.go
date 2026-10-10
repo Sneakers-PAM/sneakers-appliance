@@ -140,3 +140,22 @@ func TestSourcesRefusesAServiceWithoutABuild(t *testing.T) {
 		}
 	}
 }
+
+// version prints the release's own version, the product version the
+// bundle's stacks hand the product.
+func TestVersionPrintsTheReleasesVersion(t *testing.T) {
+	var out bytes.Buffer
+	body := strings.Replace(pinned, "kind: Release\n", "kind: Release\nmetadata:\n  version: 0.1.0\n", 1)
+	if err := version([]string{"--release", writeRelease(t, body)}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != "0.1.0\n" {
+		t.Fatalf("got %q", out.String())
+	}
+	for name, v := range map[string]string{"none": "", "not a version": "0.1.0 lab", "a path": "../0.1.0"} {
+		body := strings.Replace(pinned, "kind: Release\n", "kind: Release\nmetadata:\n  version: \""+v+"\"\n", 1)
+		if err := version([]string{"--release", writeRelease(t, body)}, &bytes.Buffer{}); err == nil {
+			t.Errorf("%s: a release version %q was printed", name, v)
+		}
+	}
+}

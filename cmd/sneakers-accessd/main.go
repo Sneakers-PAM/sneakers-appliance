@@ -72,6 +72,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshsession"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/webslots"
 )
 
 type config struct {
@@ -298,6 +299,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 				return st.Msg.GetHostname(), accessd.Bindable(st.Msg.GetManagementAddresses()), nil
 			},
 			Own: func() string { name, _ := boxname.Ensure(c.state); return name },
+			// The Base OS and Base Web versions for the product's About.
+			Versions: func() (string, string) {
+				return release.Version, webslots.ServedVersion(filepath.Join(paths.OwnDir(), osadmin.WebServedFile), release.Version)
+			},
 		},
 		Logger: lg,
 		Upgrade: osadmin.UpgradeOptions{

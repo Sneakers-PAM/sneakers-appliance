@@ -46,7 +46,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: bundle pull|check|manifest|images|sources|fill|push [flags]")
+		return fmt.Errorf("usage: bundle pull|check|manifest|images|sources|fill|push|version [flags]")
 	}
 	switch args[0] {
 	case "manifest":
@@ -59,6 +59,8 @@ func run(args []string) error {
 		return fill(args[1:], os.Stdout)
 	case "push":
 		return push(args[1:])
+	case "version":
+		return version(args[1:], os.Stdout)
 	}
 	fl := flag.NewFlagSet("bundle "+args[0], flag.ContinueOnError)
 	relPath := fl.String("release", "", "release.yaml")
@@ -168,6 +170,33 @@ func images(args []string, w io.Writer) error {
 		}
 	}
 	return nil
+}
+
+// releaseVersionRE is what a release's own version may look like.
+var releaseVersionRE = regexp.MustCompile(`^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$`)
+
+// version prints the release's own version (metadata.version): the
+// product version the bundle's stacks give the product.
+func version(args []string, w io.Writer) error {
+	fl := flag.NewFlagSet("bundle version", flag.ContinueOnError)
+	relPath := fl.String("release", "", "release.yaml")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	relYAML, err := os.ReadFile(*relPath) // #nosec G304 G703 -- a build tool reading the file it was handed
+	if err != nil {
+		return err
+	}
+	rel, err := bundle.ParseRelease(relYAML)
+	if err != nil {
+		return err
+	}
+	v := rel.Metadata.Version
+	if !releaseVersionRE.MatchString(v) {
+		return fmt.Errorf("release.yaml: metadata.version %q isn't a version", v)
+	}
+	_, err = fmt.Fprintln(w, v)
+	return err
 }
 
 var (

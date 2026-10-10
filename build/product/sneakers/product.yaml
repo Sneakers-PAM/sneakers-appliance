@@ -93,10 +93,17 @@ escrow:
 # set global.host to this placeholder, so every host-dependent setting
 # (Kratos's URLs and return URLs, the WebAuthn relying party, the SSH
 # websocket, the MCP, OAuth and Hydra addresses) carries it, and the box
-# puts its FQDN in its place when it applies the stacks.
+# puts its FQDN in its place when it applies the stacks. The Base OS and
+# Base Web versions reach the gateway's diagnostics the same way
+# (SNEAKERS_APPLIANCE_VERSION and SNEAKERS_APPLIANCE_WEB_VERSION in
+# values.yaml), for the product's About.
 box_values:
   - value: box.fqdn
     placeholder: sneakers.box.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+  - value: box.os.version
+    placeholder: baseos-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
+  - value: box.web.version
+    placeholder: baseweb-version.invalid  # scrub:allow=fqdn -- the reserved .invalid name, never resolved
 
 # The Secrets every box makes for itself (internal/boxsecrets): accessd
 # generates the values on the box the first time a bundle declares them,
