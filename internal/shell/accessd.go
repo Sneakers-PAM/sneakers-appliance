@@ -428,6 +428,10 @@ func (s *Services) networkSet(ctx context.Context, args []string) (Result, error
 		return Result{}, err
 	}
 	t := out.Msg.GetToken()
+	if t == "" {
+		// netd kept it at once (no revert window, such as the time zone).
+		return Result{Text: "Applied and kept; there's nothing to confirm.", Data: map[string]string{"token": ""}}, nil
+	}
 	return Result{Text: fmt.Sprintf("Applied. It reverts in %d seconds unless kept.", out.Msg.GetRevertAfterSeconds()), Data: map[string]string{"token": t}}, nil
 }
 
