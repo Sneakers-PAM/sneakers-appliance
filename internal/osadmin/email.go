@@ -174,7 +174,7 @@ func (h *emailSvc) SetEmail(ctx context.Context, r *connect.Request[osadminv1.Se
 	s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
 	err = s.switchProduct(ctx, func() error { return nil })
 	s.endMaintenance()
-	s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "apply", v, c.session.Admin, err, "email settings")
+	s.productHistory("apply", v, c.session.Admin, err, "email settings")
 	if err != nil {
 		s.o.Logger.Error(err, "osadmin: the product wasn't applied again with the email settings")
 		return nil, err

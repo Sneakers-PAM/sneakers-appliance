@@ -234,3 +234,69 @@ func TestAProductRevertWaitsForTheProduct(t *testing.T) {
 	p.set("", "", nil)
 	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
 }
+
+// waitHistory polls the history until its latest entry is action, or
+// fails after a few seconds.
+func waitHistory(t *testing.T, br *browser, action string) *osadminv1.UpgradeEvent {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if h := br.upgrades(t).GetHistory(); len(h) > 0 && h[0].GetAction() == action {
+			return h[0]
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the history never got %s: %v", action, br.upgrades(t).GetHistory())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A product apply goes into the history only once the product is ready:
+// while it rolls out the latest entry is still the stage.
+func TestAProductApplyIsInTheHistoryOnlyOnceReady(t *testing.T) {
+	p := &fakeProbe{step: productup.StepPods, detail: "Rolling out (3 of 5 ready): waiting for app/api, 0 of 1 updated, 1 running"}
+	_, alice := applyProductWith(t, p)
+	waitSteps(t, alice, "verify:DONE stage:DONE switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	if h := alice.upgrades(t).GetHistory()[0]; h.GetAction() != "stage" {
+		t.Fatalf("the apply is in the history while it rolls out: %+v", h)
+	}
+	p.set("", "", nil)
+	h := waitHistory(t, alice, "apply")
+	if h.GetOutcome() != "ok" || h.GetActor() != "alice" || h.GetVersion() != "0.2.0" || h.GetTarget() != product {
+		t.Fatalf("history %+v", h)
+	}
+}
+
+// A product revert to a slot that declares no health check still waits
+// for the rollout before it's done and in the history: no health check
+// skips only that step.
+func TestAProductRevertIsInTheHistoryOnlyOnceReady(t *testing.T) {
+	p := &fakeProbe{}
+	b, alice := applyProductWith(t, p)
+	waitHistory(t, alice, "apply")
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.3.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	waitHistory(t, alice, "apply")
+	p.set(productup.StepPods, "Rolling out (16 of 19 ready): waiting for app/api, 0 of 1 updated, 1 running", nil)
+	if _, err := alice.upgrade().RevertUpdate(context.Background(), connect.NewRequest(&osadminv1.RevertUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	got := waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:ACTIVE product_health:PENDING edge:PENDING")
+	if !got.GetInProgress() {
+		t.Fatalf("revert %+v", got)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if h := alice.upgrades(t).GetHistory()[0]; h.GetAction() == "revert" {
+		t.Fatalf("the revert is in the history while it rolls out: %+v", h)
+	}
+	p.set("", "", nil)
+	waitSteps(t, alice, "switch:DONE restart:DONE k0s:DONE images:DONE manifests:DONE pods:DONE product_health:DONE edge:DONE")
+	if h := waitHistory(t, alice, "revert"); h.GetOutcome() != "ok" || h.GetVersion() != "0.2.0" || h.GetActor() != "alice" {
+		t.Fatalf("history %+v", h)
+	}
+}

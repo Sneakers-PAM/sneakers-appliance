@@ -122,7 +122,7 @@ func (s *Server) HostNameChanged(ctx context.Context) {
 	err = s.switchProduct(ctx, func() error { return nil })
 	s.endMaintenance()
 	detail := "host name " + fqdn
-	s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "apply", v, by.Actor, err, detail)
+	s.productHistory("apply", v, by.Actor, err, detail)
 	s.write(osaudit.Entry{Actor: by.Actor, Action: by.Action, Target: "product", Detail: map[string]string{"version": v, "surface": "hostname", "hostname": fqdn, "was": was}}, err)
 	if err != nil {
 		lg.Error(err, "osadmin: the product wasn't applied again for the new host name", log.F("fqdn", fqdn))

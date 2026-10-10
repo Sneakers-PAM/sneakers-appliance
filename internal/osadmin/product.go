@@ -282,7 +282,7 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 			s.endMaintenance()
 		}
 	}
-	s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "apply", v, by.Actor, err, overrideDetail(overrode))
+	s.productHistory("apply", v, by.Actor, err, overrideDetail(overrode))
 	s.o.Logger.Info("osadmin: product apply", log.F("version", v), log.F("by", by.Actor), log.F("ok", err == nil))
 	return v, overrode, err
 }
@@ -300,7 +300,7 @@ func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadmin
 		})
 		s.endMaintenance()
 	}
-	s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, "revert", v, by.Actor, err, overrideDetail(overrode))
+	s.productHistory("revert", v, by.Actor, err, overrideDetail(overrode))
 	s.o.Logger.Info("osadmin: product revert", log.F("version", v), log.F("by", by.Actor), log.F("ok", err == nil))
 	return v, overrode, err
 }

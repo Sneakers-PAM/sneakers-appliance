@@ -163,6 +163,9 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 			s.o.Logger.Debug("osadmin: the product's progress isn't known this time", log.F("step", at), log.F("error", err.Error()))
 		case res.Step == "":
 			s.finishSteps(productup.StepEdge)
+			if h := s.takeHeld(started); h != nil {
+				s.writeHeld(h, nil, "")
+			}
 			s.o.Logger.Info("osadmin: the product is up", log.F("version", r.Version), log.F("seconds", int(s.o.Clock.Now().Sub(since).Seconds())))
 			return
 		case res != last:
@@ -177,7 +180,11 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 			}
 			err := codes.New(codes.UpgradeProductStart, "the product isn't ready after %s: %s; Status and the root shell's kubectl show what holds it", bound, waiting)
 			s.failStep(at, err)
-			s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, r.Action, r.Version, "osadmin", err, "not ready after "+bound.String())
+			if h := s.takeHeld(started); h != nil {
+				s.writeHeld(h, err, "not ready after "+bound.String())
+			} else {
+				s.historyFor(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, r.Action, r.Version, "osadmin", err, "not ready after "+bound.String())
+			}
 			s.write(osaudit.Entry{Actor: "osadmin", Action: "upgrade.product-not-ready", Target: "product", Detail: map[string]string{"version": r.Version, "action": r.Action, "step": at, "waited": bound.String()}}, err)
 			s.o.Logger.Warn("osadmin: the product isn't ready within the bound; the update failed", log.F("action", r.Action), log.F("version", r.Version), log.F("step", at), log.F("waiting", waiting), log.F("bound", bound.String()))
 			s.consoleChanged()
@@ -190,4 +197,60 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 		case <-time.After(every):
 		}
 	}
+}
+
+// productHistory records a product apply's or revert's outcome. One that
+// failed, or that nothing follows, goes into the history at once; one the
+// product is still coming up from is held in the record and written once
+// the product is ready, or fails within the bound, so the history never
+// says ok before the steps do.
+func (s *Server) productHistory(action, version, actor string, err error, detail string) {
+	e := &historyEntry{Action: action, Version: version, Actor: actor, Detail: detail, Target: targetName(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT)}
+	if err == nil && s.o.ProductUp != nil && s.holdHistory(e) {
+		s.o.Logger.Debug("osadmin: the product's history entry waits until it's ready", log.F("action", action), log.F("version", version))
+		return
+	}
+	s.writeHeld(e, err, "")
+}
+
+// holdHistory keeps e in the record while the product is coming up; false
+// when it isn't (it was ready already).
+func (s *Server) holdHistory(e *historyEntry) bool {
+	s.progress.mu.Lock()
+	defer s.progress.mu.Unlock()
+	s.loadProgress()
+	r := s.progress.rec
+	if r == nil || !isProductUpStep(r.active()) {
+		return false
+	}
+	r.History = e
+	s.saveProgressLocked()
+	return true
+}
+
+// takeHeld takes the history entry the record started at started holds.
+func (s *Server) takeHeld(started time.Time) *historyEntry {
+	s.progress.mu.Lock()
+	defer s.progress.mu.Unlock()
+	r := s.progress.rec
+	if r == nil || !r.Started.Equal(started) || r.History == nil {
+		return nil
+	}
+	h := r.History
+	r.History = nil
+	s.saveProgressLocked()
+	return h
+}
+
+// writeHeld writes a held entry with the outcome err, more added to its
+// detail.
+func (s *Server) writeHeld(h *historyEntry, err error, more string) {
+	detail := h.Detail
+	if more != "" {
+		if detail != "" {
+			detail += "; "
+		}
+		detail += more
+	}
+	s.historyFor(targetOf(h.Target), h.Action, h.Version, h.Actor, err, detail)
 }

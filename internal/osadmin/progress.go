@@ -63,6 +63,9 @@ type progressRecord struct {
 	// when, for the reboot watchdog.
 	BootID   string    `json:"boot_id,omitempty"`
 	RebootAt time.Time `json:"reboot_at,omitzero"`
+	// History is a product apply's or revert's history entry, held until
+	// the product is ready (or isn't within the bound).
+	History *historyEntry `json:"history,omitempty"`
 }
 
 // progress holds the record in memory, read from its file the first time.
@@ -221,6 +224,11 @@ func recordTarget(t osadminv1.UpdateTarget) string {
 }
 
 func (s *Server) newRecordLocked(action string, target osadminv1.UpdateTarget, version, slot string) {
+	if old := s.progress.rec; old != nil && old.History != nil {
+		h := old.History
+		old.History = nil
+		s.writeHeld(h, codes.New(codes.UpgradeProductStart, "another update began before %s was ready", h.Version), "")
+	}
 	s.progress.rec = &progressRecord{Action: action, Target: recordTarget(target), Version: version, Steps: stepsFor(action, target, slot, s.o.ProductUp != nil), Started: s.o.Clock.Now().UTC()}
 	s.o.Logger.Info("osadmin: update progress begins", log.F("action", action), log.F("target", recordTarget(target)), log.F("version", version))
 }
