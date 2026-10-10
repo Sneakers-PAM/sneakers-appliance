@@ -84,7 +84,7 @@ func run() int {
 	}
 	defer b.EndLogin(context.WithoutCancel(ctx), login)
 	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: stdin, Out: os.Stdout, Err: os.Stderr,
-		Product: productinfo.Installed(productinfo.Dir)}
+		Product: productinfo.Installed(productinfo.Dir), Role: b.Role}
 	if e.Product.Present() {
 		// The values the bundle exposes to this login's role; accessd
 		// checks the role again on every read.

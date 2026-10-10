@@ -145,6 +145,18 @@ ssh alice@192.0.2.10 status -o json
 ```
 
 The interactive shell needs a terminal; without one it takes only a command on the SSH command line.
+
+Tab completes the word before the cursor from the command tree's own completion (cobra's): the
+commands and subcommands, the flags (`--admin`, `-o`), and the values the shell knows: the
+`network set` keys (`time-zone=` and so on; a key already on the line isn't offered again), the
+time zones after `time-zone=` (the IANA names of tzdata's `zone1970.tab`, and `UTC`), the admins
+after `--admin`, `on` and `off` and `machine-api=` for `<product> mcp`, and `json` or `text`
+after `-o`. `snea` and Tab gives `sneakers `. When Tab can't add anything because more than one
+word fits, a second Tab lists them under the line and draws the prompt again. Only what the login
+may run is offered: the other origin's commands never, and an admin who isn't an owner isn't
+offered the owner-only commands (`network set`, `network confirm`, `setup recovery-key`), which
+`help` doesn't list for them either; accessd still checks the role of every call. It's plain Tab
+(0x09), so it works the same from OpenSSH, PuTTY and MobaXterm.
 With no terminal, the code is one line of standard input, ended by Enter as LF, CRLF or a bare CR.
 
 The shell splits the line itself; nothing is passed to `/bin/sh`, and the binary links nothing that
