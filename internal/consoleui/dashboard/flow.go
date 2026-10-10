@@ -48,7 +48,13 @@ type console struct {
 	c      consoleui.Chrome
 	data   Data
 	loaded time.Time
+	// zone is the box's time zone setting, which the clock and the
+	// screen's times are shown in.
+	zone *time.Location
 }
+
+// now is the time in the box's time zone.
+func (k *console) now() time.Time { return k.d.Now().In(k.zone) }
 
 // Run runs the console until ctx ends or the console's input does.
 func Run(ctx context.Context, u *tui.UI, d Deps) error {
@@ -61,7 +67,10 @@ func Run(ctx context.Context, u *tui.UI, d Deps) error {
 	if d.Logger == nil {
 		d.Logger = log.Nop()
 	}
-	k := &console{u: u, d: d, c: d.Chrome}
+	k := &console{u: u, d: d, c: d.Chrome, zone: time.UTC}
+	if k.c.Now == nil {
+		k.c.Now = k.now
+	}
 	k.load(ctx)
 	for {
 		line, _, err := u.Ask(ctx, k.statusView(ctx))
@@ -99,6 +108,8 @@ func (k *console) load(ctx context.Context) {
 	d.Status = k.d.Status(c)
 	if !k.d.Network.Installed() {
 		d.NetErr = sources.NotInstalled{What: "The network service"}
+	} else if s, err := k.d.Network.Get(c); err == nil {
+		k.setZone(s.TimeZone)
 	}
 	k.c.NTP = consoleui.NTPUnknown
 	if st := d.Status.Status; st != nil {
@@ -120,6 +131,24 @@ func (k *console) load(ctx context.Context) {
 	k.data, k.loaded = d, time.Now()
 }
 
+// setZone shows the times in the zone the network settings name; none,
+// or one that can't be loaded, is UTC.
+func (k *console) setZone(name string) {
+	zone := time.UTC
+	if name != "" {
+		z, err := time.LoadLocation(name)
+		if err != nil {
+			k.d.Logger.Warn("console: the time zone setting can't be loaded; showing UTC", log.F("zone", name), log.F("error", err.Error()))
+		} else {
+			zone = z
+		}
+	}
+	if zone.String() != k.zone.String() {
+		k.d.Logger.Info("console: showing times in the box's time zone", log.F("zone", zone.String()))
+	}
+	k.zone = zone
+}
+
 // statusView redraws on every tick (the clock and a reset's countdown)
 // and reads the status again every Refresh.
 func (k *console) statusView(ctx context.Context) func() (tui.Page, bool) {
@@ -127,7 +156,7 @@ func (k *console) statusView(ctx context.Context) func() (tui.Page, bool) {
 		if time.Since(k.loaded) >= k.d.Refresh {
 			k.load(ctx)
 		}
-		return Screen(k.c, k.data, k.d.Now()), false
+		return Screen(k.c, k.data, k.now()), false
 	}
 }
 
@@ -203,7 +232,7 @@ func (k *console) recoverCode(ctx context.Context) (string, error) {
 					fp = info.CertFingerprint
 				}
 			}
-			return RecoverCodePage(k.c, r, fp, k.d.Now()), false
+			return RecoverCodePage(k.c, r, fp, k.now()), false
 		})
 		if err != nil {
 			return "", err

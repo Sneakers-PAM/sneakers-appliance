@@ -16,13 +16,17 @@ first-boot network step and later on the :8443 Network page or with `network set
 | DNS | up to 3 IPv4 or IPv6 addresses, and up to 6 search domains | from DHCP and RA |
 | NTP | up to 4 addresses or host names | from DHCP (option 42, DHCPv6 option 56), else the public pool `0.pool.ntp.org` to `3.pool.ntp.org` | <!-- scrub:allow=fqdn -->
 | Allow-list | the prefixes 22 and 8443 accept, without host bits | during setup any source on the management interface |
-| Time zone | an IANA name such as `Europe/Paris`, or `UTC` | `UTC` |
+| Time zone | an IANA name such as `Europe/Paris` or `America/New_York`, or `UTC`; the console's clock and the times on its screens are shown in it | `UTC` |
 | HTTPS proxy | an `http://` or `https://` URL without credentials | none |
 | Cluster ranges | the k0s pod and service prefixes; they may not overlap each other or a static network of the box | `10.244.0.0/16` and `10.96.0.0/12`, the k0s defaults <!-- scrub:allow=private-ip --> |
 
 At least one of IPv4 and IPv6 must be on for the management interface (and for the service interface
 when there is one). A static IPv4 address can't be its subnet's network or broadcast address
 (except on /31 and /32), and a static IPv6 address can't be link-local.
+
+The root image has no zoneinfo database, so every binary that checks or shows the time zone (netd,
+accessd, osadmin, init, firstboot and the console) links Go's own copy (`time/tzdata`); a test in
+`internal/network` fails if one of them doesn't.
 
 A setting that fails these rules is refused with `NET_INVALID`; the error names the field, such as
 `management.ipv4.address` or `dns[1]`, and nothing is applied.
