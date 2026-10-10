@@ -5,14 +5,17 @@ from the verified copy of the release.
 
 | `--format` | Arch | Output | Needs |
 |---|---|---|---|
-| `raw` | amd64 | `sneakers-<ver>-<arch>.raw`: the installed disk, sparse | nothing |
-| `ova` | amd64 | `sneakers-<ver>-<arch>.ova`: OVF, manifest and stream-optimized VMDK | `qemu-img` |
-| `qcow2` | amd64 | `sneakers-<ver>-<arch>.qcow2` and `proxmox-vm.md` | `qemu-img` |
-| `iso` | amd64 | the install ISO | arrives with the install mode |
-| `rpi` | arm64 | the Raspberry Pi image | arrives with the arm64 build |
+| `raw` | amd64 | `sneakers-appliance-<v>-<arch>.raw`: the installed disk, sparse | nothing |
+| `ova` | amd64 | `sneakers-appliance-<v>-<arch>.ova`: OVF, manifest and stream-optimized VMDK | `qemu-img` |
+| `qcow2` | amd64 | `sneakers-appliance-<v>-<arch>.qcow2` and `proxmox-vm.md` | `qemu-img` |
+| `iso` | amd64 | the install ISO, `sneakers-appliance-<v>-amd64.iso` (reserved) | arrives with the install mode |
+| `rpi` | arm64 | the Raspberry Pi image, `sneakers-appliance-<v>-arm64.img.xz` (reserved) | arrives with the arm64 build |
 
 The kit's container carries `qemu-img`; a bare kit binary reports `KIT_TOOL_MISSING` without it.
-Lab builds add `-LAB` to every name.
+`<v>` is the version for a production release and `lab-<build label>` for a lab one
+(`sneakers-appliance-lab-n3-amd64.ova`); no name carries a build date, a build time or a commit.
+A release publishes only the OVA today; the other formats' names are reserved
+([release.md](release.md#file-names)).
 
 ## OVA (VMware)
 
