@@ -54,11 +54,11 @@ func completeKeys(keys []Key) func(context.Context, *Env, []string, string) ([]s
 	}
 }
 
-func completeMcp(_ context.Context, _ *Env, args []string, partial string) ([]string, cobra.ShellCompDirective) {
-	switch len(args) {
-	case 0:
+func completeMcp(_ context.Context, e *Env, args []string, partial string) ([]string, cobra.ShellCompDirective) {
+	switch {
+	case len(args) == 0:
 		return []string{"off\tturn the MCP off", "on\tturn the MCP on"}, cobra.ShellCompDirectiveNoFileComp
-	case 1:
+	case len(args) == 1 && !noMachineAPI(e.Switches):
 		if strings.HasPrefix(partial, "machine-api=") {
 			return []string{"machine-api=off", "machine-api=on"}, cobra.ShellCompDirectiveNoFileComp
 		}

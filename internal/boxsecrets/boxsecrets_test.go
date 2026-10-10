@@ -192,3 +192,56 @@ func TestTwoBoxesGetTheirOwnValues(t *testing.T) {
 		t.Fatal("two boxes share a key")
 	}
 }
+
+// On a replacement box the escrow's sealed items came over (ImportEscrow),
+// and the box secrets don't exist yet: a key the bundle names under escrow
+// takes the escrowed value instead of a new one, so the restored data
+// opens. Keys with nothing escrowed are made as usual.
+func TestEnsureRestoresEscrowedKeysBeforeMakingThem(t *testing.T) {
+	withEscrow := spec + `escrow:
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: KEK}
+`
+	escrowed := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	var asked []string
+	st := boxsecrets.Store{Dir: t.TempDir(), Manifests: t.TempDir(), Restore: func(name string) (string, bool, error) {
+		asked = append(asked, name)
+		if name == "vault-root-key" {
+			return escrowed, true, nil
+		}
+		return "", false, nil
+	}}
+	if err := st.Ensure(slot(t, withEscrow)); err != nil {
+		t.Fatal(err)
+	}
+	got := readStack(t, st.Manifests)
+	if got["sneakers/sneakers-box"].StringData["KEK"] != escrowed {
+		t.Fatal("the escrowed key wasn't restored")
+	}
+	if got["sneakers/sneakers-box"].StringData["SETUP_TOKEN"] == "" || got["sneakers/sneakers-bundled"].StringData["password"] == "" {
+		t.Fatal("keys with nothing escrowed weren't made")
+	}
+	if strings.Join(asked, " ") != "vault-root-key" {
+		t.Fatalf("asked for %v", asked)
+	}
+	// Kept from then on: a later Ensure doesn't ask again.
+	if err := st.Ensure(slot(t, withEscrow)); err != nil || len(asked) != 1 {
+		t.Fatalf("%v, asked %v", err, asked)
+	}
+}
+
+// If the escrow can't be read, nothing is made: a new key would leave the
+// restored data unreadable, so the apply stops instead.
+func TestEnsureStopsWhenTheEscrowCantBeRead(t *testing.T) {
+	withEscrow := spec + `escrow:
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: KEK}
+`
+	st := boxsecrets.Store{Dir: t.TempDir(), Manifests: t.TempDir(), Restore: func(string) (string, bool, error) {
+		return "", false, os.ErrPermission
+	}}
+	if err := st.Ensure(slot(t, withEscrow)); err == nil {
+		t.Fatal("Ensure made a new key with the escrow unreadable")
+	}
+	if _, err := os.Stat(filepath.Join(st.Dir, boxsecrets.ValuesFile)); !os.IsNotExist(err) {
+		t.Fatalf("values written: %v", err)
+	}
+}

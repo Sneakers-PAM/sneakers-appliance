@@ -93,11 +93,19 @@ anything that changes the keys. A key the product hasn't made yet is sealed next
 
 Restoring the product onto a replacement box: decrypt the escrow with one recovery key
 (`age -d -i <private key> escrow-*.age`). It is JSON: `items` maps each sealed item's name to its
-value (base64). Before the product's data is restored, put `product-sneakers-vault-root-key` and
-`product-sneakers-totp-key` back as the new box's `VAULT_ROOT_KEK` and `TOTP_ENC_KEY` (the root
-shell's `kubectl` edits the product's Secrets), then restart the vault and the identity service.
-Without the vault's root key no stored secret opens; without the TOTP key every second factor has
-to be enrolled again.
+value (base64). Bring it in at the new box's first boot with `KeyCustody.ImportEscrow` (below),
+**before the product is installed**. When the product's first apply makes its box secrets
+([release.md](release.md#productyaml)), a key the bundle names under `escrow` that the box hasn't
+made yet is read from the sealed item `product-<product>-<name>` instead of made anew, so the new
+box's `VAULT_ROOT_KEK` and `TOTP_ENC_KEY` are the old box's and the restored data opens. Keys
+with nothing escrowed are made as usual. If the sealed items can't be read, the apply stops rather
+than make a key that would leave the data unreadable.
+
+Don't edit the product's Secrets with `kubectl`: the box writes `sneakers-box` from its own store
+(`box-secrets.json`) at every product apply and revert, so an edit is undone. A box that has
+already made its own product keys keeps them; restore onto a box whose product isn't installed
+yet. Without the vault's root key no stored secret opens; without the TOTP key every second factor
+has to be enrolled again.
 
 ## Importing an escrow on new hardware
 

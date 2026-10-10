@@ -26,7 +26,8 @@ one-time setup value its own setup consumes, and what to restart after an import
   template with the step's `sneakers-migrate` arguments and the import directory, and writes it into
   the import stack, which k0s applies. One step runs at a time. Each step writes what it prints,
   and its exit code, into `out/` (`MIGRATE_OUTPUT_FILE`), and the page shows them with the step's
-  report and, for a review, the mapping template to download.
+  report and, for a review, the mapping template to download. The output is shown as plain text:
+  the terminal colour codes of the step's console log are dropped when the box reads it.
 - **After an import passes**, the box records it (`/var/lib/sneakers/platform/imported.json`: the
   bundle, the step and the mode; audited as `import.done`) and restarts what the product names (the
   vault, which loads the imported state on start). That is imported-users mode: the product's setup

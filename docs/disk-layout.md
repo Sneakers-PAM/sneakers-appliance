@@ -104,7 +104,9 @@ the installed bundle's `product.yaml` declares (`data`, [release.md](release.md#
 none declared, every directory under `/var/lib/sneakers-data`). Status warns when:
 
 - a volume is at its warning or critical level (`WARNING_KIND_DISK_SPACE`, `critical` set at 90%);
-- a volume would fill within a week at the last day's rate (`WARNING_KIND_DISK_GROWTH`);
+- a volume would fill within a week at the last day's rate (`WARNING_KIND_DISK_GROWTH`). The rate
+  needs at least 6 hours of hourly samples, so a one-off fill isn't read as a day's growth (the
+  space warning covers it), and the warning says what the volume really grew over that span;
 - a data path's write-ahead log is over its `wal_warn` (`WARNING_KIND_DATA_WAL`);
 - the OS audit archive has files flagged to move to the backup volume, or files past their
   retention stay because the backup volume's archive can't take them (`WARNING_KIND_AUDIT_ARCHIVE`,

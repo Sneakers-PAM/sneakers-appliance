@@ -95,3 +95,31 @@ func TestRecordingIsAsciicast(t *testing.T) {
 		t.Fatalf("event kinds %v, want both directions", kinds)
 	}
 }
+
+// A normal session's recording entries read ok, as every audit entry's
+// outcome is ok or refused; the end's reason is in its detail.
+func TestRecordingEntriesReadOk(t *testing.T) {
+	l := openLog(t)
+	var buf bytes.Buffer
+	r := osaudit.NewRecorder(&buf, l, "E-BBBB", "alice")
+	writeN(t, r, 70*1024)
+	mustNoErr(t, r.Close("exit"))
+	entries, err := l.Entries()
+	mustNoErr(t, err)
+	seen := 0
+	for _, e := range entries {
+		if e.Action != osaudit.ActionRecordingChunk && e.Action != osaudit.ActionRecordingEnd {
+			continue
+		}
+		seen++
+		if e.Outcome != "ok" {
+			t.Errorf("%s outcome %q, want ok", e.Action, e.Outcome)
+		}
+		if e.Action == osaudit.ActionRecordingEnd && e.Detail["reason"] != "exit" {
+			t.Errorf("end reason %q", e.Detail["reason"])
+		}
+	}
+	if seen != 3 {
+		t.Fatalf("%d recording entries", seen)
+	}
+}

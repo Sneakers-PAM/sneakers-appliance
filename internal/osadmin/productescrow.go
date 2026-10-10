@@ -15,8 +15,8 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 )
 
-// productEscrowName is a product key's sealed item: "product-<product>-<name>".
-func productEscrowName(product, name string) string { return "product-" + product + "-" + name }
+// ProductEscrowName is a product key's sealed item: "product-<product>-<name>".
+func ProductEscrowName(product, name string) string { return "product-" + product + "-" + name }
 
 // sealProductKeys seals each key the installed product's product.yaml names
 // for the escrow under KeyCustody, so the recovery escrow carries it. It
@@ -34,7 +34,7 @@ func (s *Server) sealProductKeys(ctx context.Context) (bool, error) {
 			s.o.Logger.Warn("osadmin: a product key for the escrow can't be read yet; it's sealed next time", log.F("key", e.Name), log.F("error", err.Error()))
 			continue
 		}
-		name := productEscrowName(info.Name, e.Name)
+		name := ProductEscrowName(info.Name, e.Name)
 		if cur, err := s.o.KeyCustody.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: name})); err == nil && bytes.Equal(cur.Msg.GetSecret(), []byte(val)) {
 			continue
 		}

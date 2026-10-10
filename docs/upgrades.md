@@ -300,6 +300,9 @@ OS, so no code from a Base Web ever runs on the box; switching one changes the p
   sessions or elevation. Apply moves `current` to the staged slot (the old one becomes
   `previous`); Revert moves it back, or with no previous slot removes it, so the built-in pages
   serve. A revert to a Base Web that doesn't fit the running Base OS is refused (`UPGRADE_COMPAT`).
+  While the built-in pages serve because they're newer than the installed Base Web, a revert to a
+  previous slot that isn't newer than them either couldn't change what serves: `can_revert` is false
+  and a Revert asked for anyway is refused (`UPGRADE_NO_PREVIOUS`), leaving the links as they are.
   The steps are switching and loading: sneakers-osadmin, which serves :8443, sees the link change
   within a second, loads the slot and swaps what it serves in one step. accessd waits for
   sneakers-osadmin's record of what it serves (`web-served.json` in its own directory); when the
