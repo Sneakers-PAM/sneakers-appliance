@@ -298,7 +298,9 @@ sneakers-elevated warns a minute before the end.
 At its start the session says who it's for, that it's recorded and when it ends, and that `help`
 lists the commands that help troubleshoot the box. `help` comes from the shell's start file
 (`os/rootshell/rc.sh`, handed to ash through `ENV`): pods, logs, events, `k0s status`, the stacks
-k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. It
+k0s applies, addresses and routes, DNS, name and port checks, disk, memory and the kernel log. The
+disk lines suit busybox: `df -hP`, whose `-P` keeps each volume on one line for a script to read,
+and `ls -l --full-time` for a file's size and time, because busybox `stat` has no `-c`. It
 also says why `helm list -A` is empty: the product's stacks are k0s manifests the appliance applies
 from the installed bundle, not Helm releases, because the update slots and revert track the
 manifests directly and Helm's release state would sit outside them.
