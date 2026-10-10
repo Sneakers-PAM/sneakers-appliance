@@ -111,6 +111,9 @@ type Spec struct {
 	// an install, an update or a revert: the product's own health check,
 	// and how long the box waits for it (docs/upgrades.md).
 	Ready *Ready `yaml:"ready"`
+	// Phases, when set, are the order the product comes up in, each
+	// gated on Ready before the next (phases.go, docs/upgrades.md).
+	Phases []Phase `yaml:"phases"`
 }
 
 // Ready is product.yaml's ready section.
@@ -574,6 +577,9 @@ func Parse(b []byte) (Spec, error) {
 	if err := s.checkReady(); err != nil {
 		return Spec{}, err
 	}
+	if err := s.checkPhases(); err != nil {
+		return Spec{}, err
+	}
 	return s, nil
 }
 
@@ -909,7 +915,8 @@ func quoted(names []string) string {
 // WriteRBAC renders the RBAC for the product.yaml in slot dir into
 // dir/RBACFile (a bundle that exposes nothing gets none), and the
 // stacks its switches gate into dir/SwitchStacksFile, and the box values
-// its stacks read into dir/BoxValuesFile.
+// its stacks read into dir/BoxValuesFile, and its phase stacks into
+// dir/PhaseStacksFile.
 func WriteRBAC(dir string) error {
 	s, err := Load(dir)
 	if err != nil {
@@ -919,6 +926,9 @@ func WriteRBAC(dir string) error {
 		return err
 	}
 	if err := writeBoxValues(dir, s); err != nil {
+		return err
+	}
+	if err := writePhaseStacks(dir, s); err != nil {
 		return err
 	}
 	p := filepath.Join(dir, RBACFile)
