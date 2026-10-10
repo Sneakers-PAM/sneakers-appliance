@@ -82,6 +82,9 @@ service AccessService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc SetUpdateChannel(SetUpdateChannelRequest) returns (SetUpdateChannelResponse);
+  // CleanUpDisk is the closed shell's "disk cleanup": osadmin's
+  // StatusService.CleanUpDisk run as the login's admin.
+  rpc CleanUpDisk(CleanUpDiskRequest) returns (CleanUpDiskResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -775,3 +778,9 @@ message SetUpdateChannelRequest {
 }
 
 message SetUpdateChannelResponse {}
+
+message CleanUpDiskRequest {}
+
+message CleanUpDiskResponse {
+  sneakers.appliance.osadmin.v1.DiskCleanup cleanup = 1;
+}

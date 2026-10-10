@@ -197,7 +197,8 @@ func countdown(d time.Duration) string {
 // about but what has its own line (reduced protection, the clock, the
 // self-signed certificate), an upgrade staged or rolled back, the factory
 // reset with its countdown, an unhealthy service, accessd not answering,
-// and a Recover access code out.
+// and a Recover access code out. A critical warning (a volume 90% full)
+// shows in the alert colour.
 func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 	var out []tui.Line
 	add := func(st tui.Style, s string) {
@@ -257,6 +258,10 @@ func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 		case osadminv1.WarningKind_WARNING_KIND_EXPOSURE:
 			add(tui.Alert, w.GetDetail())
 		default:
+			if w.GetCritical() {
+				add(tui.Alert, w.GetDetail())
+				continue
+			}
 			add(tui.Warn, w.GetDetail())
 		}
 	}

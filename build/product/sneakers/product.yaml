@@ -169,3 +169,15 @@ box_settings:
       - {key: SMTP_TLS_MODE, setting: email.tls}
       - {key: SMTP_TLS_INSECURE, setting: email.skip_verify}
       - {key: SMTP_CA_PEM, setting: email.ca_pem}
+
+# The data paths the box's disk guard watches for growth (docs/disk-layout.md
+# "Keeping the disk from filling"), under /var/lib/sneakers-data, where each
+# of the stacks' volumes is. The database's write-ahead log is held to
+# max_wal_size by PostgreSQL itself (values.yaml); the box warns when it
+# passes wal_warn, and never removes a WAL file.
+data:
+  - name: database
+    label: The database
+    path: postgres
+    wal: pgdata/pg_wal
+    wal_warn: 1GiB

@@ -603,3 +603,73 @@ func TestTheSneakersBundleDeclaresItsBoxSecrets(t *testing.T) {
 		}
 	}
 }
+
+const withData = `format: 2
+data:
+  - name: database
+    label: The database
+    path: postgres
+    wal: pgdata/pg_wal
+    wal_warn: 1GiB
+  - {name: cache, label: The cache, path: valkey}
+`
+
+// The product names its data paths, relative to the data root, and the
+// write-ahead log under one with the size that's too big; the disk guard
+// watches them for growth.
+func TestTheDataPathsParse(t *testing.T) {
+	s, err := productspec.Parse([]byte(withData))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Data) != 2 {
+		t.Fatalf("%+v", s.Data)
+	}
+	db := s.Data[0]
+	if db.HostPath() != productspec.DataRoot+"/postgres" || db.WAL != "pgdata/pg_wal" || db.WALWarnBytes() != 1<<30 {
+		t.Fatalf("%+v %s %d", db, db.HostPath(), db.WALWarnBytes())
+	}
+	if s.Data[1].WALWarnBytes() != 0 {
+		t.Fatalf("%+v", s.Data[1])
+	}
+}
+
+func TestADataPathIsRefusedWhenItBreaksARule(t *testing.T) {
+	for name, bad := range map[string]string{
+		"no name":       "format: 2\ndata:\n  - {label: x, path: p}\n",
+		"twice":         "format: 2\ndata:\n  - {name: a, label: A, path: p}\n  - {name: a, label: B, path: q}\n",
+		"absolute path": "format: 2\ndata:\n  - {name: a, label: A, path: /var/lib/x}\n",
+		"escaping path": "format: 2\ndata:\n  - {name: a, label: A, path: ../sneakers}\n",
+		"escaping wal":  "format: 2\ndata:\n  - {name: a, label: A, path: p, wal: ../../x, wal_warn: 1GiB}\n",
+		"bad size":      "format: 2\ndata:\n  - {name: a, label: A, path: p, wal: w, wal_warn: lots}\n",
+		"size, no wal":  "format: 2\ndata:\n  - {name: a, label: A, path: p, wal_warn: 1GiB}\n",
+		"wal, no size":  "format: 2\ndata:\n  - {name: a, label: A, path: p, wal: w}\n",
+		"no label":      "format: 2\ndata:\n  - {name: a, path: p}\n",
+		"unclean path":  "format: 2\ndata:\n  - {name: a, label: A, path: p//q}\n",
+	} {
+		if _, err := productspec.Parse([]byte(bad)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// The Sneakers bundle declares its database's data path and WAL limit.
+func TestTheSneakersBundleDeclaresItsDataPaths(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wal bool
+	for _, d := range s.Data {
+		if d.WAL != "" && d.WALWarnBytes() > 0 {
+			wal = true
+		}
+	}
+	if len(s.Data) == 0 || !wal {
+		t.Fatalf("data %+v", s.Data)
+	}
+}

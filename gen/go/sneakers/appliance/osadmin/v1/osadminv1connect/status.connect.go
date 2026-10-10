@@ -45,6 +45,9 @@ const (
 	StatusServiceSetSecureBootProcedure = "/sneakers.appliance.osadmin.v1.StatusService/SetSecureBoot"
 	// StatusServiceGetPhaseProcedure is the fully-qualified name of the StatusService's GetPhase RPC.
 	StatusServiceGetPhaseProcedure = "/sneakers.appliance.osadmin.v1.StatusService/GetPhase"
+	// StatusServiceCleanUpDiskProcedure is the fully-qualified name of the StatusService's CleanUpDisk
+	// RPC.
+	StatusServiceCleanUpDiskProcedure = "/sneakers.appliance.osadmin.v1.StatusService/CleanUpDisk"
 )
 
 // StatusServiceClient is a client for the sneakers.appliance.osadmin.v1.StatusService service.
@@ -60,6 +63,9 @@ type StatusServiceClient interface {
 	// open, and sneakers-edgefall serves the state on 443. It says nothing
 	// else about the box.
 	GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error)
+	// CleanUpDisk runs the disk cleanup now (the hourly one's steps) and
+	// says what each step freed.
+	CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error)
 }
 
 // NewStatusServiceClient constructs a client for the sneakers.appliance.osadmin.v1.StatusService
@@ -93,6 +99,12 @@ func NewStatusServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		cleanUpDisk: connect.NewClient[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse](
+			httpClient,
+			baseURL+StatusServiceCleanUpDiskProcedure,
+			connect.WithSchema(statusServiceMethods.ByName("CleanUpDisk")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -101,6 +113,7 @@ type statusServiceClient struct {
 	getStatus     *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
 	setSecureBoot *connect.Client[v1.SetSecureBootRequest, v1.SetSecureBootResponse]
 	getPhase      *connect.Client[v1.GetPhaseRequest, v1.GetPhaseResponse]
+	cleanUpDisk   *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
 }
 
 // GetStatus calls sneakers.appliance.osadmin.v1.StatusService.GetStatus.
@@ -118,6 +131,11 @@ func (c *statusServiceClient) GetPhase(ctx context.Context, req *connect.Request
 	return c.getPhase.CallUnary(ctx, req)
 }
 
+// CleanUpDisk calls sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk.
+func (c *statusServiceClient) CleanUpDisk(ctx context.Context, req *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error) {
+	return c.cleanUpDisk.CallUnary(ctx, req)
+}
+
 // StatusServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.StatusService
 // service.
 type StatusServiceHandler interface {
@@ -132,6 +150,9 @@ type StatusServiceHandler interface {
 	// open, and sneakers-edgefall serves the state on 443. It says nothing
 	// else about the box.
 	GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error)
+	// CleanUpDisk runs the disk cleanup now (the hourly one's steps) and
+	// says what each step freed.
+	CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error)
 }
 
 // NewStatusServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -161,6 +182,12 @@ func NewStatusServiceHandler(svc StatusServiceHandler, opts ...connect.HandlerOp
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	statusServiceCleanUpDiskHandler := connect.NewUnaryHandler(
+		StatusServiceCleanUpDiskProcedure,
+		svc.CleanUpDisk,
+		connect.WithSchema(statusServiceMethods.ByName("CleanUpDisk")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.StatusService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case StatusServiceGetStatusProcedure:
@@ -169,6 +196,8 @@ func NewStatusServiceHandler(svc StatusServiceHandler, opts ...connect.HandlerOp
 			statusServiceSetSecureBootHandler.ServeHTTP(w, r)
 		case StatusServiceGetPhaseProcedure:
 			statusServiceGetPhaseHandler.ServeHTTP(w, r)
+		case StatusServiceCleanUpDiskProcedure:
+			statusServiceCleanUpDiskHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -188,4 +217,8 @@ func (UnimplementedStatusServiceHandler) SetSecureBoot(context.Context, *connect
 
 func (UnimplementedStatusServiceHandler) GetPhase(context.Context, *connect.Request[v1.GetPhaseRequest]) (*connect.Response[v1.GetPhaseResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.StatusService.GetPhase is not implemented"))
+}
+
+func (UnimplementedStatusServiceHandler) CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.StatusService.CleanUpDisk is not implemented"))
 }

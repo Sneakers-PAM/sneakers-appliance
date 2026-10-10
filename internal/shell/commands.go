@@ -121,6 +121,9 @@ var specs = []spec{
 	{path: "status", short: "Show the appliance status", action: "status", origins: both,
 		long:    "Shows the host name, the version (and any staged one), the phase, the disk protection, the management addresses, NTP and the health of each service, with any warnings. While the appliance services are down it shows the last status they kept, with its time.",
 		example: "  status\n  status -o json"},
+	{path: "disk cleanup", short: "Free disk space now", action: "disk.cleanup", origins: both,
+		long:    "Runs the disk cleanup at once, the one the box runs every hour and whenever a volume passes 80%: rotated pod logs over their cap, closed OS audit files (compressed, never deleted), images neither product release needs, update files left behind and stale temporary files. It never touches product data, secrets, backups, either release or key custody. It prints what each step freed, and the run is audited.",
+		example: "  disk cleanup\n  disk cleanup -o json"},
 	{path: "network show", short: "Show the network settings", action: "network.show", origins: both,
 		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.",
 		example: "  network show\n  network show -o json"},
@@ -458,6 +461,7 @@ var groupDoc = map[string][2]string{
 	"setup":              {"First boot setup", "The steps of first boot that are done over SSH."},
 	"tls":                {"TLS certificates", "The TLS certificates the box serves."},
 	"logs":               {"Logs", "The box's logs."},
+	"disk":               {"Disk space", "The box's disk: it cleans up after itself every hour and when a volume passes 80%; Status shows each volume's use."},
 }
 
 func documentGroups(c *cobra.Command) {

@@ -637,3 +637,29 @@ func TestTheBaseAndProductLines(t *testing.T) {
 		})
 	}
 }
+
+// The disk guard's warnings show on the status view; a critical one (a
+// volume 90% full) in the alert colour, a plain one in the warning
+// colour.
+func TestDiskWarningsShowOnTheStatusView(t *testing.T) {
+	st := status()
+	st.Warnings = append(st.Warnings,
+		&osadminv1.Warning{Kind: osadminv1.WarningKind_WARNING_KIND_DISK_SPACE, Critical: true, Detail: "The state volume is 92% full (58.9 GiB of 64.0 GiB). Free space or grow the disk now."},
+		&osadminv1.Warning{Kind: osadminv1.WarningKind_WARNING_KIND_DATA_WAL, Detail: "The database's write-ahead log is 1.5 GiB, over its 1.0 GiB limit."})
+	ls := dashboard.Warnings(chrome(full, keycustody.ModeTPM), data(st), now)
+	var crit, warn bool
+	for _, l := range ls {
+		if len(l) < 3 || l[0].Text != "!" {
+			continue
+		}
+		switch {
+		case strings.Contains(l.String(), "92% full"):
+			crit = l[0].Style == tui.Alert
+		case strings.Contains(l.String(), "write-ahead log"):
+			warn = l[0].Style == tui.Warn
+		}
+	}
+	if !crit || !warn {
+		t.Fatalf("critical in the alert colour %v, plain in the warning colour %v", crit, warn)
+	}
+}

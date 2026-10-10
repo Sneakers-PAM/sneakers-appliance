@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -101,6 +102,76 @@ type Spec struct {
 	// Email, when set, says the product reads the box's email settings,
 	// so :8443 offers its Email page.
 	Email *Email `yaml:"email"`
+	// Data are the product's data paths the box watches for growth (the
+	// disk guard): each a directory under DataRoot, optionally with the
+	// write-ahead log under it and the size that's too big.
+	Data []DataPath `yaml:"data"`
+}
+
+// DataRoot is where a product's volumes live on the box: every volume
+// claim in a bundle's stacks becomes a hostPath under it.
+const DataRoot = "/var/lib/sneakers-data"
+
+// DataPath is one product data directory.
+type DataPath struct {
+	Name  string `yaml:"name"`
+	Label string `yaml:"label"`
+	// Path is relative to DataRoot.
+	Path string `yaml:"path"`
+	// WAL is the write-ahead log's directory, relative to Path, and
+	// WALWarn the size it shouldn't pass, such as 1GiB.
+	WAL     string `yaml:"wal"`
+	WALWarn string `yaml:"wal_warn"`
+}
+
+// HostPath is the directory on the box.
+func (d DataPath) HostPath() string { return path.Join(DataRoot, d.Path) }
+
+// WALWarnBytes is WALWarn in bytes, 0 when unset.
+func (d DataPath) WALWarnBytes() int64 {
+	n, _ := parseSize(d.WALWarn)
+	return n
+}
+
+var sizeRE = regexp.MustCompile(`^([1-9][0-9]{0,5})(KiB|MiB|GiB|TiB)$`)
+
+func parseSize(s string) (int64, bool) {
+	m := sizeRE.FindStringSubmatch(s)
+	if m == nil {
+		return 0, false
+	}
+	n, _ := strconv.ParseInt(m[1], 10, 64)
+	shift := map[string]uint{"KiB": 10, "MiB": 20, "GiB": 30, "TiB": 40}[m[2]]
+	return n << shift, true
+}
+
+// relPath reports whether p is a clean relative path that stays inside
+// the directory it's relative to.
+func relPath(p string) bool {
+	return p != "" && !path.IsAbs(p) && path.Clean(p) == p && p != ".." && !strings.HasPrefix(p, "../")
+}
+
+func (s Spec) checkData() error {
+	seen := map[string]bool{}
+	for i, d := range s.Data {
+		switch {
+		case !nameRE.MatchString(d.Name) || seen[d.Name]:
+			return bad("data[%d]: %q isn't a lower-case word, or is declared twice", i, d.Name)
+		case d.Label == "":
+			return bad("data[%d]: %s has no label", i, d.Name)
+		case !relPath(d.Path):
+			return bad("data[%d]: the path %q isn't a clean path under the data root", i, d.Path)
+		case (d.WAL == "") != (d.WALWarn == ""):
+			return bad("data[%d]: a write-ahead log needs both wal and wal_warn", i)
+		case d.WAL != "" && !relPath(d.WAL):
+			return bad("data[%d]: the write-ahead log %q isn't a clean path under %s", i, d.WAL, d.Path)
+		}
+		if _, ok := parseSize(d.WALWarn); d.WALWarn != "" && !ok {
+			return bad("data[%d]: wal_warn %q isn't a size such as 1GiB", i, d.WALWarn)
+		}
+		seen[d.Name] = true
+	}
+	return nil
 }
 
 // EscrowKey is one Secret key the recovery escrow carries.
@@ -422,6 +493,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkEscrow(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkData(); err != nil {
 		return Spec{}, err
 	}
 	return s, nil

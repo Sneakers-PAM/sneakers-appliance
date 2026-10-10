@@ -120,6 +120,14 @@ func (h *accessH) SetUpdateChannel(ctx context.Context, r *connect.Request[acces
 	return connect.NewResponse(&accessv1.SetUpdateChannelResponse{}), nil
 }
 
+func (h *accessH) CleanUpDisk(ctx context.Context, r *connect.Request[accessv1.CleanUpDiskRequest]) (*connect.Response[accessv1.CleanUpDiskResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceCleanUpDiskProcedure, osadminv1connect.StatusServiceCleanUpDiskProcedure, h.s.h.Status.CleanUpDisk, &osadminv1.CleanUpDiskRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.CleanUpDiskResponse{Cleanup: out.GetCleanup()}), nil
+}
+
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {
 	m := r.Msg
 	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceAddAdminProcedure, osadminv1connect.AccessServiceAddAdminProcedure, h.s.h.Access.AddAdmin,
