@@ -326,35 +326,12 @@ func (s *Services) networkSet(ctx context.Context, args []string) (Result, error
 	if st == nil {
 		st = &netdv1.Settings{}
 	}
-	for _, a := range args {
-		k, v, ok := strings.Cut(a, "=")
-		if !ok {
-			return Result{}, codes.New(codes.ShellParse, "%q isn't key=value", a)
-		}
-		list := func() []string {
-			if v == "" {
-				return nil
-			}
-			return strings.Split(v, ",")
-		}
-		switch k {
-		case "hostname":
-			st.Hostname = v
-		case "dns":
-			st.Dns = list()
-		case "search":
-			st.Search = list()
-		case "ntp":
-			st.Ntp = list()
-		case "allow-list":
-			st.AllowList = list()
-		case "time-zone":
-			st.TimeZone = v
-		case "https-proxy":
-			st.HttpsProxy = v
-		default:
-			return Result{}, codes.New(codes.ShellParse, "%q isn't a setting the shell changes (hostname, dns, search, ntp, allow-list, time-zone, https-proxy); set the interfaces on :8443", k)
-		}
+	kvs, err := parseKeys("network set", networkKeys, args)
+	if err != nil {
+		return Result{}, err
+	}
+	for _, kv := range kvs {
+		kv.key.set(st, kv.value)
 	}
 	out, err := s.Network.SetNetwork(ctx, connect.NewRequest(&accessv1.SetNetworkRequest{Settings: st}))
 	if err != nil {
