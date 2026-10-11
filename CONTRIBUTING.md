@@ -23,3 +23,6 @@ issues from a template, a branch per issue, Conventional Commits, squash-merged 
   of their projects is re-authored here as this project's own, with only this header.
 - No real names, hosts, addresses or other identifiers in code, tests, fixtures or docs. Use
   example.org, 192.0.2.0/24, 2001:db8::/32 and invented names.
+- CI: pushing to a PR branch cancels that PR's own still-running checks and starts fresh ones, so
+  don't wait out a stale run. See [docs/testing.md](docs/testing.md) for what runs on a PR, what's
+  path-filtered, and what reruns when the PR enters the merge queue.
