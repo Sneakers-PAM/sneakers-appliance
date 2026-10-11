@@ -64,6 +64,9 @@ wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l
 # After a power loss the first Ready hello pod is the old one, restarted
 # in place by the kubelet before the box quiesced it: sample the phases
 # only once the box says running.
+# The image suite may install a bundle without phases first: wait for one
+# with them.
+wait_for "phased product" grep -q '^phases:' "$product/product.yaml"
 wait_for "box running" box_running 127.0.0.1 9180
 # The lab product's phases (build/lab/product.yaml): each phased pod's
 # restarts, when it started and when it got Ready, for the suite to check

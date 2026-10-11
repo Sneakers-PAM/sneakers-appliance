@@ -5,8 +5,14 @@
 # phases (docs/upgrades.md#the-phases): a stand-in data phase that comes up
 # late, then the hello Deployment, so the image suite sees the box bring a
 # product up one phase at a time on its first install and after a power
-# loss, with no restarts.
+# loss, with no restarts. The MCP switch (on by default) gates lab-mcp,
+# placed with the front phase, before hello, which it needs.
 format: 2
+switches:
+  - name: mcp
+    label: The lab MCP stand-in
+    default: true
+    stacks: [lab-mcp]
 phases:
   - name: data
     label: Starting the lab's data stand-in
@@ -15,4 +21,5 @@ phases:
   - name: front
     label: Starting the hello page
     stack: lab-front
-    workloads: [hello]
+    workloads: [hello, lab-mcp]
+    switch_stacks: [lab-mcp]

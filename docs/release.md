@@ -219,8 +219,9 @@ resolves the dependencies), over `charts/sneakers/examples/values-small-box.yaml
 Each workload goes in its phase's own stack (`product.yaml` `phases`, below), labelled
 `sneakers-appliance/phase` and `sneakers-appliance/phase-order` on itself and its pods, and the
 tool refuses a workload no phase names, or a switch's workload whose phase doesn't place the
-switch's stack. The bundle check refuses a bundle without a phase's stack, or with a workload in
-it that its phase doesn't name or that lacks the labels.
+switch's stack. The bundle check refuses a bundle without a phase's stack, with a workload in
+it that its phase doesn't name or that lacks the labels, or with a switch's stack that runs a
+workload and that no phase places (`switch_stacks`).
 
 The renders layer sneakers-release's `migrate/deploy/migrate-callers-values.yaml`, so the vault
 and audit list the migrate caller and the NetworkPolicies admit it; the import's
