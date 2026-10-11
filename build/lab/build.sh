@@ -207,6 +207,18 @@ product_bin="$(go run "$root/cmd/sneakers-artifact" bin-seal --work "$work/produ
 go run "$root/cmd/sneakers-artifact" product-index --out "$OUT/product/sneakers-product-index.json" "$product_bin" >/dev/null
 rm -rf "$work/product/tree"
 
+# The same lab product as a bundle without phases, an earlier version, for
+# the image suite's update to phases (test/image/k0s): never published.
+echo "lab: product bundle without phases"
+bash "$here/unphased.sh" "$here/stacks" "$work/stacks-unphased"
+VERSION="${version%%-*}-0.unphased" CHANNEL=lab MIN_BASE="${PRODUCT_MIN_BASE:-$version}" MAX_BASE="${PRODUCT_MAX_BASE:-}" BASES="$version" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
+  SIGNATURES="$work/image-sigs" K0S="$k0s" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$work/stacks-unphased" PRODUCT_YAML="$here/product-unphased.yaml" OUT="$work/product-unphased" \
+  bash "$root/build/product/build.sh"
+sign_blob "$work/product-unphased/bin/header.json" "$work/product-unphased/bin/header.sigstore.json"
+rm -rf "$OUT/product-unphased"
+go run "$root/cmd/sneakers-artifact" bin-seal --work "$work/product-unphased/bin" --bundle "$work/product-unphased/bin/header.sigstore.json" --out "$OUT/product-unphased" >/dev/null
+rm -rf "$work/product-unphased/tree"
+
 if [ -n "${WEB:-}" ]; then
   echo "lab: :8443 pages"
   WEB="$WEB" VERSION="$version" OUT="$work/osadmin" bash "$here/pages.sh"

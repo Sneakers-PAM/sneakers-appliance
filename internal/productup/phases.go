@@ -129,8 +129,12 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 	if err != nil {
 		return Result{}, err
 	}
+	product, err := p.slotStacks()
+	if err != nil {
+		return Result{}, err
+	}
 	if !p.anyPlaced(phaseStacks) {
-		if detail, err := p.quiescePass(ctx, live, pods, always, alwaysWant); err != nil {
+		if detail, err := p.quiescePass(ctx, live, pods, product, alwaysWant); err != nil {
 			return Result{}, err
 		} else if detail != "" {
 			return Result{Step: StepQuiesce, Detail: detail}, nil
@@ -141,8 +145,13 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 	} else if len(missing) > 0 {
 		return Result{Step: StepCluster, Detail: "Waiting for " + strings.Join(missing, ", ")}, nil
 	}
-	notPhased := func(w workload) bool { return w.Metadata.Labels[productspec.PhaseLabel] == "" }
-	if waiting := rolloutWith(alwaysWant, live, notPhased); waiting != "" {
+	// The cluster's own workloads (k0s's stacks: CoreDNS, kube-router), and
+	// what the always-on stacks declare (the edge); never a product
+	// workload, which only its phase starts.
+	cluster := func(w workload) bool {
+		return w.Metadata.Labels[productspec.PhaseLabel] == "" && !slices.Contains(product, w.Metadata.Labels[StackLabel])
+	}
+	if waiting := rolloutWith(alwaysWant, live, cluster); waiting != "" {
 		return Result{Step: StepCluster, Detail: waiting}, nil
 	}
 	importOpen := false
@@ -315,11 +324,29 @@ func (p *Probe) podItems(ctx context.Context) ([]podItem, error) {
 	return l.Items, nil
 }
 
+// slotStacks are every stack the slot carries, switched on or off: the
+// product's, as opposed to k0s's own.
+func (p *Probe) slotStacks() ([]string, error) {
+	dirs, err := os.ReadDir(filepath.Join(p.Slot, "manifests"))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	var out []string
+	for _, d := range dirs {
+		if d.IsDir() {
+			out = append(out, d.Name())
+		}
+	}
+	return out, nil
+}
+
 // quiesceTargets are the product's workloads to stop, in the order they
-// stop: what an earlier version left in the always-on stacks that this
-// slot doesn't have (it goes when k0s applies the stack again), then each
-// phase, latest first.
-func quiesceTargets(live []workload, always []string, alwaysWant []wanted) [][]workload {
+// stop: what an earlier version left without phase labels in any of this
+// slot's stacks (an update from a bundle without phases: its workloads,
+// a switch's included, then sit in what are now phase stacks, or in the
+// always-on stack that no longer holds them), except what the always-on
+// stacks declare (the edge); then each phase, latest first.
+func quiesceTargets(live []workload, product []string, alwaysWant []wanted) [][]workload {
 	declared := map[string]bool{}
 	for _, w := range alwaysWant {
 		declared[w.key()] = true
@@ -332,7 +359,7 @@ func quiesceTargets(live []workload, always []string, alwaysWant []wanted) [][]w
 			continue
 		}
 		key := w.Kind + " " + w.Metadata.Namespace + "/" + w.Metadata.Name
-		if w.Kind != "DaemonSet" && slices.Contains(always, w.Metadata.Labels[StackLabel]) && !declared[key] {
+		if w.Kind != "DaemonSet" && slices.Contains(product, w.Metadata.Labels[StackLabel]) && !declared[key] {
 			leftovers = append(leftovers, w)
 		}
 	}
@@ -383,9 +410,9 @@ func (p *Probe) stopGroup(ctx context.Context, group []workload, pods []podItem)
 // every container in place, all at once) is scaled to 0 and waited for,
 // so each phase starts with fresh pods. It answers what it waits for, or
 // "" once nothing of the product runs.
-func (p *Probe) quiescePass(ctx context.Context, live []workload, pods []podItem, always []string, alwaysWant []wanted) (string, error) {
+func (p *Probe) quiescePass(ctx context.Context, live []workload, pods []podItem, product []string, alwaysWant []wanted) (string, error) {
 	scaled, left := 0, 0
-	for _, g := range quiesceTargets(live, always, alwaysWant) {
+	for _, g := range quiesceTargets(live, product, alwaysWant) {
 		s, l, err := p.stopGroup(ctx, g, pods)
 		if err != nil {
 			return "", err
@@ -427,11 +454,15 @@ func (p *Probe) Quiesce(ctx context.Context, every time.Duration) error {
 	if err != nil {
 		return err
 	}
+	product, err := p.slotStacks()
+	if err != nil {
+		return err
+	}
 	live, err := p.liveWorkloads(ctx)
 	if err != nil {
 		return err
 	}
-	for _, g := range quiesceTargets(live, always, alwaysWant) {
+	for _, g := range quiesceTargets(live, product, alwaysWant) {
 		for {
 			pods, err := p.podItems(ctx)
 			if err != nil {

@@ -133,7 +133,8 @@ jobs:
           export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage"
           SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
           SNEAKERS_PRODUCT="$(ls "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin)"
-          export SNEAKERS_IMAGE SNEAKERS_PRODUCT
+          SNEAKERS_PRODUCT_UNPHASED="$(ls "$RUNNER_TEMP"/lab/product-unphased/sneakers-product-*.bin)"
+          export SNEAKERS_IMAGE SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED
           go test -tags image -timeout 60m -v ./test/image/...
       - name: Wipe the lab keys
         if: always()
