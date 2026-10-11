@@ -5,6 +5,8 @@ package osadmin_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -234,5 +236,28 @@ func TestGetPhaseNamesTheFailedPhaseAndWhy(t *testing.T) {
 	b.waitState(boxstate.Running)
 	if got := b.phase(); got.GetFailedPhase() != "" || got.GetFailedReason() != "" {
 		t.Fatalf("a running box names a failure: %q %q", got.GetFailedPhase(), got.GetFailedReason())
+	}
+}
+
+// A product apply stops the running product before it switches the slots:
+// k0s's pre-stop then stops the product with the running slot's own spec
+// (its phases, in reverse), never the incoming one, which would take the
+// running version's workloads for leftovers and stop them all at once.
+func TestAProductApplyStopsTheProductBeforeItSwitchesSlots(t *testing.T) {
+	p := &phasedProbe{}
+	var b *box
+	var atStop, staged string
+	b, alice := applyProductOpts(t, withPhased(p), func(bx *box, _ *osadmin.Options) {
+		bx.services.onStop = func() {
+			atStop, _ = os.Readlink(filepath.Join(bx.state, "product", "current"))
+			staged, _ = os.Readlink(filepath.Join(bx.state, "product", "staged"))
+		}
+	})
+	waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:DONE phase:front:DONE product_health:DONE edge:DONE")
+	if staged == "" || atStop == staged {
+		t.Fatalf("at the stop, current named %q and staged %q: the slots switched first", atStop, staged)
+	}
+	if got := strings.Join(b.services.log(), ","); !strings.HasPrefix(got, "stop k0s,start k0s") {
+		t.Fatalf("services %s", got)
 	}
 }

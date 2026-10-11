@@ -97,10 +97,16 @@ type fakeCluster struct {
 	// keepReplicas makes apply leave a scaled-down workload's replicas, as
 	// an applier that merges against what it last applied would.
 	keepReplicas bool
+	// stopAsks is how many asks a stopping pod outlasts (1 when unset).
+	stopAsks int
+	asked    map[string]int
+	// scaledWhile records, at each scale to 0, the workloads whose pods
+	// were still stopping.
+	scaledWhile map[string][]string
 }
 
 func newCluster() *fakeCluster {
-	return &fakeCluster{applied: map[string]bool{}, workloads: map[string]*live{}, stopping: map[string]int{}}
+	return &fakeCluster{applied: map[string]bool{}, workloads: map[string]*live{}, stopping: map[string]int{}, asked: map[string]int{}, scaledWhile: map[string][]string{}}
 }
 
 func (c *fakeCluster) add(l *live) { c.workloads[l.key()] = l }
@@ -197,6 +203,13 @@ func (c *fakeCluster) run(_ context.Context, _ string, args ...string) ([]byte, 
 		}
 		var r int64
 		_, _ = fmt.Sscan(n, &r)
+		if r == 0 {
+			for sk, left := range c.stopping {
+				if left > 0 && sk != k {
+					c.scaledWhile[k] = append(c.scaledWhile[k], sk)
+				}
+			}
+		}
 		if r < w.replicas {
 			c.stopping[k] += int(w.replicas - r)
 		}
@@ -214,6 +227,8 @@ func (c *fakeCluster) run(_ context.Context, _ string, args ...string) ([]byte, 
 		return nil, nil
 	case strings.HasPrefix(line, "get pods"):
 		return c.podsJSON(), nil
+	case strings.HasPrefix(line, "get replicasets"):
+		return c.replicaSetsJSON(), nil
 	case strings.HasPrefix(line, "get deployments,statefulsets,daemonsets"):
 		return c.workloadsJSON(), nil
 	}
@@ -256,8 +271,31 @@ func (c *fakeCluster) sorted() []*live {
 	return out
 }
 
-// podsJSON is a pod per replica, with the template's labels, and the
-// stopping ones; a pod that was stopping is gone after one ask.
+// owner is the pod's owner reference: a Deployment's pods belong to its
+// ReplicaSet, <name>-rs; a StatefulSet's to itself.
+func owner(w *live) map[string]any {
+	if w.kind == "Deployment" {
+		return map[string]any{"kind": "ReplicaSet", "name": w.name + "-rs"}
+	}
+	return map[string]any{"kind": w.kind, "name": w.name}
+}
+
+// replicaSetsJSON is each Deployment's ReplicaSet, owned by it.
+func (c *fakeCluster) replicaSetsJSON() []byte {
+	var items []any
+	for _, w := range c.sorted() {
+		if w.kind == "Deployment" {
+			items = append(items, map[string]any{"metadata": map[string]any{"namespace": w.ns, "name": w.name + "-rs",
+				"ownerReferences": []any{map[string]any{"kind": "Deployment", "name": w.name}}}})
+		}
+	}
+	b, _ := json.Marshal(map[string]any{"items": items})
+	return b
+}
+
+// podsJSON is a pod per replica, with the template's labels and its
+// owner, and the stopping ones; a pod that was stopping is gone after
+// stopAsks asks.
 func (c *fakeCluster) podsJSON() []byte {
 	var items []any
 	for _, w := range c.sorted() {
@@ -272,13 +310,19 @@ func (c *fakeCluster) podsJSON() []byte {
 			if !w.ready && w.reason != "" {
 				st["containerStatuses"] = []any{map[string]any{"name": "main", "state": map[string]any{"waiting": map[string]any{"reason": w.reason, "message": "the image isn't on the box"}}}}
 			}
-			items = append(items, map[string]any{"metadata": map[string]any{"namespace": w.ns, "name": fmt.Sprintf("%s-%d", w.name, i), "labels": labels}, "status": st})
+			items = append(items, map[string]any{"metadata": map[string]any{"namespace": w.ns, "name": fmt.Sprintf("%s-%d", w.name, i), "labels": labels, "ownerReferences": []any{owner(w)}}, "status": st})
 		}
 		for i := 0; i < c.stopping[w.key()]; i++ {
-			items = append(items, map[string]any{"metadata": map[string]any{"namespace": w.ns, "name": fmt.Sprintf("%s-old-%d", w.name, i), "labels": labels, "deletionTimestamp": "2026-10-10T18:00:00Z"},
+			items = append(items, map[string]any{"metadata": map[string]any{"namespace": w.ns, "name": fmt.Sprintf("%s-old-%d", w.name, i), "labels": labels, "deletionTimestamp": "2026-10-10T18:00:00Z", "ownerReferences": []any{owner(w)}},
 				"status": map[string]any{"phase": "Running"}})
 		}
-		delete(c.stopping, w.key())
+		if c.stopping[w.key()] > 0 {
+			c.asked[w.key()]++
+			if c.asked[w.key()] >= max(c.stopAsks, 1) {
+				delete(c.stopping, w.key())
+				delete(c.asked, w.key())
+			}
+		}
 	}
 	b, _ := json.Marshal(map[string]any{"items": items})
 	return b
@@ -367,11 +411,20 @@ func TestThePhasesComeUpInOrderAfterAPowerLoss(t *testing.T) {
 	if !strings.Contains(r.Detail, "Stopping") {
 		t.Fatalf("quiesce detail %q", r.Detail)
 	}
-	if got := c.callsMatching("scale "); len(got) != 2 {
+	// One phase at a time, the latest first: the front, then, once its
+	// pods are gone, the data.
+	if got := c.callsMatching("scale "); len(got) != 1 {
 		t.Fatalf("scaled %v", got)
 	}
 	if len(placed(t, manifests)) != 0 {
 		t.Fatal("a phase was placed before the product was quiesced")
+	}
+	if r := step(productup.StepQuiesce); !strings.Contains(r.Detail, "stopping") {
+		t.Fatalf("quiesce detail %q", r.Detail)
+	}
+	step(productup.StepQuiesce)
+	if got := c.callsMatching("scale "); len(got) != 2 {
+		t.Fatalf("scaled %v", got)
 	}
 	// The scaled-away pods are stopping, then gone; the cluster's stacks
 	// aren't applied yet.
@@ -737,5 +790,75 @@ func TestTheClusterStepIgnoresTheProductsWorkloads(t *testing.T) {
 	c.workloads["Deployment app/app-mcp"].replicas = 0
 	if r, _ := p.Check(ctx); r.Step != "phase:data" {
 		t.Fatalf("%+v", r)
+	}
+}
+
+// The k0s pre-stop on the Sneakers bundle's slot as an update from a bundle
+// without phases finds it: every workload unlabelled. Each stops in the
+// reverse order of the phase the slot names it in (one it names in none
+// first), each group's pods gone, found by their owner rather than a label
+// they don't carry, before the next is scaled down: PostgreSQL last, with
+// nothing connected.
+func TestQuiesceStopsTheDatabaseLastByEachWorkloadsOwnPods(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	c.stopAsks = 2
+	p, _ := phasedProbe(t, c)
+	p.Slot = realSlot(t)
+	old := func(kind, name, stack string) {
+		c.add(&live{kind: kind, ns: "sneakers", name: name, stack: stack, labels: map[string]string{productup.StackLabel: stack}, replicas: 1, template: map[string]any{}, ready: true})
+	}
+	old("StatefulSet", "sneakers-postgres", "sneakers")
+	old("Deployment", "sneakers-vault", "sneakers")
+	old("Deployment", "sneakers-gateway", "sneakers")
+	old("Deployment", "sneakers-mcp", "sneakers-mcp")
+	old("Deployment", "sneakers-retired", "sneakers")
+	if err := p.Quiesce(context.Background(), time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, l := range c.callsMatching("scale ") {
+		order = append(order, strings.TrimSuffix(strings.TrimPrefix(l, "scale --namespace sneakers "), " --replicas=0"))
+	}
+	want := []string{"deployment/sneakers-retired", "deployment/sneakers-gateway", "deployment/sneakers-mcp", "deployment/sneakers-vault", "statefulset/sneakers-postgres"}
+	if !slices.Equal(order, want) {
+		t.Fatalf("stopped %v, want %v", order, want)
+	}
+	// The front phase's two stop together; nothing else stops while an
+	// earlier group's pods are still there.
+	for k, while := range c.scaledWhile {
+		if k == "Deployment sneakers/sneakers-mcp" && slices.Equal(while, []string{"Deployment sneakers/sneakers-gateway"}) {
+			continue
+		}
+		t.Errorf("%s was scaled down while %v still stopped", k, while)
+	}
+}
+
+// The quiesce at the start of a boot stops one phase at a time too: the
+// latest first, and the next only once its pods are gone.
+func TestTheBootQuiesceStopsOnePhaseAtATime(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	c.stopAsks = 2
+	p, _ := phasedProbe(t, c)
+	c.apply(t, p.Slot, "app-data")
+	c.apply(t, p.Slot, "app-front")
+	ctx := context.Background()
+	if r, _ := p.Check(ctx); r.Step != productup.StepQuiesce {
+		t.Fatalf("%+v", r)
+	}
+	if got := c.callsMatching("scale "); !slices.Equal(got, []string{"scale --namespace app deployment/app-web --replicas=0"}) {
+		t.Fatalf("the first pass scaled %v, want the front phase only", got)
+	}
+	for range 4 {
+		if r, _ := p.Check(ctx); r.Step != productup.StepQuiesce && r.Step != productup.StepCluster {
+			t.Fatalf("%+v", r)
+		}
+	}
+	if got := c.callsMatching("scale "); len(got) != 2 || got[1] != "scale --namespace app statefulset/app-db --replicas=0" {
+		t.Fatalf("scaled %v, want the data phase second", got)
+	}
+	for k, while := range c.scaledWhile {
+		t.Errorf("%s was scaled down while %v still stopped", k, while)
 	}
 }

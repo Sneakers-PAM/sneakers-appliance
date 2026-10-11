@@ -173,7 +173,7 @@ func (h *emailSvc) SetEmail(ctx context.Context, r *connect.Request[osadminv1.Se
 	}
 	s.o.Logger.Info("osadmin: the product's email settings are saved; the product is applied again", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("verify", e.Verify), log.F("password", pw), log.F("version", v), log.F("by", c.session.Admin))
 	s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
-	err = s.switchProduct(ctx, func() error { return nil })
+	err = s.switchProduct(ctx, s.slots().Current(), func() error { return nil })
 	s.endMaintenance()
 	s.productHistory("apply", v, c.session.Admin, err, "email settings")
 	if err != nil {
