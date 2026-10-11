@@ -76,8 +76,11 @@ cp "$WORK"/image-sigs/*.sigstore.json "$work/image-sigs/"
 sign_blob "$work/postgres.manifest" "$work/image-sigs/${pg_digest#sha256:}.sigstore.json"
 
 say "render"
-helm="$HELM"
-export HELM_CACHE_HOME="$work/helm/cache" HELM_CONFIG_HOME="$work/helm/config" HELM_DATA_HOME="$work/helm/data"
+# The bundled helm renders the chart; the build keeps its copy as it
+# bundles it, so this runs one of its own.
+helm="$work/helm-render"
+install -m 0755 "$HELM" "$helm"
+export HELM_CACHE_HOME="$work/helm-home/cache" HELM_CONFIG_HOME="$work/helm-home/config" HELM_DATA_HOME="$work/helm-home/data"
 {
   "$helm" template sneakers "$charts/charts/postgres" -n sneakers -f "$src/values.yaml"
   echo "---"
@@ -103,7 +106,7 @@ for kind in phaseless phased; do
   install -m 0644 "$root/build/lab/stacks/edge/edge.yaml" "$stacks/edge/edge.yaml"
   say "$kind stacks: $(cd "$stacks" && echo */ | tr -d /)"
   VERSION="$base.$n" CHANNEL=lab MIN_BASE="$base" BASES="$base" RELEASE="$work/release.yaml" RELEASE_KEY="$KEYS/cosign.pub" \
-    SIGNATURES="$work/image-sigs" K0S="$K0S" HELM="$helm" RECIPIENT="$KEYS/update.pub" STACKS="$stacks" \
+    SIGNATURES="$work/image-sigs" K0S="$K0S" HELM="$HELM" RECIPIENT="$KEYS/update.pub" STACKS="$stacks" \
     PRODUCT_YAML="$src/product-$kind.yaml" OUT="$work/$kind/product" bash "$root/build/product/build.sh"
   sign_blob "$work/$kind/product/bin/header.json" "$work/$kind/product/bin/header.sigstore.json"
   rm -rf "${OUT:?}/$kind"
