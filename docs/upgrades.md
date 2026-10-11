@@ -127,8 +127,8 @@ has switched:
 |---|---|---|
 | `k0s` | Starting k0s | the Kubernetes API answers |
 | `images` | Importing the images | containerd lists every image in the bundle's `images/` |
-| `quiesce` | Stopping what was left running | no workload of the product runs: the box scales every one an earlier run left running to 0 and waits for its pods to go |
-| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's (the always-on stack, the edge, k0s's own CoreDNS and kube-router) is applied and rolled out |
+| `quiesce` | Stopping what was left running | no workload of the product runs: the box scales every one an earlier run left running to 0 and waits for its pods to go: every phased one, and every one without phase labels in any of the slot's stacks (switch-gated ones included) that the always-on stacks don't declare |
+| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's is applied, and k0s's own workloads (CoreDNS, kube-router) and the ones the always-on stacks declare (the edge) have rolled out; never a product workload, which only its phase starts |
 | `phase:data` | Starting the database and the cache | PostgreSQL and Valkey |
 | `phase:identity` | Starting sign-in, identity and the vault | Kratos (with its migration), the identity service and the vault, whose root key preflight runs in the vault itself, so it's Ready only once the preflight passed |
 | `phase:services` | Starting the services | workflow, audit, notify, connector and the SSH broker |
@@ -159,8 +159,10 @@ has switched:
   for a pod that starts again on its own (evicted, or its node's k0s restarted).
 - **Every apply and revert** comes up the same way, from `quiesce`, so the old version's
   workloads never start next to the new version's. A revert to a slot without phases comes up as
-  before (every stack at once); an update from one starts at `quiesce` too, which stops the old
-  version's workloads that the new always-on stack no longer holds.
+  before (every stack at once); an update from one starts at `quiesce` too, which stops every
+  workload of the old version, none of which carries a phase label: in the always-on stack, and
+  in a stack that is now a phase's, such as the MCP switch's (the MCP server would otherwise
+  hold the cluster step until the gateway, a later phase, answered).
 - **The timeout of a phase** is its product.yaml `timeout` (5 minutes when it names none), from
   when the step became the current one; the overall `ready.timeout` still bounds the whole.
 - **A phase that fails**, because it isn't Ready within its timeout or a pod of it can never start

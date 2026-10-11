@@ -226,4 +226,8 @@ data phase was Ready, and none is a pod the first install started: the box quies
 started new ones), logs its scaling events line (the quiesce, then each phase) and checks its
 sandbox events line (no FailedCreatePodSandBox event with the CNI
 plugin's "exec: already started"). The lab bundle is the one the lab build writes next to the disk
-(`SNEAKERS_PRODUCT`).
+(`SNEAKERS_PRODUCT`). Its MCP switch (on by default) gates `lab-mcp`, which is Ready only while
+hello answers, placed with the front phase. A second run installs the same product as a bundle
+without phases (`SNEAKERS_PRODUCT_UNPHASED`, `build/lab/unphased.sh`, never published), then the
+phased one: the box quiesces every unlabelled workload, `lab-mcp` included, and brings the phases
+up in order. The hook samples the phases only once the installed product has them.

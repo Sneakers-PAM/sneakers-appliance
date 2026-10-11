@@ -259,3 +259,29 @@ func TestABundleCarriesItsPhaseStacks(t *testing.T) {
 		}
 	}
 }
+
+// With phases, a switch's stack that runs a workload must belong to a
+// phase (switch_stacks): one no phase places would be placed at k0s's
+// start, all at once, and its workloads would hold the cluster step up.
+func TestABundleRefusesASwitchStackWithNoPhase(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	const phase = "phases:\n  - {name: data, label: The database, stack: app-data, workloads: [app-db]}\n"
+	const db = "apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: app-db\n  labels: {sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"}\n" +
+		"spec:\n  template:\n    metadata:\n      labels: {sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"}\n"
+	with := func(sw string) func(fstest.MapFS) {
+		return func(m fstest.MapFS) {
+			m["product.yaml"] = &fstest.MapFile{Data: []byte("format: 2\nswitches:\n  - {name: mcp, stacks: [app-mcp]}\n" + phase), Mode: 0o644}
+			m[bundle.ProductManifests+"/app-data/app-data.yaml"] = &fstest.MapFile{Data: []byte(db), Mode: 0o644}
+			m[bundle.ProductManifests+"/app-mcp/app-mcp.yaml"] = &fstest.MapFile{Data: []byte(sw), Mode: 0o644}
+		}
+	}
+	tree, _ := fixtures.ProductTree(t, k, "amd64", with("apiVersion: v1\nkind: ConfigMap\nmetadata: {name: app-mcp-switch}\n"))
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+		t.Fatalf("a switch stack with no workload: %v", err)
+	}
+	tree, _ = fixtures.ProductTree(t, k, "amd64", with("apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: app-mcp}\nspec:\n  template:\n    metadata: {}\n"))
+	if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "app-mcp") {
+		t.Fatalf("a switch stack with a workload and no phase: %v", err)
+	}
+}

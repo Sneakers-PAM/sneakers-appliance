@@ -610,3 +610,132 @@ func TestAnOpenImportHoldsAfterItsPhase(t *testing.T) {
 		t.Fatalf("the front phase wasn't started again: %v", c.callsMatching("scale "))
 	}
 }
+
+// realSlot is a slot laid out like the Sneakers bundle: its own
+// product.yaml (build/product/sneakers/product.yaml), the always-on
+// sneakers stack, the edge, every phase's stack with the workloads its
+// phase names, and the MCP switch's stack with the MCP server and Hydra,
+// labelled the way the render labels them.
+func realSlot(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"product.yaml":                      string(b),
+		"manifests/sneakers/sneakers.yaml":  "apiVersion: v1\nkind: Namespace\nmetadata: {name: sneakers}\n",
+		"manifests/edge/edge.yaml":          "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: edge, namespace: sneakers-edge}\nspec:\n  template:\n    spec:\n      containers: [{name: edge, image: traefik}]\n",
+		"manifests/sneakers-import/sa.yaml": "apiVersion: v1\nkind: ServiceAccount\nmetadata: {name: sneakers-migrate, namespace: sneakers}\n",
+	}
+	for i, ph := range spec.Phases {
+		var own, sw []string
+		for _, w := range ph.Workloads {
+			kind := "Deployment"
+			if w == "sneakers-postgres" {
+				kind = "StatefulSet"
+			}
+			doc := strings.Replace(workloadDoc(kind, w, ph.Name, fmt.Sprint(i+1)), "namespace: app", "namespace: sneakers", 1)
+			if w == "sneakers-mcp" || w == "sneakers-hydra" {
+				sw = append(sw, doc)
+			} else {
+				own = append(own, doc)
+			}
+		}
+		files["manifests/"+ph.Stack+"/"+ph.Stack+".yaml"] = strings.Join(own, "---\n")
+		if len(sw) > 0 {
+			files["manifests/sneakers-mcp/sneakers-mcp.yaml"] = "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: sneakers-mcp-switch, namespace: sneakers}\n---\n" + strings.Join(sw, "---\n")
+		}
+	}
+	slot := t.TempDir()
+	writeSlot(t, slot, files)
+	if err := productspec.WriteRBAC(slot); err != nil {
+		t.Fatal(err)
+	}
+	return slot
+}
+
+// An update from a Sneakers bundle without phases, the MCP switch on: the
+// earlier version's MCP server and Hydra run unlabelled in the switch's
+// stack, which is now a stack of the front phase. They're quiesced with
+// the rest, and the cluster step never waits for them: the MCP server
+// can't be Ready before the gateway, whose phase comes after it.
+func TestAnUpdateFromAnUnphasedBundleQuiescesTheSwitchsWorkloads(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	p, manifests := phasedProbe(t, c)
+	p.Slot = realSlot(t)
+	if err := os.MkdirAll(p.SwitchDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "switches"), []byte("mcp on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := func(name, stack string, ready bool) {
+		c.add(&live{kind: "Deployment", ns: "sneakers", name: name, stack: stack, labels: map[string]string{productup.StackLabel: stack}, replicas: 1, template: map[string]any{}, ready: ready})
+	}
+	old("sneakers-gateway", "sneakers", true)
+	old("sneakers-mcp", "sneakers-mcp", false)
+	old("sneakers-hydra", "sneakers-mcp", true)
+	ctx := context.Background()
+	r, err := p.Check(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Step != productup.StepQuiesce {
+		t.Fatalf("%+v", r)
+	}
+	scaled := c.callsMatching("scale ")
+	for _, w := range []string{"sneakers-gateway", "sneakers-mcp", "sneakers-hydra"} {
+		if !slices.Contains(scaled, "scale --namespace sneakers deployment/"+w+" --replicas=0") {
+			t.Errorf("%s wasn't quiesced: %v", w, scaled)
+		}
+	}
+	// The earlier version's workloads are gone; the cluster's own stacks
+	// come up, and the MCP server's Deployment (at 0, not Ready) holds
+	// nothing up.
+	c.podsJSON()
+	for _, st := range []string{"sneakers", "edge", "sneakers-import"} {
+		c.apply(t, p.Slot, st)
+	}
+	c.setReady("Deployment sneakers-edge/edge", true, "")
+	for range 3 {
+		if r, err = p.Check(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if r.Step != "phase:data" {
+		t.Fatalf("the cluster step waits on a product workload: %+v (placed %v)", r, placed(t, manifests))
+	}
+}
+
+// The cluster step waits only for the cluster's own workloads (k0s's
+// stacks: CoreDNS, kube-router) and what the always-on stacks declare
+// (the edge), never for a product workload that runs in a phase's stack
+// without its labels.
+func TestTheClusterStepIgnoresTheProductsWorkloads(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	p, _ := phasedProbe(t, c)
+	for _, st := range []string{"app", "edge"} {
+		c.apply(t, p.Slot, st)
+	}
+	c.setReady("Deployment edge/edge", true, "")
+	c.add(&live{kind: "Deployment", ns: "kube-system", name: "coredns", stack: "coredns", labels: map[string]string{productup.StackLabel: "coredns"}, replicas: 1, template: map[string]any{}, ready: false})
+	ctx := context.Background()
+	if r, _ := p.Check(ctx); r.Step != productup.StepCluster || !strings.Contains(r.Detail, "kube-system/coredns") {
+		t.Fatalf("CoreDNS not Ready: %+v", r)
+	}
+	c.setReady("Deployment kube-system/coredns", true, "")
+	// A product workload at 0 in a phase's stack, unlabelled, which only
+	// its phase may start.
+	c.add(&live{kind: "Deployment", ns: "app", name: "app-mcp", stack: "app-mcp", labels: map[string]string{productup.StackLabel: "app-mcp"}, replicas: 0, template: map[string]any{}})
+	c.workloads["Deployment app/app-mcp"].replicas = 0
+	if r, _ := p.Check(ctx); r.Step != "phase:data" {
+		t.Fatalf("%+v", r)
+	}
+}

@@ -1,0 +1,15 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# LAB ONLY: the lab product as a bundle without phases, the way products
+# were built before them (build/lab/build.sh writes it next to the phased
+# one, build/lab/unphased.sh lays out its stacks): every workload in the
+# hello stack with no phase labels, the MCP switch's lab-mcp in its own
+# stack, on by default. The image suite installs it, then the phased bundle,
+# to show the box taking a product without phases over (test/image/k0s).
+format: 2
+switches:
+  - name: mcp
+    label: The lab MCP stand-in
+    default: true
+    stacks: [lab-mcp]

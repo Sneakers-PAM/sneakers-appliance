@@ -1,0 +1,57 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# THROWAWAY, LAB ONLY: a stand-in for the Sneakers MCP server, the lab
+# product's MCP switch's stack (build/lab/product.yaml, on by default). It is
+# Ready only while the hello Service answers, as the MCP server needs the
+# gateway, so the image suite (test/image/k0s) shows a switch's workload that
+# depends on a workload of its own phase coming up in order, and an update
+# from a bundle without phases taking it over (docs/upgrades.md#the-phases).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lab-mcp
+  namespace: sneakers-hello
+  labels:
+    app: lab-mcp
+    sneakers-appliance/phase: front
+    sneakers-appliance/phase-order: "2"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lab-mcp
+  template:
+    metadata:
+      labels:
+        app: lab-mcp
+        sneakers-appliance/phase: front
+        sneakers-appliance/phase-order: "2"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp
+          image: docker.io/library/busybox@sha256:bdf57e528e45e4433820e045b29b4597825a1c9e38353532d90a01445013f82e
+          imagePullPolicy: Never
+          command: [sleep, "2147483647"]
+          readinessProbe:
+            exec:
+              command: [nc, -z, -w, "2", hello.sneakers-hello.svc.cluster.local, "80"]
+            periodSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 8Mi
+            limits:
+              memory: 16Mi

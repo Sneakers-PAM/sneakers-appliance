@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/fs"
 	"path"
+	"regexp"
 	"slices"
 	"strconv"
 
@@ -25,6 +26,9 @@ import (
 // puts them: the box finds the product's workloads by them to stop them in
 // order.
 func checkPhaseStacks(fsys fs.FS, spec productspec.Spec) error {
+	if err := checkSwitchStacksPhased(fsys, spec); err != nil {
+		return err
+	}
 	for i, p := range spec.Phases {
 		if fi, err := fs.Stat(fsys, path.Join(ProductManifests, p.Stack)); err != nil || !fi.IsDir() {
 			return codes.New(codes.KitBundleMismatch, "the product bundle has no stack %s, the phase %s's own", p.Stack, p.Name)
@@ -88,3 +92,36 @@ func checkPhaseFile(fsys fs.FS, file, stack string, p productspec.Phase, order s
 		}
 	}
 }
+
+// checkSwitchStacksPhased refuses, in a phased bundle, a switch's stack
+// that runs a workload and that no phase places (switch_stacks):
+// k0s-interim would place it at k0s's start, ahead of the phases it needs.
+func checkSwitchStacksPhased(fsys fs.FS, spec productspec.Spec) error {
+	if len(spec.Phases) == 0 {
+		return nil
+	}
+	phased := spec.PhaseStacks()
+	for _, w := range spec.Switches {
+		for _, st := range w.Stacks {
+			if slices.Contains(phased, st) {
+				continue
+			}
+			files, err := fs.Glob(fsys, path.Join(ProductManifests, st, "*.yaml"))
+			if err != nil {
+				return codes.New(codes.KitBundleMismatch, "the stack %s can't be read: %v", st, err)
+			}
+			for _, f := range files {
+				b, err := fs.ReadFile(fsys, f)
+				if err != nil {
+					return codes.New(codes.KitBundleMismatch, "the stack %s can't be read: %v", st, err)
+				}
+				if workloadRE.Match(b) {
+					return codes.New(codes.KitBundleMismatch, "the switch %s's stack %s runs a workload, and no phase places it (product.yaml phases switch_stacks)", w.Name, st)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+var workloadRE = regexp.MustCompile(`(?m)^kind:\s*(Deployment|StatefulSet|DaemonSet)\s*$`)
