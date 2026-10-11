@@ -145,13 +145,23 @@ has switched:
   hold it back), and waits until each has rolled out and every pod of the phase is Ready.
 - **Stopping, in reverse.** Before k0s stops, on every reboot, shutdown, product apply and revert,
   its `pre-stop` (`sneakers-accessd quiesce`, [init.md](init.md#the-service-table)) scales the
-  product to 0 latest phase first. Each phase's pods are gone before the next is scaled, so the
-  database stops last and cleanly, with nothing connected. With the API down it does nothing. It's
-  bounded at 100 seconds, inside k0s's 2-minute stop timeout.
+  product to 0 one group at a time: first what the running slot names in no phase (what an
+  earlier version left), then each phase, latest first, the data phase last. A workload's phase is
+  its `sneakers-appliance/phase-order` label, else the phase the slot's product.yaml names it in,
+  so a version without phases stops in the same order. Each group's pods, found by their owner
+  (a Deployment's ReplicaSet, a StatefulSet), are gone before the next is scaled, so the database
+  stops last and cleanly, with nothing connected. With the API down it does nothing. It's bounded
+  at 4 minutes 30 seconds, inside k0s's 5-minute stop timeout, which leaves PostgreSQL its
+  2-minute shutdown grace; a graceful reboot's drain gets 12 minutes.
+- **The order of an apply or a revert.** The box secrets of the slot it switches to are made
+  first (a failure leaves the running product alone), then the running product stops, while
+  `current` still names its slot, so the pre-stop stops it by the running slot's own spec. Only
+  then do the slots switch and k0s start from the new one. A switch that fails after the stop
+  starts the product again from its slot.
 - **A power loss.** When the box loses power, or k0s or the kernel dies, nothing ran the pre-stop:
   after the restart the kubelet restarts every container in its old pod, all at once, and each
-  shows a restart. The `quiesce` step at the start of every boot scales them to 0 and waits for
-  their pods to go before the first phase, so the pods that serve are new ones, with no restarts,
+  shows a restart. The `quiesce` step at the start of every boot scales them to 0, one group at
+  a time in the same order as the pre-stop, and waits for their pods to go before the first phase, so the pods that serve are new ones, with no restarts,
   started in order. The killed pods never served: 443 says starting throughout. In the seconds
   before the quiesce, each restarted pod sits in its `wait-phase` init container, which waits for
   the cluster's DNS and the Services its phase needs ([release.md](release.md#productyaml)),

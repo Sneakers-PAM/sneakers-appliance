@@ -55,6 +55,14 @@ type Status struct {
 // Current is the current slot's path; the product runs from it.
 func (s Slots) Current() string { return s.target(linkCurrent) }
 
+// Staged is the staged slot's path, which Apply makes current; "" when
+// none is staged.
+func (s Slots) Staged() string { return s.target(linkStaged) }
+
+// Previous is the previous slot's path, which Revert makes current; ""
+// when there is none.
+func (s Slots) Previous() string { return s.target(linkPrevious) }
+
 // Status reads the links and the headers in the slots they name.
 func (s Slots) Status() Status {
 	return Status{Installed: s.version(linkCurrent), Staged: s.version(linkStaged), Previous: s.version(linkPrevious)}

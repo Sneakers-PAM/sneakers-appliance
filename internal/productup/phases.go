@@ -134,7 +134,7 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 		return Result{}, err
 	}
 	if !p.anyPlaced(phaseStacks) {
-		if detail, err := p.quiescePass(ctx, live, pods, product, alwaysWant); err != nil {
+		if detail, err := p.quiescePass(ctx, live, pods, spec, product, alwaysWant); err != nil {
 			return Result{}, err
 		} else if detail != "" {
 			return Result{Step: StepQuiesce, Detail: detail}, nil
@@ -340,18 +340,21 @@ func (p *Probe) slotStacks() ([]string, error) {
 	return out, nil
 }
 
-// quiesceTargets are the product's workloads to stop, in the order they
-// stop: what an earlier version left without phase labels in any of this
-// slot's stacks (an update from a bundle without phases: its workloads,
-// a switch's included, then sit in what are now phase stacks, or in the
-// always-on stack that no longer holds them), except what the always-on
-// stacks declare (the edge); then each phase, latest first.
-func quiesceTargets(live []workload, product []string, alwaysWant []wanted) [][]workload {
+// quiesceTargets are the product's workloads to stop, in groups, in the
+// order they stop: the ones the slot names in no phase first (what an
+// earlier version left), then each phase, latest first, so the data phase
+// stops last, with nothing connected. A workload's phase is its phase-order
+// label, else the phase spec names it in: an update from a bundle without
+// phases finds its workloads unlabelled, in the always-on stack and in what
+// are now phase stacks (a switch's included). What the always-on stacks
+// declare (the edge) and what isn't in the slot's stacks (k0s's own) are
+// never stopped.
+func quiesceTargets(live []workload, spec productspec.Spec, product []string, alwaysWant []wanted) [][]workload {
 	declared := map[string]bool{}
 	for _, w := range alwaysWant {
 		declared[w.key()] = true
 	}
-	var leftovers []workload
+	var unnamed []workload
 	byOrder := map[int][]workload{}
 	for _, w := range live {
 		if o, err := strconv.Atoi(w.Metadata.Labels[productspec.PhaseOrderLabel]); err == nil {
@@ -359,13 +362,18 @@ func quiesceTargets(live []workload, product []string, alwaysWant []wanted) [][]
 			continue
 		}
 		key := w.Kind + " " + w.Metadata.Namespace + "/" + w.Metadata.Name
-		if w.Kind != "DaemonSet" && slices.Contains(product, w.Metadata.Labels[StackLabel]) && !declared[key] {
-			leftovers = append(leftovers, w)
+		if w.Kind == "DaemonSet" || !slices.Contains(product, w.Metadata.Labels[StackLabel]) || declared[key] {
+			continue
 		}
+		if i, ok := spec.PhaseOf(w.Metadata.Name); ok {
+			byOrder[i+1] = append(byOrder[i+1], w)
+			continue
+		}
+		unnamed = append(unnamed, w)
 	}
 	var out [][]workload
-	if len(leftovers) > 0 {
-		out = append(out, leftovers)
+	if len(unnamed) > 0 {
+		out = append(out, unnamed)
 	}
 	orders := make([]int, 0, len(byOrder))
 	for o := range byOrder {
@@ -378,28 +386,68 @@ func quiesceTargets(live []workload, product []string, alwaysWant []wanted) [][]
 	return out
 }
 
-// stopGroup scales the group's workloads that still run to 0; it answers
-// how many it scaled and how many of its pods are still there.
-func (p *Probe) stopGroup(ctx context.Context, group []workload, pods []podItem) (scaled, left int, err error) {
-	orders := map[string]bool{}
-	for _, w := range group {
-		if o := w.Metadata.Labels[productspec.PhaseOrderLabel]; o != "" {
-			orders[o] = true
+// owners maps each ReplicaSet, "<namespace>/<name>", to the Deployment
+// that owns it, so a Deployment's pods are found by owner.
+func (p *Probe) owners(ctx context.Context) (map[string]string, error) {
+	out, err := p.kubectl(ctx, "get", "replicasets", "--all-namespaces", "-o", "json")
+	if err != nil {
+		return nil, err
+	}
+	var l struct {
+		Items []struct {
+			Metadata struct {
+				Namespace       string     `json:"namespace"`
+				Name            string     `json:"name"`
+				OwnerReferences []ownerRef `json:"ownerReferences"`
+			} `json:"metadata"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(out, &l); err != nil {
+		return nil, fmt.Errorf("the ReplicaSet list doesn't parse: %w", err)
+	}
+	m := map[string]string{}
+	for _, rs := range l.Items {
+		for _, o := range rs.Metadata.OwnerReferences {
+			if o.Kind == "Deployment" {
+				m[rs.Metadata.Namespace+"/"+rs.Metadata.Name] = o.Name
+			}
 		}
+	}
+	return m, nil
+}
+
+// ownedBy is whether pod it belongs to workload w: its owner is w (a
+// StatefulSet's pods) or a ReplicaSet w owns (a Deployment's).
+func ownedBy(it podItem, w workload, rs map[string]string) bool {
+	if it.Metadata.Namespace != w.Metadata.Namespace {
+		return false
+	}
+	for _, o := range it.Metadata.OwnerReferences {
+		switch {
+		case o.Kind == w.Kind && o.Name == w.Metadata.Name:
+			return true
+		case o.Kind == "ReplicaSet" && w.Kind == "Deployment" && rs[it.Metadata.Namespace+"/"+o.Name] == w.Metadata.Name:
+			return true
+		}
+	}
+	return false
+}
+
+// stopGroup scales the group's workloads that still run to 0; it answers
+// how many it scaled and how many of their pods, found by owner (an
+// earlier version's carry no phase labels), are still there.
+func (p *Probe) stopGroup(ctx context.Context, group []workload, pods []podItem, rs map[string]string) (scaled, left int, err error) {
+	for _, w := range group {
 		if replicasOf(w) > 0 {
 			if err := p.scale(ctx, w.Metadata.Namespace, w.Kind, w.Metadata.Name, 0); err != nil {
 				return scaled, 0, err
 			}
 			scaled++
 		}
-		left += int(w.Status.Replicas)
-	}
-	for _, it := range pods {
-		if it.Status.Phase == "Succeeded" || it.Status.Phase == "Failed" {
-			continue
-		}
-		if orders[it.Metadata.Labels[productspec.PhaseOrderLabel]] {
-			left++
+		for _, it := range pods {
+			if it.Status.Phase != "Succeeded" && it.Status.Phase != "Failed" && ownedBy(it, w, rs) {
+				left++
+			}
 		}
 	}
 	return scaled, left, nil
@@ -408,33 +456,43 @@ func (p *Probe) stopGroup(ctx context.Context, group []workload, pods []podItem)
 // quiescePass is the start of every boot and every product restart: what
 // an earlier run left running (after a power loss the kubelet restarts
 // every container in place, all at once) is scaled to 0 and waited for,
-// so each phase starts with fresh pods. It answers what it waits for, or
-// "" once nothing of the product runs.
-func (p *Probe) quiescePass(ctx context.Context, live []workload, pods []podItem, product []string, alwaysWant []wanted) (string, error) {
-	scaled, left := 0, 0
-	for _, g := range quiesceTargets(live, product, alwaysWant) {
-		s, l, err := p.stopGroup(ctx, g, pods)
+// one group of quiesceTargets at a time, so each phase starts with fresh
+// pods and the database stops last. It answers what it waits for, or ""
+// once nothing of the product runs.
+func (p *Probe) quiescePass(ctx context.Context, live []workload, pods []podItem, spec productspec.Spec, product []string, alwaysWant []wanted) (string, error) {
+	groups := quiesceTargets(live, spec, product, alwaysWant)
+	if len(groups) == 0 {
+		return "", nil
+	}
+	rs, err := p.owners(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, g := range groups {
+		scaled, left, err := p.stopGroup(ctx, g, pods, rs)
 		if err != nil {
 			return "", err
 		}
-		scaled += s
-		left += l
-	}
-	switch {
-	case scaled > 0:
-		return fmt.Sprintf("Stopping %d %s an earlier run left running", scaled, plural(scaled, "workload", "workloads")), nil
-	case left > 0:
-		return fmt.Sprintf("%d %s still stopping", left, plural(left, "pod", "pods")), nil
+		switch {
+		case scaled > 0:
+			return fmt.Sprintf("Stopping %d %s an earlier run left running", scaled, plural(scaled, "workload", "workloads")), nil
+		case left > 0:
+			return fmt.Sprintf("%d %s still stopping", left, plural(left, "pod", "pods")), nil
+		}
 	}
 	return "", nil
 }
 
+// QuiesceBound bounds Quiesce as k0s's pre-stop: inside its 5-minute
+// stop-timeout, with room for the database's own 2-minute shutdown grace.
+const QuiesceBound = 270 * time.Second
+
 // Quiesce stops the product before k0s stops (the k0s service's pre-stop,
-// `sneakers-accessd quiesce`): each group of quiesceTargets is scaled to 0
-// and its pods waited for before the next, asking every every, so the
-// services stop before the database they use and the database stops
-// cleanly with nothing connected. With the API down there is nothing to
-// do. ctx bounds it.
+// `sneakers-accessd quiesce`), by the slot it runs from: each group of
+// quiesceTargets is scaled to 0 and its pods waited for before the next,
+// asking every every, so the services stop before the database they use
+// and the database stops cleanly with nothing connected. With the API down
+// there is nothing to do. ctx bounds it.
 func (p *Probe) Quiesce(ctx context.Context, every time.Duration) error {
 	if _, err := p.kubectl(ctx, "get", "--raw", "/readyz"); err != nil {
 		return nil
@@ -462,13 +520,17 @@ func (p *Probe) Quiesce(ctx context.Context, every time.Duration) error {
 	if err != nil {
 		return err
 	}
-	for _, g := range quiesceTargets(live, product, alwaysWant) {
+	for _, g := range quiesceTargets(live, spec, product, alwaysWant) {
 		for {
 			pods, err := p.podItems(ctx)
 			if err != nil {
 				return err
 			}
-			_, left, err := p.stopGroup(ctx, g, pods)
+			rs, err := p.owners(ctx)
+			if err != nil {
+				return err
+			}
+			_, left, err := p.stopGroup(ctx, g, pods, rs)
 			if err != nil {
 				return err
 			}

@@ -120,7 +120,7 @@ func (s *Server) HostNameChanged(ctx context.Context) {
 	}
 	lg.Info("osadmin: the host name changed; the product is applied again with it", log.F("fqdn", fqdn), log.F("was", was), log.F("version", v))
 	s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
-	err = s.switchProduct(ctx, func() error { return nil })
+	err = s.switchProduct(ctx, s.slots().Current(), func() error { return nil })
 	s.endMaintenance()
 	detail := "host name " + fqdn
 	s.productHistory("apply", v, by.Actor, err, detail)

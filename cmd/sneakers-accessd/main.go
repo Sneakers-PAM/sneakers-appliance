@@ -262,8 +262,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		KeyCustody: custody,
 		Image:      initv1connect.NewImageServiceClient(ic, "http://init.sock"),
 		Power:      initv1connect.NewPowerServiceClient(ic, "http://init.sock"),
-		// Stopping k0s may take its whole stop-timeout (2 minutes).
-		Services: initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 5*time.Minute), "http://init.sock"),
+		// Stopping k0s may take its pre-stop and its whole stop-timeout
+		// (5 minutes each).
+		Services: initv1connect.NewServicesServiceClient(unixClientWith(c.initSock, 11*time.Minute), "http://init.sock"),
 		Network:  netd,
 		// accessd is root, so it may ask the installed bundle's k0s how
 		// far the product has come up after an apply (docs/upgrades.md).

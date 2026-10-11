@@ -25,16 +25,12 @@ func productProbe(c config) *productup.Probe {
 	}
 }
 
-// quiesceBound keeps `sneakers-accessd quiesce` inside the k0s service's
-// stop-timeout (2 minutes), which bounds it too.
-const quiesceBound = 100 * time.Second
-
 // quiesce is the k0s service's pre-stop: the product stops latest phase
 // first, each phase's pods gone before the next, so the database stops
 // last and cleanly, before k0s itself stops on every reboot, shutdown,
 // update and revert.
 func quiesce(ctx context.Context, c config, lg log.Logger) error {
-	ctx, cancel := context.WithTimeout(ctx, quiesceBound)
+	ctx, cancel := context.WithTimeout(ctx, productup.QuiesceBound)
 	defer cancel()
 	start := time.Now()
 	lg.Info("accessd: stopping the product in order before k0s stops")

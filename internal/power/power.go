@@ -95,6 +95,11 @@ type Resetter interface {
 	Run(ctx context.Context, stop func(context.Context) error) (factoryreset.Record, error)
 }
 
+// DefaultDrainTimeout bounds a graceful drain: k0s's pre-stop (the
+// product stopped one phase at a time, the database last) and its stop
+// take up to its 5-minute stop-timeout each.
+const DefaultDrainTimeout = 12 * time.Minute
+
 // Options are the controller's collaborators.
 type Options struct {
 	Machine Machine
@@ -110,7 +115,7 @@ type Options struct {
 	// Go runs the work after the request is answered; nil means a
 	// goroutine.
 	Go func(func())
-	// DrainTimeout bounds a graceful drain; zero means 5 minutes.
+	// DrainTimeout bounds a graceful drain; zero means DefaultDrainTimeout.
 	DrainTimeout time.Duration
 	// Announce, when set, is told a reboot or a shutdown is under way
 	// (power.reboot or power.shutdown) before anything stops: init puts
@@ -148,7 +153,7 @@ func New(o Options) *Controller {
 		o.Go = func(f func()) { go f() }
 	}
 	if o.DrainTimeout == 0 {
-		o.DrainTimeout = 5 * time.Minute
+		o.DrainTimeout = DefaultDrainTimeout
 	}
 	return &Controller{o: o}
 }

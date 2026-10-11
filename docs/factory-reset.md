@@ -27,7 +27,8 @@ Graceful, the default:
 
 1. Audit the request (`power.reboot` or `power.shutdown`, `outcome: accepted`) and answer it.
 2. Drain the services in reverse `after:` order, so k0s stops before platformd. Each gets its
-   `stop-timeout` after SIGTERM before SIGKILL; the whole drain is bounded at 5 minutes. A drain
+   `stop-timeout` after SIGTERM before SIGKILL (k0s's pre-stop, which stops the product one phase
+   at a time, gets its 5 minutes too); the whole drain is bounded at 12 minutes. A drain
    that fails is logged and audited (`outcome: drain-failed`) and the box still goes down.
 3. Audit the outcome, sync, unmount everything under `/var/lib` deepest first and close the LUKS
    mappings, unmount the ESP, sync again.

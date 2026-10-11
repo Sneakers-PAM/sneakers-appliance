@@ -279,7 +279,7 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 		overrode, err = s.beginMaintenance(ctx, "product update applies", edgefall.KindProductApply, by, o)
 		if err == nil {
 			s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
-			err = s.switchProduct(ctx, func() error { _, err := s.slots().Apply(); return err })
+			err = s.switchProduct(ctx, s.slots().Staged(), func() error { _, err := s.slots().Apply(); return err })
 			s.endMaintenance()
 		}
 	}
@@ -294,7 +294,7 @@ func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadmin
 	v := ""
 	if err == nil {
 		s.beginProgress("revert", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, s.slots().Status().Previous, "")
-		err = s.switchProduct(ctx, func() error {
+		err = s.switchProduct(ctx, s.slots().Previous(), func() error {
 			var err error
 			v, err = s.slots().Revert()
 			return err
@@ -306,24 +306,33 @@ func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadmin
 	return v, overrode, err
 }
 
-// switchProduct runs a product apply's or revert's switch, then the
-// product's restart, each as its step.
-func (s *Server) switchProduct(ctx context.Context, switchSlots func() error) error {
+// switchProduct runs a product apply's or revert's switch to the slot
+// next, then the product's start, each as its step. next's box secrets
+// are made first, so a failure leaves the running product alone. The
+// running product then stops while current still names its slot: k0s's
+// pre-stop (sneakers-accessd quiesce) stops it by that slot's own spec,
+// latest phase first, the database last. Only then do the slots switch.
+func (s *Server) switchProduct(ctx context.Context, next string, switchSlots func() error) error {
 	s.setStep(stepSwitch, "")
-	if err := switchSlots(); err != nil {
-		s.failStep(stepSwitch, err)
-		return err
-	}
-	if s.o.BoxSecrets != nil {
-		if err := s.o.BoxSecrets.Ensure(s.slots().Current()); err != nil {
-			s.o.Logger.Error(err, "osadmin: the product's box secrets can't be made; the product isn't restarted")
+	if s.o.BoxSecrets != nil && next != "" {
+		if err := s.o.BoxSecrets.Ensure(next); err != nil {
+			s.o.Logger.Error(err, "osadmin: the product's box secrets can't be made; the product isn't switched")
 			s.failStep(stepSwitch, err)
 			return err
 		}
 	}
+	if err := s.stopProduct(ctx); err != nil {
+		s.failStep(stepSwitch, err)
+		return err
+	}
+	if err := switchSlots(); err != nil {
+		s.failStep(stepSwitch, err)
+		s.startAgain(ctx)
+		return err
+	}
 	s.recordBoxValues(ctx)
 	s.setStep(stepRestart, "")
-	if err := s.restartProduct(ctx); err != nil {
+	if err := s.startProduct(ctx); err != nil {
 		s.failStep(stepRestart, err)
 		return err
 	}
@@ -334,9 +343,22 @@ func (s *Server) switchProduct(ctx context.Context, switchSlots func() error) er
 	return nil
 }
 
-// restartProduct stops the product service and starts it from the current
-// slot, then opens the product's ports.
-func (s *Server) restartProduct(ctx context.Context) error {
+// startAgain starts the product from the slot it ran from when the switch
+// failed after the stop, so a failed switch doesn't leave it stopped.
+func (s *Server) startAgain(ctx context.Context) {
+	if s.slots().Status().Installed == "" {
+		return
+	}
+	if err := s.startProduct(ctx); err != nil {
+		s.o.Logger.Error(err, "osadmin: the product didn't start again after a failed switch")
+		return
+	}
+	s.o.Logger.Info("osadmin: the product started again from its slot after a failed switch")
+}
+
+// stopProduct stops the product service; k0s's pre-stop stops the product
+// first, by the slot current names.
+func (s *Server) stopProduct(ctx context.Context) error {
 	if s.o.Services == nil {
 		return errors.New("osadmin: no services client; the product can't be restarted")
 	}
@@ -344,10 +366,20 @@ func (s *Server) restartProduct(ctx context.Context) error {
 	if _, err := s.o.Services.Stop(ctx, connect.NewRequest(&initv1.StopRequest{Name: ProductService})); err != nil {
 		return err
 	}
+	s.o.Logger.Info("osadmin: product stopped", log.F("service", ProductService), log.F("ms", time.Since(started).Milliseconds()))
+	return nil
+}
+
+// startProduct starts the product service from the current slot, then
+// opens the product's ports.
+func (s *Server) startProduct(ctx context.Context) error {
+	if s.o.Services == nil {
+		return errors.New("osadmin: no services client; the product can't be restarted")
+	}
 	if _, err := s.o.Services.Start(ctx, connect.NewRequest(&initv1.StartRequest{Name: ProductService})); err != nil {
 		return err
 	}
-	s.o.Logger.Info("osadmin: product restarted", log.F("service", ProductService), log.F("ms", time.Since(started).Milliseconds()))
+	s.o.Logger.Info("osadmin: product started", log.F("service", ProductService))
 	return s.OpenProductPorts(ctx)
 }
 

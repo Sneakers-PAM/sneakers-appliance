@@ -595,12 +595,18 @@ type containerStatus struct {
 	RestartCount int `json:"restartCount"`
 }
 
+type ownerRef struct {
+	Kind string `json:"kind"`
+	Name string `json:"name"`
+}
+
 type podItem struct {
 	Metadata struct {
 		Namespace         string            `json:"namespace"`
 		Name              string            `json:"name"`
 		DeletionTimestamp *string           `json:"deletionTimestamp"`
 		Labels            map[string]string `json:"labels"`
+		OwnerReferences   []ownerRef        `json:"ownerReferences"`
 	} `json:"metadata"`
 	Status struct {
 		Phase      string `json:"phase"`

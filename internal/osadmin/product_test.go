@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -363,8 +362,8 @@ func TestStatusCarriesTheProductSlots(t *testing.T) {
 	}
 }
 
-// fakeBoxSecrets records the slots it made box secrets for, and what the
-// services had been asked by then.
+// fakeBoxSecrets records the slots it made box secrets for (resolved),
+// and what the services had been asked by then.
 type fakeBoxSecrets struct {
 	b     *box
 	slots []string
@@ -373,31 +372,33 @@ type fakeBoxSecrets struct {
 }
 
 func (f *fakeBoxSecrets) Ensure(slot string) error {
-	cur, _ := filepath.EvalSymlinks(filepath.Join(f.b.state, "product", "current"))
-	if got, _ := filepath.EvalSymlinks(slot); got != cur {
-		slot = "not the current slot " + slot
-	}
-	f.slots = append(f.slots, slot)
+	got, _ := filepath.EvalSymlinks(slot)
+	f.slots = append(f.slots, got)
 	f.seen = append(f.seen, f.b.services.log())
 	return f.err
 }
 
-// A product apply and a revert make the current slot's box secrets after
-// the switch and before k0s restarts, so the product's first start already
+// A product apply and a revert make the box secrets of the slot they
+// switch to before k0s stops, so the product's first start from it already
 // has them; a failure stops the apply before k0s is touched.
 func TestAProductApplyMakesTheBoxSecretsBeforeK0sStarts(t *testing.T) {
 	fake := &fakeBoxSecrets{}
 	b := newBox(t, false, func(b *box, o *osadmin.Options) { fake.b = b; o.BoxSecrets = fake })
 	alice := b.browser()
 	alice.signIn("alice")
+	current := func() string {
+		got, _ := filepath.EvalSymlinks(filepath.Join(b.state, "product", "current"))
+		return got
+	}
 	alice.installProduct(t, "0.2.0")
+	first := current()
 	alice.installProduct(t, "0.3.0")
 	if len(fake.slots) != 2 {
 		t.Fatalf("box secrets made %d times", len(fake.slots))
 	}
 	for i, s := range fake.slots {
-		if strings.HasPrefix(s, "not") {
-			t.Fatalf("made for %s", s)
+		if want := []string{first, current()}[i]; s != want {
+			t.Fatalf("made for %s, want the slot switched to, %s", s, want)
 		}
 		if n := len(fake.seen[i]); n != 2*i {
 			t.Fatalf("made when the services had %v, want before the restart", fake.seen[i])
