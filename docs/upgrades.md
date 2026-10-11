@@ -142,13 +142,20 @@ has switched:
   the loop puts the phase's stacks in front of k0s, with the box's values, a switch's stack first
   and each applied before the next. It waits until every workload in them runs the slot's pod
   template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
-  hold it back), and waits until each has rolled out and every pod of the phase is Ready.
+  hold it back), and waits until each has rolled out and every pod of the phase is Ready. A
+  workload of the phase that another stack owns (an update from a bundle without phases finds
+  them all in its one stack, and k0s's applier leaves an object another stack owns) is deleted
+  first, quiesced already and with its data on the box's own volumes, and the phase's stack makes
+  it anew.
 - **Stopping, in reverse.** Before k0s stops, on every reboot, shutdown, product apply and revert,
   its `pre-stop` (`sneakers-accessd quiesce`, [init.md](init.md#the-service-table)) scales the
   product to 0 one group at a time: first what the running slot names in no phase (what an
   earlier version left), then each phase, latest first, the data phase last. A workload's phase is
   its `sneakers-appliance/phase-order` label, else the phase the slot's product.yaml names it in,
-  so a version without phases stops in the same order. Each group's pods, found by their owner
+  else the phase the staged or the previous slot's names it in (the one an apply or a revert
+  switches to), so a running version without phases, whose workloads its one stack declares,
+  stops in the incoming version's order, PostgreSQL last; a workload no slot puts in a phase that
+  an always-on stack declares (the edge) keeps running. Each group's pods, found by their owner
   (a Deployment's ReplicaSet, a StatefulSet), are gone before the next is scaled, so the database
   stops last and cleanly, with nothing connected. With the API down it does nothing. It's bounded
   at 4 minutes 30 seconds, inside k0s's 5-minute stop timeout, which leaves PostgreSQL its

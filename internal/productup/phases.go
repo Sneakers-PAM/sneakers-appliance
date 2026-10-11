@@ -192,6 +192,11 @@ func (p *Probe) phase(ctx context.Context, ph productspec.Phase, on []string, li
 	}
 	for _, st := range stacks {
 		if _, err := os.Stat(filepath.Join(p.Manifests, st)); err != nil {
+			if freed, err := p.takeOver(ctx, st, live); err != nil {
+				return Result{}, false, err
+			} else if freed != "" {
+				return at("Taking " + freed + " over from the earlier version's stack"), false, nil
+			}
 			if err := p.place(st); err != nil {
 				return Result{}, false, err
 			}
@@ -258,6 +263,35 @@ func (p *Probe) hold(ctx context.Context, later []productspec.Phase, live []work
 		}
 	}
 	return Result{Step: PhaseStep(later[0].Name), Detail: "Held while an import is open; it starts once the import is closed", Held: true}, nil
+}
+
+// takeOver deletes the live workloads the slot's stack st holds that
+// another stack owns: an update from a bundle without phases finds them in
+// its one stack, and k0s's applier leaves an object another stack owns,
+// so st would never be applied. They are quiesced already (at 0), and
+// their data is on the box's own volumes, which a delete keeps; st makes
+// them anew. It answers the ones it deleted, or "".
+func (p *Probe) takeOver(ctx context.Context, st string, live []workload) (string, error) {
+	want, err := p.wantedWorkloads([]string{st})
+	if err != nil {
+		return "", err
+	}
+	byKey := map[string]workload{}
+	for _, w := range live {
+		byKey[w.Kind+" "+w.Metadata.Namespace+"/"+w.Metadata.Name] = w
+	}
+	var freed []string
+	for _, w := range want {
+		got, ok := byKey[w.key()]
+		if !ok || got.Metadata.Labels[StackLabel] == "" || got.Metadata.Labels[StackLabel] == st {
+			continue
+		}
+		if _, err := p.kubectl(ctx, "delete", "--namespace", w.ns, strings.ToLower(w.kind)+"/"+w.name, "--wait=false"); err != nil {
+			return "", err
+		}
+		freed = append(freed, w.ns+"/"+w.name)
+	}
+	return strings.Join(freed, ", "), nil
 }
 
 func replicasOf(w workload) int64 {
@@ -340,16 +374,46 @@ func (p *Probe) slotStacks() ([]string, error) {
 	return out, nil
 }
 
+// specs are the slot's product.yaml first, then the staged and the
+// previous slots' next to it, the ones an apply or a revert switches to:
+// a running product without phases stops in the order of the incoming
+// one.
+func (p *Probe) specs(first productspec.Spec) []productspec.Spec {
+	out := []productspec.Spec{first}
+	for _, link := range []string{"staged", "previous"} {
+		dir := filepath.Join(filepath.Dir(p.Slot), link)
+		if _, err := os.Stat(filepath.Join(dir, productspec.File)); err != nil {
+			continue
+		}
+		if s, err := productspec.Load(dir); err == nil {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// phaseOf is the order, from 1, of the phase the first of specs that
+// names workload puts it in.
+func phaseOf(specs []productspec.Spec, workload string) (int, bool) {
+	for _, s := range specs {
+		if i, ok := s.PhaseOf(workload); ok {
+			return i + 1, true
+		}
+	}
+	return 0, false
+}
+
 // quiesceTargets are the product's workloads to stop, in groups, in the
-// order they stop: the ones the slot names in no phase first (what an
+// order they stop: the ones no spec names in a phase first (what an
 // earlier version left), then each phase, latest first, so the data phase
 // stops last, with nothing connected. A workload's phase is its phase-order
-// label, else the phase spec names it in: an update from a bundle without
-// phases finds its workloads unlabelled, in the always-on stack and in what
-// are now phase stacks (a switch's included). What the always-on stacks
-// declare (the edge) and what isn't in the slot's stacks (k0s's own) are
-// never stopped.
-func quiesceTargets(live []workload, spec productspec.Spec, product []string, alwaysWant []wanted) [][]workload {
+// label, else the phase the first of specs (the slot's, then the slots an
+// update or a revert switches to) names it in: an update from a bundle
+// without phases finds its workloads unlabelled, in its one stack or in
+// what are now phase stacks (a switch's included). A workload no spec puts
+// in a phase that the always-on stacks declare (the edge), and what isn't
+// in the slot's stacks (k0s's own), are never stopped.
+func quiesceTargets(live []workload, specs []productspec.Spec, product []string, alwaysWant []wanted) [][]workload {
 	declared := map[string]bool{}
 	for _, w := range alwaysWant {
 		declared[w.key()] = true
@@ -362,14 +426,16 @@ func quiesceTargets(live []workload, spec productspec.Spec, product []string, al
 			continue
 		}
 		key := w.Kind + " " + w.Metadata.Namespace + "/" + w.Metadata.Name
-		if w.Kind == "DaemonSet" || !slices.Contains(product, w.Metadata.Labels[StackLabel]) || declared[key] {
+		if w.Kind == "DaemonSet" || !slices.Contains(product, w.Metadata.Labels[StackLabel]) {
 			continue
 		}
-		if i, ok := spec.PhaseOf(w.Metadata.Name); ok {
-			byOrder[i+1] = append(byOrder[i+1], w)
+		if o, ok := phaseOf(specs, w.Metadata.Name); ok {
+			byOrder[o] = append(byOrder[o], w)
 			continue
 		}
-		unnamed = append(unnamed, w)
+		if !declared[key] {
+			unnamed = append(unnamed, w)
+		}
 	}
 	var out [][]workload
 	if len(unnamed) > 0 {
@@ -460,7 +526,7 @@ func (p *Probe) stopGroup(ctx context.Context, group []workload, pods []podItem,
 // pods and the database stops last. It answers what it waits for, or ""
 // once nothing of the product runs.
 func (p *Probe) quiescePass(ctx context.Context, live []workload, pods []podItem, spec productspec.Spec, product []string, alwaysWant []wanted) (string, error) {
-	groups := quiesceTargets(live, spec, product, alwaysWant)
+	groups := quiesceTargets(live, p.specs(spec), product, alwaysWant)
 	if len(groups) == 0 {
 		return "", nil
 	}
@@ -520,7 +586,7 @@ func (p *Probe) Quiesce(ctx context.Context, every time.Duration) error {
 	if err != nil {
 		return err
 	}
-	for _, g := range quiesceTargets(live, spec, product, alwaysWant) {
+	for _, g := range quiesceTargets(live, p.specs(spec), product, alwaysWant) {
 		for {
 			pods, err := p.podItems(ctx)
 			if err != nil {
