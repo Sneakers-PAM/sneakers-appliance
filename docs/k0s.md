@@ -104,6 +104,11 @@ init): etcd, the PKI, containerd's image store and snapshots (`containerd/`), th
 unpacks (`bin/`), the kubelet's directory, the image links (`images/`) and the stacks
 (`manifests/`). The CNI files are in `/var/lib/cni-conf` and `/var/lib/opt`, the plugins containerd runs in
 `/var/lib/sneakers/k0s/cni-bin`, and the host-local IP allocations in `/var/lib/cni`. The rendered config and k0s's run directory are on `/run` (tmpfs).
+`k0s-interim prepare` keeps its record in `/var/lib/sneakers/k0s/prepare.log`, so a failed
+pre-start survives a reboot even though the console log is on tmpfs: one line per step,
+`<UTC time> [<pid>] <message>`, from `prepare starts` to `prepare done`, or
+`prepare failed at the step "<step>" (exit N)` from its EXIT trap. The pid tells two runs apart.
+Past 64 KiB it rolls over to `prepare.log.1`.
 A factory reset wipes them with the rest of the state.
 
 ## The product bundle and the airgapped images
@@ -113,7 +118,10 @@ holds `k0s`, `helm` (when its `release.yaml` pins one), `release.yaml`, `images/
 with its signature beside it) and `manifests/` ([release.md](release.md#the-product-bundle)). The
 box checked all of it before it linked the slot. At every start `k0s-interim prepare` links each
 archive into `/var/lib/k0s/images/`, which k0s imports into containerd when the worker starts, so
-the images aren't copied again. Each archive
+the images aren't copied again. A link the slot also has is replaced by rename, a new one is made
+under a dot name first, and one the slot lacks is removed (a link already gone counts as
+removed), so k0s never finds a half-made link and the step doesn't fail on a link that changed
+under it. Each archive
 names its image `<image>@sha256:<digest>`, which is the name the kubelet asks for when a pod's
 image is `<image>:<tag>@sha256:<digest>`. With the pull policy `Never`, a pod whose image isn't
 bundled fails with `ErrImageNeverPull` instead of reaching for a registry.
@@ -204,6 +212,15 @@ limit, log and reject expressions, and the dummy interface. `os/kernel/required.
 can't start without.
 
 ## Testing
+
+`os/k0s/prepare_test.go` runs the whole `k0s-interim prepare` against a fake box under a
+temporary root (ip and mount faked; the box's busybox with `SNEAKERS_TEST_BUSYBOX`, else
+`/bin/sh`): the bundle before phases, then the phased Sneakers bundle's slot layout
+(phase-stacks, switch-stacks, box-values, the exposed RBAC) applied into the other slot; a
+failure naming its step in the record; the record's rollover; and the image links made by two
+runs at once. `internal/services/onestart_test.go` checks that the supervisor never runs a
+pre-start twice at once: a Start during a pre-start, a product apply (Stop, then Start) during a
+restart's backoff, and many Stop and Start rounds in a row.
 
 `test/image/k0s` (the image suite, after each merge and nightly; it isn't run on pull requests)
 boots a lab disk without Secure Boot or a TPM and sets it up the whole way: the console wizard, the

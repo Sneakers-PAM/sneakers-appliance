@@ -94,6 +94,16 @@ type unit struct {
 	restarts int
 	lastErr  string
 	done     chan struct{}
+	// starting is open while a start (its pre-start, then the exec) is
+	// in flight, and startErr is its outcome: a second start waits for it
+	// instead of running the pre-start beside it.
+	starting chan struct{}
+	startErr error
+	// gen counts the API's starts and stops; a restart scheduled before
+	// one of them doesn't run.
+	gen int
+	// stopped is the process a stop ended; its exit never restarts it.
+	stopped Process
 }
 
 // Supervisor runs the table's services for the current phase.
@@ -245,6 +255,7 @@ func (s *Supervisor) Start(ctx context.Context, name string) error {
 		u.lastErr = ""
 	}
 	u.held, u.waiting = false, false
+	u.gen++
 	s.mu.Unlock()
 	s.mu.Lock()
 	p, run := s.phase, s.ctx
@@ -268,6 +279,7 @@ func (s *Supervisor) Stop(name string) error {
 	s.mu.Lock()
 	u := s.units[name]
 	u.held, u.waiting = true, false
+	u.gen++
 	s.mu.Unlock()
 	s.stop(name)
 	return nil
@@ -333,9 +345,35 @@ func (s *Supervisor) start(ctx context.Context, name string) error {
 		s.mu.Unlock()
 		return nil
 	}
+	if ch := u.starting; ch != nil {
+		u.wanted = true
+		s.mu.Unlock()
+		s.o.Logger.Info("services: a start is in flight; waiting for it", log.F("service", name))
+		<-ch
+		s.mu.Lock()
+		err := u.startErr
+		s.mu.Unlock()
+		return err
+	}
 	u.wanted, u.ready = true, false
+	u.starting = make(chan struct{})
 	s.mu.Unlock()
 	return s.launch(ctx, u, s.o.Backoff)
+}
+
+// started ends the start in flight with err; proc, when it's set, is the
+// unit's process from then on.
+func (s *Supervisor) started(u *unit, proc Process, done chan struct{}, err error) {
+	s.mu.Lock()
+	if proc != nil {
+		u.proc, u.done = proc, done
+	}
+	u.startErr = err
+	if u.starting != nil {
+		close(u.starting)
+		u.starting = nil
+	}
+	s.mu.Unlock()
 }
 
 // exec starts sv, as its user when it names one.
@@ -367,34 +405,39 @@ func (s *Supervisor) exec(sv *Service) (Process, error) {
 func (s *Supervisor) launch(ctx context.Context, u *unit, backoff time.Duration) error {
 	sv := u.svc
 	if len(sv.PreStart) > 0 {
+		started := time.Now()
+		s.o.Logger.Debug("services: pre-start", log.F("service", sv.Name), log.F("exec", sv.PreStart[0]))
 		if err := s.r.Run(ctx, sv.PreStart); err != nil {
 			err = codes.New(codes.ServicePreStart, "%s: pre-start %s failed: %v", sv.Name, sv.PreStart[0], err)
-			s.o.Logger.Error(err, "services: pre-start failed", log.F("service", sv.Name))
-			s.exited(ctx, u, err, backoff)
+			s.o.Logger.Error(err, "services: pre-start failed", log.F("service", sv.Name), log.F("took", time.Since(started).String()))
+			s.started(u, nil, nil, err)
+			s.exited(ctx, u, nil, err, backoff)
 			return err
 		}
+		s.o.Logger.Debug("services: pre-start done", log.F("service", sv.Name), log.F("took", time.Since(started).String()))
 	}
 	proc, err := s.exec(sv)
 	if err != nil {
 		s.o.Logger.Error(err, "services: exec failed", log.F("service", sv.Name))
-		s.exited(ctx, u, err, backoff)
+		s.started(u, nil, nil, err)
+		s.exited(ctx, u, nil, err, backoff)
 		return err
 	}
 	done := make(chan struct{})
-	s.mu.Lock()
-	u.proc, u.done = proc, done
-	s.mu.Unlock()
+	s.started(u, proc, done, nil)
 	s.o.Logger.Info("services: started", log.F("service", sv.Name))
 	go func() {
 		err := proc.Wait()
-		close(done)
+		// The unit has no process before a waiting stop returns, so a
+		// Start right after it starts a new one.
 		s.mu.Lock()
 		if u.proc == proc {
 			u.proc = nil
 			u.ready = false
 		}
 		s.mu.Unlock()
-		s.exited(ctx, u, err, backoff)
+		close(done)
+		s.exited(ctx, u, proc, err, backoff)
 	}()
 	go s.probe(ctx, u, proc)
 	return nil
@@ -443,13 +486,16 @@ func (s *Supervisor) probe(ctx context.Context, u *unit, proc Process) {
 	}
 }
 
-// exited applies the restart policy after a process ends or fails to start.
-func (s *Supervisor) exited(ctx context.Context, u *unit, err error, backoff time.Duration) {
+// exited applies the restart policy after a process ends or fails to start
+// (proc is nil then). A process a stop ended isn't restarted, and a restart
+// a later Start or Stop came before doesn't run.
+func (s *Supervisor) exited(ctx context.Context, u *unit, proc Process, err error, backoff time.Duration) {
 	s.mu.Lock()
 	if err != nil {
 		u.lastErr = err.Error()
 	}
-	wanted := u.wanted && u.svc.In(s.phase)
+	wanted := u.wanted && u.svc.In(s.phase) && (proc == nil || u.stopped != proc)
+	gen := u.gen
 	s.mu.Unlock()
 	restart := wanted && (u.svc.Restart == RestartAlways || (u.svc.Restart == RestartOnFailure && err != nil))
 	s.o.Logger.Info("services: exited", log.F("service", u.svc.Name), log.F("restart", restart), log.F("error", errString(err)))
@@ -463,11 +509,15 @@ func (s *Supervisor) exited(ctx context.Context, u *unit, err error, backoff tim
 			return
 		}
 		s.mu.Lock()
-		again := u.wanted && u.proc == nil && u.svc.In(s.phase)
+		again := u.wanted && u.proc == nil && u.starting == nil && u.gen == gen && u.svc.In(s.phase)
 		if again {
 			u.restarts++
+			u.starting = make(chan struct{})
 		}
 		s.mu.Unlock()
+		if !again {
+			s.o.Logger.Debug("services: restart not needed", log.F("service", u.svc.Name))
+		}
 		if again {
 			_ = s.launch(ctx, u, min(backoff*2, s.o.MaxBackoff))
 		}
@@ -519,7 +569,18 @@ func (s *Supervisor) stop(name string) {
 	s.mu.Lock()
 	u := s.units[name]
 	u.wanted = false
+	if ch := u.starting; ch != nil {
+		// A start in flight finishes first, then its process stops.
+		s.mu.Unlock()
+		s.o.Logger.Info("services: a start is in flight; stopping once it ends", log.F("service", name))
+		<-ch
+		s.mu.Lock()
+		u.wanted = false
+	}
 	proc, done := u.proc, u.done
+	if proc != nil {
+		u.stopped = proc
+	}
 	s.mu.Unlock()
 	if proc == nil {
 		return

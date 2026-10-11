@@ -26,7 +26,57 @@ name_file=/var/lib/sneakers/box-name
 node_ip=198.18.0.1
 # spec.network.serviceCIDR in k0s.yaml.tmpl (os/k0s/config_test.go).
 service_cidr=10.96.0.0/12 # scrub:allow=private-ip -- the k0s default
-say() { echo "k0s-interim: $*"; }
+# prepare's record on the state volume, so a failed pre-start's step
+# survives a reboot (the console log is on tmpfs): each run's lines, its
+# pid, and the step it failed at. Held to 64 KiB, then prepare.log.1.
+plog=/var/lib/sneakers/k0s/prepare.log
+plog_max=65536
+step=""
+say() {
+  echo "k0s-interim: $*"
+  [ -z "$step" ] || echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) [$$] $*" >> "$plog" 2>/dev/null || :
+}
+
+# prepare_exit is prepare's EXIT trap: a failure names the step it was at.
+prepare_exit() {
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    say "prepare failed at the step \"$step\" (exit $rc)"
+  fi
+}
+
+# prepare_log starts this run's record, rolling the file over at its cap.
+prepare_log() {
+  mkdir -p "${plog%/*}"
+  if [ -f "$plog" ] && [ "$(wc -c < "$plog")" -gt "$plog_max" ]; then
+    mv -f "$plog" "$plog.1"
+  fi
+  step=start
+  trap prepare_exit EXIT
+  say "prepare starts"
+}
+
+# link_images <slot> <dir>: k0s's airgap images, as links into the slot.
+# A link this slot also has is replaced by rename and one it lacks is
+# removed, a link already gone counting as removed; no step of it fails
+# because a link changed under it, and k0s never finds a half-made one (a
+# new link is made under a dot name that isn't an archive's, then renamed).
+link_images() {
+  mkdir -p "$2"
+  for l in "$2"/*.tar; do
+    [ -L "$l" ] || continue
+    [ -f "$1/images/$(basename "$l")" ] && continue
+    rm -f "$l" 2>/dev/null || [ ! -L "$l" ]
+  done
+  n=""
+  for f in "$1"/images/*.tar; do
+    [ -f "$f" ] || continue
+    t="$2/.$(basename "$f").$$"
+    ln -s "$f" "$t"
+    mv -f "$t" "$2/$(basename "$f")"
+    n="$n."
+  done
+}
 
 # kubelet_resolv <host file> <out>: the kubelet's resolver file, which the
 # pods with dnsPolicy Default get, CoreDNS among them. CoreDNS forwards
@@ -184,16 +234,20 @@ box_tls() {
 }
 
 prepare() {
+  prepare_log
+  step="the installed product bundle"
   if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
     say "no product bundle is installed; k0s comes with it (Updates)"
     exit 1
   fi
   # cgroup v2 for containerd and the kubelet.
+  step="cgroup2"
   if ! grep -q '^[^ ]* /sys/fs/cgroup cgroup2 ' /proc/mounts; then
     mount -t cgroup2 -o nosuid,nodev,noexec cgroup2 /sys/fs/cgroup
     say "mounted cgroup2 on /sys/fs/cgroup"
   fi
 
+  step="the box's name"
   if [ ! -s "$name_file" ]; then
     say "the box has no name of its own yet ($name_file); init makes it at boot"
     exit 1
@@ -207,6 +261,7 @@ prepare() {
     mv /var/lib/sneakers/machine-id.new /var/lib/sneakers/machine-id
   fi
 
+  step="the sneakers0 address and the service route"
   if ! ip link show sneakers0 >/dev/null 2>&1; then
     ip link add sneakers0 type dummy
   fi
@@ -221,9 +276,11 @@ prepare() {
   # the cluster off the management network's gateway, like its address.
   ip route replace "$service_cidr" dev sneakers0 src "$node_ip"
 
+  step="the k0s config"
   mkdir -p /run/sneakers/k0s
   sed "s/@NODE_NAME@/$name/g" /etc/k0s/k0s.yaml.tmpl > /run/sneakers/k0s/k0s.yaml
 
+  step="the CNI plugins"
   # The root's /etc/cni and /opt are links to these, where kube-router
   # installs the CNI config and plugins.
   mkdir -p /var/lib/cni-conf/net.d /var/lib/opt/cni/bin
@@ -232,6 +289,7 @@ prepare() {
   say "the CNI plugins containerd runs: $(ls /var/lib/sneakers/k0s/cni-bin | tr '\n' ' ')"
   # /var/log leads here (pod logs).
   mkdir -p /var/lib/log
+  step="the kubelet's resolver"
   # netd writes the host's resolver file; until it has, an empty one. The
   # kubelet gets its own, made from it.
   [ -e /run/sneakers/resolv.conf ] || : > /run/sneakers/resolv.conf
@@ -240,25 +298,19 @@ prepare() {
 
   # The airgap images: k0s imports every archive in $data/images when its
   # worker starts. Links into the current product slot, so the images
-  # aren't copied; links an earlier bundle left are replaced.
-  mkdir -p "$data/images"
-  for l in "$data"/images/*.tar; do
-    if [ -L "$l" ]; then rm -f "$l"; fi
-  done
+  # aren't copied; links an earlier bundle left are replaced
+  # (link_images).
+  step="the image links"
   # The shell's own cd -P, not readlink -f: the box's busybox has no
   # readlink -f (os/k0s/busybox_test.go).
   slot="$(cd -P "$product" && pwd)"
-  n=""
-  for f in "$slot"/images/*.tar; do
-    [ -f "$f" ] || continue
-    ln -s "$f" "$data/images/"
-    n="$n."
-  done
+  link_images "$slot" "$data/images"
   say "linked ${#n} images from the product bundle $(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json") into $data/images"
 
   # Stacks k0s applies on its own: each <slot>/manifests/<name>/ is copied
   # to $data/manifests/<name>/, replacing what an earlier bundle put there.
   # A phase's stacks are taken away and left to the phase loop.
+  step="the product's stacks"
   unplace_phases /var/lib/sneakers/platform/phase-placed "$data/manifests"
   for d in "$slot"/manifests/*/; do
     [ -d "$d" ] || continue
@@ -275,6 +327,7 @@ prepare() {
     place_stack "$d" "$data/manifests/$stack" "$slot/box-values" /var/lib/sneakers/platform/box-values "$(cat /proc/sys/kernel/hostname)"
     say "stack $stack in place"
   done
+  step="the exposed values RBAC"
   exposed_rbac "$slot" "$data/manifests/sneakers-appliance-exposed"
 
   # INTERIM, until Traefik comes with the platform (#102): the box-tls
@@ -283,6 +336,7 @@ prepare() {
   # which also writes this stack live when it's assigned), else the box's
   # own :8443 certificate (osadmin renews it). It stays on the encrypted
   # state volume, in k0s's manifests and etcd.
+  step="the edge certificate"
   tls=/var/lib/sneakers/osadmin
   assigned=/var/lib/sneakers/platform/tls
   if [ -s "$assigned/product.crt" ] && [ -s "$assigned/product.key" ]; then
@@ -292,6 +346,8 @@ prepare() {
     box_tls "$tls/tls.crt" "$tls/tls.key" "$data/manifests/box-tls"
     say "the box's certificate is in place for the edge"
   fi
+  step="done"
+  say "prepare done"
 }
 
 run() {
