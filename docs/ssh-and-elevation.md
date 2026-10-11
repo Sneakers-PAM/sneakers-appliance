@@ -226,8 +226,8 @@ product adds its own commands in a group named after it, listed by `help` under 
 product's name from the current product slot's header (`/var/lib/sneakers/product/current/bundle.json`,
 the `<name>-product` header name without `-product`) when the login starts. With no product
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
-`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp` and the product's exposed
-values.
+`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, `reset` (owners only) and
+the product's exposed values.
 
 ### The update channel
 
@@ -300,6 +300,34 @@ If the signal can't be read yet the value is still shown. There is no command th
 other Secret. Each read is audited as `product.value.read` with the name and the outcome (`shown`
 or `consumed`), never the value; a value that can't be read yet (k0s or the product isn't up) is
 `PRODUCT_VALUE_UNAVAILABLE`.
+
+### Removing the product
+
+`<product> reset` (`sneakers reset`) removes the installed product and all of its data, and keeps
+the box ([upgrades.md](upgrades.md#removing-the-product)). It's an owner's, over SSH only: help and
+Tab don't offer it to an admin, the console hasn't got it, and there's no button for it on :8443.
+It says what goes and what stays, then asks for the product's name (or the box's host name) and a
+new code from the owner's authenticator, on top of the code the login took. The code is read
+without echo, and neither answer goes into the arrow-key recall or `history`. Over `ssh <owner>@<box>
+sneakers reset` without a terminal, the two answers are the next lines of standard input.
+
+```text
+> sneakers reset
+This removes Sneakers 0.2.0 and all of its data: its database, its users, its secrets and its setup. It can't be undone.
+The box keeps its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log.
+Type sneakers, or this box's host name, to confirm: sneakers
+New authenticator code:
+Removing Sneakers. This takes a few minutes; keep the box powered on.
+Sneakers 0.2.0 is removed: 3 namespaces and 212 objects from k0s, and 1.2 GiB of data.
+The box kept its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log.
+To install it again, Apply the staged Sneakers 0.2.0 on the Product card of Updates on :8443; it starts with a new setup token.
+```
+
+accessd runs `ProductService.ResetProduct` as the login's admin and checks the new code itself,
+under the sign-in lockout; a wrong or reused code is `ACCESS_CREDENTIALS`, a missing one or another
+name `ACCESS_CONFIRM`. The reset finishes even if the SSH session ends, and once it's done the
+session's product commands go, as they do for a login with no product installed. It's audited as
+`product.reset` ([os-audit.md](os-audit.md)).
 
 ## The root shell
 

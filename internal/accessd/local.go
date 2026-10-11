@@ -34,7 +34,7 @@ func run[Req, Resp any](ctx context.Context, s *Server, h http.Header, procedure
 
 func runAs[Req, Resp any](ctx context.Context, s *Server, l osadmin.Local, apiProcedure string, fn func(context.Context, *connect.Request[Req]) (*connect.Response[Resp], error), req *Req) (*Resp, error) {
 	var out *Resp
-	err := s.api.RunLocal(ctx, l, apiProcedure, func(ctx context.Context) error {
+	err := s.api.RunLocalCall(ctx, l, apiProcedure, req, func(ctx context.Context) error {
 		r, err := fn(ctx, connect.NewRequest(req))
 		if err == nil {
 			out = r.Msg
@@ -126,6 +126,18 @@ func (h *accessH) CleanUpDisk(ctx context.Context, r *connect.Request[accessv1.C
 		return nil, err
 	}
 	return connect.NewResponse(&accessv1.CleanUpDiskResponse{Cleanup: out.GetCleanup()}), nil
+}
+
+// ResetProduct is the closed shell's "<product> reset". The reset goes on
+// to its end even if the shell that asked goes away (osadmin.ResetBound).
+func (h *accessH) ResetProduct(ctx context.Context, r *connect.Request[accessv1.ResetProductRequest]) (*connect.Response[accessv1.ResetProductResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceResetProductProcedure, osadminv1connect.ProductServiceResetProductProcedure, h.s.h.Product.ResetProduct,
+		&osadminv1.ResetProductRequest{TotpCode: r.Msg.GetTotpCode(), Confirm: r.Msg.GetConfirm()})
+	if err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("accessd: the product was reset from the shell", log.F("product", out.GetProduct()), log.F("objects", out.GetObjects()), log.F("bytes", out.GetBytesRemoved()))
+	return connect.NewResponse(&accessv1.ResetProductResponse{Result: out}), nil
 }
 
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {

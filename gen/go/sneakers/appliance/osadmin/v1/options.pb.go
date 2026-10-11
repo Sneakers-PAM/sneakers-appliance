@@ -114,7 +114,13 @@ type Rule struct {
 	// caller's authenticator on every call, whatever the step-up window
 	// says. A wrong or reused code counts toward the sign-in lockout. Used
 	// for the actions that reboot the box or swap what it runs.
-	CodeEachCall  bool `protobuf:"varint,7,opt,name=code_each_call,json=codeEachCall,proto3" json:"code_each_call,omitempty"`
+	CodeEachCall bool `protobuf:"varint,7,opt,name=code_each_call,json=codeEachCall,proto3" json:"code_each_call,omitempty"`
+	// ssh_only methods are a closed-shell login's alone, which
+	// sneakers-accessd runs as that admin: a call from :8443 or the console
+	// is refused (ACCESS_FORBIDDEN) and audited, whatever the role. With
+	// code_each_call the request's totp_code is checked for the login too,
+	// on top of the code it signed in with.
+	SshOnly       bool `protobuf:"varint,8,opt,name=ssh_only,json=sshOnly,proto3" json:"ssh_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -198,6 +204,13 @@ func (x *Rule) GetCodeEachCall() bool {
 	return false
 }
 
+func (x *Rule) GetSshOnly() bool {
+	if x != nil {
+		return x.SshOnly
+	}
+	return false
+}
+
 var file_sneakers_appliance_osadmin_v1_options_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
@@ -219,7 +232,7 @@ var File_sneakers_appliance_osadmin_v1_options_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"\n" +
-	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\xee\x01\n" +
+	"+sneakers/appliance/osadmin/v1/options.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a google/protobuf/descriptor.proto\"\x89\x02\n" +
 	"\x04Rule\x12\x16\n" +
 	"\x06public\x18\x01 \x01(\bR\x06public\x127\n" +
 	"\x04role\x18\x02 \x01(\x0e2#.sneakers.appliance.osadmin.v1.RoleR\x04role\x12\x17\n" +
@@ -228,7 +241,8 @@ const file_sneakers_appliance_osadmin_v1_options_proto_rawDesc = "" +
 	"\fcode_session\x18\x05 \x01(\bR\vcodeSession\x12\x1d\n" +
 	"\n" +
 	"setup_only\x18\x06 \x01(\bR\tsetupOnly\x12$\n" +
-	"\x0ecode_each_call\x18\a \x01(\bR\fcodeEachCall*<\n" +
+	"\x0ecode_each_call\x18\a \x01(\bR\fcodeEachCall\x12\x19\n" +
+	"\bssh_only\x18\b \x01(\bR\asshOnly*<\n" +
 	"\x04Role\x12\x14\n" +
 	"\x10ROLE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

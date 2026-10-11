@@ -53,6 +53,11 @@ func unixClient(sock string, timeout time.Duration) *http.Client {
 // with it (osadmin.DefaultSwitchReadyBound).
 const accessTimeout = 2 * time.Minute
 
+// resetTimeout is how long the product reset may take: longer than
+// accessd's own bound on it (osadmin.ResetBound), which it finishes even
+// if the shell goes away.
+const resetTimeout = 45 * time.Minute
+
 func backend() *shell.Services {
 	name := "unknown"
 	if u, err := user.LookupId(strconv.Itoa(os.Getuid())); err == nil {
@@ -65,6 +70,7 @@ func backend() *shell.Services {
 		StatusFile: accessapi.StatusFile,
 	}
 	s.UseAccessd(unixClient(accessapi.SocketPath, accessTimeout), "http://access.sock")
+	s.UseResetClient(unixClient(accessapi.SocketPath, resetTimeout), "http://access.sock")
 	return s
 }
 

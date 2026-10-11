@@ -31,6 +31,9 @@ func ruleRow(svc, method string, r *osadminv1.Rule) string {
 			who += " or code session"
 		}
 	}
+	if r.GetSshOnly() {
+		who += ", SSH only"
+	}
 	step := "no"
 	switch {
 	case r.GetCodeEachCall():

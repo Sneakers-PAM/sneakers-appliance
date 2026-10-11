@@ -70,6 +70,8 @@ const (
 	ProductValueUnavailable = 2517
 	// ProductNotReady: the product is still coming up or rolling out.
 	ProductNotReady = 2518
+	// ProductReset: removing the product stopped before it finished.
+	ProductReset = 2519
 	// The internal mirror's TLS refusals sit apart from the run above, so
 	// other upgrade codes can follow 2514.
 	UpgradeMirrorUntrusted = 2520
@@ -79,6 +81,8 @@ const (
 	UpgradeEpoch       = 2531
 	UpgradeWebLoad     = 2532
 	UpgradePatchResult = 2533
+	// ProductNotInstalled: there's no installed product to act on.
+	ProductNotInstalled = 2534
 )
 
 // The key custody codes.
@@ -136,6 +140,8 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeBusy, Symbol: "UPGRADE_BUSY", Title: "upgrade", Cause: "a file is already coming in or waiting, or a stage is under way; verify or cancel it first"},
 	{Code: UpgradeProductStart, Symbol: "UPGRADE_PRODUCT_START", Title: "upgrade", Cause: "a product apply or revert restarted the product, but it wasn't ready within the bound: its workloads hadn't rolled out, its health check didn't answer, or 443 didn't answer with it"},
 	{Code: ProductNotReady, Symbol: "PRODUCT_NOT_READY", Title: "upgrade", Cause: "the product is still coming up or rolling out after an install, an update, a revert or an import's restart; try again once it's ready"},
+	{Code: ProductReset, Symbol: "PRODUCT_RESET", Title: "upgrade", Cause: "removing the product stopped before it finished: the product didn't stop, k0s didn't answer or its objects or data didn't go; the reason says which, and the reset run again finishes it"},
+	{Code: ProductNotInstalled, Symbol: "PRODUCT_NOT_INSTALLED", Title: "upgrade", Cause: "no product is installed, so there's nothing to remove; install it from the Product card on Updates"},
 	{Code: ProductValueUnavailable, Symbol: "PRODUCT_VALUE_UNAVAILABLE", Title: "upgrade", Cause: "the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there"},
 	{Code: UpgradeMirrorUntrusted, Symbol: "UPGRADE_MIRROR_UNTRUSTED", Title: "upgrade", Cause: "the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host"},
 	{Code: UpgradeMirrorPin, Symbol: "UPGRADE_MIRROR_PIN", Title: "upgrade", Cause: "the HTTPS mirror's certificate isn't the one the update trust pins"},

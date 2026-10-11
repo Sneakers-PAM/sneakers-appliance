@@ -195,6 +195,9 @@ var specs = []spec{
 	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp, complete: completeMcp,
 		long:    "Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit. With MCP on it also shows how far the product has come up with it: starting (with what it waits for), ready, or failed. on or off answers once the product is ready with the change, or fails within about 90 seconds with what it still waits for.",
 		example: "  {product} mcp\n  {product} mcp on\n  {product} mcp off machine-api=off"},
+	{path: "reset", owner: true, short: "Remove the installed product and its data (an owner, with a new authenticator code)", action: "product.reset", origins: []Origin{OriginSSH}, product: true, run: runReset,
+		long:    "Removes the installed product and everything it holds: it stops the product in order (the database last, cleanly), removes its objects from k0s (its stacks, namespaces and volumes), stops k0s and removes its data and the secrets the box made for it. The box keeps its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log, and keeps the product's bundle as the staged one: Apply on the Product card on :8443 installs it again, and it starts with a new setup token and its own first-admin setup. Type the product's name or the box's host name to confirm, then a new code from your authenticator. Owners only, over SSH only; it takes a few minutes and is audited as product.reset. There's no undo.",
+		example: "  {product} reset"},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Shows and sets the resources the product may use. Not available in this release.",
 		example: "  resources"},
@@ -803,6 +806,63 @@ func runMcp(ctx context.Context, e *Env, _ *Command, args []string, _ map[string
 		api = v
 	}
 	return e.Backend.Call(ctx, Request{Action: "mcp.set", Args: []string{map[bool]string{true: "on", false: "off"}[on]}, Flags: map[string]string{"machine-api": api}})
+}
+
+// lineReader reads the answers to a command's prompts: on the interactive
+// terminal each as its own prompt, otherwise lines of standard input from
+// one reader, so an answer isn't lost to the one before it.
+type lineReader struct {
+	e     *Env
+	lines *bufio.Reader
+}
+
+func (l *lineReader) read(prompt string, secret bool) string {
+	if a, ok := l.e.In.(asker); ok {
+		ask := a.AskLine
+		if secret {
+			ask = a.AskSecret
+		}
+		line, _ := ask(prompt)
+		return strings.TrimSpace(line)
+	}
+	_, _ = fmt.Fprint(l.e.Out, prompt)
+	if l.e.In == nil {
+		return ""
+	}
+	if l.lines == nil {
+		l.lines = bufio.NewReader(l.e.In)
+	}
+	line, _ := l.lines.ReadString('\n')
+	if secret {
+		_, _ = fmt.Fprintln(l.e.Out)
+	}
+	return strings.TrimSpace(line)
+}
+
+// runReset removes the installed product: it says what goes and what
+// stays, reads the product's name (or the box's host name) and a new
+// authenticator code, without echo and out of recall, and asks accessd.
+// The session's product commands go with it.
+func runReset(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]string) (Result, error) {
+	p := e.Product
+	_, _ = fmt.Fprintf(e.Out, "This removes %s %s and all of its data: its database, its users, its secrets and its setup. It can't be undone.\n"+
+		"The box keeps its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log.\n", p.Title, p.Version)
+	in := &lineReader{e: e}
+	confirm := in.read(fmt.Sprintf("Type %s, or this box's host name, to confirm: ", p.Name), false)
+	if confirm == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "not confirmed; nothing was removed")
+	}
+	code := in.read("New authenticator code: ", true)
+	if code == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "no authenticator code; nothing was removed")
+	}
+	_, _ = fmt.Fprintf(e.Out, "Removing %s. This takes a few minutes; keep the box powered on.\n", p.Title)
+	res, err := e.Backend.Call(ctx, Request{Action: "product.reset", Args: []string{confirm, code}})
+	if err != nil {
+		return Result{}, err
+	}
+	e.Product, e.Values, e.Switches = productinfo.Info{}, nil, nil
+	return res, nil
 }
 
 // runUpdates shows the GitHub source's channel, or sets the channel or a

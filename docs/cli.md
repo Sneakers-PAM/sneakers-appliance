@@ -28,12 +28,14 @@ Its commands:
 
 - `<product> <value>`: <Value label> (shown to the roles the product names)
 - `<product> mcp`: Show or set the MCP switch, the one the MCP card on :8443 sets
+- `<product> reset`: Remove the installed product and its data (an owner, with a new authenticator code)
 
 Example:
 
 ```text
   <product> <value>
   <product> mcp
+  <product> reset
 ```
 
 ## `<product> <value>`
@@ -72,6 +74,24 @@ Example:
   <product> mcp
   <product> mcp on
   <product> mcp off machine-api=off
+```
+
+## `<product> reset`
+
+Remove the installed product and its data (an owner, with a new authenticator code).
+
+Removes the installed product and everything it holds: it stops the product in order (the database last, cleanly), removes its objects from k0s (its stacks, namespaces and volumes), stops k0s and removes its data and the secrets the box made for it. The box keeps its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log, and keeps the product's bundle as the staged one: Apply on the Product card on :8443 installs it again, and it starts with a new setup token and its own first-admin setup. Type the product's name or the box's host name to confirm, then a new code from your authenticator. Owners only, over SSH only; it takes a few minutes and is audited as product.reset. There's no undo.
+
+Offered over: SSH.
+
+```text
+<product> reset
+```
+
+Example:
+
+```text
+  <product> reset
 ```
 
 ## `admins`

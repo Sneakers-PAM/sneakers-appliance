@@ -104,6 +104,15 @@ func (s *Server) interceptor() connect.UnaryInterceptorFunc {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("this method has no access rule"))
 			}
 			ctx = context.WithValue(ctx, callKey{}, c)
+			if rule.GetSshOnly() {
+				err := codes.New(codes.AccessForbidden, "this is done in the closed shell over SSH only, not on :8443")
+				s.o.Logger.Warn("osadmin: an SSH-only call came to :8443; refused", log.F("procedure", c.procedure), log.F("source", c.source))
+				if sess, serr := s.session(c.header); serr == nil {
+					c.session = sess
+				}
+				s.audit(c, rule, err)
+				return nil, toConnect(err)
+			}
 			if !rule.GetPublic() {
 				if err := s.authorize(c, rule, readOnly(md), req.Any()); err != nil {
 					s.audit(c, rule, err)
@@ -206,7 +215,11 @@ func (s *Server) callCode(c *call, msg any) error {
 	if !ok || !a.HasCredentials() {
 		return codes.New(codes.AccessSession, "sign in again")
 	}
-	if err := s.checkTOTP(a, code, c.source, osaudit.SurfaceAdmin, wrongCode); err != nil {
+	surface := osaudit.SurfaceAdmin
+	if v := c.detail["surface"]; v != "" {
+		surface = v
+	}
+	if err := s.checkTOTP(a, code, c.source, surface, wrongCode); err != nil {
 		return err
 	}
 	s.o.Logger.Debug("osadmin: the call's own code was accepted", log.F("procedure", c.procedure), log.F("admin", c.session.Admin))
@@ -265,6 +278,14 @@ type Local struct {
 // authenticated to sshd or sits at the console), and the call is audited
 // like one from :8443, from the ssh or console surface.
 func (s *Server) RunLocal(ctx context.Context, l Local, procedure string, fn func(context.Context) error) error {
+	return s.RunLocalCall(ctx, l, procedure, nil, fn)
+}
+
+// RunLocalCall is RunLocal for a request msg the rule may read: a
+// code_each_call method's totp_code is checked for a closed-shell login
+// against its admin's authenticator, under the sign-in lockout, and an
+// ssh_only method is refused to the console.
+func (s *Server) RunLocalCall(ctx context.Context, l Local, procedure string, msg any, fn func(context.Context) error) error {
 	md := methodOf(procedure)
 	rule := RuleOf(md)
 	if rule == nil {
@@ -277,6 +298,9 @@ func (s *Server) RunLocal(ctx context.Context, l Local, procedure string, fn fun
 	}
 	c := &call{procedure: procedure, source: l.Source, detail: map[string]string{"surface": surface}}
 	err := s.localIdentity(c, l, rule)
+	if err == nil {
+		err = s.localCode(c, l, rule, msg)
+	}
 	if err == nil {
 		s.o.Logger.Debug("osadmin: local call", log.F("procedure", procedure), log.F("admin", c.session.Admin))
 		err = fn(context.WithValue(ctx, callKey{}, c))
@@ -313,6 +337,19 @@ func (s *Server) localIdentity(c *call, l Local, rule *osadminv1.Rule) error {
 	c.role = a.Role
 	if rule.GetRole() == osadminv1.Role_ROLE_OWNER && a.Role != access.RoleOwner {
 		return codes.New(codes.AccessForbidden, "only an owner may do this")
+	}
+	return nil
+}
+
+// localCode is the rule's own checks for a local call: an ssh_only
+// method is a closed-shell login's alone, and a code_each_call method from
+// one takes a new code from its admin's authenticator.
+func (s *Server) localCode(c *call, l Local, rule *osadminv1.Rule, msg any) error {
+	if rule.GetSshOnly() && l.Admin == "" {
+		return codes.New(codes.AccessForbidden, "this is done in the closed shell over SSH only, not on the console")
+	}
+	if rule.GetCodeEachCall() && l.Admin != "" {
+		return s.callCode(c, msg)
 	}
 	return nil
 }

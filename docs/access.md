@@ -337,7 +337,7 @@ uid is refused before a byte is read.
 | Peer | Gets | As |
 |---|---|---|
 | root | every method of `AccessService`, `NetworkService`, `SetupService` (with `GetConsoleInfo`, the `WatchConsoleInfo` stream, `ResetSetupCode` and the Recover access code) and `ElevationService`, and `LocalService` | the console (an owner named `console`), firstboot, or `sneakers-elevated` |
-| an admin uid (a closed-shell login) | `SshLoginService` (the TOTP check, first) and the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, `BeginRootShell`, `OpenRootShell`, the product's exposed values and MCP switch (`GetExposedValue`, `GetMcp`, `SetMcp`), the update channel (`GetUpdateChannel`, `SetUpdateChannel`), and `LocalService` | that admin, with that admin's role |
+| an admin uid (a closed-shell login) | `SshLoginService` (the TOTP check, first) and the methods the shell needs: status, admins, keys, network show/set/confirm, the setup recovery key, `BeginRootShell`, `OpenRootShell`, the product's exposed values and MCP switch (`GetExposedValue`, `GetMcp`, `SetMcp`), the update channel (`GetUpdateChannel`, `SetUpdateChannel`), the disk cleanup (`CleanUpDisk`), the product reset (`ResetProduct`, owners only, with a new authenticator code), and `LocalService` | that admin, with that admin's role |
 | `osadmin` | the :8443 API (`sneakers.appliance.osadmin.v1`), the upload and the audit export, and `BindingService` | the signed-in admin (or the code session) each call carries |
 | `edgefall` | the public `StatusService.GetPhase` only; anything else answers `permission_denied` | nobody: it's a public call ([edge-fallback.md](edge-fallback.md)) |
 
@@ -352,7 +352,12 @@ uid is refused before a byte is read.
   every call itself; a call with no valid session is `ACCESS_SESSION`. The browser's address comes
   from `Sneakers-Client-Address`, which accessd reads from the `osadmin` uid only.
 - Every local call is checked against the same per-method role as on :8443 and written to the OS
-  audit log with the `ssh` or `console` surface.
+  audit log with the `ssh` or `console` surface. A method whose rule takes a code on every call
+  (`code_each_call`) checks the request's `totp_code` against the login's own authenticator, under
+  the sign-in lockout, on top of the code the login signed in with.
+- An SSH-only method (the rule's `ssh_only`; today `ResetProduct`, the closed shell's
+  `<product> reset`) is a closed-shell login's alone: from :8443 or the console it's refused with
+  `ACCESS_FORBIDDEN` and audited, whatever the role ([upgrades.md](upgrades.md#removing-the-product)).
 
 accessd also serves `/run/sneakers/rootshell.sock` (admin uids only) for the root shell
 ([ssh-and-elevation.md](ssh-and-elevation.md#the-root-shell)).

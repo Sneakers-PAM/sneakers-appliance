@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -265,4 +266,70 @@ func (s Slots) Revert() (string, error) {
 		return "", err
 	}
 	return v, s.link(linkPrevious, cur)
+}
+
+// Uninstall takes the installed product away and keeps its bundle: the
+// current link goes first, so k0s never starts from the slot again, then
+// the slot becomes the staged one, which an apply installs again. The
+// previous slot and any other staged bundle go. It returns the version
+// kept and the bytes the dropped slots held; with no installed product
+// it's PRODUCT_NOT_INSTALLED.
+func (s Slots) Uninstall() (string, int64, error) {
+	v, cur := s.version(linkCurrent), s.target(linkCurrent)
+	if v == "" || cur == "" {
+		return "", 0, codes.New(codes.ProductNotInstalled, "no product is installed")
+	}
+	if err := s.unlink(linkCurrent); err != nil {
+		return "", 0, err
+	}
+	for _, l := range []string{linkPrevious, linkStaged} {
+		if err := s.unlink(l); err != nil {
+			return "", 0, err
+		}
+	}
+	if err := s.link(linkStaged, filepath.Base(cur)); err != nil {
+		return "", 0, err
+	}
+	var removed int64
+	for _, name := range slotNames {
+		dir := filepath.Join(s.Dir, name)
+		if dir == cur {
+			continue
+		}
+		n, err := DirBytes(dir)
+		if err != nil {
+			return v, removed, err
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			return v, removed, fmt.Errorf("product: %w", err)
+		}
+		removed += n
+	}
+	return v, removed, nil
+}
+
+// DirBytes is what the regular files under dir hold; a dir that isn't
+// there holds nothing.
+func DirBytes(dir string) (int64, error) {
+	var n int64
+	err := filepath.WalkDir(dir, func(_ string, d fs.DirEntry, err error) error {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if d.Type().IsRegular() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			n += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return n, fmt.Errorf("product: %w", err)
+	}
+	return n, nil
 }

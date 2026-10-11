@@ -33,6 +33,25 @@ service ProductService {
       audit: "product.value.read"
     };
   }
+  // ResetProduct removes the installed product and its data: the product
+  // stops in order (its phases in reverse, the database last and cleanly),
+  // its k0s objects go (its stacks, its namespaces with everything in
+  // them, its volume claims and volumes), k0s stops, and its data under
+  // /var/lib/sneakers-data and the secrets the box made for it go. The
+  // box's admins, keys, certificates, network settings, Base OS and Base
+  // Web slots and the OS audit log stay. The installed bundle stays on the
+  // box as the staged one, so Apply on the Product card installs it again
+  // with a new setup token. The closed shell's "<product> reset" only, by
+  // an owner, with a new authenticator code and the product's name or the
+  // box's host name typed to confirm (docs/upgrades.md#removing-the-product).
+  rpc ResetProduct(ResetProductRequest) returns (ResetProductResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      code_each_call: true
+      ssh_only: true
+      audit: "product.reset"
+    };
+  }
 }
 
 // ExposedValue describes one declared value.
@@ -68,4 +87,31 @@ message GetExposedValueResponse {
   ExposedValue entry = 2;
   // value is empty once a one-time value was consumed.
   string value = 3;
+}
+
+message ResetProductRequest {
+  // totp_code is a new code from the owner's authenticator, on top of the
+  // one the login took.
+  string totp_code = 1;
+  // confirm is the installed product's name or the box's host name, as
+  // typed.
+  string confirm = 2;
+}
+
+message ResetProductResponse {
+  // product is the removed product's command word, product_title its name
+  // for people and version its version.
+  string product = 1;
+  string product_title = 2;
+  string version = 3;
+  // namespaces and objects are the product's namespaces and the k0s
+  // objects removed (the namespaces' objects, the stacks' cluster-wide
+  // objects and the volumes), and bytes_removed what the removed data and
+  // slot files held.
+  uint32 namespaces = 4;
+  uint32 objects = 5;
+  uint64 bytes_removed = 6;
+  // staged_version is the bundle kept as the staged one, which Apply
+  // installs again.
+  string staged_version = 7;
 }

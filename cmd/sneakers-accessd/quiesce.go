@@ -11,6 +11,8 @@ import (
 	log "github.com/Bugs5382/go-log"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productreset"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 )
 
@@ -39,4 +41,25 @@ func quiesce(ctx context.Context, c config, lg log.Logger) error {
 	}
 	lg.Info("accessd: the product stopped in order", log.F("seconds", int(time.Since(start).Seconds())))
 	return nil
+}
+
+// resetQuiesceBound is how long the product reset waits for the product to
+// stop in order; it isn't held to the k0s service's stop-timeout.
+const resetQuiesceBound = 10 * time.Minute
+
+// productReset removes the installed product for the closed shell's
+// "<product> reset", stopping it first with the same quiesce as the k0s
+// service's pre-stop.
+func productReset(c config, lg log.Logger) *productreset.Reset {
+	return &productreset.Reset{
+		Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s", Manifests: "/var/lib/k0s/manifests",
+		Platform: filepath.Join(c.state, "platform"), DataRoot: productspec.DataRoot,
+		Images: "/var/lib/k0s/images", Products: product.Dir,
+		Quiesce: func(ctx context.Context) error {
+			ctx, cancel := context.WithTimeout(ctx, resetQuiesceBound)
+			defer cancel()
+			return productProbe(c).Quiesce(ctx, time.Second)
+		},
+		Logger: lg,
+	}
 }
