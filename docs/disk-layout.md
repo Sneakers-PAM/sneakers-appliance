@@ -41,6 +41,7 @@ reach the disk is capped:
 | What | Where | Cap |
 |---|---|---|
 | Pod logs | `/var/log` (a link to `/var/lib/log`) | the kubelet rotates each container's log at 10 MiB and keeps 3 (`containerLogMaxSize`, `containerLogMaxFiles`); the cleanup holds all of them to 2% of the state volume (between 256 MiB and 2 GiB), and removes every rotated file while the volume has less than 15% free (between 1 GiB and 16 GiB): the journal-style size cap and keep-free floor |
+| k0s's pre-start record | `/var/lib/sneakers/k0s/prepare.log` | 64 KiB, then `prepare.log.1` ([k0s.md](k0s.md#where-its-data-lives)) |
 | The OS audit log | `/var/lib/sneakers/os-audit/` | a file rolls over at 16 MiB within its day; closed files are compressed; the archive is held to 5% of the state volume (at least 512 MiB) and 2000 files, its oldest files moving to the backup volume ([os-audit.md](os-audit.md#rotation-and-the-archive)) |
 | Containerd's images | `/var/lib/k0s` | the cleanup removes the images neither product slot needs; the kubelet's own image garbage collection is the last resort, from 90% down to 85% |
 | Update files | `/var/lib/sneakers/osadmin-api/uploads/`, `/var/lib/sneakers/image-stage/` | an upload or fetch nobody staged goes after 7 days; partial uploads and cut-off stage work after an hour |

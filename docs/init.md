@@ -65,6 +65,13 @@ start-when: [/var/lib/sneakers/setup/done]  # absolute paths that must all exist
   see [access.md](access.md#accessd)).
 - `pre-start` runs to completion before every start; a non-zero exit keeps the service from
   starting (`SERVICE_PRE_START`) and its restart policy decides whether it's tried again.
+- A service has one start in flight at a time: its pre-start, then its exec. A Services.Start
+  that comes while one is in flight waits for it and answers its outcome; it never runs a second
+  pre-start beside it. A Services.Start or Stop also cancels a restart still waiting out its
+  backoff, and a Stop that comes during a start waits for it, then stops what it started. A
+  process a stop ended is never restarted by its exit, however soon a Start follows, and the
+  unit has no process left by the time the stop returns, so a product apply's Stop and Start
+  always start it exactly once.
 - `pre-stop` runs before every stop (Services.Stop, a phase change, a drain) while the service
   still runs, before its SIGTERM, and gets the entry's `stop-timeout`. One that fails or takes
   longer is logged and the stop goes on. k0s's stops the product in order, latest phase first,
