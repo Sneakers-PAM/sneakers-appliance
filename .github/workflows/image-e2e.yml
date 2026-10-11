@@ -6,12 +6,28 @@ name: Image E2E
 # is uploaded.
 # The QEMU suite takes too long to gate every pull request during
 # development, so on a pull request this only builds the lab release and
-# reports the root image size. The suite runs on main after each merge,
-# nightly and on demand. Neither is a required check.
+# reports the root image size, and only when the PR could change what's in
+# the image: the OS and boot code (os, cmd, internal), the build pipeline
+# (build, keys, proto, gen, go.mod/go.sum) or the suite's own tests
+# (test/image) or workflow. A docs-only or release-tooling-only PR skips it.
+# The suite still runs on every push to main, nightly and on demand
+# regardless of paths. Neither is a required check.
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - os/**
+      - cmd/**
+      - internal/**
+      - build/**
+      - keys/**
+      - proto/**
+      - gen/**
+      - go.mod
+      - go.sum
+      - test/image/**
+      - .github/workflows/image-e2e.yml
   push:
     branches: [main]
   schedule:

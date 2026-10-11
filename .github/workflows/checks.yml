@@ -3,15 +3,26 @@ name: checks
 # commits, title and body. The ruleset on main requires its `checks / scrub`
 # status, so the caller job keeps the id `checks`. `edited` reruns it when the
 # PR title or body changes.
+#
+# This file also carries the rest of the PR-time checks that don't need their
+# own workflow run: license headers (required, kept as its own job so its
+# check name resolves), the small PR/lint checks folded into one job, and the
+# static OpenSSH/busybox build. Folding them in here means one workflow run
+# starts instead of six, with fewer billable job-minutes for the same checks.
+# Each folded job still gates on pull_request (not push to main) and skips
+# drafts; `merge_group` lets the merge queue re-run every required check on
+# the queued commit.
 on:
   pull_request:
     types: [opened, synchronize, reopened, edited, ready_for_review]
   push:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
 permissions:
   contents: read
 concurrency:
-  group: checks-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   checks:
@@ -55,3 +66,283 @@ jobs:
         cdn.openbsd.org
         busybox.net
         software.sslmate.com
+
+  # Required check "🔏 License headers". Moved in from job-golic.yaml; the
+  # ruleset matches on the job's name, not its file, so nothing else changes.
+  golic:
+    name: 🔏 License headers
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16  # v6.5.0
+        with:
+          go-version: 'stable'
+      - name: Install Task
+        uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611  # v2.0.0
+        with:
+          version: 3.x
+          # setup-task reads its token from this input, not env. Without it
+          # the release lookup hits the anonymous rate limit.
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify license headers
+        run: |
+          # Assign first, then export, so a failing `go env` is not masked.
+          gobin="$(go env GOPATH)/bin"
+          export PATH="${PATH}:${gobin}"
+          task license
+
+  # Not required. Folds the PR title/body/hygiene/gitleaks checks
+  # (job-pr-checks.yaml), the label checker (job-label-checker.yaml),
+  # Actionlint (action-lint.yaml) and YamlLint (job-yaml-lint.yaml) into one
+  # job: each did a few seconds of work in its own billed job-minute. Every
+  # step after the first runs with `!cancelled()`, so one failing check never
+  # hides the others; the log shows every failure.
+  lint:
+    name: ✅ PR checks
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: 📝 PR Title
+        if: github.event_name == 'pull_request'
+        uses: amannn/action-semantic-pull-request@e32d7e603df1aa1ba07e981f2a23455dee596825  # v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 📋 PR Body
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        # An issue reference is a keyword (GitHub's closing keywords, or Refs),
+        # an optional colon, then a reference GitHub links: #12, GH-12,
+        # owner/repo#12, or https://github.com/owner/repo/issues/12. Casing is
+        # free. A repo without its owner (repo#12) or a fragment on another
+        # site does not count, because GitHub does not link those.
+        run: |
+          fail=0
+          owner='[[:alnum:]][[:alnum:]-]*'
+          repo='[[:alnum:]._-]+'
+          target="(#|gh-|${owner}/${repo}#|https://github\\.com/${owner}/${repo}/issues/)[0-9]+"
+          ref="(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?|refs):?[[:space:]]+${target}([^[:alnum:]_]|\$)"
+          printf '%s' "$BODY" | grep -qiE "$ref" \
+            || { echo "PR body must reference an issue (e.g. 'Closes #12' or 'Refs owner/repo#12')."; fail=1; }
+          printf '%s' "$BODY" | grep -qiE '##[[:space:]]*what' \
+            || { echo "PR body must follow the template (a 'What and why' section)."; fail=1; }
+          [ "$fail" -eq 0 ] || exit 1
+
+      - name: Checkout
+        id: checkout
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          fetch-depth: 0
+
+      - name: 🧼 PR Hygiene
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.checkout.outcome == 'success' }}
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Reuse the exact rules the local pre-commit hook uses.
+          source .claude/hooks/lib.sh
+          fail=0
+          while IFS= read -r f; do
+            [ -f "$f" ] || continue
+            case "$f" in
+              .git/*) continue ;;
+              *.png|*.jpg|*.jpeg|*.gif|*.pdf|*.ico|*.svg|*.woff|*.woff2|*.ttf|*.eot|*.zip|*.gz) continue ;;
+              # A fixture of real breach-list bytes, not text: emoji/AI-tell
+              # scanning a binary is meaningless and can false-positive.
+              internal/credentials/breached.bin) continue ;;
+            esac
+            # Emoji allowed in Markdown and .github; blocked elsewhere.
+            case "$f" in
+              .github/*|*.md|NOTES.txt|*/NOTES.txt) : ;;
+              *) e="$(gov_find_emoji < "$f")"; [ -n "$e" ] && { echo "emoji not allowed in $f:"; echo "$e"; fail=1; } ;;
+            esac
+            # AI-tells blocked except in files that document the rule, and in
+            # generated code (gen/go), whose comments come from the generator.
+            case "$f" in
+              CLAUDE.md|*/CLAUDE.md|.claude/*|*/.claude/*|.github/workflows/*|*forbidden-text.txt|gen/go/*) : ;;
+              *) t="$(gov_find_file_tells "$f")"; [ -n "$t" ] && { echo "AI-tell not allowed in $f:"; echo "$t"; fail=1; } ;;
+            esac
+          done < <(git diff --name-only --diff-filter=ACM "$BASE" "$HEAD")
+          [ "$fail" -eq 0 ] || { echo "pr-hygiene: remove the above before merging."; exit 1; }
+
+      # Secret scan, no paths-ignore: a secret can land in any file, docs
+      # included. Hard failure: the scan exits non-zero on a finding. It runs the
+      # gitleaks CLI directly rather than gitleaks/gitleaks-action@v2, which needs
+      # a paid GITLEAKS_LICENSE for organization-owned repos; the CLI is free
+      # everywhere and matches the `gitleaks detect` repos run locally.
+      - name: Install gitleaks
+        id: gitleaks-install
+        if: ${{ !cancelled() && steps.checkout.outcome == 'success' }}
+        run: |
+          VERSION="8.30.0"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: 🔒 Gitleaks (secret scan)
+        if: ${{ !cancelled() && steps.gitleaks-install.outcome == 'success' }}
+        run: |
+          # Honor a repo-local .gitleaks.toml if present; scan the full tree.
+          # An array keeps the optional flag pair intact without word splitting.
+          args=(detect --source . --redact --verbose --no-banner)
+          if [ -f .gitleaks.toml ]; then args+=(--config .gitleaks.toml); fi
+          gitleaks "${args[@]}"
+
+      - name: 🐹 Setup Go (Actionlint)
+        if: ${{ !cancelled() }}
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version: "stable"
+
+      # Validate the GitHub Actions workflow files. The other checks here don't
+      # verify a workflow is actually runnable, so a malformed one (e.g. an
+      # invalid job id) can merge green and only fail at startup on main.
+      # shellcheck integration is disabled (-shellcheck=) to keep the gate
+      # focused on workflow validity; drop that flag to also lint run: shell.
+      - name: 🧹 Actionlint
+        if: ${{ !cancelled() }}
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@latest
+          "$(go env GOPATH)/bin/actionlint" -color -shellcheck=
+
+      - name: Set up Python (YamlLint)
+        if: ${{ !cancelled() }}
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
+
+      - name: 🧾 YamlLint
+        if: ${{ !cancelled() }}
+        run: |
+          pip install yamllint
+          yamllint .
+
+      # Map the conventional-commit prefix in the PR title to a categorizing
+      # label and apply it, then confirm it stuck. Best-effort
+      # (continue-on-error): the verify step below is the authoritative check.
+      # Labeling and the check run as two steps of the same job on purpose:
+      # GitHub does not fire a new workflow event from a GITHUB_TOKEN label
+      # write, so a separate checker keyed on `labeled` would never re-run.
+      - name: 🏷️ Apply label from PR title
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # Derive the label from the conventional-commit type/prefix. The first
+          # pattern already covers every `<type>!:` and `<type>(scope)!:` title,
+          # feat included, so there is no separate feat-breaking arm.
+          label=""
+          case "$TITLE" in
+            *"!:"*|*"BREAKING CHANGE"*|*"BREAKING-CHANGE"*) label="breaking" ;;
+            feat:*|feat\(*\):*)                              label="enhancement" ;;
+            fix:*|fix\(*\):*)                                label="fix" ;;
+            perf:*|perf\(*\):*)                              label="performance" ;;
+            refactor:*|refactor\(*\):*)                      label="refactor" ;;
+            docs:*|docs\(*\):*)                              label="documentation" ;;
+            security:*|security\(*\):*)                      label="security" ;;
+            build:*|build\(*\):*|chore\(deps*\):*)           label="dependencies" ;;
+            ci:*|ci\(*\):*|test:*|test\(*\):*|style:*|style\(*\):*|chore:*|chore\(*\):*) label="skip-changelog" ;;
+            *) echo "PR title is not a recognized conventional-commit type; leaving labels alone."; exit 0 ;;
+          esac
+          echo "Applying label: $label"
+          gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=$label" >/dev/null
+
+      - name: ✅ Categorizing label present
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          allowed="breaking enhancement bug fix performance refactor changed deprecated removed security documentation dependencies skip-changelog"
+          for attempt in 1 2 3; do
+            labels="$(gh api "repos/$REPO/issues/$PR/labels" --jq '.[].name' 2>/dev/null || true)"
+            for l in $labels; do
+              for a in $allowed; do
+                if [ "$l" = "$a" ]; then echo "Found categorizing label: $l"; exit 0; fi
+              done
+            done
+            echo "No categorizing label yet (attempt $attempt/3); waiting for the autolabel step..."
+            sleep 5
+          done
+          echo "No categorizing label present. Add one of: $allowed"
+          exit 1
+
+  # The static OpenSSH and busybox the root image carries, built from the pins
+  # in build/openssh/versions.env on a native runner per architecture. The
+  # outputs are cached by the hash of their inputs, so a PR that doesn't touch
+  # them restores the cache instead of rebuilding. Moved in from
+  # job-static-tools.yaml; two different runner architectures still need two
+  # jobs, so folding this one into steps would cost a cross-arch matrix inside
+  # a single job instead of saving anything.
+  static-tools:
+    name: 🔧 Static OpenSSH and busybox (${{ matrix.arch }})
+    if: (github.event_name == 'pull_request' && github.event.pull_request.draft == false) || github.event_name == 'merge_group'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+      - name: Restore the outputs
+        id: cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: out/static
+          key: static-tools-${{ matrix.arch }}-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
+      - name: Build busybox
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash build/busybox/build.sh out/static
+      - name: Build OpenSSH
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: bash build/openssh/build.sh out/static
+      - name: Check the outputs
+        run: bash build/openssh/test.sh out/static
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Check the rendered sshd_config with sshd -t, and run sshd-run on it
+        # sshd -t needs its privilege separation user and directory, as on
+        # the box.
+        run: |
+          id sshd >/dev/null 2>&1 || sudo useradd --system --no-create-home --shell /usr/sbin/nologin sshd
+          sudo mkdir -p /run/sneakers/sshd-empty
+          SNEAKERS_TEST_SSHD="$PWD/out/static/sshd" SNEAKERS_REQUIRE_SSHD=1 go test -count=1 -run 'Sshd|Check' ./internal/sshconfig/ ./internal/sshdrun/
+      - name: Report the digests
+        run: |
+          {
+            echo "### Static tools (${{ matrix.arch }})"
+            echo
+            echo '| Binary | SHA-256 |'
+            echo '|---|---|'
+            for b in sshd sshd-session sshd-auth ssh-keygen busybox; do
+              echo "| \`$b\` | \`$(sha256sum "out/static/$b" | cut -d' ' -f1)\` |"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the outputs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: static-tools-${{ matrix.arch }}
+          path: out/static
+          retention-days: 7

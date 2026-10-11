@@ -24,11 +24,15 @@ name: Go Security
 #
 # Pull requests (not drafts) and the weekly schedule, which catches advisories
 # published after the last PR. There is no rerun on push to main: the PR run
-# already scanned the tree being merged.
+# already scanned the tree being merged. `merge_group` lets the merge queue
+# re-run the required "🔐 Gosec" and "🛡️ Govulncheck" checks on the queued
+# commit.
 on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
   schedule:
     - cron: '17 6 * * 1'
   workflow_dispatch:

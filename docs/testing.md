@@ -4,13 +4,27 @@
 |---|---|---|
 | Unit tests (the chain, the writers, init, custody, Secure Boot, the upgrade stager) | `go test ./...` | every PR (`🧪 Build & Test`) |
 | netd and the firewall in network namespaces (needs root) | `sudo -E go test ./internal/netd/ ./internal/firewall/` | every PR (`🧪 Build & Test`, with `SNEAKERS_REQUIRE_NETNS=1`) |
-| sshd-run and the rendered config against the pinned static sshd | `SNEAKERS_TEST_SSHD=out/static/sshd go test -run 'Sshd\|Check' ./internal/sshconfig/ ./internal/sshdrun/` | every PR (`Static tools`) |
+| sshd-run and the rendered config against the pinned static sshd | `SNEAKERS_TEST_SSHD=out/static/sshd go test -run 'Sshd\|Check' ./internal/sshconfig/ ./internal/sshdrun/` | every PR (`checks` / `🔧 Static OpenSSH and busybox`) |
 | Tool interop (efitools, cosign, sbsign, sbverify, unsquashfs, ukify against the kit's checks) | `go test -tags tools ./test/kit/labkeys/` | every PR (`🔑 Lab keys and tool interop`) |
 | The root image: reproducible, the declared tree, its refusals | `bash build/root/build_test.sh` | every PR (`🔑 Lab keys and tool interop`) |
 | The airgap bundle: pull by digest per architecture, signatures, both-way check (a `registry:2` container) | `go test ./internal/bundle/` | every PR (`🧪 Build & Test`) |
 | The disk guard on a real small volume: filled past 80% with removable files it recovers by itself; past 90% with a protected file it stays critical and touches nothing | `DISKGUARD_TEST_DIR=<a directory on a tmpfs or loop volume of 8 GiB or less> go test -tags integration -run Fill ./internal/diskguard/` | by hand (a tmpfs mount needs root; the test skips without the variable) |
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
-| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a merge never cancels the suite already running on main, it waits for it; a pull request only builds the lab release and reports the root image and product bundle sizes |
+| The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a merge never cancels the suite already running on main, it waits for it; a pull request only builds the lab release and reports the root image and product bundle sizes, and only runs when the PR touches `os/`, `cmd/`, `internal/`, `build/`, `keys/`, `proto/`, `gen/`, `go.mod`, `go.sum`, `test/image/` or the workflow itself |
+
+## What runs on a pull request, and when it reruns
+
+Every PR gets the required checks (`checks / scrub`, `🧪 Build & Test`, `🔐 Gosec`, `🛡️ Govulncheck`,
+`🔏 License headers`, `⚖️ Dependency licenses (Go)`) plus `checks`'s other jobs (`✅ PR checks`,
+`🔧 Static OpenSSH and busybox`), `GolangCI` and `License Check (Go)` — every one skipped on a draft
+PR and run on `ready_for_review`. A push to the PR branch cancels that PR's own still-running jobs
+(each workflow's `concurrency` group) rather than letting a stale run finish; it never cancels a
+suite already running for a different PR or for main. The image suite above is the one PR-time
+workflow that's also path-filtered, since it's the only one expensive enough to skip outright when
+the PR can't have changed its output.
+
+A PR entering the merge queue re-runs every required workflow (the `merge_group` trigger) against
+the queued commit, so a check that only ran against an older `main` can't let a bad merge through.
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
