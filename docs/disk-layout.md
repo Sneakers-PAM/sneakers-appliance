@@ -35,11 +35,13 @@ when it can't.
 ### What grows, and its cap
 
 The box runs sneakers-init, not systemd, so there is no journald: init's and the services' output
-goes to `/run/sneakers/console.log` on tmpfs (1 MiB, then `console.log.1`), never to disk. What does
-reach the disk is capped:
+goes to `/run/sneakers/console.log` on tmpfs (1 MiB, then `console.log.1`) and to init's kept
+console log on the state volume ([init.md](init.md#the-kept-console-log)). What reaches the disk is
+capped:
 
 | What | Where | Cap |
 |---|---|---|
+| The kept console log | `/var/lib/sneakers/log/` | `console.log` rolls over at 4 MiB into `console.log.1` to `console.log.7`, the oldest overwritten: 32 MiB at most |
 | Pod logs | `/var/log` (a link to `/var/lib/log`) | the kubelet rotates each container's log at 10 MiB and keeps 3 (`containerLogMaxSize`, `containerLogMaxFiles`); the cleanup holds all of them to 2% of the state volume (between 256 MiB and 2 GiB), and removes every rotated file while the volume has less than 15% free (between 1 GiB and 16 GiB): the journal-style size cap and keep-free floor |
 | The OS audit log | `/var/lib/sneakers/os-audit/` | a file rolls over at 16 MiB within its day; closed files are compressed; the archive is held to 5% of the state volume (at least 512 MiB) and 2000 files, its oldest files moving to the backup volume ([os-audit.md](os-audit.md#rotation-and-the-archive)) |
 | Containerd's images | `/var/lib/k0s` | the cleanup removes the images neither product slot needs; the kubelet's own image garbage collection is the last resort, from 90% down to 85% |

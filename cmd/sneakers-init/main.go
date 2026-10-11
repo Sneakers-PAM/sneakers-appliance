@@ -213,6 +213,10 @@ func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 			lg.Info("init: the box's versions are recorded for the product", log.F("baseOS", release.Version))
 		}
 	}
+	var kept *keptLog
+	if opened && con != nil {
+		kept = keepConsoleLog(con, keptLogPath, lg)
+	}
 
 	tbl, err := services.Load(os.DirFS("/"), services.Dir)
 	if err != nil {
@@ -223,7 +227,7 @@ func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 		sopt.Console = con
 	}
 	sup := services.NewSupervisor(r, tbl, sopt)
-	pw := newPower(sup, lg, con, screen)
+	pw := newPower(sup, lg, con, screen, kept)
 	api := initapi.Options{Supervisor: sup, Power: pw, AdminName: adminName, SecureBoot: st, Logger: lg}
 	if opened {
 		api.KeyCustody = kc
@@ -251,6 +255,7 @@ func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 	<-ctx.Done()
 	lg.Info("init: shutting down")
 	_ = sup.EnterPhase(context.Background(), "")
+	kept.stop()
 	unix.Sync()
 	return nil
 }

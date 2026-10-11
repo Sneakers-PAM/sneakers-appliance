@@ -143,6 +143,29 @@ never sends accessd's ready line aside. At most one service per phase may own th
 runs as root. When it stops, the consoles get a fresh line with the colours
 reset and the shared output again.
 
+#### The kept console log
+
+`/run/sneakers/console.log` is on tmpfs and holds only what went aside, so init also keeps every
+line of the shared output (init's and every service's, k0s's included; never a console program's
+own screen) on the state volume, in `/var/lib/sneakers/log/console.log`. Each line starts with the
+UTC time its first byte was read (`2026-10-10T20:34:05.123456Z`, then a space), with the terminal's
+colour codes and carriage returns dropped and a line cut at 16 KiB. Past 4 MiB the file rolls to
+`console.log.1`, that one to `console.log.2` and so on up to `console.log.7`, the oldest
+overwritten, so the log never takes more than 32 MiB; each boot appends to what the boots before it
+left. The directory is root's (0700) and the files are 0600.
+
+Until the state volume is open, init keeps up to 256 KiB of the shared output in memory, with the
+time each part was read; once the volume is mounted it writes that first, then everything after it
+(`init: the console log is kept on the state volume`). What didn't fit is noted in the log
+(`console: <n> bytes of the boot before the state opened weren't kept`). A boot that never opens
+the state (the install medium, a factory reset, the mismatch screen) keeps no log. A log that
+can't be opened is logged and the box boots without one.
+
+A reboot, a shutdown or a factory reset closes the log right before the volumes are unmounted, so
+no open file keeps the state volume mounted or its LUKS mapping open; the lines written after that
+(the unmount itself, the reboot) reach the consoles only. The log download on :8443 and the closed
+shell's `logs export` read it ([os-audit.md](os-audit.md)).
+
 #### The screen stays quiet
 
 The screen (a VT: `tty0`) never shows the kernel's, init's or the services' lines; the serial line

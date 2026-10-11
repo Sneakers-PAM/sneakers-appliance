@@ -140,6 +140,14 @@ func (t *Taken) Claim() (*os.File, error) {
 // consoles.
 func (t *Taken) SetAside(w io.Writer) { t.mux.SetAside(w) }
 
+// SetRecord sets the recorder of the shared output (Mux.SetRecord).
+// Nil-safe.
+func (t *Taken) SetRecord(r Recorder) {
+	if t != nil {
+		t.mux.SetRecord(r)
+	}
+}
+
 // Quiet draws page on the screens and keeps init's and the services'
 // lines off them (they go to the serial lines and aside). Nil-safe.
 func (t *Taken) Quiet(page []byte) {

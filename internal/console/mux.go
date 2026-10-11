@@ -10,15 +10,22 @@
 package console
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // ActivePath lists the consoles the kernel writes its own messages to.
 const ActivePath = "/sys/class/tty/console/active"
+
+// EarlyMax bounds the shared output kept before a recorder is set (the boot
+// before the state volume opens); past it the rest of that output isn't
+// kept for the recorder.
+const EarlyMax = 256 << 10
 
 // queueLen is how many output chunks a slow console may fall behind by
 // before it starts losing output, so one stuck line can't stop the rest.
@@ -48,6 +55,21 @@ type Mux struct {
 
 	mu    sync.Mutex
 	aside io.Writer
+
+	recMu sync.Mutex
+	rec   Recorder
+	// early is the shared output read before the first recorder, until
+	// EarlyMax; recorded is set once one was, and nothing is kept early
+	// again after that.
+	early     []earlyChunk
+	earlySize int
+	earlyCut  int
+	recorded  bool
+}
+
+type earlyChunk struct {
+	at    time.Time
+	chunk []byte
 }
 
 // Join copies out to every console and what's typed on each console to in,
@@ -68,6 +90,7 @@ func Join(out io.Reader, in io.Writer, cons []Console, logf func(string, ...any)
 			n, err := out.Read(buf)
 			if n > 0 {
 				chunk := append([]byte(nil), buf[:n]...)
+				m.record(time.Now(), chunk)
 				switch {
 				case m.Owned():
 					m.toAside(chunk)
@@ -162,6 +185,43 @@ func (m *Mux) SetAside(w io.Writer) {
 	m.mu.Lock()
 	m.aside = w
 	m.mu.Unlock()
+}
+
+// SetRecord sets the recorder every chunk of the shared output also goes
+// to, whoever owns the consoles: init's journal on the state volume. The
+// first one gets the output kept since the start first. Nil stops
+// recording (before the volume is closed).
+func (m *Mux) SetRecord(r Recorder) {
+	m.recMu.Lock()
+	defer m.recMu.Unlock()
+	if r != nil && !m.recorded {
+		for _, c := range m.early {
+			r.Record(c.at, c.chunk)
+		}
+		if m.earlyCut > 0 {
+			r.Record(time.Now(), []byte(fmt.Sprintf("\nconsole: %d bytes of the boot before the state opened weren't kept\n", m.earlyCut)))
+		}
+		m.early, m.earlySize, m.earlyCut = nil, 0, 0
+	}
+	if r != nil {
+		m.recorded = true
+	}
+	m.rec = r
+}
+
+func (m *Mux) record(at time.Time, chunk []byte) {
+	m.recMu.Lock()
+	defer m.recMu.Unlock()
+	switch {
+	case m.rec != nil:
+		m.rec.Record(at, chunk)
+	case m.recorded:
+	case m.earlySize+len(chunk) <= EarlyMax:
+		m.early = append(m.early, earlyChunk{at: at, chunk: chunk})
+		m.earlySize += len(chunk)
+	default:
+		m.earlyCut += len(chunk)
+	}
 }
 
 func (m *Mux) toAside(chunk []byte) {

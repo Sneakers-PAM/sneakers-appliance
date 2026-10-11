@@ -135,11 +135,17 @@ func (n noReset) Run(context.Context, func(context.Context) error) (factoryreset
 }
 
 // flushedMachine puts the rebooting or shutting down page on the screen
-// and lets the last lines reach every console before the power goes.
+// and lets the last lines reach every console before the power goes. It
+// closes the kept console log before the volumes.
 type flushedMachine struct {
 	power.Linux
 	con    *console.Taken
 	screen bootScreen
+	kept   *keptLog
+}
+
+func (m flushedMachine) CloseVolumes(ctx context.Context) error {
+	return closeLogFirst(ctx, m.kept, m.Linux.CloseVolumes)
 }
 
 func (m flushedMachine) Reboot() error {
@@ -154,7 +160,7 @@ func (m flushedMachine) PowerOff() error {
 	return m.Linux.PowerOff()
 }
 
-func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken, screen bootScreen) *power.Controller {
+func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken, screen bootScreen, kept *keptLog) *power.Controller {
 	var reset power.Resetter
 	if d, err := resetDeps(lg); err != nil {
 		lg.Warn("init: no factory reset on this boot", log.F("error", codes.Describe(err)))
@@ -164,7 +170,7 @@ func newPower(sup *services.Supervisor, lg log.Logger, con *console.Taken, scree
 	}
 	roster := func() (access.State, error) { return access.ReadState(filepath.Join(stateDir, "access")) }
 	return power.New(power.Options{
-		Machine:  flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: reaperRunner{binary: cryptsetup}, Logger: lg}, con: con, screen: screen},
+		Machine:  flushedMachine{Linux: power.Linux{ESP: espMount, Cryptsetup: reaperRunner{binary: cryptsetup}, Logger: lg}, con: con, screen: screen, kept: kept},
 		Announce: announce(boxstate.File, screen.stopping, lg),
 		Keep:     drainKeep,
 		Drainer:  sup,
