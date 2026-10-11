@@ -51,7 +51,10 @@ session` is the session a redeemed one-time code gives (the setup code, an invit
 access code). Step-up means a sign-in or a fresh TOTP code (`SignInService.StepUp`) from the last 5
 minutes. `every call` means the request carries its own `totp_code`, a fresh code checked on every
 call whatever the step-up window says; an empty code is `ACCESS_CONFIRM`, and a wrong or reused one
-is `ACCESS_CREDENTIALS` and counts toward the sign-in lockout.
+is `ACCESS_CREDENTIALS` and counts toward the sign-in lockout. `SSH only` (the rule's `ssh_only`)
+is a closed-shell login's alone, which `sneakers-accessd` runs as that admin: from :8443 or the
+console it's refused with `ACCESS_FORBIDDEN` and audited, and with `every call` the login gives a
+fresh code at the command on top of the one it signed in with.
 
 Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin` and
 `SetupService.Finish` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
@@ -166,6 +169,7 @@ same.
 | `UpgradeService.SetUpgradePolicy` | owner | no | `upgrade.policy.set` |
 | `ProductService.ListExposedValues` | admin | no | |
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
+| `ProductService.ResetProduct` | owner, SSH only | every call | `product.reset` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `EmailService.GetEmail` | admin | no | |

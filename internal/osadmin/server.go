@@ -168,7 +168,11 @@ type Options struct {
 	// (boxvalues.Box on the box); nil records none, and k0s-interim falls
 	// back to the kernel's host name.
 	BoxValues BoxValues
-	Logger    log.Logger
+	// ProductReset removes the installed product's k0s objects and its
+	// data for the closed shell's "<product> reset" (productreset.Reset on
+	// the box); nil answers Not available.
+	ProductReset ProductResetter
+	Logger       log.Logger
 }
 
 // Server is the appliance admin.

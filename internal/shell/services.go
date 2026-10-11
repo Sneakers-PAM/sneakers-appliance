@@ -41,6 +41,9 @@ type Services struct {
 	Setup     accessv1connect.SetupServiceClient
 	Elevation accessv1connect.ElevationServiceClient
 	SSHLogin  accessv1connect.SshLoginServiceClient
+	// Reset is the access service for the product reset, on a client
+	// whose timeout lets it finish (UseResetClient); nil uses Access.
+	Reset accessv1connect.AccessServiceClient
 	// StatusFile is accessd's status cache (accessapi.StatusFile).
 	StatusFile string
 	// Role is the login's role once VerifyTotp passed: owner or admin.

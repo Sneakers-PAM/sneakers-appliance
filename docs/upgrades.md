@@ -569,3 +569,70 @@ default) lets the box fetch from the release source when no mirror is set or the
 kept in `/var/lib/sneakers/osadmin-api/upgrade-policy.json`. **The history** of every fetch, stage, apply
 and revert, with its outcome and code, is in `/var/lib/sneakers/osadmin-api/upgrade-history.jsonl` and
 on the page, newest first.
+
+## Removing the product
+
+The closed shell's `<product> reset` (`sneakers reset`, [ssh-and-elevation.md](ssh-and-elevation.md#removing-the-product))
+removes the installed product and everything it holds and keeps the box, so a box can go back to an
+empty product without a factory reset: for a new start, or for an import, which needs a product
+that was never set up ([import.md](import.md)). A single-admin box has no factory reset at all, so
+this is its way to an empty product. It's an owner's, over SSH only, with a new authenticator code
+and the product's name (or the box's host name) typed to confirm; :8443 has no button for it and
+refuses the method (`ProductService.ResetProduct`, rule `ssh_only`), and so does the console. The
+Product card on Updates and Help say what it does and the command to run.
+
+It runs under the maintenance gate, like a product update: the box state is `updating` and an open
+elevated shell holds it (`UPGRADE_ELEVATED`); an update coming in, staging or applying, or a product
+still coming up, refuses it (`UPGRADE_BUSY`). Then, in order:
+
+1. **k0s is up.** A k0s that doesn't run is started, and the reset waits up to 5 minutes for its
+   API: the product's objects can only go through it.
+2. **The product stops in order**, with the k0s service's own quiesce: its phases latest first,
+   each phase's pods gone before the next, so the database stops last and cleanly with nothing
+   connected ([The phases](#the-phases)).
+3. **Its k0s objects go.** Its stacks leave k0s's manifests (each stack the installed slot carries,
+   and the box's own for it: `sneakers-appliance-secrets`, `sneakers-appliance-exposed` and
+   `box-tls`), and the phase loop's list of the stacks it placed goes, so nothing applies them
+   again. Then its namespaces go with everything in them (the namespaces its stacks make or put
+   objects in; never `default` or the `kube-` ones), then the cluster-wide objects its stacks
+   carry (by the `k0s.k0sproject.io/stack` label: CRDs, cluster roles, webhooks), then the volumes
+   its claims had. k0s's own stacks (kube-router, CoreDNS) stay. Each delete waits up to 5 minutes.
+4. **k0s stops.** It stays stopped: with no installed bundle its service waits again.
+5. **Its data goes:** everything under `/var/lib/sneakers-data` (the database, the cache and every
+   volume of the product), the Secrets the box made for it (`platform/box-secrets.json`), its
+   switch settings (`platform/switches`), the import's files and marker (`import/` and
+   `platform/imported.json`), and the record of which one-time values were used
+   (`osadmin-api/exposed/`). k0s's links to the bundle's images in `/var/lib/k0s/images` go too.
+6. **The slot is taken away.** The `current` link goes first, so k0s never starts from it again,
+   then the installed bundle's slot becomes the `staged` one. The previous slot and any other staged
+   bundle go.
+7. **The product's ports (80 and 443) close.**
+
+**What stays:** the admins and their keys and authenticators, the root key, the certificates (the
+:8443 one, the store, and the one assigned to the product's edge), the network settings, the box's
+settings (the Email page's relay), the box's values, the Base OS and Base Web slots, the update
+policy and history, the recovery keys and escrow, and the OS audit log. The product keys its bundle
+names for the escrow (for Sneakers the vault root key and the TOTP key) stay sealed under key
+custody, so the escrow file an owner holds stays good; an install after the reset takes them back
+from there and makes every other Secret anew.
+
+**Why the bundle stays.** Staging always empties the slot it fills (a stage replaces what that
+slot held), and only `current` makes a product installed: the shell's product group, the Product
+card's version and k0s's `start-when` all read `current/bundle.json`. So keeping the slot as the
+staged one costs nothing, and the Product card shows "Not installed yet" with that version staged;
+Apply installs it again without a download, exactly as a first install: k0s starts with an empty
+data root, the product makes a new setup token (it's a box secret, made anew) and runs its own
+first-admin setup. A newer bundle can be fetched or uploaded and staged over it as usual. **Why
+the image links go.** `k0s-interim prepare` links every image of the slot again at each k0s start,
+and removes links the slot lacks ([k0s.md](k0s.md#the-product-bundle-and-the-airgapped-images)),
+so they're never needed while no product is installed, and a link left behind would point at a
+slot a later stage may replace. The images k0s imported into containerd stay in its store until
+the disk cleanup removes those neither slot needs, with k0s running again.
+
+**When a step fails** the reset stops there and answers `PRODUCT_RESET` with the reason
+(`detail.step` in the audit entry). Until the slot is taken away (step 6) the product is still
+installed, and running `sneakers reset` again goes through it from the start: the data goes before
+the slot, so a reset never leaves data behind a product that's no longer installed. The
+history on Updates lists each reset (`reset (product)`) with its outcome, and the OS audit log
+has it as `product.reset`, with the counts: the namespaces, the objects and the bytes removed.
+

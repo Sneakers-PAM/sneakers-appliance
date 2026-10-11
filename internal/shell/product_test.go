@@ -74,7 +74,7 @@ func TestAnInstalledProductAddsItsOwnGroup(t *testing.T) {
 	if !slices.Contains(names, "sneakers mcp") || slices.Contains(names, "mcp") {
 		t.Fatalf("names %v", names)
 	}
-	for typed, want := range map[string]string{"sne": "sneakers ", "sneakers ": "sneakers mcp ", "mc": "mc"} {
+	for typed, want := range map[string]string{"sne": "sneakers ", "sneakers m": "sneakers mcp ", "sneakers r": "sneakers reset ", "mc": "mc"} {
 		if got := shell.CompleteFor(shell.OriginSSH, sneakers, typed); got != want {
 			t.Errorf("CompleteFor(%q) = %q, want %q", typed, got, want)
 		}

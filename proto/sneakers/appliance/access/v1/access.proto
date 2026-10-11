@@ -85,6 +85,11 @@ service AccessService {
   // CleanUpDisk is the closed shell's "disk cleanup": osadmin's
   // StatusService.CleanUpDisk run as the login's admin.
   rpc CleanUpDisk(CleanUpDiskRequest) returns (CleanUpDiskResponse);
+  // ResetProduct is the closed shell's "<product> reset": osadmin's
+  // ProductService.ResetProduct run as the login's admin, which must be an
+  // owner and give a new authenticator code. It's the only way to the
+  // reset: :8443 and the console are refused.
+  rpc ResetProduct(ResetProductRequest) returns (ResetProductResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -783,4 +788,15 @@ message CleanUpDiskRequest {}
 
 message CleanUpDiskResponse {
   sneakers.appliance.osadmin.v1.DiskCleanup cleanup = 1;
+}
+
+message ResetProductRequest {
+  // totp_code is a new authenticator code, read at the command.
+  string totp_code = 1;
+  // confirm is the product's name or the box's host name, as typed.
+  string confirm = 2;
+}
+
+message ResetProductResponse {
+  sneakers.appliance.osadmin.v1.ResetProductResponse result = 1;
 }

@@ -109,7 +109,9 @@ pre-start survives a reboot even though the console log is on tmpfs: one line pe
 `<UTC time> [<pid>] <message>`, from `prepare starts` to `prepare done`, or
 `prepare failed at the step "<step>" (exit N)` from its EXIT trap. The pid tells two runs apart.
 Past 64 KiB it rolls over to `prepare.log.1`.
-A factory reset wipes them with the rest of the state.
+A factory reset wipes them with the rest of the state. The product reset (`sneakers reset`,
+[upgrades.md](upgrades.md#removing-the-product)) removes only the product's objects, its stacks in
+`manifests/` and its links in `images/`, and leaves k0s's own data for the next install.
 
 ## The product bundle and the airgapped images
 

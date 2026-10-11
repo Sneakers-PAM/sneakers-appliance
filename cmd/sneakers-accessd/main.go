@@ -322,7 +322,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 				return release.Version, webslots.ServedVersion(filepath.Join(paths.OwnDir(), osadmin.WebServedFile), release.Version)
 			},
 		},
-		Logger: lg,
+		// The closed shell's "<product> reset": the product stops in order
+		// through the k0s service's own quiesce, then its objects, data
+		// and records go (docs/upgrades.md#removing-the-product).
+		ProductReset: productReset(c, lg),
+		Logger:       lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
 			// The update key is read from the running UKI on each use and

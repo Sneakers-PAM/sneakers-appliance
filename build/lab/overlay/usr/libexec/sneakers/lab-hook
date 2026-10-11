@@ -86,3 +86,20 @@ export KUBECONFIG=/var/lib/k0s/pki/admin.conf HELM_CACHE_HOME=/tmp/helm/cache HE
 if /usr/bin/kubectl get nodes; then say "root shell kubectl works"; else say "root shell kubectl failed"; fi
 if /usr/bin/helm list -A; then say "root shell helm works"; else say "root shell helm failed"; fi
 if /usr/bin/watch --version && [ -f /usr/share/terminfo/x/xterm ] && [ -f /usr/share/terminfo/p/putty ]; then say "root shell watch works"; else say "root shell watch failed"; fi
+
+# The image suite's product reset (test/image/k0s, docs/upgrades.md
+# "Removing the product"): the lab database's marker under the product's
+# data root; once `sneakers reset` has taken the product away, what's left
+# of it; and once it's installed again, the new marker. Without a reset it
+# waits here quietly.
+data=/var/lib/sneakers-data
+say "product data: $(cat "$data/lab-db/written" 2>/dev/null || echo none)"
+until [ ! -e "$product/bundle.json" ]; do sleep 5; done
+staged="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' /var/lib/sneakers/product/staged/bundle.json 2>/dev/null)"
+links=""
+for l in /var/lib/k0s/images/*.tar; do
+  if [ -L "$l" ]; then links="$links."; fi
+done
+say "product reset: data [$(ls -A "$data" 2>/dev/null | tr '\n' ' ')] staged ${staged:-none} image links ${#links} stacks [$(ls /var/lib/k0s/manifests 2>/dev/null | tr '\n' ' ')]"
+until [ -s "$product/bundle.json" ] && box_running 127.0.0.1 9180; do sleep 10; done
+say "after the reinstall: product data: $(cat "$data/lab-db/written" 2>/dev/null || echo none)"

@@ -54,6 +54,12 @@ message Rule {
   // says. A wrong or reused code counts toward the sign-in lockout. Used
   // for the actions that reboot the box or swap what it runs.
   bool code_each_call = 7;
+  // ssh_only methods are a closed-shell login's alone, which
+  // sneakers-accessd runs as that admin: a call from :8443 or the console
+  // is refused (ACCESS_FORBIDDEN) and audited, whatever the role. With
+  // code_each_call the request's totp_code is checked for the login too,
+  // on top of the code it signed in with.
+  bool ssh_only = 8;
 }
 
 extend google.protobuf.MethodOptions {

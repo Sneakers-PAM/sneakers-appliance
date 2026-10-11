@@ -46,6 +46,9 @@ const (
 	// ProductServiceGetExposedValueProcedure is the fully-qualified name of the ProductService's
 	// GetExposedValue RPC.
 	ProductServiceGetExposedValueProcedure = "/sneakers.appliance.osadmin.v1.ProductService/GetExposedValue"
+	// ProductServiceResetProductProcedure is the fully-qualified name of the ProductService's
+	// ResetProduct RPC.
+	ProductServiceResetProductProcedure = "/sneakers.appliance.osadmin.v1.ProductService/ResetProduct"
 )
 
 // ProductServiceClient is a client for the sneakers.appliance.osadmin.v1.ProductService service.
@@ -59,6 +62,18 @@ type ProductServiceClient interface {
 	// never shown again. Every call is audited with the name and the outcome,
 	// never the value.
 	GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error)
+	// ResetProduct removes the installed product and its data: the product
+	// stops in order (its phases in reverse, the database last and cleanly),
+	// its k0s objects go (its stacks, its namespaces with everything in
+	// them, its volume claims and volumes), k0s stops, and its data under
+	// /var/lib/sneakers-data and the secrets the box made for it go. The
+	// box's admins, keys, certificates, network settings, Base OS and Base
+	// Web slots and the OS audit log stay. The installed bundle stays on the
+	// box as the staged one, so Apply on the Product card installs it again
+	// with a new setup token. The closed shell's "<product> reset" only, by
+	// an owner, with a new authenticator code and the product's name or the
+	// box's host name typed to confirm (docs/upgrades.md#removing-the-product).
+	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
 }
 
 // NewProductServiceClient constructs a client for the sneakers.appliance.osadmin.v1.ProductService
@@ -85,6 +100,12 @@ func NewProductServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(productServiceMethods.ByName("GetExposedValue")),
 			connect.WithClientOptions(opts...),
 		),
+		resetProduct: connect.NewClient[v1.ResetProductRequest, v1.ResetProductResponse](
+			httpClient,
+			baseURL+ProductServiceResetProductProcedure,
+			connect.WithSchema(productServiceMethods.ByName("ResetProduct")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -92,6 +113,7 @@ func NewProductServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type productServiceClient struct {
 	listExposedValues *connect.Client[v1.ListExposedValuesRequest, v1.ListExposedValuesResponse]
 	getExposedValue   *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
+	resetProduct      *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
 }
 
 // ListExposedValues calls sneakers.appliance.osadmin.v1.ProductService.ListExposedValues.
@@ -102,6 +124,11 @@ func (c *productServiceClient) ListExposedValues(ctx context.Context, req *conne
 // GetExposedValue calls sneakers.appliance.osadmin.v1.ProductService.GetExposedValue.
 func (c *productServiceClient) GetExposedValue(ctx context.Context, req *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error) {
 	return c.getExposedValue.CallUnary(ctx, req)
+}
+
+// ResetProduct calls sneakers.appliance.osadmin.v1.ProductService.ResetProduct.
+func (c *productServiceClient) ResetProduct(ctx context.Context, req *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
+	return c.resetProduct.CallUnary(ctx, req)
 }
 
 // ProductServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.ProductService
@@ -116,6 +143,18 @@ type ProductServiceHandler interface {
 	// never shown again. Every call is audited with the name and the outcome,
 	// never the value.
 	GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error)
+	// ResetProduct removes the installed product and its data: the product
+	// stops in order (its phases in reverse, the database last and cleanly),
+	// its k0s objects go (its stacks, its namespaces with everything in
+	// them, its volume claims and volumes), k0s stops, and its data under
+	// /var/lib/sneakers-data and the secrets the box made for it go. The
+	// box's admins, keys, certificates, network settings, Base OS and Base
+	// Web slots and the OS audit log stay. The installed bundle stays on the
+	// box as the staged one, so Apply on the Product card installs it again
+	// with a new setup token. The closed shell's "<product> reset" only, by
+	// an owner, with a new authenticator code and the product's name or the
+	// box's host name typed to confirm (docs/upgrades.md#removing-the-product).
+	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
 }
 
 // NewProductServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -138,12 +177,20 @@ func NewProductServiceHandler(svc ProductServiceHandler, opts ...connect.Handler
 		connect.WithSchema(productServiceMethods.ByName("GetExposedValue")),
 		connect.WithHandlerOptions(opts...),
 	)
+	productServiceResetProductHandler := connect.NewUnaryHandler(
+		ProductServiceResetProductProcedure,
+		svc.ResetProduct,
+		connect.WithSchema(productServiceMethods.ByName("ResetProduct")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.ProductService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProductServiceListExposedValuesProcedure:
 			productServiceListExposedValuesHandler.ServeHTTP(w, r)
 		case ProductServiceGetExposedValueProcedure:
 			productServiceGetExposedValueHandler.ServeHTTP(w, r)
+		case ProductServiceResetProductProcedure:
+			productServiceResetProductHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -159,4 +206,8 @@ func (UnimplementedProductServiceHandler) ListExposedValues(context.Context, *co
 
 func (UnimplementedProductServiceHandler) GetExposedValue(context.Context, *connect.Request[v1.GetExposedValueRequest]) (*connect.Response[v1.GetExposedValueResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.GetExposedValue is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.ResetProduct is not implemented"))
 }

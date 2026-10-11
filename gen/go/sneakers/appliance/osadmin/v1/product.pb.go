@@ -320,6 +320,162 @@ func (x *GetExposedValueResponse) GetValue() string {
 	return ""
 }
 
+type ResetProductRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// totp_code is a new code from the owner's authenticator, on top of the
+	// one the login took.
+	TotpCode string `protobuf:"bytes,1,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	// confirm is the installed product's name or the box's host name, as
+	// typed.
+	Confirm       string `protobuf:"bytes,2,opt,name=confirm,proto3" json:"confirm,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetProductRequest) Reset() {
+	*x = ResetProductRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetProductRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetProductRequest) ProtoMessage() {}
+
+func (x *ResetProductRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetProductRequest.ProtoReflect.Descriptor instead.
+func (*ResetProductRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ResetProductRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *ResetProductRequest) GetConfirm() string {
+	if x != nil {
+		return x.Confirm
+	}
+	return ""
+}
+
+type ResetProductResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// product is the removed product's command word, product_title its name
+	// for people and version its version.
+	Product      string `protobuf:"bytes,1,opt,name=product,proto3" json:"product,omitempty"`
+	ProductTitle string `protobuf:"bytes,2,opt,name=product_title,json=productTitle,proto3" json:"product_title,omitempty"`
+	Version      string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	// namespaces and objects are the product's namespaces and the k0s
+	// objects removed (the namespaces' objects, the stacks' cluster-wide
+	// objects and the volumes), and bytes_removed what the removed data and
+	// slot files held.
+	Namespaces   uint32 `protobuf:"varint,4,opt,name=namespaces,proto3" json:"namespaces,omitempty"`
+	Objects      uint32 `protobuf:"varint,5,opt,name=objects,proto3" json:"objects,omitempty"`
+	BytesRemoved uint64 `protobuf:"varint,6,opt,name=bytes_removed,json=bytesRemoved,proto3" json:"bytes_removed,omitempty"`
+	// staged_version is the bundle kept as the staged one, which Apply
+	// installs again.
+	StagedVersion string `protobuf:"bytes,7,opt,name=staged_version,json=stagedVersion,proto3" json:"staged_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResetProductResponse) Reset() {
+	*x = ResetProductResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResetProductResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResetProductResponse) ProtoMessage() {}
+
+func (x *ResetProductResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResetProductResponse.ProtoReflect.Descriptor instead.
+func (*ResetProductResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ResetProductResponse) GetProduct() string {
+	if x != nil {
+		return x.Product
+	}
+	return ""
+}
+
+func (x *ResetProductResponse) GetProductTitle() string {
+	if x != nil {
+		return x.ProductTitle
+	}
+	return ""
+}
+
+func (x *ResetProductResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ResetProductResponse) GetNamespaces() uint32 {
+	if x != nil {
+		return x.Namespaces
+	}
+	return 0
+}
+
+func (x *ResetProductResponse) GetObjects() uint32 {
+	if x != nil {
+		return x.Objects
+	}
+	return 0
+}
+
+func (x *ResetProductResponse) GetBytesRemoved() uint64 {
+	if x != nil {
+		return x.BytesRemoved
+	}
+	return 0
+}
+
+func (x *ResetProductResponse) GetStagedVersion() string {
+	if x != nil {
+		return x.StagedVersion
+	}
+	return ""
+}
+
 var File_sneakers_appliance_osadmin_v1_product_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_product_proto_rawDesc = "" +
@@ -342,10 +498,24 @@ const file_sneakers_appliance_osadmin_v1_product_proto_rawDesc = "" +
 	"\x17GetExposedValueResponse\x12#\n" +
 	"\rproduct_title\x18\x01 \x01(\tR\fproductTitle\x12A\n" +
 	"\x05entry\x18\x02 \x01(\v2+.sneakers.appliance.osadmin.v1.ExposedValueR\x05entry\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value2\xc3\x02\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\"L\n" +
+	"\x13ResetProductRequest\x12\x1b\n" +
+	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x18\n" +
+	"\aconfirm\x18\x02 \x01(\tR\aconfirm\"\xf5\x01\n" +
+	"\x14ResetProductResponse\x12\x18\n" +
+	"\aproduct\x18\x01 \x01(\tR\aproduct\x12#\n" +
+	"\rproduct_title\x18\x02 \x01(\tR\fproductTitle\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12\x1e\n" +
+	"\n" +
+	"namespaces\x18\x04 \x01(\rR\n" +
+	"namespaces\x12\x18\n" +
+	"\aobjects\x18\x05 \x01(\rR\aobjects\x12#\n" +
+	"\rbytes_removed\x18\x06 \x01(\x04R\fbytesRemoved\x12%\n" +
+	"\x0estaged_version\x18\a \x01(\tR\rstagedVersion2\xd8\x03\n" +
 	"\x0eProductService\x12\x91\x01\n" +
 	"\x11ListExposedValues\x127.sneakers.appliance.osadmin.v1.ListExposedValuesRequest\x1a8.sneakers.appliance.osadmin.v1.ListExposedValuesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
-	"\x0fGetExposedValue\x125.sneakers.appliance.osadmin.v1.GetExposedValueRequest\x1a6.sneakers.appliance.osadmin.v1.GetExposedValueResponse\"\x1a\xc2\xf3\x18\x16\x10\x01\"\x12product.value.readB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\x0fGetExposedValue\x125.sneakers.appliance.osadmin.v1.GetExposedValueRequest\x1a6.sneakers.appliance.osadmin.v1.GetExposedValueResponse\"\x1a\xc2\xf3\x18\x16\x10\x01\"\x12product.value.read\x12\x92\x01\n" +
+	"\fResetProduct\x122.sneakers.appliance.osadmin.v1.ResetProductRequest\x1a3.sneakers.appliance.osadmin.v1.ResetProductResponse\"\x19\xc2\xf3\x18\x15\x10\x02\"\rproduct.reset8\x01@\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_product_proto_rawDescOnce sync.Once
@@ -359,25 +529,29 @@ func file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_sneakers_appliance_osadmin_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_sneakers_appliance_osadmin_v1_product_proto_goTypes = []any{
 	(*ExposedValue)(nil),              // 0: sneakers.appliance.osadmin.v1.ExposedValue
 	(*ListExposedValuesRequest)(nil),  // 1: sneakers.appliance.osadmin.v1.ListExposedValuesRequest
 	(*ListExposedValuesResponse)(nil), // 2: sneakers.appliance.osadmin.v1.ListExposedValuesResponse
 	(*GetExposedValueRequest)(nil),    // 3: sneakers.appliance.osadmin.v1.GetExposedValueRequest
 	(*GetExposedValueResponse)(nil),   // 4: sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	(Role)(0),                         // 5: sneakers.appliance.osadmin.v1.Role
+	(*ResetProductRequest)(nil),       // 5: sneakers.appliance.osadmin.v1.ResetProductRequest
+	(*ResetProductResponse)(nil),      // 6: sneakers.appliance.osadmin.v1.ResetProductResponse
+	(Role)(0),                         // 7: sneakers.appliance.osadmin.v1.Role
 }
 var file_sneakers_appliance_osadmin_v1_product_proto_depIdxs = []int32{
-	5, // 0: sneakers.appliance.osadmin.v1.ExposedValue.roles:type_name -> sneakers.appliance.osadmin.v1.Role
+	7, // 0: sneakers.appliance.osadmin.v1.ExposedValue.roles:type_name -> sneakers.appliance.osadmin.v1.Role
 	0, // 1: sneakers.appliance.osadmin.v1.ListExposedValuesResponse.values:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
 	0, // 2: sneakers.appliance.osadmin.v1.GetExposedValueResponse.entry:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
 	1, // 3: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:input_type -> sneakers.appliance.osadmin.v1.ListExposedValuesRequest
 	3, // 4: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:input_type -> sneakers.appliance.osadmin.v1.GetExposedValueRequest
-	2, // 5: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:output_type -> sneakers.appliance.osadmin.v1.ListExposedValuesResponse
-	4, // 6: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:output_type -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	5, // [5:7] is the sub-list for method output_type
-	3, // [3:5] is the sub-list for method input_type
+	5, // 5: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:input_type -> sneakers.appliance.osadmin.v1.ResetProductRequest
+	2, // 6: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:output_type -> sneakers.appliance.osadmin.v1.ListExposedValuesResponse
+	4, // 7: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:output_type -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	6, // 8: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:output_type -> sneakers.appliance.osadmin.v1.ResetProductResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
 	3, // [3:3] is the sub-list for extension extendee
 	0, // [0:3] is the sub-list for field type_name
@@ -395,7 +569,7 @@ func file_sneakers_appliance_osadmin_v1_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_product_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_product_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

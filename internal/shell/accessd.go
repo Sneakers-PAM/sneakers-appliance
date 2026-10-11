@@ -35,6 +35,12 @@ func (s *Services) UseAccessd(hc connect.HTTPClient, baseURL string) {
 	s.Local = osadminv1connect.NewLocalServiceClient(hc, baseURL)
 }
 
+// UseResetClient sends the product reset to accessd through hc, whose
+// timeout gives the reset the minutes it takes.
+func (s *Services) UseResetClient(hc connect.HTTPClient, baseURL string) {
+	s.Reset = accessv1connect.NewAccessServiceClient(hc, baseURL, connect.WithInterceptors(s.identify()))
+}
+
 // identify sends the login's key and SSH client address with each call,
 // for accessd's audit entry; accessd takes the identity from the uid.
 func (s *Services) identify() connect.UnaryInterceptorFunc {
@@ -61,7 +67,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -117,6 +123,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.updatesSet(ctx, r.Flags)
 	case "disk.cleanup":
 		res, err = s.diskCleanup(ctx)
+	case "product.reset":
+		res, err = s.productReset(ctx, r.Args[0], r.Args[1])
 	default:
 		return Result{}, false, nil
 	}
@@ -260,6 +268,29 @@ func (s *Services) diskCleanup(ctx context.Context) (Result, error) {
 		cats = append(cats, map[string]any{"name": cat.GetName(), "freedBytes": cat.GetFreedBytes(), "note": cat.GetNote(), "error": cat.GetError()})
 	}
 	return Result{Text: b.String(), Data: map[string]any{"freedBytes": c.GetFreedBytes(), "categories": cats}}, nil
+}
+
+// productReset removes the installed product, through the reset's own
+// client when there is one: the reset takes longer than other calls.
+func (s *Services) productReset(ctx context.Context, confirm, code string) (Result, error) {
+	c := s.Access
+	if s.Reset != nil {
+		c = s.Reset
+	}
+	out, err := c.ResetProduct(ctx, connect.NewRequest(&accessv1.ResetProductRequest{TotpCode: code, Confirm: confirm}))
+	if err != nil {
+		return Result{}, err
+	}
+	m := out.Msg.GetResult()
+	title := Printable(m.GetProductTitle())
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s %s is removed: %d namespaces and %d objects from k0s, and %s of data.\n", title, Printable(m.GetVersion()), m.GetNamespaces(), m.GetObjects(), diskBytes(m.GetBytesRemoved()))
+	b.WriteString("The box kept its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log.\n")
+	if v := Printable(m.GetStagedVersion()); v != "" {
+		fmt.Fprintf(&b, "To install it again, Apply the staged %s %s on the Product card of Updates on :8443; it starts with a new setup token.\n", title, v)
+	}
+	return Result{Text: b.String(), Data: map[string]any{"product": m.GetProduct(), "version": m.GetVersion(), "namespaces": m.GetNamespaces(), "objects": m.GetObjects(),
+		"bytesRemoved": m.GetBytesRemoved(), "stagedVersion": m.GetStagedVersion()}}, nil
 }
 
 // diskBytes is n in binary units, one decimal.

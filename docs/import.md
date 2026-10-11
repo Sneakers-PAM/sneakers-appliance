@@ -16,7 +16,11 @@ one-time setup value its own setup consumes, and what to restart after an import
   import directory, `/var/lib/sneakers/import`, owned by the Job's user. The page shows its
   recipient: the export is encrypted to it, and the key never leaves the box. An import opens only
   while the product's own setup isn't done (its setup value isn't consumed, and the product's
-  signal doesn't say so), or on a box that was imported before (a re-import).
+  signal doesn't say so), or on a box that was imported before (a re-import). On a box whose
+  product is already set up, an owner gets back to an empty product with `sneakers reset` over
+  SSH, which needs no quorum, so a single-admin box can import too
+  ([upgrades.md](upgrades.md#removing-the-product)); Apply on the Product card then installs it
+  again, and the import opens before its setup.
 - **Upload** (`POST /import/upload?kind=...`, `import.upload`): the export bundle, the mapping file,
   a proposal sheet and its type rules, each under a fixed name in the import directory. A new
   upload replaces the earlier file of its kind.

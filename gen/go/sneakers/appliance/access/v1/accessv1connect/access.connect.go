@@ -100,6 +100,9 @@ const (
 	// AccessServiceCleanUpDiskProcedure is the fully-qualified name of the AccessService's CleanUpDisk
 	// RPC.
 	AccessServiceCleanUpDiskProcedure = "/sneakers.appliance.access.v1.AccessService/CleanUpDisk"
+	// AccessServiceResetProductProcedure is the fully-qualified name of the AccessService's
+	// ResetProduct RPC.
+	AccessServiceResetProductProcedure = "/sneakers.appliance.access.v1.AccessService/ResetProduct"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -245,6 +248,11 @@ type AccessServiceClient interface {
 	// CleanUpDisk is the closed shell's "disk cleanup": osadmin's
 	// StatusService.CleanUpDisk run as the login's admin.
 	CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error)
+	// ResetProduct is the closed shell's "<product> reset": osadmin's
+	// ProductService.ResetProduct run as the login's admin, which must be an
+	// owner and give a new authenticator code. It's the only way to the
+	// reset: :8443 and the console are refused.
+	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -347,6 +355,12 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("CleanUpDisk")),
 			connect.WithClientOptions(opts...),
 		),
+		resetProduct: connect.NewClient[v1.ResetProductRequest, v1.ResetProductResponse](
+			httpClient,
+			baseURL+AccessServiceResetProductProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("ResetProduct")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -366,6 +380,7 @@ type accessServiceClient struct {
 	getUpdateChannel *connect.Client[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse]
 	setUpdateChannel *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
 	cleanUpDisk      *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
+	resetProduct     *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -440,6 +455,11 @@ func (c *accessServiceClient) CleanUpDisk(ctx context.Context, req *connect.Requ
 	return c.cleanUpDisk.CallUnary(ctx, req)
 }
 
+// ResetProduct calls sneakers.appliance.access.v1.AccessService.ResetProduct.
+func (c *accessServiceClient) ResetProduct(ctx context.Context, req *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
+	return c.resetProduct.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -481,6 +501,11 @@ type AccessServiceHandler interface {
 	// CleanUpDisk is the closed shell's "disk cleanup": osadmin's
 	// StatusService.CleanUpDisk run as the login's admin.
 	CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error)
+	// ResetProduct is the closed shell's "<product> reset": osadmin's
+	// ProductService.ResetProduct run as the login's admin, which must be an
+	// owner and give a new authenticator code. It's the only way to the
+	// reset: :8443 and the console are refused.
+	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -579,6 +604,12 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("CleanUpDisk")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceResetProductHandler := connect.NewUnaryHandler(
+		AccessServiceResetProductProcedure,
+		svc.ResetProduct,
+		connect.WithSchema(accessServiceMethods.ByName("ResetProduct")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -609,6 +640,8 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceSetUpdateChannelHandler.ServeHTTP(w, r)
 		case AccessServiceCleanUpDiskProcedure:
 			accessServiceCleanUpDiskHandler.ServeHTTP(w, r)
+		case AccessServiceResetProductProcedure:
+			accessServiceResetProductHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -672,6 +705,10 @@ func (UnimplementedAccessServiceHandler) SetUpdateChannel(context.Context, *conn
 
 func (UnimplementedAccessServiceHandler) CleanUpDisk(context.Context, *connect.Request[v1.CleanUpDiskRequest]) (*connect.Response[v1.CleanUpDiskResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.CleanUpDisk is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.ResetProduct is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.
