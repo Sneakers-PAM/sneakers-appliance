@@ -862,3 +862,56 @@ func TestTheBootQuiesceStopsOnePhaseAtATime(t *testing.T) {
 		t.Errorf("%s was scaled down while %v still stopped", k, while)
 	}
 }
+
+// The k0s pre-stop of an update from a bundle without phases (.12) to one
+// with them (.13): the running slot names no phase, and declares every
+// workload in its one stack. The quiesce takes the order from the staged
+// slot, the one the update switches to: the gateway first, then the vault,
+// PostgreSQL last; the edge, which no phase names, keeps running.
+func TestQuiesceOfAnUnphasedRunningSlotTakesTheIncomingSlotsOrder(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	c.stopAsks = 2
+	p, _ := phasedProbe(t, c)
+	dir := t.TempDir()
+	running, incoming := filepath.Join(dir, "a"), filepath.Join(dir, "b")
+	legacy := ""
+	for _, w := range []struct{ kind, name string }{{"StatefulSet", "sneakers-postgres"}, {"Deployment", "sneakers-vault"}, {"Deployment", "sneakers-gateway"}} {
+		legacy += fmt.Sprintf("---\napiVersion: apps/v1\nkind: %s\nmetadata: {name: %s, namespace: sneakers}\nspec:\n  template:\n    spec:\n      containers: [{name: main, image: x}]\n", w.kind, w.name)
+	}
+	writeSlot(t, running, map[string]string{
+		"product.yaml":                     "format: 2\n",
+		"manifests/sneakers/sneakers.yaml": legacy,
+		"manifests/edge/edge.yaml":         "apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: edge, namespace: sneakers-edge}\nspec:\n  template:\n    spec:\n      containers: [{name: edge, image: traefik}]\n",
+	})
+	real := realSlot(t)
+	if err := os.Rename(real, incoming); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("a", filepath.Join(dir, "current")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("b", filepath.Join(dir, "staged")); err != nil {
+		t.Fatal(err)
+	}
+	p.Slot = filepath.Join(dir, "current")
+	for _, w := range []struct{ kind, ns, name, stack string }{
+		{"StatefulSet", "sneakers", "sneakers-postgres", "sneakers"}, {"Deployment", "sneakers", "sneakers-vault", "sneakers"},
+		{"Deployment", "sneakers", "sneakers-gateway", "sneakers"}, {"Deployment", "sneakers-edge", "edge", "edge"},
+	} {
+		c.add(&live{kind: w.kind, ns: w.ns, name: w.name, stack: w.stack, labels: map[string]string{productup.StackLabel: w.stack}, replicas: 1, template: map[string]any{}, ready: true})
+	}
+	if err := p.Quiesce(context.Background(), time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, l := range c.callsMatching("scale ") {
+		order = append(order, strings.Fields(l)[3])
+	}
+	if want := []string{"deployment/sneakers-gateway", "deployment/sneakers-vault", "statefulset/sneakers-postgres"}; !slices.Equal(order, want) {
+		t.Fatalf("stopped %v, want %v", order, want)
+	}
+	for k, while := range c.scaledWhile {
+		t.Errorf("%s was scaled down while %v still stopped", k, while)
+	}
+}

@@ -148,7 +148,10 @@ has switched:
   product to 0 one group at a time: first what the running slot names in no phase (what an
   earlier version left), then each phase, latest first, the data phase last. A workload's phase is
   its `sneakers-appliance/phase-order` label, else the phase the slot's product.yaml names it in,
-  so a version without phases stops in the same order. Each group's pods, found by their owner
+  else the phase the staged or the previous slot's names it in (the one an apply or a revert
+  switches to), so a running version without phases, whose workloads its one stack declares,
+  stops in the incoming version's order, PostgreSQL last; a workload no slot puts in a phase that
+  an always-on stack declares (the edge) keeps running. Each group's pods, found by their owner
   (a Deployment's ReplicaSet, a StatefulSet), are gone before the next is scaled, so the database
   stops last and cleanly, with nothing connected. With the API down it does nothing. It's bounded
   at 4 minutes 30 seconds, inside k0s's 5-minute stop timeout, which leaves PostgreSQL its
