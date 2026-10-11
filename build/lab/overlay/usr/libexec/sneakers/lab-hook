@@ -47,6 +47,49 @@ box_running() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: %s\r\n\r\n' "$1" | nc -w 5 "$1" "$2" 2>/dev/null | grep -q '"state":"running"'
 }
 
+# The image suite's durability product (build/lab/durability.sh): the
+# bundled PostgreSQL and a client on it. Once the box first runs it, 10000
+# rows go into the database, once per box (the mark is on the state
+# volume, so a lost database is never filled again). Each time the box
+# runs a product version it hadn't reported since this boot (the install,
+# the update, then after a reboot or a power loss), the hook prints the
+# rows it counts and how the server's current start began: first (a new
+# data directory), clean (after a shutdown checkpoint) or recovered.
+durability_mark=/var/lib/sneakers/lab-durability-rows
+pg() { k -n sneakers exec sneakers-postgres-0 -c postgres -- psql -U postgres -d durability -qtAX -v ON_ERROR_STOP=1 -c "$1"; }
+durability_report() {
+  if [ ! -e "$durability_mark" ]; then
+    if pg "CREATE TABLE durability_rows (id bigserial PRIMARY KEY, v text NOT NULL)" >/dev/null &&
+      pg "INSERT INTO durability_rows (v) SELECT md5(g::text) FROM generate_series(1, 10000) g" >/dev/null; then
+      : > "$durability_mark"
+      sync
+      say "durability: rows written"
+    else
+      say "durability: the rows couldn't be written"
+    fi
+  fi
+  n="$(pg 'SELECT count(*) FROM durability_rows' 2>/dev/null)" || n=missing
+  [ -n "$n" ] || n=missing
+  log="$(k -n sneakers logs sneakers-postgres-0 -c postgres 2>/dev/null)"
+  case "$log" in
+    *"database system was interrupted"*|*"not properly shut down"*) start=recovered ;;
+    *"database system was shut down"*) start=clean ;;
+    *) start=first ;;
+  esac
+  say "durability: version=$1 rows=$n start=$start"
+}
+durability() {
+  last=""
+  while :; do
+    v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
+    if [ "$v" != "$last" ] && box_running 127.0.0.1 9180; then
+      durability_report "$v"
+      last="$v"
+    fi
+    sleep 5
+  done
+}
+
 # The kernel host name init set at boot: with no name configured and none
 # from DHCP, the box's own, never "(none)".
 say "host name $(uname -n)"
@@ -60,6 +103,9 @@ fi
 wait_for "product bundle installed" test -s "$product/bundle.json"
 wait_for "api up" k get --raw /readyz
 wait_for "node ready" k wait --for=condition=Ready node --all --timeout=10s
+if [ -d "$product/manifests/durability" ]; then
+  durability
+fi
 wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l app=hello --timeout=10s
 # After a power loss the first Ready hello pod is the old one, restarted
 # in place by the kubelet before the box quiesced it: sample the phases
