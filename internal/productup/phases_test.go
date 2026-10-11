@@ -97,6 +97,9 @@ type fakeCluster struct {
 	// keepReplicas makes apply leave a scaled-down workload's replicas, as
 	// an applier that merges against what it last applied would.
 	keepReplicas bool
+	// foreignSkip makes apply leave an object another stack owns, as
+	// k0s's applier does.
+	foreignSkip bool
 	// stopAsks is how many asks a stopping pod outlasts (1 when unset).
 	stopAsks int
 	asked    map[string]int
@@ -118,7 +121,13 @@ func (c *fakeCluster) apply(t *testing.T, slot, stack string) {
 	t.Helper()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.applied[stack] = true
+	// A stack counts as applied once k0s has applied an object of it.
+	took := false
+	defer func() {
+		if took {
+			c.applied[stack] = true
+		}
+	}()
 	files, _ := filepath.Glob(filepath.Join(slot, "manifests", stack, "*.yaml"))
 	for _, f := range files {
 		b, _ := os.ReadFile(f)
@@ -133,6 +142,7 @@ func (c *fakeCluster) apply(t *testing.T, slot, stack string) {
 			}
 			kind, _ := d["kind"].(string)
 			if kind != "Deployment" && kind != "StatefulSet" {
+				took = true
 				continue
 			}
 			md := d["metadata"].(map[string]any)
@@ -145,6 +155,11 @@ func (c *fakeCluster) apply(t *testing.T, slot, stack string) {
 			ns, _ := md["namespace"].(string)
 			l := &live{kind: kind, ns: ns, name: md["name"].(string), stack: stack, labels: labels, replicas: 1,
 				template: d["spec"].(map[string]any)["template"].(map[string]any)}
+			if old, ok := c.workloads[l.key()]; ok && c.foreignSkip && old.stack != stack {
+				// k0s's applier leaves an object another stack owns.
+				continue
+			}
+			took = true
 			if old, ok := c.workloads[l.key()]; ok {
 				l.ready, l.reason = old.ready, old.reason
 				if c.keepReplicas {
@@ -220,11 +235,21 @@ func (c *fakeCluster) run(_ context.Context, _ string, args ...string) ([]byte, 
 		return []byte("scaled"), nil
 	case strings.Contains(line, productup.StackLabel+"="):
 		for s, ok := range c.applied {
-			if ok && strings.Contains(line, productup.StackLabel+"="+s+" ") {
-				return []byte("configmap/" + s + "\n"), nil
+			if !ok || !strings.Contains(line, productup.StackLabel+"="+s+" ") {
+				continue
 			}
+			return []byte("configmap/" + s + "\n"), nil
 		}
 		return nil, nil
+	case strings.HasPrefix(line, "delete "):
+		// delete --namespace <ns> <kind>/<name> ...
+		kind, name, _ := strings.Cut(args[3], "/")
+		k := map[string]string{"statefulset": "StatefulSet", "deployment": "Deployment"}[kind] + " " + args[2] + "/" + name
+		if _, ok := c.workloads[k]; !ok {
+			return nil, errors.New("not found: " + k)
+		}
+		delete(c.workloads, k)
+		return []byte("deleted"), nil
 	case strings.HasPrefix(line, "get pods"):
 		return c.podsJSON(), nil
 	case strings.HasPrefix(line, "get replicasets"):
@@ -913,5 +938,54 @@ func TestQuiesceOfAnUnphasedRunningSlotTakesTheIncomingSlotsOrder(t *testing.T) 
 	}
 	for k, while := range c.scaledWhile {
 		t.Errorf("%s was scaled down while %v still stopped", k, while)
+	}
+}
+
+// An update from a bundle without phases: its workloads belong to its one
+// stack, and k0s's applier leaves an object another stack owns, so a phase
+// whose stack holds one of them would never be applied. Before it places a
+// phase's stack the box deletes those (quiesced already, at 0; their data is
+// on the box's own volumes), and the phase's stack makes them anew.
+func TestAPhaseTakesItsWorkloadsOverFromAnotherStack(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	c.foreignSkip = true
+	p, manifests := phasedProbe(t, c)
+	for _, st := range []string{"app", "edge"} {
+		c.apply(t, p.Slot, st)
+	}
+	c.setReady("Deployment edge/edge", true, "")
+	// The earlier version's database, in the always-on stack, quiesced.
+	c.add(&live{kind: "StatefulSet", ns: "app", name: "app-db", stack: "app", labels: map[string]string{productup.StackLabel: "app"}, replicas: 0, template: map[string]any{}})
+	if err := os.MkdirAll(filepath.Join(manifests, "app-data"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if err := os.Remove(filepath.Join(manifests, "app-data")); err != nil {
+		t.Fatal(err)
+	}
+	// The cluster step done, the data phase: the old object goes first.
+	r, err := p.Check(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Step != "phase:data" || !strings.Contains(r.Detail, "app/app-db") {
+		t.Fatalf("%+v", r)
+	}
+	if got := c.callsMatching("delete "); len(got) != 1 || !strings.Contains(got[0], "statefulset/app-db") {
+		t.Fatalf("deleted %v", got)
+	}
+	if _, err := os.Stat(filepath.Join(manifests, "app-data")); err == nil {
+		t.Fatal("the stack was placed while another stack owned its workload")
+	}
+	if r, _ = p.Check(ctx); r.Step != "phase:data" {
+		t.Fatalf("%+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(manifests, "app-data")); err != nil {
+		t.Fatal("the stack wasn't placed once its workload was free")
+	}
+	c.apply(t, p.Slot, "app-data")
+	if w := c.workloads["StatefulSet app/app-db"]; w == nil || w.stack != "app-data" {
+		t.Fatalf("the data phase's stack doesn't hold app-db: %+v", w)
 	}
 }
