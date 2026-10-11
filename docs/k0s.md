@@ -248,3 +248,18 @@ hello answers, placed with the front phase. A second run installs the same produ
 without phases (`SNEAKERS_PRODUCT_UNPHASED`, `build/lab/unphased.sh`, never published), then the
 phased one: the box quiesces every unlabelled workload, `lab-mcp` included, and brings the phases
 up in order. The hook samples the phases only once the installed product has them.
+
+A third run is the database's durability proof (`TestTheDatabaseKeepsEveryRow`). Its two bundles
+(`build/lab/durability.sh`, built with `DURABILITY=1`, never published) carry the bundled
+PostgreSQL rendered from sneakers-release's `charts/postgres` (at `SNEAKERS_RELEASE_COMMIT` in
+`build/ci/versions.env`) through `build/tools/stack`, as the Sneakers product's is: the hostPath
+volume under `/var/lib/sneakers-data/postgres`, box-made passwords, and the chart's own stop hook
+and grace period. A client holds a session on it, as a service's pool does. The first bundle has
+no phases (`SNEAKERS_DURABILITY_PHASELESS`), the second has the database in the data phase and
+the client in the front one (`SNEAKERS_DURABILITY_PHASED`). The hook writes 10000 rows once the
+box first runs the product (once per box: a lost table is never filled again) and, each time the
+box runs a product version it hasn't reported since that boot, prints the rows it counts and how
+the server's current start began (`first`, `clean` after a shutdown checkpoint, or `recovered`).
+The test installs the first bundle, updates to the second, reboots through `PowerService/Reboot`
+(the k0s pre-stop quiesce) and then powers the box off. Every count must be 10000, and the starts
+after the update and the reboot must be clean.

@@ -1,0 +1,27 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# LAB ONLY: the values for sneakers-release's charts/postgres in the image
+# suite's durability product (build/lab/durability.sh): the small box's
+# PostgreSQL, one database, and the client as its only caller.
+auth:
+  existingSecret: sneakers-bundled
+databases: [durability]
+persistence:
+  size: 1Gi
+resources:
+  requests:
+    cpu: 50m
+    memory: 192Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+shm:
+  sizeLimit: 64Mi
+parameters:
+  shared_buffers: 64MB
+  max_connections: 20
+networkPolicy:
+  from:
+    - app.kubernetes.io/part-of: sneakers
+      app.kubernetes.io/component: durability-client

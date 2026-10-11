@@ -257,3 +257,39 @@ func TestRenderRefuses(t *testing.T) {
 		t.Fatalf("two switch settings that disagree: %v", err)
 	}
 }
+
+// A product without a switch (no --switch-stack) has one render and gets
+// the always-on stack only.
+func TestRenderWithoutASwitch(t *testing.T) {
+	dir := t.TempDir()
+	w := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	o := options{Release: w("release.yaml", release), ProductYAML: w("product.yaml", productYAML), Off: w("off.yaml", off),
+		Out: filepath.Join(dir, "stacks"), Namespace: "sneakers", Stack: "sneakers", Data: "/var/lib/sneakers-data"}
+	if err := render(o, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	ents, err := os.ReadDir(o.Out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ents) != 1 || ents[0].Name() != "sneakers" {
+		t.Fatalf("the stacks %v; want the always-on one only", ents)
+	}
+	b, err := os.ReadFile(filepath.Join(o.Out, "sneakers", "sneakers.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := docs(t, string(b))
+	if _, ok := m["StatefulSet/sneakers-postgres"]; !ok {
+		t.Fatal("the always-on stack has no PostgreSQL")
+	}
+	if _, ok := m["ConfigMap/"]; ok {
+		t.Fatal("a switch ConfigMap without a switch")
+	}
+}

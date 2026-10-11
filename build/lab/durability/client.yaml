@@ -1,0 +1,63 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# LAB ONLY: the durability product's client (build/lab/durability.sh), a
+# stand-in for a service with a pooled session: it holds one session open
+# on the database for as long as it runs, so a stop that waits for the
+# sessions to end (a smart shutdown) never finishes by itself.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sneakers-durability-client
+  labels:
+    app.kubernetes.io/part-of: sneakers
+    app.kubernetes.io/component: durability-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: durability-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: sneakers
+        app.kubernetes.io/component: durability-client
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: client
+          image: docker.io/library/postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+          command:
+            - sh
+            - -c
+            - until psql -qtAc 'SELECT 1' >/dev/null 2>&1; do sleep 2; done; exec psql -qtAc 'SELECT pg_sleep(2147483)'
+          env:
+            - name: PGHOST
+              value: sneakers-postgres
+            - name: PGDATABASE
+              value: durability
+            - name: PGUSER
+              value: sneakers
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sneakers-bundled
+                  key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi

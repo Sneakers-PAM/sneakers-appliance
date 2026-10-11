@@ -49,6 +49,9 @@
 #                build/product/build.sh, docs/artifact.md#the-brand)
 #   LAB_MIRROR   the lab mirror the build names as its built-in update
 #                source (release.Mirrors; comma-separated; optional)
+#   DURABILITY   1 also builds the image suite's two durability product
+#                bundles into $OUT/durability (build/lab/durability.sh;
+#                CHARTS there names a sneakers-release checkout)
 #
 # Output: $OUT/version (the version with the build number, which the
 # signed headers carry; a file name carries only the build's label,
@@ -206,6 +209,10 @@ rm -rf "$OUT/product"
 product_bin="$(go run "$root/cmd/sneakers-artifact" bin-seal --work "$work/product/bin" --bundle "$work/product/bin/header.sigstore.json" --out "$OUT/product")"
 go run "$root/cmd/sneakers-artifact" product-index --out "$OUT/product/sneakers-product-index.json" "$product_bin" >/dev/null
 rm -rf "$work/product/tree"
+if [ "${DURABILITY:-}" = 1 ]; then
+  echo "lab: the durability product bundles"
+  WORK="$work" KEYS="$KEYS" VERSION="$version" K0S="$k0s" HELM="$helm" OUT="$OUT/durability" bash "$here/durability.sh"
+fi
 
 # The same lab product as a bundle without phases, an earlier version, for
 # the image suite's update to phases (test/image/k0s): never published.

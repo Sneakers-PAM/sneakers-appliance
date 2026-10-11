@@ -1,0 +1,20 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# LAB ONLY: the image suite's durability product (build/lab/durability.sh),
+# as a product from before the phases: the bundled PostgreSQL from
+# sneakers-release's chart and a client holding a session on it, all in
+# the one always-on stack. The suite installs it, writes rows, then
+# updates to product-phased.yaml's bundle (test/image/k0s).
+format: 2
+box_secrets:
+  - secret: sneakers/sneakers-bundled
+    keys:
+      - {key: password, generate: password}
+      - {key: postgres-password, generate: password}
+data:
+  - name: database
+    label: The database
+    path: postgres
+    wal: pgdata/pg_wal
+    wal_warn: 1GiB

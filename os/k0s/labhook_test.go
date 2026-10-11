@@ -65,3 +65,66 @@ func TestTheLabHookSamplesThePhasesOnceTheBoxRuns(t *testing.T) {
 		t.Fatal("box_running doesn't say running")
 	}
 }
+
+// The durability product's report (build/lab/durability.sh): the rows are
+// written once per box, the count is read back, and the server's current
+// start is told apart from its log; a database that doesn't answer counts
+// as missing, never as written again.
+func TestTheLabHookReportsTheDurabilityRows(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := string(b)
+	pg := regexp.MustCompile(`(?m)^pg\(\) \{.*\}\n`).FindString(hook)
+	report1 := regexp.MustCompile(`(?ms)^durability_report\(\) \{\n.*?^\}\n`).FindString(hook)
+	if pg == "" || report1 == "" {
+		t.Fatal("the lab hook has no pg or durability_report function")
+	}
+	// report runs durability_report with a fake kubectl: psql answers count
+	// with rows (or fails when rows is empty), logs prints log; it answers
+	// the hook's output and every psql statement it ran.
+	report := func(rows, log string, marked bool) (string, string) {
+		dir := t.TempDir()
+		mark := dir + "/mark"
+		if marked {
+			if err := os.WriteFile(mark, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		script := "set -u\n" + `say() { echo "lab-hook: $*"; }
+durability_mark="$1"
+k() {
+  case "$*" in
+    *" logs "*) printf '%s\n' "$LOG" ;;
+    *psql*) for a in "$@"; do last="$a"; done; echo "$last" >> "$STATEMENTS"
+      case "$last" in *count*) [ -n "$ROWS" ] || return 1; echo "$ROWS" ;; esac ;;
+  esac
+}
+` + pg + report1 + `durability_report v2` + "\n"
+		cmd := exec.Command("sh", "-c", script, "sh", mark) // #nosec G204 -- the repo's own script
+		cmd.Env = append(os.Environ(), "ROWS="+rows, "LOG="+log, "STATEMENTS="+dir+"/statements")
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("durability_report: %v: %s", err, out)
+		}
+		sql, _ := os.ReadFile(dir + "/statements")
+		return string(out), string(sql)
+	}
+	out, sql := report("10000", "PostgreSQL init process complete; ready for start up.\ndatabase system is ready to accept connections", false)
+	if !strings.Contains(out, "durability: rows written") || !strings.Contains(out, "durability: version=v2 rows=10000 start=first") || !strings.Contains(sql, "INSERT INTO durability_rows") {
+		t.Fatalf("the first report: %s (statements %q)", out, sql)
+	}
+	out, sql = report("10000", "LOG:  database system was shut down at 2026-10-11 00:52:01 UTC", true)
+	if !strings.Contains(out, "version=v2 rows=10000 start=clean") || strings.Contains(sql, "INSERT") {
+		t.Fatalf("a report after a clean stop: %s (statements %q)", out, sql)
+	}
+	out, _ = report("10000", "LOG:  database system was interrupted; last known up at 2026-10-11 00:59:19 UTC\nLOG:  database system was not properly shut down; automatic recovery in progress", true)
+	if !strings.Contains(out, "start=recovered") {
+		t.Fatalf("a report after a crash: %s", out)
+	}
+	out, sql = report("", "", true)
+	if !strings.Contains(out, "rows=missing") || strings.Contains(sql, "INSERT") || strings.Contains(sql, "CREATE") {
+		t.Fatalf("a database that doesn't answer: %s (statements %q)", out, sql)
+	}
+}

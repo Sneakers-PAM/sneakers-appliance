@@ -2,7 +2,9 @@
 # unless the ESP holds a file named lab-hook, which only the image suite
 # writes. In normal operation it reports whether k0s runs before a product
 # bundle is installed, then checks k0s, the hello stack and the edge once
-# one is, and prints the result.
+# one is, and prints the result. With the durability product installed
+# (build/lab/durability.sh) it writes the database's rows once and counts
+# them each time the box runs a product version.
 exec: /bin/sh
 args: [/usr/libexec/sneakers/lab-hook]
 phases: [normal]

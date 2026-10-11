@@ -1,0 +1,28 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# LAB ONLY: the image suite's durability product (build/lab/durability.sh)
+# with phases, the update from product-phaseless.yaml's bundle: the same
+# render, the database in the data phase and its client in the front
+# phase, so the box stops the client before the database.
+format: 2
+box_secrets:
+  - secret: sneakers/sneakers-bundled
+    keys:
+      - {key: password, generate: password}
+      - {key: postgres-password, generate: password}
+data:
+  - name: database
+    label: The database
+    path: postgres
+    wal: pgdata/pg_wal
+    wal_warn: 1GiB
+phases:
+  - name: data
+    label: Starting the database
+    stack: durability-data
+    workloads: [sneakers-postgres]
+  - name: front
+    label: Starting the database's client
+    stack: durability-front
+    workloads: [sneakers-durability-client]

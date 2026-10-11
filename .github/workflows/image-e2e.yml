@@ -117,12 +117,13 @@ jobs:
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
-          KEYS="$keys" OUT="$RUNNER_TEMP/lab" bash build/lab/build.sh
+          KEYS="$keys" OUT="$RUNNER_TEMP/lab" DURABILITY=1 bash build/lab/build.sh
           {
             echo "### Lab release"
             echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes (SquashFS zstd with the verity tree)"
             echo "- raw disk: $(ls "$RUNNER_TEMP"/lab/disk)"
             echo "- product bundle: $(stat -c %s "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin) bytes (k0s, its images and the lab stacks)"
+            echo "- durability bundles: $(stat -c %s "$RUNNER_TEMP"/lab/durability/*/sneakers-product-*.bin | tr '\n' ' ')bytes (the bundled PostgreSQL, without and with phases)"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Image suite
         if: github.event_name != 'pull_request'
@@ -134,7 +135,9 @@ jobs:
           SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
           SNEAKERS_PRODUCT="$(ls "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin)"
           SNEAKERS_PRODUCT_UNPHASED="$(ls "$RUNNER_TEMP"/lab/product-unphased/sneakers-product-*.bin)"
-          export SNEAKERS_IMAGE SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED
+          SNEAKERS_DURABILITY_PHASELESS="$(ls "$RUNNER_TEMP"/lab/durability/phaseless/sneakers-product-*.bin)"
+          SNEAKERS_DURABILITY_PHASED="$(ls "$RUNNER_TEMP"/lab/durability/phased/sneakers-product-*.bin)"
+          export SNEAKERS_IMAGE SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED SNEAKERS_DURABILITY_PHASELESS SNEAKERS_DURABILITY_PHASED
           go test -tags image -timeout 60m -v ./test/image/...
       - name: Wipe the lab keys
         if: always()
