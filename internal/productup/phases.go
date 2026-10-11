@@ -192,6 +192,11 @@ func (p *Probe) phase(ctx context.Context, ph productspec.Phase, on []string, li
 	}
 	for _, st := range stacks {
 		if _, err := os.Stat(filepath.Join(p.Manifests, st)); err != nil {
+			if freed, err := p.takeOver(ctx, st, live); err != nil {
+				return Result{}, false, err
+			} else if freed != "" {
+				return at("Taking " + freed + " over from the earlier version's stack"), false, nil
+			}
 			if err := p.place(st); err != nil {
 				return Result{}, false, err
 			}
@@ -258,6 +263,35 @@ func (p *Probe) hold(ctx context.Context, later []productspec.Phase, live []work
 		}
 	}
 	return Result{Step: PhaseStep(later[0].Name), Detail: "Held while an import is open; it starts once the import is closed", Held: true}, nil
+}
+
+// takeOver deletes the live workloads the slot's stack st holds that
+// another stack owns: an update from a bundle without phases finds them in
+// its one stack, and k0s's applier leaves an object another stack owns,
+// so st would never be applied. They are quiesced already (at 0), and
+// their data is on the box's own volumes, which a delete keeps; st makes
+// them anew. It answers the ones it deleted, or "".
+func (p *Probe) takeOver(ctx context.Context, st string, live []workload) (string, error) {
+	want, err := p.wantedWorkloads([]string{st})
+	if err != nil {
+		return "", err
+	}
+	byKey := map[string]workload{}
+	for _, w := range live {
+		byKey[w.Kind+" "+w.Metadata.Namespace+"/"+w.Metadata.Name] = w
+	}
+	var freed []string
+	for _, w := range want {
+		got, ok := byKey[w.key()]
+		if !ok || got.Metadata.Labels[StackLabel] == "" || got.Metadata.Labels[StackLabel] == st {
+			continue
+		}
+		if _, err := p.kubectl(ctx, "delete", "--namespace", w.ns, strings.ToLower(w.kind)+"/"+w.name, "--wait=false"); err != nil {
+			return "", err
+		}
+		freed = append(freed, w.ns+"/"+w.name)
+	}
+	return strings.Join(freed, ", "), nil
 }
 
 func replicasOf(w workload) int64 {

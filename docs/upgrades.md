@@ -142,7 +142,11 @@ has switched:
   the loop puts the phase's stacks in front of k0s, with the box's values, a switch's stack first
   and each applied before the next. It waits until every workload in them runs the slot's pod
   template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
-  hold it back), and waits until each has rolled out and every pod of the phase is Ready.
+  hold it back), and waits until each has rolled out and every pod of the phase is Ready. A
+  workload of the phase that another stack owns (an update from a bundle without phases finds
+  them all in its one stack, and k0s's applier leaves an object another stack owns) is deleted
+  first, quiesced already and with its data on the box's own volumes, and the phase's stack makes
+  it anew.
 - **Stopping, in reverse.** Before k0s stops, on every reboot, shutdown, product apply and revert,
   its `pre-stop` (`sneakers-accessd quiesce`, [init.md](init.md#the-service-table)) scales the
   product to 0 one group at a time: first what the running slot names in no phase (what an
