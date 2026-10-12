@@ -78,6 +78,13 @@ type Options struct {
 	// HostFwd forwards host ports to the guest through QEMU's user network,
 	// as hostfwd rules such as tcp:127.0.0.1:2222-:22.
 	HostFwd []string
+	// GuestFwd forwards a guest connection to the host, as guestfwd rules
+	// such as tcp:<guest address>:<port>-tcp:127.0.0.1:<host port>. QEMU connects to
+	// the host side when it starts, so it must be listening by then.
+	GuestFwd []string
+	// Capture, when set, is a pcap file QEMU writes every frame on the
+	// guest's NIC to (its filter-dump): what the box's network sees.
+	Capture string
 }
 
 // Paths of the pinned firmware (Ubuntu's ovmf package in CI).
@@ -209,7 +216,10 @@ func Boot(t testing.TB, o Options) *VM {
 		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + code,
 		"-drive", "if=pflash,format=raw,unit=1,file=" + vars,
 		"-monitor", "none", "-qmp", "unix:" + qmpSock + ",server=on,wait=off",
-		"-netdev", netdev(o.HostFwd), "-device", "virtio-net-pci,netdev=n0",
+		"-netdev", netdev(o.HostFwd, o.GuestFwd), "-device", "virtio-net-pci,netdev=n0",
+	}
+	if o.Capture != "" {
+		args = append(args, "-object", "filter-dump,id=cap0,netdev=n0,file="+o.Capture)
 	}
 	if o.NoSerial {
 		args = append(args, "-serial", "none")
@@ -308,12 +318,15 @@ func Boot(t testing.TB, o Options) *VM {
 	return vm
 }
 
-// netdev is the user network: no way out for the guest (restrict=on), and
-// only the forwarded ports in.
-func netdev(fwd []string) string {
+// netdev is the user network: no way out for the guest (restrict=on) but
+// its guestfwd rules, and only the forwarded ports in.
+func netdev(hostFwd, guestFwd []string) string {
 	n := "user,id=n0,restrict=on"
-	for _, f := range fwd {
+	for _, f := range hostFwd {
 		n += ",hostfwd=" + f
+	}
+	for _, f := range guestFwd {
+		n += ",guestfwd=" + f
 	}
 	return n
 }
