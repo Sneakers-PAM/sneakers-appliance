@@ -68,7 +68,9 @@ func TestTheLabHookSamplesThePhasesOnceTheBoxRuns(t *testing.T) {
 
 // The durability product's report (build/lab/durability.sh): the rows are
 // written once per box, the count is read back, and the server's current
-// start is told apart from its log; a database that doesn't answer counts
+// start is told apart from its log (the image's first start stops and
+// starts its initdb server, so it logs a clean shutdown too); a database
+// that doesn't answer counts
 // as missing, never as written again.
 func TestTheLabHookReportsTheDurabilityRows(t *testing.T) {
 	b, err := os.ReadFile(labHook)
@@ -111,7 +113,7 @@ k() {
 		sql, _ := os.ReadFile(dir + "/statements")
 		return string(out), string(sql)
 	}
-	out, sql := report("10000", "PostgreSQL init process complete; ready for start up.\ndatabase system is ready to accept connections", false)
+	out, sql := report("10000", "LOG:  database system was shut down at 2026-10-11 01:50:01 UTC\nPostgreSQL init process complete; ready for start up.\nLOG:  database system was shut down at 2026-10-11 01:50:02 UTC\nLOG:  database system is ready to accept connections", false)
 	if !strings.Contains(out, "durability: rows written") || !strings.Contains(out, "durability: version=v2 rows=10000 start=first") || !strings.Contains(sql, "INSERT INTO durability_rows") {
 		t.Fatalf("the first report: %s (statements %q)", out, sql)
 	}

@@ -71,7 +71,10 @@ durability_report() {
   n="$(pg 'SELECT count(*) FROM durability_rows' 2>/dev/null)" || n=missing
   [ -n "$n" ] || n=missing
   log="$(k -n sneakers logs sneakers-postgres-0 -c postgres 2>/dev/null)"
+  # The image's first start runs initdb's own server and stops it cleanly,
+  # so its init line comes first.
   case "$log" in
+    *"init process complete"*) start=first ;;
     *"database system was interrupted"*|*"not properly shut down"*) start=recovered ;;
     *"database system was shut down"*) start=clean ;;
     *) start=first ;;
