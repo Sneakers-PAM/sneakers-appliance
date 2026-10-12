@@ -27,6 +27,11 @@ type apiServer struct {
 	mu       sync.Mutex
 	tokens   int
 	requests []string
+	// validFrom is the first token the service account takes: a token
+	// minted before the account was made again (a product reset deletes
+	// its namespace) is refused, as the API server refuses one whose
+	// account's UID changed.
+	validFrom int
 }
 
 func newAPI(t *testing.T) (*apiServer, string) {
@@ -53,6 +58,8 @@ func newAPI(t *testing.T) (*apiServer, string) {
 			}})
 		case hasCert || !strings.HasPrefix(bearer, "tok-"):
 			http.Error(w, "only the service account reads", http.StatusForbidden)
+		case tokenNumber(bearer) < a.validFrom:
+			http.Error(w, "the token's service account is gone", http.StatusUnauthorized)
 		case r.URL.Path == "/api/v1/namespaces/sneakers/secrets/sneakers-setup-token":
 			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{
 				"SETUP_TOKEN": base64.StdEncoding.EncodeToString([]byte("stp_value")),
@@ -122,6 +129,44 @@ func TestReadsGoThroughTheServiceAccount(t *testing.T) {
 		if strings.Contains(r, "cert=true") || !strings.Contains(r, "bearer=tok-1") {
 			t.Fatalf("a read went with the admin's certificate or no token: %s", r)
 		}
+	}
+}
+
+func tokenNumber(bearer string) int {
+	var n int
+	_, _ = fmt.Sscanf(bearer, "tok-%d", &n)
+	return n
+}
+
+// A token the API server refuses (its service account was deleted and
+// made again, as a product reset and a reinstall do) is dropped and a new
+// one minted, once, instead of being reused until it expires.
+func TestARefusedTokenIsMintedAgain(t *testing.T) {
+	a, conf := newAPI(t)
+	c := &kubeapi.Client{Kubeconfig: conf, Namespace: "sneakers-appliance", ServiceAccount: "exposed-values"}
+	ctx := context.Background()
+	if _, err := c.SecretKey(ctx, "sneakers", "sneakers-setup-token", "SETUP_TOKEN"); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.validFrom = 2
+	a.mu.Unlock()
+	v, err := c.SecretKey(ctx, "sneakers", "sneakers-setup-token", "SETUP_TOKEN")
+	if err != nil || v != "stp_value" {
+		t.Fatalf("after the account was made again: %q %v", v, err)
+	}
+	a.mu.Lock()
+	a.validFrom = 100
+	a.mu.Unlock()
+	if _, err := c.SecretKey(ctx, "sneakers", "sneakers-setup-token", "SETUP_TOKEN"); err == nil {
+		t.Fatal("a token refused twice read")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	// The first, one after the account was made again, and one more for
+	// the read refused twice, which then gives up.
+	if a.tokens != 3 {
+		t.Fatalf("%d tokens minted, want one more per refused read", a.tokens)
 	}
 }
 

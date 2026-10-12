@@ -299,7 +299,9 @@ A one-time value is consumed once the product's signal says so (for Sneakers, th
 If the signal can't be read yet the value is still shown. There is no command that reads or lists any
 other Secret. Each read is audited as `product.value.read` with the name and the outcome (`shown`
 or `consumed`), never the value; a value that can't be read yet (k0s or the product isn't up) is
-`PRODUCT_VALUE_UNAVAILABLE`.
+`PRODUCT_VALUE_UNAVAILABLE`. accessd reads them as the appliance's own service account, with a
+short token it reuses; when the API server refuses that token (the account was deleted and made
+again, as a product reset and the next install do) it mints a new one and reads again, once.
 
 ### Removing the product
 
