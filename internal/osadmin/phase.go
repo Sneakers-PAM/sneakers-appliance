@@ -78,6 +78,7 @@ func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 		s.productReadyNow(productRunning)
 		return boxstate.Starting
 	case s.productComingUp():
+		s.followIfNone()
 		return boxstate.Updating
 	}
 	ready := s.productReadyNow(productRunning)

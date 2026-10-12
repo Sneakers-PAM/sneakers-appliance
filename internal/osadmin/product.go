@@ -410,6 +410,7 @@ func (s *Server) stopProduct(ctx context.Context) error {
 	if s.o.Services == nil {
 		return errors.New("osadmin: no services client; the product can't be restarted")
 	}
+	s.callOffAsks()
 	started := time.Now()
 	if _, err := s.o.Services.Stop(ctx, connect.NewRequest(&initv1.StopRequest{Name: ProductService})); err != nil {
 		return err

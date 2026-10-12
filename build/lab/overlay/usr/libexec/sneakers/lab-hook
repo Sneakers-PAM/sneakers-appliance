@@ -163,3 +163,15 @@ done
 say "product reset: data [$(ls -A "$data" 2>/dev/null | tr '\n' ' ')] staged ${staged:-none} image links ${#links} stacks [$(ls /var/lib/k0s/manifests 2>/dev/null | tr '\n' ' ')]"
 until [ -s "$product/bundle.json" ] && box_running 127.0.0.1 9180; do sleep 10; done
 say "after the reinstall: product data: $(cat "$data/lab-db/written" 2>/dev/null || echo none)"
+# A reinstall of the same version in the same run of the box's services,
+# right after that install: once the box runs again from the other slot,
+# every phase came back, with the data.
+slot="$(cd -P "$product" 2>/dev/null && pwd)"
+while :; do
+  now="$(cd -P "$product" 2>/dev/null && pwd)"
+  if [ -n "$now" ] && [ "$now" != "$slot" ] && box_running 127.0.0.1 9180; then
+    say "after the reinstall after the reset: product data: $(cat "$data/lab-db/written" 2>/dev/null || echo none) phased pods ready: $(k get pods -A -l sneakers-appliance/phase -o jsonpath='{range .items[*]}{.status.conditions[?(@.type=="Ready")].status}{" "}{end}')"
+    break
+  fi
+  sleep 5
+done

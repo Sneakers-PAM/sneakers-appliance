@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -98,13 +99,30 @@ type Probe struct {
 	// Manifests is k0s's manifests directory (/var/lib/k0s/manifests),
 	// where a phased product's phase loop places each phase's stacks.
 	Manifests string
+	// AskTimeout bounds each command and the edge request; 0 is 10 s.
+	AskTimeout time.Duration
 }
 
-// askTimeout bounds each command and the edge request.
-const askTimeout = 10 * time.Second
+// defaultAskTimeout bounds each command and the edge request.
+const defaultAskTimeout = 10 * time.Second
 
+// killGrace is how long a command killed at its bound may take to let go
+// of its output before the probe stops waiting for it.
+const killGrace = time.Second
+
+func (p *Probe) askTimeout() time.Duration {
+	if p.AskTimeout > 0 {
+		return p.AskTimeout
+	}
+	return defaultAskTimeout
+}
+
+// run runs the slot's k0s. At its bound the command is killed with every
+// process it started (its own process group), and the probe waits at
+// most killGrace more for its output, so a child that kept the output
+// open never holds the probe, and with it the box's phase loop.
 func (p *Probe) run(ctx context.Context, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, askTimeout)
+	ctx, cancel := context.WithTimeout(ctx, p.askTimeout())
 	defer cancel()
 	k0s := filepath.Join(p.Slot, "k0s")
 	if p.Run != nil {
@@ -113,6 +131,9 @@ func (p *Probe) run(ctx context.Context, args ...string) ([]byte, error) {
 	var stderr bytes.Buffer
 	cmd := exec.CommandContext(ctx, k0s, args...) // #nosec G204 -- the installed bundle's k0s, fixed arguments
 	cmd.Stderr = &stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = killGrace
 	out, err := cmd.Output()
 	if err != nil {
 		return out, fmt.Errorf("k0s %s: %w: %s", args[0], err, strings.TrimSpace(stderr.String()))
@@ -684,7 +705,7 @@ func (p *Probe) edgeAnswers(ctx context.Context) bool {
 	c := p.HTTP
 	if c == nil {
 		c = &http.Client{
-			Timeout: askTimeout,
+			Timeout: p.askTimeout(),
 			// #nosec G402 -- loopback, the box's own edge: only who answers matters, not the certificate
 			Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}},
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },

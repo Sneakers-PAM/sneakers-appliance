@@ -33,6 +33,10 @@ type readiness struct {
 	// step and stepSince the step it was last seen on, and since when.
 	since, stepSince time.Time
 	step             string
+	// unread is the error the last ask failed with, "" once one answers.
+	unread string
+	// cancel calls off the ask in flight.
+	cancel context.CancelFunc
 	// asking: a probe runs; askedAt is when the last one started, on the
 	// process's own clock (it only spaces the asks out).
 	asking  bool
@@ -74,6 +78,9 @@ func (s *Server) productReadyNow(running bool) bool {
 	}
 	if bound := s.productUpBound(); !r.held && now.Sub(r.since) > bound {
 		r.failed, r.failedStep = fmt.Sprintf("%s: the product isn't ready after %s", s.stepLabel(r.step), bound), r.step
+		if r.unread != "" {
+			r.failed += ": " + unreadable + r.unread
+		}
 		go s.boxChanged()
 		s.o.Logger.Warn("osadmin: the product isn't ready within its bound; the box says failed", log.F("bound", bound.String()), log.F("step", r.step))
 		return false
@@ -91,15 +98,18 @@ func (s *Server) productReadyNow(running bool) bool {
 }
 
 func (r *readiness) reset() {
-	r.ready, r.held, r.failed, r.failedStep, r.step = false, false, "", "", ""
+	r.ready, r.held, r.failed, r.failedStep, r.step, r.unread = false, false, "", "", "", ""
 	r.since, r.stepSince = time.Time{}, time.Time{}
 }
 
 // askReady runs the probe once and records its answer, unless k0s started
 // again meanwhile: ready, held, a failed phase, or the step it's on.
 func (s *Server) askReady(since time.Time, every time.Duration) {
-	ctx, cancel := context.WithTimeout(context.Background(), every+10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), checkBound)
 	defer cancel()
+	s.ready.mu.Lock()
+	s.ready.cancel = cancel
+	s.ready.mu.Unlock()
 	var res productup.Result
 	var err error
 	if s.o.ProductUp != nil {
@@ -112,10 +122,16 @@ func (s *Server) askReady(since time.Time, every time.Duration) {
 	if !r.since.Equal(since) || r.failed != "" {
 		return
 	}
+	if err == nil {
+		r.unread = ""
+	}
 	now := s.o.Clock.Now()
 	switch {
 	case err != nil:
-		s.o.Logger.Debug("osadmin: the product's state isn't known this time", log.F("error", err.Error()))
+		if msg := err.Error(); msg != r.unread {
+			r.unread = msg
+			s.o.Logger.Warn("osadmin: the product's state can't be read", log.F("error", msg))
+		}
 		return
 	case res.Step == "":
 		r.ready, r.held = true, false
