@@ -143,32 +143,57 @@ func do(hc *http.Client, req *http.Request) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, errRefused)
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("%s %s: %s", req.Method, req.URL.Path, resp.Status)
 	}
 	return b, nil
 }
 
-// get reads path with the service account's token only.
+// errRefused is a read the API server refused the token for.
+var errRefused = errors.New("401 Unauthorized")
+
+// get reads path with the service account's token only. A token the API
+// server refuses is dropped and a new one minted, once: the account it was
+// minted for may have been deleted and made again (a product reset deletes
+// its namespace, and the next install makes it anew), and the cached token
+// would otherwise be refused until it expires.
 func (c *Client) get(ctx context.Context, path string) ([]byte, error) {
 	k, err := c.config()
 	if err != nil {
 		return nil, err
 	}
-	tok, err := c.tokenFor(ctx, k)
-	if err != nil {
-		return nil, err
+	for try := 0; ; try++ {
+		tok, err := c.tokenFor(ctx, k)
+		if err != nil {
+			return nil, err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, k.server+path, nil)
+		if err != nil {
+			return nil, fmt.Errorf("kubeapi: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+tok)
+		b, err := do(client(k, false), req)
+		if errors.Is(err, errRefused) && try == 0 {
+			c.drop(tok)
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("kubeapi: %w", err)
+		}
+		return b, nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, k.server+path, nil)
-	if err != nil {
-		return nil, fmt.Errorf("kubeapi: %w", err)
+}
+
+// drop forgets tok, so the next read mints a new token.
+func (c *Client) drop(tok string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.token == tok {
+		c.token, c.expires = "", time.Time{}
 	}
-	req.Header.Set("Authorization", "Bearer "+tok)
-	b, err := do(client(k, false), req)
-	if err != nil {
-		return nil, fmt.Errorf("kubeapi: %w", err)
-	}
-	return b, nil
 }
 
 // SecretKey reads one key of one Secret. Nothing else of the Secret is
