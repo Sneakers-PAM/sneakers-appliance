@@ -173,6 +173,9 @@ box_state() {
 }
 realci() {
   say "realci: the Sneakers product"
+  # The state volume's mount options: nodelalloc keeps what containerd
+  # unpacks durable across a power cut (internal/keycustody).
+  say "realci: state mount $(grep ' /var/lib ' /proc/mounts)"
   last="" seen="" ticks=""
   while :; do
     v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
