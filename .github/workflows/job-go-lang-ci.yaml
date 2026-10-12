@@ -1,12 +1,18 @@
 name: GolangCI
 # Pull requests only, and not while the PR is a draft. There is no push trigger:
 # the PR run already tested the tree being merged, so nothing reruns on push to
-# a branch or to main.
+# a branch or to main. `merge_group` lets the merge queue re-run the required
+# "🧪 Build & Test" check on the queued commit.
 on:
   pull_request:
     branches:
       - main
     types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+    types: [checks_requested]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 env:
@@ -16,7 +22,7 @@ env:
 jobs:
   build-test:
     name: 🧪 Build & Test
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'merge_group' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -75,7 +81,7 @@ jobs:
             go test -count=1 ./internal/netd/ ./internal/firewall/
   lint:
     name: 🧹 GolangCI
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'merge_group' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -97,7 +103,7 @@ jobs:
           args: --timeout=3m
   lab-tools:
     name: 🔑 Lab keys and tool interop
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'merge_group' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
