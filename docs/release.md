@@ -351,7 +351,15 @@ resolves the cluster's DNS, then connects to each of the workload's needs in tur
 2 seconds. A Service with no Ready endpoint refuses the connection, so the wait follows each
 dependency's own readiness, and the workload's NetworkPolicies already admit it. It has no timeout
 of its own: the phase's timeout bounds it. A need that isn't `<service>:<port number>`, or that
-names a workload of another phase, is refused.
+names a workload of another phase, is refused. A workload with no needs (the bundled PostgreSQL
+and Valkey) waits on the cluster's DNS alone: `--dns` with no `--tcp`.
+
+The bundle check refuses a `wait-phase` whose arguments the `wait` command would refuse before its
+first retry (no `--dns` name, a `--tcp` that isn't `host:port`, a non-positive `--every`, another
+command or flag), since that init container would fail at every start.
+`build/product/sneakers/render_test.sh` builds sneakers-migrate from the commit release.yaml pins
+for its image and runs every rendered wait: as rendered it must still be retrying, and with its
+DNS name and targets pointed at the test machine it must exit 0.
 
 The box refuses a phase whose name isn't a lower-case word or comes twice, one without a label or
 workloads, a stack that another phase, a switch or the appliance has, a workload two phases name,

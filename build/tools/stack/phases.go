@@ -109,7 +109,7 @@ func waitContainer(image, ns string, needs []string) doc {
 	}
 	args = append(args, "--every", "2s")
 	return doc{
-		"name": "wait-phase", "image": image, "imagePullPolicy": "Never", "args": args,
+		"name": bundle.WaitContainer, "image": image, "imagePullPolicy": "Never", "args": args,
 		"securityContext": doc{"runAsNonRoot": true, "runAsUser": 65532, "runAsGroup": 65532, "allowPrivilegeEscalation": false,
 			"readOnlyRootFilesystem": true, "capabilities": doc{"drop": []any{"ALL"}}, "seccompProfile": doc{"type": "RuntimeDefault"}},
 		"resources": doc{"requests": doc{"cpu": "10m", "memory": "16Mi"}, "limits": doc{"memory": "32Mi"}},

@@ -6,12 +6,15 @@ package bundle
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"path"
 	"regexp"
 	"slices"
 	"strconv"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -66,6 +69,12 @@ func checkPhaseFile(fsys fs.FS, file, stack string, p productspec.Phase, order s
 			Spec     struct {
 				Template struct {
 					Metadata meta `yaml:"metadata"`
+					Spec     struct {
+						InitContainers []struct {
+							Name string   `yaml:"name"`
+							Args []string `yaml:"args"`
+						} `yaml:"initContainers"`
+					} `yaml:"spec"`
 				} `yaml:"template"`
 			} `yaml:"spec"`
 		}
@@ -90,7 +99,56 @@ func checkPhaseFile(fsys fs.FS, file, stack string, p productspec.Phase, order s
 				return codes.New(codes.KitBundleMismatch, "the %s %s in the stack %s doesn't carry its phase's labels (%s=%s, %s=%s) on itself and its pods", d.Kind, name, stack, productspec.PhaseLabel, p.Name, productspec.PhaseOrderLabel, order)
 			}
 		}
+		for _, c := range d.Spec.Template.Spec.InitContainers {
+			if c.Name != WaitContainer {
+				continue
+			}
+			if err := CheckWaitArgs(c.Args); err != nil {
+				return codes.New(codes.KitBundleMismatch, "the %s %s in the stack %s has a %s init container the release's wait command refuses: %v (%q)", d.Kind, name, stack, WaitContainer, err, c.Args)
+			}
+		}
 	}
+}
+
+// WaitContainer is the name of the init container the bundle render
+// (build/tools/stack) puts first in each phased workload: the release's
+// sneakers-migrate `wait`.
+const WaitContainer = "wait-phase"
+
+// CheckWaitArgs takes the arguments the release's `sneakers-migrate wait`
+// takes, and refuses the ones it refuses before its first retry: a --dns
+// name is required, each --tcp is a host:port, --every is positive, and
+// there's nothing else. --tcp is optional: a workload with no Service to
+// wait for waits on the cluster's DNS alone.
+func CheckWaitArgs(args []string) error {
+	if len(args) == 0 || args[0] != "wait" {
+		return errors.New("it doesn't run wait")
+	}
+	dns := ""
+	for i := 1; i < len(args); i += 2 {
+		if i+1 >= len(args) {
+			return fmt.Errorf("%s has no value", args[i])
+		}
+		v := args[i+1]
+		switch args[i] {
+		case "--dns", "-d":
+			dns = v
+		case "--tcp", "-t":
+			if _, _, err := net.SplitHostPort(v); err != nil {
+				return fmt.Errorf("--tcp %q isn't host:port", v)
+			}
+		case "--every", "-e":
+			if d, err := time.ParseDuration(v); err != nil || d <= 0 {
+				return fmt.Errorf("--every %q isn't a positive duration", v)
+			}
+		default:
+			return fmt.Errorf("wait takes no %s", args[i])
+		}
+	}
+	if dns == "" {
+		return errors.New("it names no --dns name")
+	}
+	return nil
 }
 
 // checkSwitchStacksPhased refuses, in a phased bundle, a switch's stack
