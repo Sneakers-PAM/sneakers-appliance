@@ -131,6 +131,11 @@ func TestAFailingInitContainerIsFound(t *testing.T) {
 	if p := phaseProblems(again, true); len(p) != 1 || !strings.Contains(p[0], "wait-phase restarted 1 times") {
 		t.Fatalf("an init container that restarted: %v", p)
 	}
+	// Without phases a pod restarted in place after a reboot runs its init
+	// containers again: that's not a problem there.
+	if p := phaseProblems(again, false); len(p) != 0 {
+		t.Fatalf("an init container that ran again without phases: %v", p)
+	}
 }
 
 func TestPodsRestartedInPlaceAreFound(t *testing.T) {

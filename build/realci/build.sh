@@ -15,7 +15,8 @@
 #                      workflow's lab job packs one)
 #   OUT/product-12.bin the real Sneakers product without phases (.12)
 #   OUT/product-13.bin the first one with phases (.13)
-#   OUT/product-14.bin the product from UNDER_TEST (.14)
+#   OUT/product-next.bin the product under test (UNDER_TEST, version
+#                      0.1.0-lab.realci.next, newer than .13)
 #   OUT/realci.env     the paths and versions, for the image test
 #
 # Each product is the production path with lab keys: the service images
@@ -63,11 +64,11 @@ export COSIGN_PASSWORD=""
 under="${UNDER_TEST:-$(git -C "$root" rev-parse HEAD)}"
 if [ "${CONTROL:-}" = 1 ]; then under="$CONTROL_COMMIT"; fi
 under="$(git -C "$root" rev-parse "$under^{commit}")"
-p14_release="$P14_RELEASE_COMMIT"
-if [ -z "$p14_release" ]; then
-  p14_release="$(git ls-remote https://github.com/Sneakers-PAM/sneakers-release.git refs/heads/main | cut -f1)"
+next_release="$NEXT_RELEASE_COMMIT"
+if [ -z "$next_release" ]; then
+  next_release="$(git ls-remote https://github.com/Sneakers-PAM/sneakers-release.git refs/heads/main | cut -f1)"
 fi
-say "old base $OLD_BASE_COMMIT, under test $under; .12 $P12_APPLIANCE_COMMIT+$P12_RELEASE_COMMIT, .13 $P13_APPLIANCE_COMMIT+$P13_RELEASE_COMMIT, .14 $under+$p14_release"
+say "old base $OLD_BASE_COMMIT, under test $under; .12 $P12_APPLIANCE_COMMIT+$P12_RELEASE_COMMIT, .13 $P13_APPLIANCE_COMMIT+$P13_RELEASE_COMMIT, next $under+$next_release"
 
 # tree <commit>: a checkout of this repository at the commit, with this
 # commit's lab hook.
@@ -208,7 +209,7 @@ product() {
 }
 product 12 "$P12_APPLIANCE_COMMIT" "$P12_RELEASE_COMMIT"
 product 13 "$P13_APPLIANCE_COMMIT" "$P13_RELEASE_COMMIT"
-product 14 "$under" "$p14_release"
+product next "$under" "$next_release"
 
 cat > "$OUT/realci.env" <<ENV
 SNEAKERS_KEYS=$KEYS
@@ -218,6 +219,6 @@ SNEAKERS_REAL_NEW_BASE=$OUT/base-new.bin
 SNEAKERS_REAL_NEW_VERSION=$new_version
 SNEAKERS_REAL_P12=$OUT/product-12.bin
 SNEAKERS_REAL_P13=$OUT/product-13.bin
-SNEAKERS_REAL_P14=$OUT/product-14.bin
+SNEAKERS_REAL_NEXT=$OUT/product-next.bin
 ENV
 say "done: $(tr '\n' ' ' < "$OUT/realci.env")"

@@ -4,15 +4,16 @@ name: Real bundle upgrades
 # with a lab key set made for the run: the base the boxes run today and
 # the base under test (lab builds, from the commits build/realci/pins.env
 # names and this commit), and the real product bundles .12 (no phases),
-# .13 (the first with phases) and .14 (this commit), each from its own
-# sneakers-release commit by the release workflow's image and bundle path.
+# .13 (the first with phases) and the product under test ("next", this
+# commit), each from its own sneakers-release commit by the release
+# workflow's image and bundle path.
 # It then boots them in QEMU with the image suite's harness:
 #
 # - upgrade: the old base with .12 and the MCP switch on, the base update,
-#   .13, .14, then a power loss; every phase up in order, no restarts and
-#   every row kept after each step.
+#   the product under test (no phases to phases), then a power loss; every
+#   phase up in order, no restarts and every row kept after each step.
 # - recover: the old base stuck on .13, then the base under test applied in
-#   that state, and .14.
+#   that state, and the product under test.
 # - control: the upgrade leg with the base from before the quiesce fixes
 #   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
 #   the run. Pull requests and runs by hand only.
@@ -37,7 +38,7 @@ on:
   workflow_dispatch:
     inputs:
       under_test:
-        description: The commit under test (the base and .14); empty is the commit the run is on
+        description: The commit under test (the base and the product); empty is the commit the run is on
         required: false
         default: ""
   workflow_call:
@@ -147,7 +148,7 @@ jobs:
           bash build/openssh/build.sh out/static
       # The service images of .12 and .13 come from fixed sneakers-release
       # commits, so they're cached (no key in them: they're the public
-      # images, unsigned); .14's are built every run.
+      # images, unsigned); the product under test's are built every run.
       - name: Read the pins
         id: pins
         run: |

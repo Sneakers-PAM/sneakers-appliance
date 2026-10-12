@@ -13,9 +13,9 @@ fail=0
 bad() { echo "FAIL: $*" >&2; fail=1; }
 # shellcheck source=build/realci/pins.env
 source "$here/pins.env"
-for v in OLD_BASE_COMMIT P12_APPLIANCE_COMMIT P13_APPLIANCE_COMMIT CONTROL_COMMIT P12_RELEASE_COMMIT P13_RELEASE_COMMIT P14_RELEASE_COMMIT; do
+for v in OLD_BASE_COMMIT P12_APPLIANCE_COMMIT P13_APPLIANCE_COMMIT CONTROL_COMMIT P12_RELEASE_COMMIT P13_RELEASE_COMMIT NEXT_RELEASE_COMMIT; do
   c="${!v}"
-  if [ "$v" = P14_RELEASE_COMMIT ] && [ -z "$c" ]; then continue; fi
+  if [ "$v" = NEXT_RELEASE_COMMIT ] && [ -z "$c" ]; then continue; fi
   [[ "$c" =~ ^[0-9a-f]{40}$ ]] || { bad "$v is '$c', not a full commit"; continue; }
   case "$v" in
     *RELEASE*) ;;

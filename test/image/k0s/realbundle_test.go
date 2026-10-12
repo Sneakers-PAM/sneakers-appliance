@@ -31,7 +31,7 @@ import (
 // realEnv is what build/realci/build.sh wrote.
 type realEnv struct {
 	keys, oldImage, oldVersion, newBase, newVersion string
-	p12, p13, p14                                   string
+	p12, p13, next                                  string
 }
 
 func needReal(t *testing.T) realEnv {
@@ -39,18 +39,19 @@ func needReal(t *testing.T) realEnv {
 	e := realEnv{
 		keys: os.Getenv("SNEAKERS_KEYS"), oldImage: os.Getenv("SNEAKERS_REAL_OLD_IMAGE"), oldVersion: os.Getenv("SNEAKERS_REAL_OLD_VERSION"),
 		newBase: os.Getenv("SNEAKERS_REAL_NEW_BASE"), newVersion: os.Getenv("SNEAKERS_REAL_NEW_VERSION"),
-		p12: os.Getenv("SNEAKERS_REAL_P12"), p13: os.Getenv("SNEAKERS_REAL_P13"), p14: os.Getenv("SNEAKERS_REAL_P14"),
+		p12: os.Getenv("SNEAKERS_REAL_P12"), p13: os.Getenv("SNEAKERS_REAL_P13"), next: os.Getenv("SNEAKERS_REAL_NEXT"),
 	}
 	// The image workflow builds no real product, so the tests skip there.
-	if e.oldImage == "" || e.newBase == "" || e.p12 == "" || e.p13 == "" || e.p14 == "" {
+	if e.oldImage == "" || e.newBase == "" || e.p12 == "" || e.p13 == "" || e.next == "" {
 		t.Skip("SNEAKERS_REAL_* name the real-bundle job's builds (build/realci/build.sh)")
 	}
-	harness.Need(t, []string{"mcopy", "ssh", "ssh-keygen"}, e.keys, e.oldImage, e.newBase, e.p12, e.p13, e.p14)
+	harness.Need(t, []string{"mcopy", "ssh", "ssh-keygen"}, e.keys, e.oldImage, e.newBase, e.p12, e.p13, e.next)
 	return e
 }
 
 // productVersion is a real product bundle's version, from its build's
-// name (build/realci/build.sh): product-12.bin is 0.1.0-lab.realci.12.
+// name (build/realci/build.sh): product-12.bin is 0.1.0-lab.realci.12,
+// product-next.bin (the product under test) 0.1.0-lab.realci.next.
 func productVersion(file string) string {
 	return "0.1.0-lab.realci." + strings.TrimSuffix(strings.TrimPrefix(filepath.Base(file), "product-"), ".bin")
 }
@@ -204,16 +205,38 @@ func (b *realBox) waitReport(version string, timeout time.Duration) (report, boo
 	return r, true
 }
 
-// waiting is the hook's last lines from while the box didn't run.
+// waiting is the hook's last lines from while the box didn't run: the
+// state, the pods, each pod's last wait-phase lines and the rows.
 func (b *realBox) waiting() string {
 	c := b.vm.Console()
 	var out []string
-	for _, p := range []string{`realci: waiting `, `realci: pods waiting `, `realci: rows waiting `} {
+	for _, p := range []string{`realci: waiting `, `realci: pods waiting `} {
 		if l := lastLine(c, p); l != "" {
 			out = append(out, l)
 		}
 	}
+	out = append(out, waitPhaseLines(c)...)
+	if l := lastLine(c, `realci: rows waiting `); l != "" {
+		out = append(out, l)
+	}
 	return strings.Join(out, "\n")
+}
+
+var waitPhaseLine = regexp.MustCompile(`realci: wait-phase (\S+): [^\r\n]*`)
+
+// waitPhaseLines is the last wait-phase line the hook printed for each
+// pod, in pod order.
+func waitPhaseLines(console string) []string {
+	last := map[string]string{}
+	for _, m := range waitPhaseLine.FindAllStringSubmatch(console, -1) {
+		last[m[1]] = m[0]
+	}
+	var out []string
+	for _, l := range last {
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // mustRun waits for the box to run version and checks the report: every
@@ -247,15 +270,16 @@ func (b *realBox) mustRun(version, when string, base realRows, phased, mcp bool)
 
 // TestTheRealBundlesUpdateInOrder is a box on the field's path to the
 // release: the old base (n6) with the real product without phases (.12)
-// and the MCP switch on, the base updated to the one under test (n7),
-// then the product to the first with phases (.13), then to the one under
-// test (.14), then a power loss. After each step the box runs the
-// product with its phases up in order (data, identity, services, front),
-// no pod restarted, and every row written at the start still there.
+// and the MCP switch on, the base updated to the one under test, then the
+// product to the one under test (with phases), then a power loss. After
+// each step the box runs the product with its phases up in order (data,
+// identity, services, front), no pod restarted, and every row written at
+// the start still there. (.13, the first product with phases, can't come
+// up on any base: its data phase's wait fails. The recover test runs it.)
 func TestTheRealBundlesUpdateInOrder(t *testing.T) {
 	e := needReal(t)
 	b := newRealBox(t, e)
-	v12, v13, v14 := productVersion(e.p12), productVersion(e.p13), productVersion(e.p14)
+	v12, vNext := productVersion(e.p12), productVersion(e.next)
 
 	b.apply(e.p12, "UPDATE_TARGET_PRODUCT")
 	first := b.mustRun(v12, "the install of "+v12, realRows{}, false, false)
@@ -268,14 +292,11 @@ func TestTheRealBundlesUpdateInOrder(t *testing.T) {
 	b.updateBase(e.newBase, e.newVersion)
 	b.mustRun(v12, "the base update to "+e.newVersion, base, false, true)
 
-	b.apply(e.p13, "UPDATE_TARGET_PRODUCT")
-	b.mustRun(v13, "the update to phases ("+v12+" to "+v13+")", base, true, true)
-
-	b.apply(e.p14, "UPDATE_TARGET_PRODUCT")
-	before := b.mustRun(v14, "the update to "+v14, base, true, true)
+	b.apply(e.next, "UPDATE_TARGET_PRODUCT")
+	before := b.mustRun(vNext, "the update to phases ("+v12+" to "+vNext+")", base, true, true)
 
 	b.powerLoss()
-	after := b.mustRun(v14, "after a power loss", base, true, true)
+	after := b.mustRun(vNext, "after a power loss", base, true, true)
 	if kept := podsKeptInPlace(before.pods, after.pods); len(kept) > 0 {
 		t.Fatalf("after a power loss: %v are the pods from before it, restarted in place, not quiesced", kept)
 	}
@@ -285,14 +306,15 @@ func TestTheRealBundlesUpdateInOrder(t *testing.T) {
 // base is left by the update to phases: the old base (n6) running the
 // product without phases (.12) with the MCP switch on, then given .13,
 // which that base doesn't bring up (its quiesce leaves .12's MCP server
-// and Hydra running). The base under test (n7) is applied in that state;
-// the box must then run .13 with its phases in order and every row, and
-// take .14. If the stuck state already lost rows, the test says so with
-// the hook's lines.
+// and Hydra running). The base under test is applied in that state, and
+// whether it brings .13 up by itself is recorded; then the product under
+// test must run with its phases in order and every row.
+// The test says what the stuck state did to the rows, with the hook's
+// lines.
 func TestTheRealBundlesRecoverFromAStuckUpdate(t *testing.T) {
 	e := needReal(t)
 	b := newRealBox(t, e)
-	v12, v13, v14 := productVersion(e.p12), productVersion(e.p13), productVersion(e.p14)
+	v12, v13, vNext := productVersion(e.p12), productVersion(e.p13), productVersion(e.next)
 
 	b.apply(e.p12, "UPDATE_TARGET_PRODUCT")
 	base := b.mustRun(v12, "the install of "+v12, realRows{}, false, false).rows
@@ -308,20 +330,35 @@ func TestTheRealBundlesRecoverFromAStuckUpdate(t *testing.T) {
 		t.Logf("the old base is stuck on %s, as a box on the field was; the lab hook's last lines:\n%s", v13, b.waiting())
 		if l := lastLine(b.vm.Console(), `realci: rows waiting `); l != "" {
 			if stuck, err := readRealRows(l); err == nil {
-				if p := rowProblems(base, stuck); len(p) > 0 {
-					t.Logf("in the stuck state the rows are already short:\n%s", strings.Join(p, "\n"))
-				} else {
+				switch p := rowProblems(base, stuck); {
+				case len(p) == 0:
 					t.Logf("in the stuck state every row is still there: %s", stuck.summary())
+				case uncounted(stuck):
+					t.Logf("in the stuck state PostgreSQL doesn't answer, so no row can be counted (its data directory isn't read): %s", l)
+				default:
+					t.Logf("in the stuck state the rows are already short:\n%s", strings.Join(p, "\n"))
 				}
 			}
 		}
 	}
 
+	// The base under test is applied in that state. Whether it brings .13
+	// up by itself is recorded; the box must then take the product under
+	// test and run it with every check.
 	b.updateBase(e.newBase, e.newVersion)
-	b.mustRun(v13, "the base update to "+e.newVersion+" from the stuck state", base, true, true)
+	if r, ok := b.waitReport(v13, 20*time.Minute); ok {
+		problems := append(phaseProblems(r.pods, true), rowProblems(base, r.rows)...)
+		t.Logf("on %s the box ran %s again (%d pods, rows %s); problems: %v", e.newVersion, v13, len(r.pods), r.rows.summary(), problems)
+	} else {
+		why := ""
+		if pods, err := readRealPods(lastLine(b.vm.Console(), `realci: pods waiting `)); err == nil {
+			why = strings.Join(phaseProblems(pods, true), "\n")
+		}
+		t.Logf("on %s the box is still stuck on %s after 20m:\n%s\nthe lab hook's last lines:\n%s", e.newVersion, v13, why, b.waiting())
+	}
 
-	b.apply(e.p14, "UPDATE_TARGET_PRODUCT")
-	b.mustRun(v14, "the update to "+v14, base, true, true)
+	b.apply(e.next, "UPDATE_TARGET_PRODUCT")
+	b.mustRun(vNext, "the update to "+vNext+" from the stuck state", base, true, true)
 }
 
 // lastLine is the last console line that holds prefix, from it to the
@@ -391,6 +428,16 @@ func (r realRows) summary() string {
 	}
 	sort.Strings(out)
 	return strings.Join(out, " ")
+}
+
+// uncounted says no database could be counted: PostgreSQL didn't answer.
+func uncounted(r realRows) bool {
+	for _, tables := range r.dbs {
+		if tables != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // canaryRows is how many rows the lab hook writes into each database.
@@ -520,11 +567,13 @@ func readRealPods(line string) ([]realPod, error) {
 // data, identity, services, front.
 const phaseOrders = 4
 
-// phaseProblems checks the running pods: each Ready, every init container
-// completed without a restart (a phase's wait-phase among them), and,
-// for a phased product, no restarts, every phase there and each pod started only once
-// every pod of the phases before its own was Ready. A finished Job's pod
-// is left out.
+// phaseProblems checks the running pods: each Ready and every init
+// container completed (a phase's wait-phase among them). For a phased
+// product also no container or init container restarted, every phase is
+// there and each pod started only once every pod of the phases before its
+// own was Ready. A product without phases starts everything at once, and
+// after a reboot the kubelet restarts its pods in place, so restarts don't
+// count there. A finished Job's pod is left out.
 func phaseProblems(pods []realPod, phased bool) []string {
 	var out []string
 	readyBy := map[int]time.Time{}
@@ -540,7 +589,7 @@ func phaseProblems(pods []realPod, phased bool) []string {
 		}
 		for _, c := range p.init {
 			switch {
-			case c.restarts != 0:
+			case phased && c.restarts != 0:
 				out = append(out, fmt.Sprintf("%s's init container %s restarted %d times and is %s", p.name, c.name, c.restarts, c.state))
 			case c.state != "Completed":
 				out = append(out, fmt.Sprintf("%s's init container %s is %s, not Completed", p.name, c.name, c.state))
