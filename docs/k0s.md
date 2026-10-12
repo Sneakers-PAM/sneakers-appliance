@@ -232,7 +232,10 @@ lab product bundle through the Updates API (`POST /upload`, `StageUpdate`, `Appl
 target product). The lab image's hook (`build/lab/overlay/.../lab-hook`) does nothing unless the
 ESP holds a `lab-hook` file, which only the suite writes: then it reports on the serial line (the
 console service owns the consoles) whether k0s ran before a bundle was installed, and waits for the
-bundle, the API, the node, the hello pod, the box saying running (edgefall's `/_box/state` on
+bundle, the API and the node; with the real Sneakers product installed (the real-bundle job,
+[testing.md](testing.md#the-real-bundle-job)) it then takes that product's path: the rows it writes
+and counts, PostgreSQL's start and the product's pods on each version the box runs. Otherwise it
+waits for the hello pod, the box saying running (edgefall's `/_box/state` on
 127.0.0.1:9180, which says so only once the phase loop has brought every phase up) and the edge
 pod. It samples the phase pods only then: after a power loss the first Ready hello pod is the old
 one, restarted in place by the kubelet before the box quiesced it. After three minutes of waiting it

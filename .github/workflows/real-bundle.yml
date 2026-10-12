@@ -1,0 +1,216 @@
+name: Real bundle upgrades
+# The real Sneakers product, not the lab stand-ins, through the update
+# paths a box takes (docs/testing.md#the-real-bundle-job). Each leg builds,
+# with a lab key set made for the run: the base the boxes run today and
+# the base under test (lab builds, from the commits build/realci/pins.env
+# names and this commit), and the real product bundles .12 (no phases),
+# .13 (the first with phases) and .14 (this commit), each from its own
+# sneakers-release commit by the release workflow's image and bundle path.
+# It then boots them in QEMU with the image suite's harness:
+#
+# - upgrade: the old base with .12 and the MCP switch on, the base update,
+#   .13, .14, then a power loss; every phase up in order, no restarts and
+#   every row kept after each step.
+# - recover: the old base stuck on .13, then the base under test applied in
+#   that state, and .14.
+# - control: the upgrade leg with the base from before the quiesce fixes
+#   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
+#   the run. Pull requests and runs by hand only.
+#
+# Only logs leave the run: nothing built here, and no key, is uploaded.
+# A leg takes about four hours, so this runs on main after each merge,
+# nightly, by hand, on a pull request that changes the job itself, and in
+# the release workflow before anything is built (workflow_call).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - .github/workflows/real-bundle.yml
+      - build/realci/**
+      - test/image/k0s/realbundle*.go
+      - build/lab/overlay/**
+  push:
+    branches: [main]
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+    inputs:
+      under_test:
+        description: The commit under test (the base and .14); empty is the commit the run is on
+        required: false
+        default: ""
+  workflow_call:
+permissions:
+  contents: read
+# A newer push to a pull request cancels its earlier run; on main a merge
+# waits for the running job instead of cancelling it.
+concurrency:
+  group: real-bundle-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  real:
+    name: 🧪 Real bundles (${{ matrix.leg }})
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    continue-on-error: ${{ matrix.leg == 'control' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control"]' || '["upgrade","recover"]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        with:
+          fetch-depth: 0
+      # Three real bundles, their service images and a box's disk with them
+      # installed need more room than the runner leaves free.
+      - name: Make room on the runner
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          docker image prune -af >/dev/null
+          df -h /
+      - name: Setup Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        with:
+          go-version-file: go.mod
+      - name: Install the build and boot tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
+            ovmf qemu-system-x86 qemu-utils swtpm python3-virt-firmware \
+            efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
+            systemd-ukify systemd-boot-efi python3-pefile mtools
+          bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      # The same caches as the image suite (image-e2e.yml), so a run of
+      # either restores what the other built.
+      - name: Cache the kernel
+        id: kernel
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: build/out/kernel/amd64
+          key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
+      - name: Build the kernel
+        if: steps.kernel.outputs.cache-hit != 'true'
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: bash build/kernel/build.sh amd64
+      - name: Cache the static tools
+        id: static
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            build/out/cryptsetup-amd64
+            build/out/veritysetup-amd64
+            build/out/cryptsetup-amd64.stamp
+          key: static-crypt-amd64-${{ hashFiles('build/static/cryptsetup.sh', 'build/ci/versions.env', 'build/lib/**') }}
+      - name: Build the static cryptsetup
+        if: steps.static.outputs.cache-hit != 'true'
+        run: bash build/static/cryptsetup.sh amd64
+      - name: Cache the static e2fsprogs, gptfdisk and watch
+        id: fstools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            build/out/mke2fs-amd64
+            build/out/sgdisk-amd64
+            build/out/watch-amd64
+            build/out/terminfo-amd64
+            build/out/e2fsprogs-amd64.stamp
+            build/out/gptfdisk-amd64.stamp
+            build/out/procps-amd64.stamp
+          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/static/procps.sh', 'build/ci/versions.env', 'build/lib/**') }}
+      - name: Build the static e2fsprogs, gptfdisk and watch
+        if: steps.fstools.outputs.cache-hit != 'true'
+        run: |
+          bash build/static/e2fsprogs.sh amd64
+          bash build/static/gptfdisk.sh amd64
+          bash build/static/procps.sh amd64
+      - name: Cache the static OpenSSH and busybox
+        id: sshtools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: out/static
+          key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
+      - name: Build the static OpenSSH and busybox
+        if: steps.sshtools.outputs.cache-hit != 'true'
+        run: |
+          bash build/busybox/build.sh out/static
+          bash build/openssh/build.sh out/static
+      # The service images of .12 and .13 come from fixed sneakers-release
+      # commits, so they're cached (no key in them: they're the public
+      # images, unsigned); .14's are built every run.
+      - name: Read the pins
+        id: pins
+        run: |
+          # shellcheck source=build/realci/pins.env
+          source build/realci/pins.env
+          echo "p12=$P12_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "p13=$P13_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+      - name: Cache the .12 and .13 service images
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p12 }}
+            ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p13 }}
+          key: realci-images-${{ steps.pins.outputs.p12 }}-${{ steps.pins.outputs.p13 }}-${{ hashFiles('build/release/images.sh') }}
+      - name: Build the bases and the real bundles
+        env:
+          UNDER_TEST: ${{ inputs.under_test }}
+          CONTROL: ${{ matrix.leg == 'control' && '1' || '' }}
+        run: |
+          keys="$RUNNER_TEMP/labkeys"
+          mkdir -p "$keys"
+          sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
+          KERNEL=build/out/kernel/amd64/bzImage \
+          KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
+          VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
+          OPENSSH=out/static BUSYBOX=out/static/busybox \
+          KEYS="$keys" OUT="$RUNNER_TEMP/realci" LAYOUTS="$RUNNER_TEMP/layouts" bash build/realci/build.sh 2>&1 | tee "$RUNNER_TEMP/realci-build.log"
+          {
+            echo "### Real bundles (${{ matrix.leg }})"
+            echo '```'
+            grep -h '^realci: ' "$RUNNER_TEMP/realci-build.log" || true
+            ls -l "$RUNNER_TEMP"/realci/*.bin
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          df -h /
+      - name: Run the ${{ matrix.leg }} leg
+        env:
+          SNEAKERS_REQUIRE_TOOLS: "1"
+          LEG: ${{ matrix.leg }}
+        run: |
+          set -a
+          # shellcheck disable=SC1091
+          source "$RUNNER_TEMP/realci/realci.env"
+          set +a
+          export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage" SNEAKERS_LOG_DIR="$RUNNER_TEMP/realci-logs"
+          mkdir -p "$SNEAKERS_LOG_DIR"
+          case "$LEG" in
+            upgrade|control) run='^TestTheRealBundlesUpdateInOrder$' ;;
+            recover) run='^TestTheRealBundlesRecoverFromAStuckUpdate$' ;;
+          esac
+          start="$(date +%s)"
+          status=0
+          go test -tags image -timeout 300m -v -run "$run" ./test/image/k0s/ 2>&1 | tee "$SNEAKERS_LOG_DIR/go-test.log" || status=$?
+          echo "### The ${LEG} leg: exit ${status} after $(( ($(date +%s) - start) / 60 )) minutes" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^\s+realbundle_test.go:[0-9]+: ' "$SNEAKERS_LOG_DIR/go-test.log" | sed 's/^ *//' >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
+      - name: Upload the logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: real-bundle-logs-${{ matrix.leg }}
+          path: |
+            ${{ runner.temp }}/realci-logs
+            ${{ runner.temp }}/realci-build.log
+            ${{ runner.temp }}/realci/*.log
+          if-no-files-found: ignore
+          retention-days: 14
+      - name: Wipe the lab keys
+        if: always()
+        run: sudo umount "$RUNNER_TEMP/labkeys" || true

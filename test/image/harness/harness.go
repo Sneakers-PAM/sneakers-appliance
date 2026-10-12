@@ -52,6 +52,10 @@ type Disk struct {
 	// Image is copied before the boot, so the original stays pristine.
 	Image   string
 	SizeGiB int
+	// Move takes Image itself instead of a copy (it's renamed into the
+	// VM's directory), for a disk too big to copy at every boot, such as
+	// the previous boot's Disk with a real product on it.
+	Move bool
 }
 
 // Options shape one boot.
@@ -60,8 +64,10 @@ type Options struct {
 	TPM        bool
 	Disks      []Disk
 	// Keys is the lab key directory (build/keys/lab-keys.sh) for Enrolled.
-	Keys    string
-	MemMiB  int
+	Keys   string
+	MemMiB int
+	// CPUs is the number of virtual CPUs (default 2).
+	CPUs    int
 	Timeout time.Duration
 	// NoSerial boots without a serial port, like a VMware VM with none:
 	// the display is the only console.
@@ -162,6 +168,10 @@ func Boot(t testing.TB, o Options) *VM {
 	if mem == 0 {
 		mem = 2048
 	}
+	cpus := o.CPUs
+	if cpus == 0 {
+		cpus = 2
+	}
 	timeout := o.Timeout
 	if timeout == 0 {
 		timeout = 10 * time.Minute
@@ -194,7 +204,7 @@ func Boot(t testing.TB, o Options) *VM {
 	t.Cleanup(func() { _ = os.RemoveAll(qdir) })
 	qmpSock := filepath.Join(qdir, "qmp.sock")
 	args := []string{
-		"-machine", "q35,smm=on", "-m", fmt.Sprint(mem), "-smp", "2", "-nographic", "-no-reboot",
+		"-machine", "q35,smm=on", "-m", fmt.Sprint(mem), "-smp", fmt.Sprint(cpus), "-nographic", "-no-reboot",
 		"-global", "driver=cfi.pflash01,property=secure,value=on",
 		"-drive", "if=pflash,format=raw,unit=0,readonly=on,file=" + code,
 		"-drive", "if=pflash,format=raw,unit=1,file=" + vars,
@@ -232,9 +242,14 @@ func Boot(t testing.TB, o Options) *VM {
 	}
 	for i, d := range o.Disks {
 		img := filepath.Join(dir, fmt.Sprintf("disk%d.raw", i))
-		if d.Image != "" {
+		switch {
+		case d.Image != "" && d.Move:
+			if err := os.Rename(d.Image, img); err != nil {
+				t.Fatal(err)
+			}
+		case d.Image != "":
 			run(t, "cp", "--sparse=always", d.Image, img)
-		} else {
+		default:
 			run(t, "qemu-img", "create", "-f", "raw", img, fmt.Sprintf("%dG", max(d.SizeGiB, 1)))
 		}
 		if d.Image != "" && d.SizeGiB > 0 {

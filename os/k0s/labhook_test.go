@@ -78,10 +78,12 @@ func TestTheLabHookReportsTheDurabilityRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	hook := string(b)
-	pg := regexp.MustCompile(`(?m)^pg\(\) \{.*\}\n`).FindString(hook)
+	pg := regexp.MustCompile(`(?m)^pg_in\(\) \{.*\}\n`).FindString(hook) +
+		regexp.MustCompile(`(?ms)^pg_start\(\) \{\n.*?^\}\n`).FindString(hook) +
+		regexp.MustCompile(`(?m)^pg\(\) \{.*\}\n`).FindString(hook)
 	report1 := regexp.MustCompile(`(?ms)^durability_report\(\) \{\n.*?^\}\n`).FindString(hook)
-	if pg == "" || report1 == "" {
-		t.Fatal("the lab hook has no pg or durability_report function")
+	if strings.Count(pg, "() {") != 3 || report1 == "" {
+		t.Fatal("the lab hook has no pg_in, pg_start, pg or durability_report function")
 	}
 	// report runs durability_report with a fake kubectl: psql answers count
 	// with rows (or fails when rows is empty), logs prints log; it answers
@@ -128,5 +130,64 @@ k() {
 	out, sql = report("", "", true)
 	if !strings.Contains(out, "rows=missing") || strings.Contains(sql, "INSERT") || strings.Contains(sql, "CREATE") {
 		t.Fatalf("a database that doesn't answer: %s (statements %q)", out, sql)
+	}
+}
+
+// The real-bundle job (build/realci) installs the Sneakers product itself,
+// which has no hello stack: the hook takes its own path for it before it
+// waits for the hello pod, and prints the rows and pods lines the image
+// test reads (test/image/k0s/realbundle_test.go).
+func TestTheLabHookReportsTheRealProduct(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := string(b)
+	real := strings.Index(hook, "\n  realci\n")
+	hello := strings.Index(hook, `wait_for "hello pod ready"`)
+	if real < 0 || hello < 0 || real > hello {
+		t.Fatalf("the hook doesn't take the real product's path before it waits for the hello pod (realci at %d, hello at %d)", real, hello)
+	}
+	var defs []string
+	for _, name := range []string{"pg_in", "pg_start", "realci_rows", "realci_pods"} {
+		fn := regexp.MustCompile(`(?m)^` + name + `\(\) \{.*\}\n`).FindString(hook)
+		if fn == "" {
+			fn = regexp.MustCompile(`(?ms)^` + name + `\(\) \{[^\n]*\n.*?^\}\n`).FindString(hook)
+		}
+		if fn == "" {
+			t.Fatalf("the lab hook has no %s function", name)
+		}
+		defs = append(defs, fn)
+	}
+	for _, v := range []string{"realci_dbs", "realci_count_sql"} {
+		line := regexp.MustCompile(`(?m)^` + v + `=.*$`).FindString(hook)
+		if line == "" {
+			t.Fatalf("the lab hook doesn't set %s", v)
+		}
+		defs = append(defs, line)
+	}
+	// k stands in for kubectl: psql answers the tables of the database it
+	// was asked about (the hydra database doesn't answer), and the log is
+	// a first start's.
+	stub := `say() { echo "lab-hook: $*"; }
+k() {
+  case "$*" in
+    *"exec sneakers-postgres-0"*sneakers_hydra*) return 1 ;;
+    *"exec sneakers-postgres-0"*) echo "realci_rows=1000,t=2" ;;
+    *"logs sneakers-postgres-0"*) printf 'PostgreSQL init process complete\ndatabase system was shut down at x\n' ;;
+    *"get pods"*) echo "p app=a order=1 phase=Running restarts=0 started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;" ;;
+  esac
+}
+`
+	script := stub + strings.Join(defs, "\n") + "\nrealci_rows 0.1.0-x running\nrealci_pods 0.1.0-x running\n"
+	out, err := exec.Command("sh", "-c", script).CombinedOutput() // #nosec G204 -- the repo's own script
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	got := string(out)
+	rows := `lab-hook: realci: rows running version=0.1.0-x start=first sneakers_identity[realci_rows=1000,t=2] sneakers_vault[realci_rows=1000,t=2] sneakers_workflow[realci_rows=1000,t=2] sneakers_audit[realci_rows=1000,t=2] sneakers_kratos[realci_rows=1000,t=2] sneakers_hydra[missing]` + "\n"
+	pods := "lab-hook: realci: pods running version=0.1.0-x: p app=a order=1 phase=Running restarts=0 started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;\n"
+	if got != rows+pods {
+		t.Fatalf("the hook printed\n%s\nwant\n%s%s", got, rows, pods)
 	}
 }
