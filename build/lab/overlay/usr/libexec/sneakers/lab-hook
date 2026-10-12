@@ -135,6 +135,16 @@ export KUBECONFIG=/var/lib/k0s/pki/admin.conf HELM_CACHE_HOME=/tmp/helm/cache HE
 if /usr/bin/kubectl get nodes; then say "root shell kubectl works"; else say "root shell kubectl failed"; fi
 if /usr/bin/helm list -A; then say "root shell helm works"; else say "root shell helm failed"; fi
 if /usr/bin/watch --version && [ -f /usr/share/terminfo/x/xterm ] && [ -f /usr/share/terminfo/p/putty ]; then say "root shell watch works"; else say "root shell watch failed"; fi
+# A pod's outbound connection (docs/network.md "Pod egress"): the hello pod
+# connects to an address on QEMU's user network, which the image suite
+# forwards to a listener on the host while it captures the box's NIC, and
+# checks the connection left the box from the NIC's address.
+egress_target="10.0.2.100 7777" # scrub:allow=private-ip -- QEMU's user network, test/image/k0s
+if k -n sneakers-hello exec deploy/hello -c httpd -- sh -c "echo pod-egress-probe | nc -w 5 $egress_target"; then
+  say "pod egress connected"
+else
+  say "pod egress failed"
+fi
 
 # The image suite's product reset (test/image/k0s, docs/upgrades.md
 # "Removing the product"): the lab database's marker under the product's
