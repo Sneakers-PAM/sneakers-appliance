@@ -21,7 +21,8 @@
 //     secret, key and all;
 //   - the switch's stack holds what only the on render has, and a
 //     ConfigMap with the settings the named ConfigMaps change when it's on
-//     (the workloads load it, optional);
+//     (the workloads load it, optional); a product without a switch
+//     (no -switch-stack) has the one render, -off, and no switch stack;
 //   - with phases in product.yaml, every workload goes in its phase's own
 //     stack (a switch's stays in the switch's stack, which its phase must
 //     place), labelled with the phase and its place in the order, and a
@@ -75,11 +76,11 @@ func main() {
 	fl.StringVar(&o.Release, "release", "", "release.yaml, with every image pinned by digest")
 	fl.StringVar(&o.ProductYAML, "product-yaml", "", "the product's product.yaml (its box secrets)")
 	fl.StringVar(&o.Off, "off", "", "the render with the switch off")
-	fl.StringVar(&o.On, "on", "", "the render with the switch on")
+	fl.StringVar(&o.On, "on", "", "the render with the switch on (with -switch-stack)")
 	fl.StringVar(&o.Out, "out", "", "the stacks directory: <stack>/<stack>.yaml for each")
 	fl.StringVar(&o.Namespace, "namespace", "", "the product's namespace")
 	fl.StringVar(&o.Stack, "stack", "", "the always-on stack's name")
-	fl.StringVar(&o.SwitchStack, "switch-stack", "", "the switch's stack name")
+	fl.StringVar(&o.SwitchStack, "switch-stack", "", "the switch's stack name; empty for a product without a switch")
 	fl.StringVar(&o.SwitchConfigMap, "switch-configmap", "", "the ConfigMap the switch's stack carries")
 	fl.StringVar(&from, "switch-from", "", "the ConfigMaps whose changed settings it holds, comma-separated")
 	fl.StringVar(&o.Data, "data", "", "the directory the hostPath volumes go under")
@@ -145,13 +146,15 @@ func render(o options, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	onDocs, err := convert(o, o.On, pins, box, images)
-	if err != nil {
-		return err
-	}
-	switchDocs, err := split(o, offDocs, onDocs, w)
-	if err != nil {
-		return err
+	var switchDocs []doc
+	if o.SwitchStack != "" {
+		onDocs, err := convert(o, o.On, pins, box, images)
+		if err != nil {
+			return err
+		}
+		if switchDocs, err = split(o, offDocs, onDocs, w); err != nil {
+			return err
+		}
 	}
 	wait, err := waitImage(o, rel, pins, images)
 	if err != nil {
@@ -170,8 +173,10 @@ func render(o options, w io.Writer) error {
 			return err
 		}
 	}
-	if err := write(filepath.Join(o.Out, o.SwitchStack, o.SwitchStack+".yaml"), switchDocs); err != nil {
-		return err
+	if o.SwitchStack != "" {
+		if err := write(filepath.Join(o.Out, o.SwitchStack, o.SwitchStack+".yaml"), switchDocs); err != nil {
+			return err
+		}
 	}
 	list := make([]string, 0, len(images))
 	for im := range images {
