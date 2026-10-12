@@ -55,6 +55,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 350
     continue-on-error: ${{ matrix.leg == 'control' }}
+    # bash -eo pipefail, so a failing build or test isn't hidden by tee.
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:

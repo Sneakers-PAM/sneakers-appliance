@@ -102,9 +102,10 @@ func TestPhaseProblemsAreFound(t *testing.T) {
 	if p := phaseProblems(pods, true); len(p) != 1 || !strings.Contains(p[0], "phase 3") {
 		t.Fatalf("a missing phase: %v", p)
 	}
-	// Without phases nothing is ordered, but restarts still count.
+	// Without phases nothing is ordered and the services start at once, so
+	// one may restart until the database answers: only Ready counts.
 	pods, _ = readRealPods(strings.ReplaceAll(bad, "order=4", "order="))
-	if p := phaseProblems(pods, false); len(p) != 2 {
+	if p := phaseProblems(pods, false); len(p) != 1 || !strings.Contains(p[0], "sneakers-mcp-4f3 isn't Ready") {
 		t.Fatalf("without phases: %v", p)
 	}
 }
@@ -145,5 +146,19 @@ func TestPodsRestartedInPlaceAreFound(t *testing.T) {
 	after, _ = readRealPods(strings.ReplaceAll(realPodsLine, "2026-10-12T10:0", "2026-10-12T11:0"))
 	if got := podsKeptInPlace(before, after); len(got) != 0 {
 		t.Fatalf("new pods: %v", got)
+	}
+}
+
+// The report's lines are found by their literal prefix: a version's dots
+// are dots, and the last line wins.
+func TestTheLastLineIsFound(t *testing.T) {
+	console := "lab-hook: realci: rows running version=0.1.0-lab.realci.12 start=first a[x=1]\r\n" +
+		"lab-hook: realci: rows running version=0.1.0-lab.realci.12 start=clean a[x=2]\r\nlab-hook: other\n"
+	got := lastLine(console, "realci: rows running version=0.1.0-lab.realci.12 ")
+	if got != "realci: rows running version=0.1.0-lab.realci.12 start=clean a[x=2]" {
+		t.Fatalf("got %q", got)
+	}
+	if got := lastLine(console, "realci: rows running version=0.1.0-lab.realci.13 "); got != "" {
+		t.Fatalf("another version: %q", got)
 	}
 }

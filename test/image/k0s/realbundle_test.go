@@ -191,8 +191,8 @@ func (b *realBox) waitReport(version string, timeout time.Duration) (report, boo
 		time.Sleep(5 * time.Second)
 	}
 	console := b.vm.Console()
-	rows := lastLine(console, `realci: rows running version=`+regexp.QuoteMeta(version)+` `)
-	pods := lastLine(console, `realci: pods running version=`+regexp.QuoteMeta(version)+`: `)
+	rows := lastLine(console, "realci: rows running version="+version+" ")
+	pods := lastLine(console, "realci: pods running version="+version+": ")
 	var r report
 	var err error
 	if r.rows, err = readRealRows(rows); err != nil {
@@ -520,10 +520,9 @@ func readRealPods(line string) ([]realPod, error) {
 // data, identity, services, front.
 const phaseOrders = 4
 
-// phaseProblems checks the running pods: each Ready with no restarts,
-// every init container completed without a restart (a phase's wait-phase
-// among them), and,
-// for a phased product, every phase there and each pod started only once
+// phaseProblems checks the running pods: each Ready, every init container
+// completed without a restart (a phase's wait-phase among them), and,
+// for a phased product, no restarts, every phase there and each pod started only once
 // every pod of the phases before its own was Ready. A finished Job's pod
 // is left out.
 func phaseProblems(pods []realPod, phased bool) []string {
@@ -534,7 +533,7 @@ func phaseProblems(pods []realPod, phased bool) []string {
 			continue
 		}
 		for _, n := range p.restarts {
-			if n != 0 {
+			if phased && n != 0 {
 				out = append(out, fmt.Sprintf("%s restarted (%v)", p.name, p.restarts))
 				break
 			}
