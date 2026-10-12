@@ -305,6 +305,10 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		}
 		out.Product = append(out.Product, &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, Version: e.Version, Kind: "full", FileName: e.File, Size: e.Size, Bases: e.Bases, Needs: needs, Preferred: i == 0})
 	}
+	if e, ok := idx.ReinstallProduct(b, installed); ok {
+		out.ProductReinstall = &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, Version: e.Version, Kind: "full", FileName: e.File, Size: e.Size, Bases: e.Bases,
+			Note: "The installed version: a reinstall keeps the data and runs the same apply as an update."}
+	}
 	return out
 }
 

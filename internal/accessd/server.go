@@ -197,6 +197,7 @@ var shellMethods = map[string]bool{
 	accessv1connect.AccessServiceSetUpdateChannelProcedure:  true,
 	accessv1connect.AccessServiceCleanUpDiskProcedure:       true,
 	accessv1connect.AccessServiceResetProductProcedure:      true,
+	accessv1connect.AccessServiceReinstallProductProcedure:  true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceSetNetworkProcedure:       true,
 	accessv1connect.NetworkServiceConfirmNetworkProcedure:   true,
@@ -251,6 +252,11 @@ func (s *Server) caller(ctx context.Context, h http.Header, procedure string) (o
 // refuse is a refusal as the Connect error the shell reads.
 func refuse(err error) error {
 	return connect.NewError(connect.CodePermissionDenied, errors.New(codes.Describe(err)))
+}
+
+// refuseAs is refuse with the Connect code the refusal is.
+func refuseAs(c connect.Code, err error) error {
+	return connect.NewError(c, errors.New(codes.Describe(err)))
 }
 
 // connectDenied answers a Connect call with permission_denied.

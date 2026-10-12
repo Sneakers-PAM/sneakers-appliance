@@ -5186,6 +5186,115 @@ func (x *ResetProductResponse) GetResult() *v1.ResetProductResponse {
 	return nil
 }
 
+type ReinstallProductRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// totp_code is a new authenticator code, read at the command.
+	TotpCode string `protobuf:"bytes,1,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	// confirm is the installed version, as typed.
+	Confirm       string `protobuf:"bytes,2,opt,name=confirm,proto3" json:"confirm,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReinstallProductRequest) Reset() {
+	*x = ReinstallProductRequest{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[104]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReinstallProductRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReinstallProductRequest) ProtoMessage() {}
+
+func (x *ReinstallProductRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[104]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReinstallProductRequest.ProtoReflect.Descriptor instead.
+func (*ReinstallProductRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{104}
+}
+
+func (x *ReinstallProductRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *ReinstallProductRequest) GetConfirm() string {
+	if x != nil {
+		return x.Confirm
+	}
+	return ""
+}
+
+type ReinstallProductResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// version is the version reinstalled; source is where the bundle came
+	// from: staged, or the source FetchUpdate named (mirror, builtin or
+	// direct).
+	Version       string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Source        string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReinstallProductResponse) Reset() {
+	*x = ReinstallProductResponse{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[105]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReinstallProductResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReinstallProductResponse) ProtoMessage() {}
+
+func (x *ReinstallProductResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[105]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReinstallProductResponse.ProtoReflect.Descriptor instead.
+func (*ReinstallProductResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{105}
+}
+
+func (x *ReinstallProductResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ReinstallProductResponse) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
 var File_sneakers_appliance_access_v1_access_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
@@ -5470,13 +5579,19 @@ const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x18\n" +
 	"\aconfirm\x18\x02 \x01(\tR\aconfirm\"c\n" +
 	"\x14ResetProductResponse\x12K\n" +
-	"\x06result\x18\x01 \x01(\v23.sneakers.appliance.osadmin.v1.ResetProductResponseR\x06result*y\n" +
+	"\x06result\x18\x01 \x01(\v23.sneakers.appliance.osadmin.v1.ResetProductResponseR\x06result\"P\n" +
+	"\x17ReinstallProductRequest\x12\x1b\n" +
+	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x18\n" +
+	"\aconfirm\x18\x02 \x01(\tR\aconfirm\"L\n" +
+	"\x18ReinstallProductResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source*y\n" +
 	"\n" +
 	"SetupState\x12\x1b\n" +
 	"\x17SETUP_STATE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SETUP_STATE_NOT_STARTED\x10\x01\x12\x1b\n" +
 	"\x17SETUP_STATE_IN_PROGRESS\x10\x02\x12\x14\n" +
-	"\x10SETUP_STATE_DONE\x10\x032\xe3\r\n" +
+	"\x10SETUP_STATE_DONE\x10\x032\xe7\x0e\n" +
 	"\rAccessService\x12q\n" +
 	"\tGetStatus\x12..sneakers.appliance.access.v1.GetStatusRequest\x1a/.sneakers.appliance.access.v1.GetStatusResponse\"\x03\x90\x02\x01\x12t\n" +
 	"\n" +
@@ -5493,7 +5608,8 @@ const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\x10GetUpdateChannel\x125.sneakers.appliance.access.v1.GetUpdateChannelRequest\x1a6.sneakers.appliance.access.v1.GetUpdateChannelResponse\"\x03\x90\x02\x01\x12\x81\x01\n" +
 	"\x10SetUpdateChannel\x125.sneakers.appliance.access.v1.SetUpdateChannelRequest\x1a6.sneakers.appliance.access.v1.SetUpdateChannelResponse\x12r\n" +
 	"\vCleanUpDisk\x120.sneakers.appliance.access.v1.CleanUpDiskRequest\x1a1.sneakers.appliance.access.v1.CleanUpDiskResponse\x12u\n" +
-	"\fResetProduct\x121.sneakers.appliance.access.v1.ResetProductRequest\x1a2.sneakers.appliance.access.v1.ResetProductResponse2\xf1\x03\n" +
+	"\fResetProduct\x121.sneakers.appliance.access.v1.ResetProductRequest\x1a2.sneakers.appliance.access.v1.ResetProductResponse\x12\x81\x01\n" +
+	"\x10ReinstallProduct\x125.sneakers.appliance.access.v1.ReinstallProductRequest\x1a6.sneakers.appliance.access.v1.ReinstallProductResponse2\xf1\x03\n" +
 	"\x0eNetworkService\x12t\n" +
 	"\n" +
 	"GetNetwork\x12/.sneakers.appliance.access.v1.GetNetworkRequest\x1a0.sneakers.appliance.access.v1.GetNetworkResponse\"\x03\x90\x02\x01\x12o\n" +
@@ -5553,7 +5669,7 @@ func file_sneakers_appliance_access_v1_access_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_access_v1_access_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sneakers_appliance_access_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 104)
+var file_sneakers_appliance_access_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 106)
 var file_sneakers_appliance_access_v1_access_proto_goTypes = []any{
 	(SetupState)(0),                         // 0: sneakers.appliance.access.v1.SetupState
 	(*GetStatusRequest)(nil),                // 1: sneakers.appliance.access.v1.GetStatusRequest
@@ -5660,72 +5776,74 @@ var file_sneakers_appliance_access_v1_access_proto_goTypes = []any{
 	(*CleanUpDiskResponse)(nil),             // 102: sneakers.appliance.access.v1.CleanUpDiskResponse
 	(*ResetProductRequest)(nil),             // 103: sneakers.appliance.access.v1.ResetProductRequest
 	(*ResetProductResponse)(nil),            // 104: sneakers.appliance.access.v1.ResetProductResponse
-	(*v1.GetStatusResponse)(nil),            // 105: sneakers.appliance.osadmin.v1.GetStatusResponse
-	(*v1.Admin)(nil),                        // 106: sneakers.appliance.osadmin.v1.Admin
-	(v1.Role)(0),                            // 107: sneakers.appliance.osadmin.v1.Role
-	(*v1.Invitation)(nil),                   // 108: sneakers.appliance.osadmin.v1.Invitation
-	(*v1.Key)(nil),                          // 109: sneakers.appliance.osadmin.v1.Key
-	(*v1.RecoveryKey)(nil),                  // 110: sneakers.appliance.osadmin.v1.RecoveryKey
-	(*v11.Settings)(nil),                    // 111: sneakers.appliance.netd.v1.Settings
-	(*v1.GetSetupResponse)(nil),             // 112: sneakers.appliance.osadmin.v1.GetSetupResponse
-	(*v1.Elevation)(nil),                    // 113: sneakers.appliance.osadmin.v1.Elevation
-	(*timestamppb.Timestamp)(nil),           // 114: google.protobuf.Timestamp
-	(*v1.HostKey)(nil),                      // 115: sneakers.appliance.osadmin.v1.HostKey
-	(v1.SetupStepKind)(0),                   // 116: sneakers.appliance.osadmin.v1.SetupStepKind
-	(*v1.GetExposedValueResponse)(nil),      // 117: sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	(*v1.GetMcpResponse)(nil),               // 118: sneakers.appliance.osadmin.v1.GetMcpResponse
-	(*v1.UpgradePolicy)(nil),                // 119: sneakers.appliance.osadmin.v1.UpgradePolicy
-	(*v1.MirrorStatus)(nil),                 // 120: sneakers.appliance.osadmin.v1.MirrorStatus
-	(*v1.DiskCleanup)(nil),                  // 121: sneakers.appliance.osadmin.v1.DiskCleanup
-	(*v1.ResetProductResponse)(nil),         // 122: sneakers.appliance.osadmin.v1.ResetProductResponse
+	(*ReinstallProductRequest)(nil),         // 105: sneakers.appliance.access.v1.ReinstallProductRequest
+	(*ReinstallProductResponse)(nil),        // 106: sneakers.appliance.access.v1.ReinstallProductResponse
+	(*v1.GetStatusResponse)(nil),            // 107: sneakers.appliance.osadmin.v1.GetStatusResponse
+	(*v1.Admin)(nil),                        // 108: sneakers.appliance.osadmin.v1.Admin
+	(v1.Role)(0),                            // 109: sneakers.appliance.osadmin.v1.Role
+	(*v1.Invitation)(nil),                   // 110: sneakers.appliance.osadmin.v1.Invitation
+	(*v1.Key)(nil),                          // 111: sneakers.appliance.osadmin.v1.Key
+	(*v1.RecoveryKey)(nil),                  // 112: sneakers.appliance.osadmin.v1.RecoveryKey
+	(*v11.Settings)(nil),                    // 113: sneakers.appliance.netd.v1.Settings
+	(*v1.GetSetupResponse)(nil),             // 114: sneakers.appliance.osadmin.v1.GetSetupResponse
+	(*v1.Elevation)(nil),                    // 115: sneakers.appliance.osadmin.v1.Elevation
+	(*timestamppb.Timestamp)(nil),           // 116: google.protobuf.Timestamp
+	(*v1.HostKey)(nil),                      // 117: sneakers.appliance.osadmin.v1.HostKey
+	(v1.SetupStepKind)(0),                   // 118: sneakers.appliance.osadmin.v1.SetupStepKind
+	(*v1.GetExposedValueResponse)(nil),      // 119: sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	(*v1.GetMcpResponse)(nil),               // 120: sneakers.appliance.osadmin.v1.GetMcpResponse
+	(*v1.UpgradePolicy)(nil),                // 121: sneakers.appliance.osadmin.v1.UpgradePolicy
+	(*v1.MirrorStatus)(nil),                 // 122: sneakers.appliance.osadmin.v1.MirrorStatus
+	(*v1.DiskCleanup)(nil),                  // 123: sneakers.appliance.osadmin.v1.DiskCleanup
+	(*v1.ResetProductResponse)(nil),         // 124: sneakers.appliance.osadmin.v1.ResetProductResponse
 }
 var file_sneakers_appliance_access_v1_access_proto_depIdxs = []int32{
-	105, // 0: sneakers.appliance.access.v1.GetStatusResponse.status:type_name -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	106, // 1: sneakers.appliance.access.v1.ListAdminsResponse.admins:type_name -> sneakers.appliance.osadmin.v1.Admin
-	107, // 2: sneakers.appliance.access.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	106, // 3: sneakers.appliance.access.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
-	108, // 4: sneakers.appliance.access.v1.AddAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
-	109, // 5: sneakers.appliance.access.v1.ListKeysResponse.keys:type_name -> sneakers.appliance.osadmin.v1.Key
-	109, // 6: sneakers.appliance.access.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
-	110, // 7: sneakers.appliance.access.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	111, // 8: sneakers.appliance.access.v1.GetNetworkResponse.settings:type_name -> sneakers.appliance.netd.v1.Settings
-	111, // 9: sneakers.appliance.access.v1.SetNetworkRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
-	112, // 10: sneakers.appliance.access.v1.GetSetupResponse.setup:type_name -> sneakers.appliance.osadmin.v1.GetSetupResponse
-	110, // 11: sneakers.appliance.access.v1.SetRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	113, // 12: sneakers.appliance.access.v1.RequestElevationResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	113, // 13: sneakers.appliance.access.v1.ListElevationsResponse.elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	114, // 14: sneakers.appliance.access.v1.GetElevationCertificateResponse.valid_before:type_name -> google.protobuf.Timestamp
-	113, // 15: sneakers.appliance.access.v1.BeginElevatedSessionResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	114, // 16: sneakers.appliance.access.v1.BeginElevatedSessionResponse.ends:type_name -> google.protobuf.Timestamp
-	114, // 17: sneakers.appliance.access.v1.Enrolment.opened:type_name -> google.protobuf.Timestamp
-	114, // 18: sneakers.appliance.access.v1.Enrolment.idle_until:type_name -> google.protobuf.Timestamp
-	115, // 19: sneakers.appliance.access.v1.Enrolment.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
+	107, // 0: sneakers.appliance.access.v1.GetStatusResponse.status:type_name -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	108, // 1: sneakers.appliance.access.v1.ListAdminsResponse.admins:type_name -> sneakers.appliance.osadmin.v1.Admin
+	109, // 2: sneakers.appliance.access.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	108, // 3: sneakers.appliance.access.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
+	110, // 4: sneakers.appliance.access.v1.AddAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
+	111, // 5: sneakers.appliance.access.v1.ListKeysResponse.keys:type_name -> sneakers.appliance.osadmin.v1.Key
+	111, // 6: sneakers.appliance.access.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	112, // 7: sneakers.appliance.access.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	113, // 8: sneakers.appliance.access.v1.GetNetworkResponse.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	113, // 9: sneakers.appliance.access.v1.SetNetworkRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	114, // 10: sneakers.appliance.access.v1.GetSetupResponse.setup:type_name -> sneakers.appliance.osadmin.v1.GetSetupResponse
+	112, // 11: sneakers.appliance.access.v1.SetRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	115, // 12: sneakers.appliance.access.v1.RequestElevationResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	115, // 13: sneakers.appliance.access.v1.ListElevationsResponse.elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	116, // 14: sneakers.appliance.access.v1.GetElevationCertificateResponse.valid_before:type_name -> google.protobuf.Timestamp
+	115, // 15: sneakers.appliance.access.v1.BeginElevatedSessionResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	116, // 16: sneakers.appliance.access.v1.BeginElevatedSessionResponse.ends:type_name -> google.protobuf.Timestamp
+	116, // 17: sneakers.appliance.access.v1.Enrolment.opened:type_name -> google.protobuf.Timestamp
+	116, // 18: sneakers.appliance.access.v1.Enrolment.idle_until:type_name -> google.protobuf.Timestamp
+	117, // 19: sneakers.appliance.access.v1.Enrolment.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
 	52,  // 20: sneakers.appliance.access.v1.Enrolment.keys:type_name -> sneakers.appliance.access.v1.EnrolmentKey
 	51,  // 21: sneakers.appliance.access.v1.OpenEnrolmentResponse.enrolment:type_name -> sneakers.appliance.access.v1.Enrolment
 	51,  // 22: sneakers.appliance.access.v1.GetEnrolmentResponse.enrolment:type_name -> sneakers.appliance.access.v1.Enrolment
-	109, // 23: sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	111, // 23: sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
 	52,  // 24: sneakers.appliance.access.v1.OfferEnrolmentKeyResponse.key:type_name -> sneakers.appliance.access.v1.EnrolmentKey
 	52,  // 25: sneakers.appliance.access.v1.GetEnrolmentKeyResponse.key:type_name -> sneakers.appliance.access.v1.EnrolmentKey
 	0,   // 26: sneakers.appliance.access.v1.ConsoleInfo.state:type_name -> sneakers.appliance.access.v1.SetupState
-	114, // 27: sneakers.appliance.access.v1.ConsoleInfo.code_expires:type_name -> google.protobuf.Timestamp
-	114, // 28: sneakers.appliance.access.v1.ConsoleInfo.setup_started:type_name -> google.protobuf.Timestamp
-	116, // 29: sneakers.appliance.access.v1.ConsoleInfo.setup_step_kind:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
-	115, // 30: sneakers.appliance.access.v1.ConsoleInfo.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
+	116, // 27: sneakers.appliance.access.v1.ConsoleInfo.code_expires:type_name -> google.protobuf.Timestamp
+	116, // 28: sneakers.appliance.access.v1.ConsoleInfo.setup_started:type_name -> google.protobuf.Timestamp
+	118, // 29: sneakers.appliance.access.v1.ConsoleInfo.setup_step_kind:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
+	117, // 30: sneakers.appliance.access.v1.ConsoleInfo.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
 	72,  // 31: sneakers.appliance.access.v1.ConsoleInfo.recover:type_name -> sneakers.appliance.access.v1.RecoverAccess
-	114, // 32: sneakers.appliance.access.v1.ConsoleInfo.updated:type_name -> google.protobuf.Timestamp
-	114, // 33: sneakers.appliance.access.v1.RecoverAccess.expires:type_name -> google.protobuf.Timestamp
+	116, // 32: sneakers.appliance.access.v1.ConsoleInfo.updated:type_name -> google.protobuf.Timestamp
+	116, // 33: sneakers.appliance.access.v1.RecoverAccess.expires:type_name -> google.protobuf.Timestamp
 	71,  // 34: sneakers.appliance.access.v1.GetConsoleInfoResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
 	71,  // 35: sneakers.appliance.access.v1.WatchConsoleInfoResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
 	71,  // 36: sneakers.appliance.access.v1.ResetSetupCodeResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
 	72,  // 37: sneakers.appliance.access.v1.BeginRecoverAccessResponse.recover:type_name -> sneakers.appliance.access.v1.RecoverAccess
-	114, // 38: sneakers.appliance.access.v1.BeginRootShellResponse.expires:type_name -> google.protobuf.Timestamp
-	107, // 39: sneakers.appliance.access.v1.VerifyTotpResponse.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	117, // 40: sneakers.appliance.access.v1.GetExposedValueResponse.value:type_name -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	118, // 41: sneakers.appliance.access.v1.GetMcpResponse.mcp:type_name -> sneakers.appliance.osadmin.v1.GetMcpResponse
-	119, // 42: sneakers.appliance.access.v1.GetUpdateChannelResponse.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
-	120, // 43: sneakers.appliance.access.v1.GetUpdateChannelResponse.mirror_status:type_name -> sneakers.appliance.osadmin.v1.MirrorStatus
-	121, // 44: sneakers.appliance.access.v1.CleanUpDiskResponse.cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
-	122, // 45: sneakers.appliance.access.v1.ResetProductResponse.result:type_name -> sneakers.appliance.osadmin.v1.ResetProductResponse
+	116, // 38: sneakers.appliance.access.v1.BeginRootShellResponse.expires:type_name -> google.protobuf.Timestamp
+	109, // 39: sneakers.appliance.access.v1.VerifyTotpResponse.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	119, // 40: sneakers.appliance.access.v1.GetExposedValueResponse.value:type_name -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	120, // 41: sneakers.appliance.access.v1.GetMcpResponse.mcp:type_name -> sneakers.appliance.osadmin.v1.GetMcpResponse
+	121, // 42: sneakers.appliance.access.v1.GetUpdateChannelResponse.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
+	122, // 43: sneakers.appliance.access.v1.GetUpdateChannelResponse.mirror_status:type_name -> sneakers.appliance.osadmin.v1.MirrorStatus
+	123, // 44: sneakers.appliance.access.v1.CleanUpDiskResponse.cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
+	124, // 45: sneakers.appliance.access.v1.ResetProductResponse.result:type_name -> sneakers.appliance.osadmin.v1.ResetProductResponse
 	1,   // 46: sneakers.appliance.access.v1.AccessService.GetStatus:input_type -> sneakers.appliance.access.v1.GetStatusRequest
 	3,   // 47: sneakers.appliance.access.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.access.v1.ListAdminsRequest
 	5,   // 48: sneakers.appliance.access.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.access.v1.AddAdminRequest
@@ -5741,93 +5859,95 @@ var file_sneakers_appliance_access_v1_access_proto_depIdxs = []int32{
 	99,  // 58: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:input_type -> sneakers.appliance.access.v1.SetUpdateChannelRequest
 	101, // 59: sneakers.appliance.access.v1.AccessService.CleanUpDisk:input_type -> sneakers.appliance.access.v1.CleanUpDiskRequest
 	103, // 60: sneakers.appliance.access.v1.AccessService.ResetProduct:input_type -> sneakers.appliance.access.v1.ResetProductRequest
-	17,  // 61: sneakers.appliance.access.v1.NetworkService.GetNetwork:input_type -> sneakers.appliance.access.v1.GetNetworkRequest
-	19,  // 62: sneakers.appliance.access.v1.NetworkService.SetNetwork:input_type -> sneakers.appliance.access.v1.SetNetworkRequest
-	21,  // 63: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:input_type -> sneakers.appliance.access.v1.ConfirmNetworkRequest
-	23,  // 64: sneakers.appliance.access.v1.NetworkService.ResetAllowList:input_type -> sneakers.appliance.access.v1.ResetAllowListRequest
-	25,  // 65: sneakers.appliance.access.v1.SetupService.GetSetup:input_type -> sneakers.appliance.access.v1.GetSetupRequest
-	27,  // 66: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:input_type -> sneakers.appliance.access.v1.SetRecoveryKeyRequest
-	29,  // 67: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminRequest
-	31,  // 68: sneakers.appliance.access.v1.SetupService.Complete:input_type -> sneakers.appliance.access.v1.CompleteRequest
-	73,  // 69: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:input_type -> sneakers.appliance.access.v1.GetConsoleInfoRequest
-	75,  // 70: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:input_type -> sneakers.appliance.access.v1.WatchConsoleInfoRequest
-	77,  // 71: sneakers.appliance.access.v1.SetupService.ResetSetupCode:input_type -> sneakers.appliance.access.v1.ResetSetupCodeRequest
-	79,  // 72: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:input_type -> sneakers.appliance.access.v1.BeginRecoverAccessRequest
-	81,  // 73: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:input_type -> sneakers.appliance.access.v1.CancelRecoverAccessRequest
-	83,  // 74: sneakers.appliance.access.v1.ElevationService.BeginRootShell:input_type -> sneakers.appliance.access.v1.BeginRootShellRequest
-	85,  // 75: sneakers.appliance.access.v1.ElevationService.OpenRootShell:input_type -> sneakers.appliance.access.v1.OpenRootShellRequest
-	33,  // 76: sneakers.appliance.access.v1.ElevationService.RequestElevation:input_type -> sneakers.appliance.access.v1.RequestElevationRequest
-	35,  // 77: sneakers.appliance.access.v1.ElevationService.ListElevations:input_type -> sneakers.appliance.access.v1.ListElevationsRequest
-	37,  // 78: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:input_type -> sneakers.appliance.access.v1.GetElevationCertificateRequest
-	39,  // 79: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:input_type -> sneakers.appliance.access.v1.WithdrawElevationRequest
-	41,  // 80: sneakers.appliance.access.v1.ElevationService.ApproveElevation:input_type -> sneakers.appliance.access.v1.ApproveElevationRequest
-	43,  // 81: sneakers.appliance.access.v1.ElevationService.DenyElevation:input_type -> sneakers.appliance.access.v1.DenyElevationRequest
-	45,  // 82: sneakers.appliance.access.v1.ElevationService.TerminateElevation:input_type -> sneakers.appliance.access.v1.TerminateElevationRequest
-	47,  // 83: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:input_type -> sneakers.appliance.access.v1.BeginElevatedSessionRequest
-	49,  // 84: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:input_type -> sneakers.appliance.access.v1.EndElevatedSessionRequest
-	53,  // 85: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:input_type -> sneakers.appliance.access.v1.OpenEnrolmentRequest
-	55,  // 86: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:input_type -> sneakers.appliance.access.v1.GetEnrolmentRequest
-	57,  // 87: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:input_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyRequest
-	59,  // 88: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:input_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyRequest
-	61,  // 89: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:input_type -> sneakers.appliance.access.v1.CloseEnrolmentRequest
-	62,  // 90: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:input_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyRequest
-	65,  // 91: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:input_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeRequest
-	67,  // 92: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:input_type -> sneakers.appliance.access.v1.GetEnrolmentKeyRequest
-	87,  // 93: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:input_type -> sneakers.appliance.access.v1.VerifyTotpRequest
-	89,  // 94: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:input_type -> sneakers.appliance.access.v1.EndSshLoginRequest
-	69,  // 95: sneakers.appliance.access.v1.BindingService.GetBinding:input_type -> sneakers.appliance.access.v1.GetBindingRequest
-	2,   // 96: sneakers.appliance.access.v1.AccessService.GetStatus:output_type -> sneakers.appliance.access.v1.GetStatusResponse
-	4,   // 97: sneakers.appliance.access.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.access.v1.ListAdminsResponse
-	6,   // 98: sneakers.appliance.access.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.access.v1.AddAdminResponse
-	8,   // 99: sneakers.appliance.access.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.access.v1.RemoveAdminResponse
-	10,  // 100: sneakers.appliance.access.v1.AccessService.ListKeys:output_type -> sneakers.appliance.access.v1.ListKeysResponse
-	12,  // 101: sneakers.appliance.access.v1.AccessService.AddKey:output_type -> sneakers.appliance.access.v1.AddKeyResponse
-	14,  // 102: sneakers.appliance.access.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.access.v1.RemoveKeyResponse
-	16,  // 103: sneakers.appliance.access.v1.AccessService.AddRecoveryKey:output_type -> sneakers.appliance.access.v1.AddRecoveryKeyResponse
-	92,  // 104: sneakers.appliance.access.v1.AccessService.GetExposedValue:output_type -> sneakers.appliance.access.v1.GetExposedValueResponse
-	94,  // 105: sneakers.appliance.access.v1.AccessService.GetMcp:output_type -> sneakers.appliance.access.v1.GetMcpResponse
-	96,  // 106: sneakers.appliance.access.v1.AccessService.SetMcp:output_type -> sneakers.appliance.access.v1.SetMcpResponse
-	98,  // 107: sneakers.appliance.access.v1.AccessService.GetUpdateChannel:output_type -> sneakers.appliance.access.v1.GetUpdateChannelResponse
-	100, // 108: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:output_type -> sneakers.appliance.access.v1.SetUpdateChannelResponse
-	102, // 109: sneakers.appliance.access.v1.AccessService.CleanUpDisk:output_type -> sneakers.appliance.access.v1.CleanUpDiskResponse
-	104, // 110: sneakers.appliance.access.v1.AccessService.ResetProduct:output_type -> sneakers.appliance.access.v1.ResetProductResponse
-	18,  // 111: sneakers.appliance.access.v1.NetworkService.GetNetwork:output_type -> sneakers.appliance.access.v1.GetNetworkResponse
-	20,  // 112: sneakers.appliance.access.v1.NetworkService.SetNetwork:output_type -> sneakers.appliance.access.v1.SetNetworkResponse
-	22,  // 113: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:output_type -> sneakers.appliance.access.v1.ConfirmNetworkResponse
-	24,  // 114: sneakers.appliance.access.v1.NetworkService.ResetAllowList:output_type -> sneakers.appliance.access.v1.ResetAllowListResponse
-	26,  // 115: sneakers.appliance.access.v1.SetupService.GetSetup:output_type -> sneakers.appliance.access.v1.GetSetupResponse
-	28,  // 116: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:output_type -> sneakers.appliance.access.v1.SetRecoveryKeyResponse
-	30,  // 117: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminResponse
-	32,  // 118: sneakers.appliance.access.v1.SetupService.Complete:output_type -> sneakers.appliance.access.v1.CompleteResponse
-	74,  // 119: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:output_type -> sneakers.appliance.access.v1.GetConsoleInfoResponse
-	76,  // 120: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:output_type -> sneakers.appliance.access.v1.WatchConsoleInfoResponse
-	78,  // 121: sneakers.appliance.access.v1.SetupService.ResetSetupCode:output_type -> sneakers.appliance.access.v1.ResetSetupCodeResponse
-	80,  // 122: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:output_type -> sneakers.appliance.access.v1.BeginRecoverAccessResponse
-	82,  // 123: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:output_type -> sneakers.appliance.access.v1.CancelRecoverAccessResponse
-	84,  // 124: sneakers.appliance.access.v1.ElevationService.BeginRootShell:output_type -> sneakers.appliance.access.v1.BeginRootShellResponse
-	86,  // 125: sneakers.appliance.access.v1.ElevationService.OpenRootShell:output_type -> sneakers.appliance.access.v1.OpenRootShellResponse
-	34,  // 126: sneakers.appliance.access.v1.ElevationService.RequestElevation:output_type -> sneakers.appliance.access.v1.RequestElevationResponse
-	36,  // 127: sneakers.appliance.access.v1.ElevationService.ListElevations:output_type -> sneakers.appliance.access.v1.ListElevationsResponse
-	38,  // 128: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:output_type -> sneakers.appliance.access.v1.GetElevationCertificateResponse
-	40,  // 129: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:output_type -> sneakers.appliance.access.v1.WithdrawElevationResponse
-	42,  // 130: sneakers.appliance.access.v1.ElevationService.ApproveElevation:output_type -> sneakers.appliance.access.v1.ApproveElevationResponse
-	44,  // 131: sneakers.appliance.access.v1.ElevationService.DenyElevation:output_type -> sneakers.appliance.access.v1.DenyElevationResponse
-	46,  // 132: sneakers.appliance.access.v1.ElevationService.TerminateElevation:output_type -> sneakers.appliance.access.v1.TerminateElevationResponse
-	48,  // 133: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:output_type -> sneakers.appliance.access.v1.BeginElevatedSessionResponse
-	50,  // 134: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:output_type -> sneakers.appliance.access.v1.EndElevatedSessionResponse
-	54,  // 135: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:output_type -> sneakers.appliance.access.v1.OpenEnrolmentResponse
-	56,  // 136: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:output_type -> sneakers.appliance.access.v1.GetEnrolmentResponse
-	58,  // 137: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:output_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse
-	60,  // 138: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:output_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyResponse
-	64,  // 139: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:output_type -> sneakers.appliance.access.v1.CloseEnrolmentResponse
-	63,  // 140: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:output_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyResponse
-	66,  // 141: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:output_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeResponse
-	68,  // 142: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:output_type -> sneakers.appliance.access.v1.GetEnrolmentKeyResponse
-	88,  // 143: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:output_type -> sneakers.appliance.access.v1.VerifyTotpResponse
-	90,  // 144: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:output_type -> sneakers.appliance.access.v1.EndSshLoginResponse
-	70,  // 145: sneakers.appliance.access.v1.BindingService.GetBinding:output_type -> sneakers.appliance.access.v1.GetBindingResponse
-	96,  // [96:146] is the sub-list for method output_type
-	46,  // [46:96] is the sub-list for method input_type
+	105, // 61: sneakers.appliance.access.v1.AccessService.ReinstallProduct:input_type -> sneakers.appliance.access.v1.ReinstallProductRequest
+	17,  // 62: sneakers.appliance.access.v1.NetworkService.GetNetwork:input_type -> sneakers.appliance.access.v1.GetNetworkRequest
+	19,  // 63: sneakers.appliance.access.v1.NetworkService.SetNetwork:input_type -> sneakers.appliance.access.v1.SetNetworkRequest
+	21,  // 64: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:input_type -> sneakers.appliance.access.v1.ConfirmNetworkRequest
+	23,  // 65: sneakers.appliance.access.v1.NetworkService.ResetAllowList:input_type -> sneakers.appliance.access.v1.ResetAllowListRequest
+	25,  // 66: sneakers.appliance.access.v1.SetupService.GetSetup:input_type -> sneakers.appliance.access.v1.GetSetupRequest
+	27,  // 67: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:input_type -> sneakers.appliance.access.v1.SetRecoveryKeyRequest
+	29,  // 68: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminRequest
+	31,  // 69: sneakers.appliance.access.v1.SetupService.Complete:input_type -> sneakers.appliance.access.v1.CompleteRequest
+	73,  // 70: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:input_type -> sneakers.appliance.access.v1.GetConsoleInfoRequest
+	75,  // 71: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:input_type -> sneakers.appliance.access.v1.WatchConsoleInfoRequest
+	77,  // 72: sneakers.appliance.access.v1.SetupService.ResetSetupCode:input_type -> sneakers.appliance.access.v1.ResetSetupCodeRequest
+	79,  // 73: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:input_type -> sneakers.appliance.access.v1.BeginRecoverAccessRequest
+	81,  // 74: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:input_type -> sneakers.appliance.access.v1.CancelRecoverAccessRequest
+	83,  // 75: sneakers.appliance.access.v1.ElevationService.BeginRootShell:input_type -> sneakers.appliance.access.v1.BeginRootShellRequest
+	85,  // 76: sneakers.appliance.access.v1.ElevationService.OpenRootShell:input_type -> sneakers.appliance.access.v1.OpenRootShellRequest
+	33,  // 77: sneakers.appliance.access.v1.ElevationService.RequestElevation:input_type -> sneakers.appliance.access.v1.RequestElevationRequest
+	35,  // 78: sneakers.appliance.access.v1.ElevationService.ListElevations:input_type -> sneakers.appliance.access.v1.ListElevationsRequest
+	37,  // 79: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:input_type -> sneakers.appliance.access.v1.GetElevationCertificateRequest
+	39,  // 80: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:input_type -> sneakers.appliance.access.v1.WithdrawElevationRequest
+	41,  // 81: sneakers.appliance.access.v1.ElevationService.ApproveElevation:input_type -> sneakers.appliance.access.v1.ApproveElevationRequest
+	43,  // 82: sneakers.appliance.access.v1.ElevationService.DenyElevation:input_type -> sneakers.appliance.access.v1.DenyElevationRequest
+	45,  // 83: sneakers.appliance.access.v1.ElevationService.TerminateElevation:input_type -> sneakers.appliance.access.v1.TerminateElevationRequest
+	47,  // 84: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:input_type -> sneakers.appliance.access.v1.BeginElevatedSessionRequest
+	49,  // 85: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:input_type -> sneakers.appliance.access.v1.EndElevatedSessionRequest
+	53,  // 86: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:input_type -> sneakers.appliance.access.v1.OpenEnrolmentRequest
+	55,  // 87: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:input_type -> sneakers.appliance.access.v1.GetEnrolmentRequest
+	57,  // 88: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:input_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyRequest
+	59,  // 89: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:input_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyRequest
+	61,  // 90: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:input_type -> sneakers.appliance.access.v1.CloseEnrolmentRequest
+	62,  // 91: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:input_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyRequest
+	65,  // 92: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:input_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeRequest
+	67,  // 93: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:input_type -> sneakers.appliance.access.v1.GetEnrolmentKeyRequest
+	87,  // 94: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:input_type -> sneakers.appliance.access.v1.VerifyTotpRequest
+	89,  // 95: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:input_type -> sneakers.appliance.access.v1.EndSshLoginRequest
+	69,  // 96: sneakers.appliance.access.v1.BindingService.GetBinding:input_type -> sneakers.appliance.access.v1.GetBindingRequest
+	2,   // 97: sneakers.appliance.access.v1.AccessService.GetStatus:output_type -> sneakers.appliance.access.v1.GetStatusResponse
+	4,   // 98: sneakers.appliance.access.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.access.v1.ListAdminsResponse
+	6,   // 99: sneakers.appliance.access.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.access.v1.AddAdminResponse
+	8,   // 100: sneakers.appliance.access.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.access.v1.RemoveAdminResponse
+	10,  // 101: sneakers.appliance.access.v1.AccessService.ListKeys:output_type -> sneakers.appliance.access.v1.ListKeysResponse
+	12,  // 102: sneakers.appliance.access.v1.AccessService.AddKey:output_type -> sneakers.appliance.access.v1.AddKeyResponse
+	14,  // 103: sneakers.appliance.access.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.access.v1.RemoveKeyResponse
+	16,  // 104: sneakers.appliance.access.v1.AccessService.AddRecoveryKey:output_type -> sneakers.appliance.access.v1.AddRecoveryKeyResponse
+	92,  // 105: sneakers.appliance.access.v1.AccessService.GetExposedValue:output_type -> sneakers.appliance.access.v1.GetExposedValueResponse
+	94,  // 106: sneakers.appliance.access.v1.AccessService.GetMcp:output_type -> sneakers.appliance.access.v1.GetMcpResponse
+	96,  // 107: sneakers.appliance.access.v1.AccessService.SetMcp:output_type -> sneakers.appliance.access.v1.SetMcpResponse
+	98,  // 108: sneakers.appliance.access.v1.AccessService.GetUpdateChannel:output_type -> sneakers.appliance.access.v1.GetUpdateChannelResponse
+	100, // 109: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:output_type -> sneakers.appliance.access.v1.SetUpdateChannelResponse
+	102, // 110: sneakers.appliance.access.v1.AccessService.CleanUpDisk:output_type -> sneakers.appliance.access.v1.CleanUpDiskResponse
+	104, // 111: sneakers.appliance.access.v1.AccessService.ResetProduct:output_type -> sneakers.appliance.access.v1.ResetProductResponse
+	106, // 112: sneakers.appliance.access.v1.AccessService.ReinstallProduct:output_type -> sneakers.appliance.access.v1.ReinstallProductResponse
+	18,  // 113: sneakers.appliance.access.v1.NetworkService.GetNetwork:output_type -> sneakers.appliance.access.v1.GetNetworkResponse
+	20,  // 114: sneakers.appliance.access.v1.NetworkService.SetNetwork:output_type -> sneakers.appliance.access.v1.SetNetworkResponse
+	22,  // 115: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:output_type -> sneakers.appliance.access.v1.ConfirmNetworkResponse
+	24,  // 116: sneakers.appliance.access.v1.NetworkService.ResetAllowList:output_type -> sneakers.appliance.access.v1.ResetAllowListResponse
+	26,  // 117: sneakers.appliance.access.v1.SetupService.GetSetup:output_type -> sneakers.appliance.access.v1.GetSetupResponse
+	28,  // 118: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:output_type -> sneakers.appliance.access.v1.SetRecoveryKeyResponse
+	30,  // 119: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminResponse
+	32,  // 120: sneakers.appliance.access.v1.SetupService.Complete:output_type -> sneakers.appliance.access.v1.CompleteResponse
+	74,  // 121: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:output_type -> sneakers.appliance.access.v1.GetConsoleInfoResponse
+	76,  // 122: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:output_type -> sneakers.appliance.access.v1.WatchConsoleInfoResponse
+	78,  // 123: sneakers.appliance.access.v1.SetupService.ResetSetupCode:output_type -> sneakers.appliance.access.v1.ResetSetupCodeResponse
+	80,  // 124: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:output_type -> sneakers.appliance.access.v1.BeginRecoverAccessResponse
+	82,  // 125: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:output_type -> sneakers.appliance.access.v1.CancelRecoverAccessResponse
+	84,  // 126: sneakers.appliance.access.v1.ElevationService.BeginRootShell:output_type -> sneakers.appliance.access.v1.BeginRootShellResponse
+	86,  // 127: sneakers.appliance.access.v1.ElevationService.OpenRootShell:output_type -> sneakers.appliance.access.v1.OpenRootShellResponse
+	34,  // 128: sneakers.appliance.access.v1.ElevationService.RequestElevation:output_type -> sneakers.appliance.access.v1.RequestElevationResponse
+	36,  // 129: sneakers.appliance.access.v1.ElevationService.ListElevations:output_type -> sneakers.appliance.access.v1.ListElevationsResponse
+	38,  // 130: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:output_type -> sneakers.appliance.access.v1.GetElevationCertificateResponse
+	40,  // 131: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:output_type -> sneakers.appliance.access.v1.WithdrawElevationResponse
+	42,  // 132: sneakers.appliance.access.v1.ElevationService.ApproveElevation:output_type -> sneakers.appliance.access.v1.ApproveElevationResponse
+	44,  // 133: sneakers.appliance.access.v1.ElevationService.DenyElevation:output_type -> sneakers.appliance.access.v1.DenyElevationResponse
+	46,  // 134: sneakers.appliance.access.v1.ElevationService.TerminateElevation:output_type -> sneakers.appliance.access.v1.TerminateElevationResponse
+	48,  // 135: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:output_type -> sneakers.appliance.access.v1.BeginElevatedSessionResponse
+	50,  // 136: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:output_type -> sneakers.appliance.access.v1.EndElevatedSessionResponse
+	54,  // 137: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:output_type -> sneakers.appliance.access.v1.OpenEnrolmentResponse
+	56,  // 138: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:output_type -> sneakers.appliance.access.v1.GetEnrolmentResponse
+	58,  // 139: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:output_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse
+	60,  // 140: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:output_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyResponse
+	64,  // 141: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:output_type -> sneakers.appliance.access.v1.CloseEnrolmentResponse
+	63,  // 142: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:output_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyResponse
+	66,  // 143: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:output_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeResponse
+	68,  // 144: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:output_type -> sneakers.appliance.access.v1.GetEnrolmentKeyResponse
+	88,  // 145: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:output_type -> sneakers.appliance.access.v1.VerifyTotpResponse
+	90,  // 146: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:output_type -> sneakers.appliance.access.v1.EndSshLoginResponse
+	70,  // 147: sneakers.appliance.access.v1.BindingService.GetBinding:output_type -> sneakers.appliance.access.v1.GetBindingResponse
+	97,  // [97:148] is the sub-list for method output_type
+	46,  // [46:97] is the sub-list for method input_type
 	46,  // [46:46] is the sub-list for extension type_name
 	46,  // [46:46] is the sub-list for extension extendee
 	0,   // [0:46] is the sub-list for field type_name
@@ -5845,7 +5965,7 @@ func file_sneakers_appliance_access_v1_access_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_access_v1_access_proto_rawDesc), len(file_sneakers_appliance_access_v1_access_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   104,
+			NumMessages:   106,
 			NumExtensions: 0,
 			NumServices:   7,
 		},

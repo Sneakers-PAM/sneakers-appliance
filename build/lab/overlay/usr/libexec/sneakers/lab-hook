@@ -94,7 +94,18 @@ if /usr/bin/watch --version && [ -f /usr/share/terminfo/x/xterm ] && [ -f /usr/s
 # waits here quietly.
 data=/var/lib/sneakers-data
 say "product data: $(cat "$data/lab-db/written" 2>/dev/null || echo none)"
-until [ ! -e "$product/bundle.json" ]; do sleep 5; done
+# A reinstall of the same version (`sneakers reinstall`) moves current to
+# the other slot and keeps the data: once the box runs again from it, the
+# marker and the phased pods' restarts.
+slot="$(cd -P "$product" 2>/dev/null && pwd)"
+while [ -e "$product/bundle.json" ]; do
+  now="$(cd -P "$product" 2>/dev/null && pwd)"
+  if [ -n "$now" ] && [ "$now" != "$slot" ] && box_running 127.0.0.1 9180; then
+    slot="$now"
+    say "after the reinstall of the same version: product data: $(cat "$data/lab-db/written" 2>/dev/null || echo none) restarts: $(k get pods -A -l sneakers-appliance/phase -o jsonpath='{range .items[*]}{.status.containerStatuses[0].restartCount}{" "}{end}')"
+  fi
+  sleep 5
+done
 staged="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' /var/lib/sneakers/product/staged/bundle.json 2>/dev/null)"
 links=""
 for l in /var/lib/k0s/images/*.tar; do

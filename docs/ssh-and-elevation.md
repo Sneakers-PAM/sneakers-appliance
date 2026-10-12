@@ -226,8 +226,8 @@ product adds its own commands in a group named after it, listed by `help` under 
 product's name from the current product slot's header (`/var/lib/sneakers/product/current/bundle.json`,
 the `<name>-product` header name without `-product`) when the login starts. With no product
 installed there is no group: nothing in `help` or completion names a product command, and `mcp` or
-`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, `reset` (owners only) and
-the product's exposed values.
+`sneakers mcp` is `SHELL_UNKNOWN`. Today the product group holds `mcp`, `reset` and `reinstall`
+(owners only) and the product's exposed values.
 
 ### The update channel
 
@@ -330,6 +330,18 @@ under the sign-in lockout; a wrong or reused code is `ACCESS_CREDENTIALS`, a mis
 name `ACCESS_CONFIRM`. The reset finishes even if the SSH session ends, and once it's done the
 session's product commands go, as they do for a login with no product installed. It's audited as
 `product.reset` ([os-audit.md](os-audit.md)).
+
+### Reinstalling the product
+
+`<product> reinstall` (`sneakers reinstall`) installs the installed version again from a fresh copy
+of its bundle and keeps the product's data, for a broken install or a damaged product slot
+([upgrades.md](upgrades.md#reinstalling-the-installed-version)). It's an owner's, over SSH; it asks
+for the installed version typed and a new authenticator code (without echo, out of recall). accessd
+takes a staged bundle of that version, or has the box fetch it from its update source and verify
+and stage it (`NOT_AVAILABLE` when the source doesn't have it: upload it on Updates and stage it,
+then run it again), then applies it like an update, each step as osadmin's own method run as the
+login's admin. It answers once the product has restarted; status or the Product card says when
+it's ready.
 
 ## The root shell
 

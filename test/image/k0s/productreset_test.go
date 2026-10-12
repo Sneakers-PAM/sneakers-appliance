@@ -29,9 +29,12 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/test/image/harness"
 )
 
-// The product reset (docs/upgrades.md#removing-the-product): a lab box set
-// up the whole way gets the lab product, whose data stand-in writes its
-// marker under /var/lib/sneakers-data. `sneakers reset` over SSH, as the
+// The product reinstall and reset (docs/upgrades.md#reinstalling-the-installed-version,
+// #removing-the-product): a lab box set up the whole way gets the lab
+// product, whose data stand-in writes its marker under
+// /var/lib/sneakers-data. `sneakers reinstall` of the same version keeps
+// the data and the setup token, with new pods that never restarted.
+// `sneakers reset` over SSH, as the
 // owner with a new authenticator code and the product's name typed, takes
 // the product away: its data and image links are gone, the bundle is kept
 // as the staged one, and the box's admins, key, :8443 certificate,
@@ -81,10 +84,29 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 	first := dataMarker(t, box.Expect(`lab-hook: product data: \S+`, 10*time.Minute))
 	tokenBefore := setupToken(ctx, t, sshPort, alice)
 
+	// A reinstall of the same version, over SSH from the staged bundle:
+	// the same data, new pods that never restarted, the same setup token.
+	adm = signIn(t, adminPort, alice)
+	adm.call(t, "UpgradeService/StageUpdate", map[string]any{"uploadId": adm.upload(t, bundle)}, &staged)
+	if out := answerOverSSH(ctx, t, sshPort, alice, staged.Package.Version, "sneakers", "reinstall"); !strings.Contains(out, "is reinstalled from the staged bundle") {
+		t.Fatalf("the reinstall's answer:\n%s", out)
+	}
+	re := regexp.MustCompile(`lab-hook: after the reinstall of the same version: product data: (\S+) restarts: ([\d ]*)`).FindStringSubmatch(
+		box.Expect(`lab-hook: after the reinstall of the same version: .*`, 30*time.Minute))
+	if re == nil || re[1] != first || strings.Trim(strings.ReplaceAll(re[2], "0", ""), " ") != "" || strings.TrimSpace(re[2]) == "" {
+		t.Fatalf("after the reinstall: %v (the data before: %s)", re, first)
+	}
+	if tok := setupToken(ctx, t, sshPort, alice); tok != tokenBefore {
+		t.Fatal("the reinstall made a new setup token; it keeps the box's secrets")
+	}
+	if e := auditEntry(t, adm, "product.reinstall"); e.Actor != "alice" || e.Outcome != "ok" {
+		t.Fatalf("the reinstall's audit entry: %+v", e)
+	}
+
 	before := boxSettings(ctx, t, sshPort, adminPort, alice)
 
 	// The reset, the answers typed as the closed shell asks for them.
-	out := resetOverSSH(ctx, t, sshPort, alice)
+	out := answerOverSSH(ctx, t, sshPort, alice, "sneakers", "sneakers", "reset")
 	removed := regexp.MustCompile(`Sneakers \S+ is removed: (\d+) namespaces and (\d+) objects from k0s, and (\S+ \S+) of data`).FindStringSubmatch(out)
 	if removed == nil || removed[1] == "0" || removed[2] == "0" || removed[3] == "0 B" {
 		t.Fatalf("the reset's answer:\n%s", out)
@@ -240,13 +262,13 @@ func (l *lockedBuffer) String() string {
 	return l.b.String()
 }
 
-// resetOverSSH runs `sneakers reset` as alice and answers it as it asks:
-// the login's code, the product's name, then a new code for the reset.
-func resetOverSSH(ctx context.Context, t *testing.T, port int, alice *lab) string {
+// answerOverSSH runs command as alice and answers it as it asks: the
+// login's code, the confirm word, then a new code for the command itself.
+func answerOverSSH(ctx context.Context, t *testing.T, port int, alice *lab, confirm string, command ...string) string {
 	t.Helper()
-	args := []string{"-p", fmt.Sprint(port), "-i", alice.key, "-o", "CertificateFile=" + alice.key + "-cert.pub", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
+	args := append([]string{"-p", fmt.Sprint(port), "-i", alice.key, "-o", "CertificateFile=" + alice.key + "-cert.pub", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes",
 		"-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "LogLevel=ERROR", "-o", "ConnectTimeout=10",
-		"alice@127.0.0.1", "sneakers", "reset"}
+		"alice@127.0.0.1"}, command...)
 	cmd := exec.CommandContext(ctx, "ssh", args...) // #nosec G204 -- test-only
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -263,19 +285,19 @@ func resetOverSSH(ctx context.Context, t *testing.T, port int, alice *lab) strin
 		for !strings.Contains(out.String(), prompt) {
 			if time.Now().After(deadline) {
 				_ = cmd.Process.Kill()
-				t.Fatalf("no %q from the reset:\n%s", prompt, out.String())
+				t.Fatalf("no %q from %s:\n%s", prompt, strings.Join(command, " "), out.String())
 			}
 			time.Sleep(200 * time.Millisecond)
 		}
 	}
 	_, _ = io.WriteString(in, alice.code()+"\n")
 	waitFor("to confirm: ")
-	_, _ = io.WriteString(in, "sneakers\n")
+	_, _ = io.WriteString(in, confirm+"\n")
 	waitFor("New authenticator code: ")
 	_, _ = io.WriteString(in, alice.code()+"\n")
 	_ = in.Close()
 	if err := cmd.Wait(); err != nil {
-		t.Fatalf("sneakers reset: %v:\n%s", err, out.String())
+		t.Fatalf("%s: %v:\n%s", strings.Join(command, " "), err, out.String())
 	}
 	return out.String()
 }

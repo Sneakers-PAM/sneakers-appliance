@@ -103,6 +103,9 @@ const (
 	// AccessServiceResetProductProcedure is the fully-qualified name of the AccessService's
 	// ResetProduct RPC.
 	AccessServiceResetProductProcedure = "/sneakers.appliance.access.v1.AccessService/ResetProduct"
+	// AccessServiceReinstallProductProcedure is the fully-qualified name of the AccessService's
+	// ReinstallProduct RPC.
+	AccessServiceReinstallProductProcedure = "/sneakers.appliance.access.v1.AccessService/ReinstallProduct"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -253,6 +256,12 @@ type AccessServiceClient interface {
 	// owner and give a new authenticator code. It's the only way to the
 	// reset: :8443 and the console are refused.
 	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
+	// ReinstallProduct is the closed shell's "<product> reinstall": it takes
+	// a staged bundle of the installed version, or fetches and stages it
+	// from the box's update source, then applies it, each step as osadmin's
+	// UpgradeService method run as the login's admin (an owner, with a new
+	// authenticator code for the apply). The data is kept.
+	ReinstallProduct(context.Context, *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -361,6 +370,12 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("ResetProduct")),
 			connect.WithClientOptions(opts...),
 		),
+		reinstallProduct: connect.NewClient[v1.ReinstallProductRequest, v1.ReinstallProductResponse](
+			httpClient,
+			baseURL+AccessServiceReinstallProductProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("ReinstallProduct")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -381,6 +396,7 @@ type accessServiceClient struct {
 	setUpdateChannel *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
 	cleanUpDisk      *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
 	resetProduct     *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
+	reinstallProduct *connect.Client[v1.ReinstallProductRequest, v1.ReinstallProductResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -460,6 +476,11 @@ func (c *accessServiceClient) ResetProduct(ctx context.Context, req *connect.Req
 	return c.resetProduct.CallUnary(ctx, req)
 }
 
+// ReinstallProduct calls sneakers.appliance.access.v1.AccessService.ReinstallProduct.
+func (c *accessServiceClient) ReinstallProduct(ctx context.Context, req *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error) {
+	return c.reinstallProduct.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -506,6 +527,12 @@ type AccessServiceHandler interface {
 	// owner and give a new authenticator code. It's the only way to the
 	// reset: :8443 and the console are refused.
 	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
+	// ReinstallProduct is the closed shell's "<product> reinstall": it takes
+	// a staged bundle of the installed version, or fetches and stages it
+	// from the box's update source, then applies it, each step as osadmin's
+	// UpgradeService method run as the login's admin (an owner, with a new
+	// authenticator code for the apply). The data is kept.
+	ReinstallProduct(context.Context, *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -610,6 +637,12 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("ResetProduct")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceReinstallProductHandler := connect.NewUnaryHandler(
+		AccessServiceReinstallProductProcedure,
+		svc.ReinstallProduct,
+		connect.WithSchema(accessServiceMethods.ByName("ReinstallProduct")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -642,6 +675,8 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceCleanUpDiskHandler.ServeHTTP(w, r)
 		case AccessServiceResetProductProcedure:
 			accessServiceResetProductHandler.ServeHTTP(w, r)
+		case AccessServiceReinstallProductProcedure:
+			accessServiceReinstallProductHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -709,6 +744,10 @@ func (UnimplementedAccessServiceHandler) CleanUpDisk(context.Context, *connect.R
 
 func (UnimplementedAccessServiceHandler) ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.ResetProduct is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) ReinstallProduct(context.Context, *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.ReinstallProduct is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

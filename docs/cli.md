@@ -28,6 +28,7 @@ Its commands:
 
 - `<product> <value>`: <Value label> (shown to the roles the product names)
 - `<product> mcp`: Show or set the MCP switch, the one the MCP card on :8443 sets
+- `<product> reinstall`: Install the installed version again, keeping its data (an owner, with a new authenticator code)
 - `<product> reset`: Remove the installed product and its data (an owner, with a new authenticator code)
 
 Example:
@@ -35,6 +36,7 @@ Example:
 ```text
   <product> <value>
   <product> mcp
+  <product> reinstall
   <product> reset
 ```
 
@@ -74,6 +76,24 @@ Example:
   <product> mcp
   <product> mcp on
   <product> mcp off machine-api=off
+```
+
+## `<product> reinstall`
+
+Install the installed version again, keeping its data (an owner, with a new authenticator code).
+
+Installs the version that's installed again, from a fresh copy of its bundle, and keeps all of the product's data: for a broken install or a damaged product slot. A staged bundle of the installed version is used as it is; otherwise the box fetches it from its update source and verifies it (signature, channel, SHA-256), as Updates on :8443 does. It's then applied like an update: the product stops in order and comes up phase by phase, and Revert on Updates goes back to the copy it replaced. Type the installed version to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.reinstall.
+
+Offered over: SSH.
+
+```text
+<product> reinstall
+```
+
+Example:
+
+```text
+  <product> reinstall
 ```
 
 ## `<product> reset`

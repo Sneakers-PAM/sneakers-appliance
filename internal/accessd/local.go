@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/netip"
+	"strings"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
@@ -138,6 +139,61 @@ func (h *accessH) ResetProduct(ctx context.Context, r *connect.Request[accessv1.
 	}
 	h.s.o.Logger.Info("accessd: the product was reset from the shell", log.F("product", out.GetProduct()), log.F("objects", out.GetObjects()), log.F("bytes", out.GetBytesRemoved()))
 	return connect.NewResponse(&accessv1.ResetProductResponse{Result: out}), nil
+}
+
+// ReinstallProduct is the closed shell's "<product> reinstall": the
+// installed version again, keeping the data. A staged bundle of that
+// version is used as it is; otherwise the box's update source must offer
+// it, and it's fetched and staged. Then it's applied like an update, with
+// the code the shell read. Every step is osadmin's own method, run as the
+// login's admin, so it's checked and audited as on :8443.
+func (h *accessH) ReinstallProduct(ctx context.Context, r *connect.Request[accessv1.ReinstallProductRequest]) (*connect.Response[accessv1.ReinstallProductResponse], error) {
+	l, err := h.s.caller(ctx, r.Header(), accessv1connect.AccessServiceReinstallProductProcedure)
+	if err != nil {
+		return nil, err
+	}
+	if l.Admin != "" {
+		st := h.s.store.Read()
+		if a, ok := st.Admin(l.Admin); !ok || a.Role != access.RoleOwner {
+			return nil, refuse(codes.New(codes.AccessForbidden, "only an owner may reinstall the product"))
+		}
+	}
+	up, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceGetUpgradesProcedure, h.s.h.Upgrade.GetUpgrades, &osadminv1.GetUpgradesRequest{})
+	if err != nil {
+		return nil, err
+	}
+	v := up.GetProduct().GetInstalledVersion()
+	if v == "" {
+		return nil, refuseAs(connect.CodeFailedPrecondition, codes.New(codes.ProductNotInstalled, "no product is installed, so there's nothing to reinstall; install it from the Product card on Updates"))
+	}
+	if strings.TrimSpace(r.Msg.GetConfirm()) != v {
+		return nil, refuseAs(connect.CodeInvalidArgument, codes.New(codes.AccessConfirm, "type %s, the installed version, to confirm", v))
+	}
+	source := "staged"
+	if up.GetProduct().GetStagedVersion() != v {
+		check, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceCheckUpdatesProcedure, h.s.h.Upgrade.CheckUpdates, &osadminv1.CheckUpdatesRequest{})
+		if err != nil {
+			return nil, err
+		}
+		offer := check.GetProductReinstall()
+		if offer == nil {
+			return nil, refuseAs(connect.CodeFailedPrecondition, codes.New(codes.NotAvailable, "the update source has no %s for this box; upload its bundle on Updates, stage it, and run reinstall again", v))
+		}
+		f, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceFetchUpdateProcedure, h.s.h.Upgrade.FetchUpdate, &osadminv1.FetchUpdateRequest{FileName: offer.GetFileName()})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceStageUpdateProcedure, h.s.h.Upgrade.StageUpdate, &osadminv1.StageUpdateRequest{UploadId: f.GetUploadId()}); err != nil {
+			return nil, err
+		}
+		source = f.GetSource()
+	}
+	if _, err := runAs(ctx, h.s, l, osadminv1connect.UpgradeServiceApplyUpdateProcedure, h.s.h.Upgrade.ApplyUpdate,
+		&osadminv1.ApplyUpdateRequest{Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, TotpCode: r.Msg.GetTotpCode()}); err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("accessd: the product was reinstalled from the shell", log.F("admin", l.Admin), log.F("version", v), log.F("source", source))
+	return connect.NewResponse(&accessv1.ReinstallProductResponse{Version: v, Source: source}), nil
 }
 
 func (h *accessH) AddAdmin(ctx context.Context, r *connect.Request[accessv1.AddAdminRequest]) (*connect.Response[accessv1.AddAdminResponse], error) {

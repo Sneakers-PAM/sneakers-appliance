@@ -530,7 +530,7 @@ does:
 | | Base update | Product bundle |
 |---|---|---|
 | Slots | the two root partitions and the ESP entries | `/var/lib/sneakers/product/a` and `b` on the state volume, with the links `current`, `staged` and `previous` |
-| Stage | `Image.Stage` writes the inactive root, unless the installed product's base range doesn't include it (below) | the bundle must fit the running base, inside its `min_base` to `max_base` range (`UPGRADE_PRODUCT_BASE`, refused before it's decrypted, naming the range and the running base) and be newer than the installed product (`UPGRADE_DOWNGRADE`); it's unpacked into the slot `current` doesn't name, checked (k0s, the images and their signatures against its `release.yaml`, `KIT_BUNDLE_MISMATCH` or `KIT_IMAGE_UNSIGNED`), and only then linked as `staged`; the upload is removed |
+| Stage | `Image.Stage` writes the inactive root, unless the installed product's base range doesn't include it (below) | the bundle must fit the running base, inside its `min_base` to `max_base` range (`UPGRADE_PRODUCT_BASE`, refused before it's decrypted, naming the range and the running base) and be no older than the installed product (`UPGRADE_DOWNGRADE`; the installed version itself is a reinstall, [below](#reinstalling-the-installed-version)); it's unpacked into the slot `current` doesn't name, checked (k0s, the images and their signatures against its `release.yaml`, `KIT_BUNDLE_MISMATCH` or `KIT_IMAGE_UNSIGNED`), and only then linked as `staged`; the upload is removed |
 | Apply | activates the release and reboots | `ApplyUpdate` with `target: UPDATE_TARGET_PRODUCT` moves `current` to the staged slot (the old one becomes `previous`), restarts k0s through init's Services API and opens 80 and 443 on the service interface; no reboot |
 | Revert | `Image.Rollback` and a reboot | `RevertUpdate` with `target: UPDATE_TARGET_PRODUCT` moves `current` back to `previous` and restarts k0s (`UPGRADE_NO_PREVIOUS` when there is none) |
 
@@ -569,6 +569,28 @@ default) lets the box fetch from the release source when no mirror is set or the
 kept in `/var/lib/sneakers/osadmin-api/upgrade-policy.json`. **The history** of every fetch, stage, apply
 and revert, with its outcome and code, is in `/var/lib/sneakers/osadmin-api/upgrade-history.jsonl` and
 on the page, newest first.
+
+### Reinstalling the installed version
+
+A broken install or a damaged product slot is repaired by installing the version that's installed
+again, from a fresh copy of its bundle, and the product keeps its data. When the update source has
+the installed version for the box, `CheckUpdates` answers it as `product_reinstall` (apart from
+the newer versions in `product`), and the Product card offers "Reinstall <version>": it's fetched,
+verified (signature, channel, SHA-256) and staged into the free slot like any bundle, and an
+uploaded bundle of the installed version stages the same way. Apply then runs the usual product
+apply: the product stops in order, the slots switch, k0s restarts and the phases come up one at a
+time, so the replaced slot is the `previous` one and Revert goes back to it. It's an owner's, with
+the version typed and a new authenticator code, as for any apply; the history lists it as
+`reinstall`, and the OS audit log has `product.reinstall` beside the apply's `upgrade.apply`. A
+version older than the installed one is still refused (`UPGRADE_DOWNGRADE`). The update window
+never applies a reinstall, nor the bundle a [product reset](#removing-the-product) kept: both wait
+for an owner.
+
+The closed shell's `sneakers reinstall` does the same over SSH
+([ssh-and-elevation.md](ssh-and-elevation.md#reinstalling-the-product)): it takes a staged bundle
+of the installed version as it is, or fetches and stages it from the update source, then applies
+it with the code it read. After `sneakers reset` there's nothing installed to reinstall: Apply on
+the Product card installs the kept bundle, as a first install.
 
 ## Removing the product
 

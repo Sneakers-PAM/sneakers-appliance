@@ -146,6 +146,22 @@ func (idx Index) offerProducts(arch, channel, base, installed string, pre bool) 
 	return slices.CompactFunc(out, func(a, b IndexEntry) bool { return a.Version == b.Version })
 }
 
+// ReinstallProduct is the index's entry for the installed product version
+// itself, when it has one for b's architecture and channel that fits its
+// Base OS: what a reinstall fetches. OfferProducts never lists it.
+func (idx Index) ReinstallProduct(b Box, installed string) (IndexEntry, bool) {
+	if installed == "" {
+		return IndexEntry{}, false
+	}
+	for _, e := range idx.Products {
+		h := Header{Format: Format, Name: NameProduct, Version: e.Version, Arch: e.Arch, Kind: KindProduct, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel}
+		if e.Version == installed && h.check() == nil && e.Arch == b.Arch && e.Channel == b.Channel && NamedFor(h, e.File) && h.AppliesTo(b.BaseOS) == nil {
+			return e, true
+		}
+	}
+	return IndexEntry{}, false
+}
+
 // Add puts h's entry in its section: products, baseOS, baseWeb, or for a
 // header from before the units, base. The index is then format 2.
 func (idx *Index) Add(h Header, size int64) {

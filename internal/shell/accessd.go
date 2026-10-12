@@ -67,7 +67,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -125,6 +125,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.diskCleanup(ctx)
 	case "product.reset":
 		res, err = s.productReset(ctx, r.Args[0], r.Args[1])
+	case "product.reinstall":
+		res, err = s.productReinstall(ctx, r.Args[0], r.Args[1])
 	default:
 		return Result{}, false, nil
 	}
@@ -291,6 +293,27 @@ func (s *Services) productReset(ctx context.Context, confirm, code string) (Resu
 	}
 	return Result{Text: b.String(), Data: map[string]any{"product": m.GetProduct(), "version": m.GetVersion(), "namespaces": m.GetNamespaces(), "objects": m.GetObjects(),
 		"bytesRemoved": m.GetBytesRemoved(), "stagedVersion": m.GetStagedVersion()}}, nil
+}
+
+// productReinstall installs the installed version again, through the
+// reset's long client when there is one: a fetch takes minutes.
+func (s *Services) productReinstall(ctx context.Context, confirm, code string) (Result, error) {
+	c := s.Access
+	if s.Reset != nil {
+		c = s.Reset
+	}
+	out, err := c.ReinstallProduct(ctx, connect.NewRequest(&accessv1.ReinstallProductRequest{TotpCode: code, Confirm: confirm}))
+	if err != nil {
+		return Result{}, err
+	}
+	v, from := Printable(out.Msg.GetVersion()), Printable(out.Msg.GetSource())
+	if from == "staged" {
+		from = "the staged bundle"
+	} else {
+		from = "the " + from
+	}
+	text := fmt.Sprintf("Sneakers %s is reinstalled from %s, and its data is kept. The product restarts and comes up phase by phase: status, or the Product card on Updates, says when it's ready. Revert there goes back to the copy it replaced.\n", v, from)
+	return Result{Text: text, Data: map[string]any{"version": out.Msg.GetVersion(), "source": out.Msg.GetSource()}}, nil
 }
 
 // diskBytes is n in binary units, one decimal.

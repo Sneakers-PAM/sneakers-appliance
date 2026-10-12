@@ -1552,8 +1552,16 @@ func (s *Server) UpgradeWindowTick(ctx context.Context) {
 // staged base release (whose apply reboots).
 func (s *Server) productWindow(ctx context.Context, day string) {
 	s.upgrades.mu.Lock()
-	if s.upgrades.lastProductWindow == day || s.slots().Status().Staged == "" {
+	st := s.slots().Status()
+	if s.upgrades.lastProductWindow == day || st.Staged == "" {
 		s.upgrades.mu.Unlock()
+		return
+	}
+	// A reinstall, and the bundle a product reset kept, are an owner's
+	// to apply.
+	if st.Staged == st.Installed || st.Installed == "" && s.resetKept() == st.Staged {
+		s.upgrades.mu.Unlock()
+		s.o.Logger.Info("osadmin: the window leaves the staged product to an owner", log.F("staged", st.Staged), log.F("installed", st.Installed))
 		return
 	}
 	s.upgrades.lastProductWindow = day

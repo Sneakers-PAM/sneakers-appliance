@@ -198,6 +198,9 @@ var specs = []spec{
 	{path: "reset", owner: true, short: "Remove the installed product and its data (an owner, with a new authenticator code)", action: "product.reset", origins: []Origin{OriginSSH}, product: true, run: runReset,
 		long:    "Removes the installed product and everything it holds: it stops the product in order (the database last, cleanly), removes its objects from k0s (its stacks, namespaces and volumes), stops k0s and removes its data and the secrets the box made for it. The box keeps its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log, and keeps the product's bundle as the staged one: Apply on the Product card on :8443 installs it again, and it starts with a new setup token and its own first-admin setup. Type the product's name or the box's host name to confirm, then a new code from your authenticator. Owners only, over SSH only; it takes a few minutes and is audited as product.reset. There's no undo.",
 		example: "  {product} reset"},
+	{path: "reinstall", owner: true, short: "Install the installed version again, keeping its data (an owner, with a new authenticator code)", action: "product.reinstall", origins: []Origin{OriginSSH}, product: true, run: runReinstall,
+		long:    "Installs the version that's installed again, from a fresh copy of its bundle, and keeps all of the product's data: for a broken install or a damaged product slot. A staged bundle of the installed version is used as it is; otherwise the box fetches it from its update source and verifies it (signature, channel, SHA-256), as Updates on :8443 does. It's then applied like an update: the product stops in order and comes up phase by phase, and Revert on Updates goes back to the copy it replaced. Type the installed version to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.reinstall.",
+		example: "  {product} reinstall"},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Shows and sets the resources the product may use. Not available in this release.",
 		example: "  resources"},
@@ -863,6 +866,25 @@ func runReset(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]
 	}
 	e.Product, e.Values, e.Switches = productinfo.Info{}, nil, nil
 	return res, nil
+}
+
+// runReinstall installs the installed version again: it reads the version
+// typed and a new authenticator code, without echo and out of recall, and
+// asks accessd, which stages and applies it.
+func runReinstall(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]string) (Result, error) {
+	p := e.Product
+	_, _ = fmt.Fprintf(e.Out, "This installs %s %s again from a fresh copy of its bundle; the product keeps its data. It restarts and comes up phase by phase.\n", p.Title, p.Version)
+	in := &lineReader{e: e}
+	confirm := in.read(fmt.Sprintf("Type %s, the installed version, to confirm: ", p.Version), false)
+	if confirm == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "not confirmed; nothing was reinstalled")
+	}
+	code := in.read("New authenticator code: ", true)
+	if code == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "no authenticator code; nothing was reinstalled")
+	}
+	_, _ = fmt.Fprintf(e.Out, "Reinstalling %s %s. Fetching and checking the bundle can take a few minutes.\n", p.Title, p.Version)
+	return e.Backend.Call(ctx, Request{Action: "product.reinstall", Args: []string{confirm, code}})
 }
 
 // runUpdates shows the GitHub source's channel, or sets the channel or a
