@@ -285,3 +285,49 @@ func TestABundleRefusesASwitchStackWithNoPhase(t *testing.T) {
 		t.Fatalf("a switch stack with a workload and no phase: %v", err)
 	}
 }
+
+// Each phased workload's wait-phase init container runs the release's
+// `wait`, so its arguments must be ones `wait` takes: a --dns name, each
+// --tcp a host:port, a positive --every. A DNS-only wait (a workload with
+// no Service to wait for, the database first of all) is one; a wait with
+// nothing to wait for, or arguments `wait` refuses, would fail the init
+// container at every start, and the bundle is refused instead.
+func TestABundleRefusesAWaitTheWaitCommandRefuses(t *testing.T) {
+	k := fixtures.LabKeys(t)
+	pub, _ := sigbundle.ParsePublicKey(k.Cosign.PublicPEM)
+	const spec = "format: 2\nphases:\n  - {name: data, label: The database, stack: app-data, workloads: [app-db]}\n"
+	stack := func(args string) string {
+		return "apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: app-db\n  labels: {sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"}\n" +
+			"spec:\n  template:\n    metadata:\n      labels: {sneakers-appliance/phase: data, sneakers-appliance/phase-order: \"1\"}\n" +
+			"    spec:\n      initContainers:\n        - {name: wait-phase, image: x, args: " + args + "}\n"
+	}
+	with := func(s string) func(fstest.MapFS) {
+		return func(m fstest.MapFS) {
+			m["product.yaml"] = &fstest.MapFile{Data: []byte(spec), Mode: 0o644}
+			m[bundle.ProductManifests+"/app-data/app-data.yaml"] = &fstest.MapFile{Data: []byte(s), Mode: 0o644}
+		}
+	}
+	for name, args := range map[string]string{
+		"DNS only":     "[wait, --dns, kubernetes.default.svc.cluster.local, --every, 2s]",
+		"DNS and TCPs": "[wait, --dns, kubernetes.default.svc.cluster.local, --tcp, app-a.app.svc:5432, --tcp, app-b.app.svc:6379, --every, 2s]",
+	} {
+		tree, _ := fixtures.ProductTree(t, k, "amd64", with(stack(args)))
+		if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, args := range map[string]string{
+		"nothing to wait for":   "[wait, --every, 2s]",
+		"no DNS name":           "[wait, --tcp, app-a.app.svc:5432, --every, 2s]",
+		"an empty DNS name":     "[wait, --dns, \"\", --every, 2s]",
+		"a TCP without a port":  "[wait, --dns, kubernetes.default.svc.cluster.local, --tcp, app-a.app.svc, --every, 2s]",
+		"a zero retry interval": "[wait, --dns, kubernetes.default.svc.cluster.local, --every, 0s]",
+		"another command":       "[export, --dns, kubernetes.default.svc.cluster.local]",
+		"an unknown flag":       "[wait, --dns, kubernetes.default.svc.cluster.local, --timeout, 5m]",
+	} {
+		tree, _ := fixtures.ProductTree(t, k, "amd64", with(stack(args)))
+		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "app-db") || !strings.Contains(err.Error(), "wait") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

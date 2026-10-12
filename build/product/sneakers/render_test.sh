@@ -16,11 +16,15 @@
 #     dev-only switch, no "lab" in a name or value;
 #   - every workload is in its phase's own stack, labelled with the phase,
 #     and the always-on stack holds none;
+#   - every wait-phase init container runs with arguments the release's own
+#     sneakers-migrate wait takes, and exits 0 once its DNS and targets
+#     answer (the DNS-only waits too);
 #   - render.sh refuses a non-empty OUT, and a values overlay that brings
 #     a Secret no box makes.
 #
 # CHARTS is a sneakers-release checkout; without it the test fetches the
-# commit build/release/pins.env pins (or main while that's empty). The
+# commit build/release/pins.env pins (or main while that's empty), and
+# MIGRATE_SRC is one at the migrate image's commit (fetched without it). The
 # service digests, placeholders in git, are filled with stand-ins here.
 set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,6 +94,74 @@ for st in $(sed -n 's/^    stack: \(sneakers-[a-z-]*\)$/\1/p' "$here/product.yam
 done
 grep -q -- '--tcp' "$out/sneakers-front/sneakers-front.yaml" || fail "the gateway waits for none of the services"
 echo "ok: every workload is in its phase's stack and waits for its needs"
+
+# The waits run: each wait-phase init container's arguments, in every
+# stack, are ones the release's own `wait` takes. sneakers-migrate is built
+# from the commit release.yaml pins for its image (MIGRATE_SRC, a
+# sneakers-release checkout at that commit, or fetched), and each wait runs
+# twice: as rendered, where the cluster's DNS never resolves, so it must
+# still be retrying after 5 s rather than refusing its arguments; and with
+# its DNS name and every target pointed at this machine, where it must
+# exit 0. A DNS-only wait (the database's, the cache's) is one of them.
+migrate_commit="$(go run "$root/build/tools/bundle" sources --release "$work/release.yaml" | awk '$1 == "migrate" { print $5 }')"
+[ -n "$migrate_commit" ] || fail "release.yaml pins no commit for the migrate image"
+msrc="${MIGRATE_SRC:-}"
+if [ -z "$msrc" ]; then
+  msrc="$work/migrate-src"
+  git init -q "$msrc"
+  git -C "$msrc" fetch -q --depth 1 "https://github.com/Sneakers-PAM/sneakers-release.git" "$migrate_commit"
+  git -C "$msrc" checkout -q FETCH_HEAD
+fi
+[ "$(git -C "$msrc" rev-parse HEAD)" = "$migrate_commit" ] || fail "MIGRATE_SRC isn't at the migrate image's commit $migrate_commit"
+(cd "$msrc" && CGO_ENABLED=0 go build -o "$work/sneakers-migrate" ./migrate/cmd/sneakers-migrate)
+# One line per wait: the stack, the workload, then its arguments.
+awk '
+  FNR == 1 { st = FILENAME; sub(/.*\//, "", st); sub(/\.yaml$/, "", st); kind = ""; name = "" }
+  /^kind: / { kind = $2; name = "" }
+  /^    name: / && name == "" { name = $2 }
+  collecting && /^ *- [^ ]+$/ { a = a " " $2; next }
+  collecting { if (a ~ /^ wait /) print st, kind "/" name a; collecting = 0 }
+  /^ *- args:$/ { collecting = 1; a = "" }
+' "$out"/*/*.yaml > "$work/waits"
+nwaits="$(wc -l < "$work/waits")"
+nwant="$(cat "$out"/*/*.yaml | grep -c -- '^ *name: wait-phase$\|^ *- name: wait-phase$')"
+[ "$nwaits" -gt 0 ] && [ "$nwaits" -eq "$nwant" ] || fail "found $nwaits wait argument lists for $nwant wait-phase init containers"
+grep -q '^sneakers-data StatefulSet/sneakers-postgres wait --dns [^ ]* --every 2s$' "$work/waits" || fail "the database's wait isn't the DNS-only one: $(grep sneakers-postgres "$work/waits" || echo none)"
+# A local TCP listener for the targets; it stops once this script exits.
+python3 -c '
+import os, socket
+parent = os.getppid()
+s = socket.socket(); s.bind(("127.0.0.1", 0)); s.listen(64); s.settimeout(1)
+print(s.getsockname()[1], flush=True)
+while os.getppid() == parent:
+    try:
+        c, _ = s.accept(); c.close()
+    except socket.timeout:
+        pass
+' < /dev/null > "$work/port" 2> /dev/null &
+listener=$!
+for _ in $(seq 50); do [ -s "$work/port" ] && break; sleep 0.1; done
+port="$(cat "$work/port")"
+[ -n "$port" ] || fail "no local listener for the waits"
+while read -r st wl args; do
+  read -ra a <<<"$args"
+  rc=0
+  timeout 5 "$work/sneakers-migrate" "${a[@]}" < /dev/null > "$work/wait.log" 2>&1 || rc=$?
+  [ "$rc" -eq 124 ] || fail "$st $wl: the release's wait exited $rc on its rendered arguments ($args): $(tail -1 "$work/wait.log")"
+  local_args=()
+  for ((i = 0; i < ${#a[@]}; i++)); do
+    case "${a[$i]}" in
+      --dns) local_args+=(--dns localhost); i=$((i + 1)) ;;
+      --tcp) local_args+=(--tcp "127.0.0.1:$port"); i=$((i + 1)) ;;
+      *) local_args+=("${a[$i]}") ;;
+    esac
+  done
+  rc=0
+  timeout 10 "$work/sneakers-migrate" "${local_args[@]}" < /dev/null > "$work/wait.log" 2>&1 || rc=$?
+  [ "$rc" -eq 0 ] || fail "$st $wl: the release's wait exited $rc once its DNS and targets answered (${local_args[*]}): $(tail -1 "$work/wait.log")"
+done < "$work/waits"
+kill "$listener" 2>/dev/null || true
+echo "ok: the release's wait (sneakers-migrate at ${migrate_commit:0:7}) takes all $nwaits waits and exits 0 once each one's DNS and targets answer"
 
 # Complete: every component pinned, every service run.
 go run "$root/build/tools/bundle" images --release "$work/release.yaml" > "$work/pinned"

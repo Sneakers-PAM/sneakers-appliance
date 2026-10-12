@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/bundle"
 )
 
 const phasedProductYAML = productYAML + `switches:
@@ -180,6 +182,9 @@ func TestRenderGivesEachPhasedWorkloadItsWait(t *testing.T) {
 		}
 		if got := strings.Join(toStrings(first["args"]), " "); got != want.args {
 			t.Errorf("%s waits with %q, want %q", want.key, got, want.args)
+		}
+		if err := bundle.CheckWaitArgs(toStrings(first["args"])); err != nil {
+			t.Errorf("%s's wait is one the release's wait command refuses: %v", want.key, err)
 		}
 		sc := first["securityContext"].(map[string]any)
 		if sc["runAsNonRoot"] != true || sc["readOnlyRootFilesystem"] != true || sc["allowPrivilegeEscalation"] != false {
