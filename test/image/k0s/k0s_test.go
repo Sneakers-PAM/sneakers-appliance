@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,7 +84,20 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	// The console restarts into normal operation by itself.
 	vm.WaitExit(5 * time.Minute)
 
-	next := harness.Boot(t, opts(vm.Disk(0)))
+	// The lab hook's pod egress probe goes to podEgressTarget, which QEMU
+	// forwards to egress on the host, while the box's NIC is captured.
+	egress, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = egress.Close() }()
+	probed := make(chan string, 1)
+	go func() { probed <- readProbe(egress) }()
+	capture := filepath.Join(t.TempDir(), "n0.pcap")
+	withEgress := opts(vm.Disk(0))
+	withEgress.GuestFwd = []string{fmt.Sprintf("tcp:%s-tcp:%s", podEgressTarget, egress.Addr())}
+	withEgress.Capture = capture
+	next := harness.Boot(t, withEgress)
 	next.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
 	// QEMU's user network offers no host name, so the kernel has the box's
 	// own name, never "(none)".
@@ -119,6 +133,7 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	next.Expect(`lab-hook: root shell kubectl works`, 2*time.Minute)
 	next.Expect(`lab-hook: root shell helm works`, 2*time.Minute)
 	next.Expect(`lab-hook: root shell watch works`, time.Minute)
+	podEgressLeavesAsTheBox(t, next, probed, capture)
 	if strings.Contains(next.Console(), "ErrImageNeverPull") {
 		t.Fatal("a pod needed an image the bundle doesn't hold")
 	}
@@ -201,6 +216,61 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	if bad := sandboxErrors(after.Expect(`lab-hook: sandbox events: .*`, time.Minute)); len(bad) > 0 {
 		t.Fatalf("after a power loss: %d FailedCreatePodSandBox events with exec: already started: %v", len(bad), bad)
 	}
+}
+
+// podEgressTarget is where the lab hook's pod egress probe connects: an
+// address outside the box's cluster ranges, as an SSH target or a
+// directory server is. boxNIC is the address QEMU's DHCP gives the box.
+var (
+	podEgressTarget = netip.MustParseAddrPort("10.0.2.100:7777") // scrub:allow=private-ip -- QEMU's user network and the k0s pod range
+	boxNIC          = netip.MustParseAddr("10.0.2.15")           // scrub:allow=private-ip -- QEMU's user network and the k0s pod range
+	podCIDR         = netip.MustParsePrefix("10.244.0.0/16")     // scrub:allow=private-ip -- QEMU's user network and the k0s pod range
+)
+
+// readProbe returns the first line QEMU's guestfwd passes on: QEMU
+// connects when it starts, and the probe's line follows once the pod
+// sends it.
+func readProbe(ln net.Listener) string {
+	c, err := ln.Accept()
+	if err != nil {
+		return "accept: " + err.Error()
+	}
+	defer func() { _ = c.Close() }()
+	_ = c.SetReadDeadline(time.Now().Add(60 * time.Minute))
+	line, err := bufio.NewReader(c).ReadString('\n')
+	if err != nil {
+		return "read: " + err.Error()
+	}
+	return strings.TrimSpace(line)
+}
+
+// podEgressLeavesAsTheBox checks a product pod's outbound connection
+// (docs/network.md "Pod egress"): it reaches the target, and on the
+// box's network it comes from the box's NIC address, never a pod's.
+func podEgressLeavesAsTheBox(t *testing.T, vm *harness.VM, probed <-chan string, capture string) {
+	t.Helper()
+	vm.Expect(`lab-hook: pod egress (connected|failed)`, 2*time.Minute)
+	select {
+	case line := <-probed:
+		if line != "pod-egress-probe" {
+			t.Fatalf("the pod egress probe's listener got %q", line)
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("the pod egress probe never reached the host")
+	}
+	srcs, err := harness.SYNSources(capture, podEgressTarget)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(srcs) == 0 {
+		t.Fatalf("no connection to %s on the box's NIC", podEgressTarget)
+	}
+	for _, src := range srcs {
+		if src != boxNIC || podCIDR.Contains(src) {
+			t.Fatalf("a pod's connection to %s left the box from %s, want the NIC's %s (all: %v)", podEgressTarget, src, boxNIC, srcs)
+		}
+	}
+	t.Logf("pod egress to %s left the box from %v", podEgressTarget, srcs)
 }
 
 // phasePod is one phased pod as the lab hook prints it.

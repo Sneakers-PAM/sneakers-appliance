@@ -100,6 +100,33 @@ reboot, a base update (the other root slot), a product update and a revert all l
 The 22 and 8443 open/closed state follows the setup steps and is kept in `/run`, so it is
 rebuilt at each boot.
 
+## Pod egress
+
+A product pod's outbound connection (an SSH target, a directory server, a mail relay, a connector's
+endpoint) leaves the box from the box's own address, never the pod's `10.244.x` address, so the
+target answers the box and needs no route to the cluster ranges. k0s's network stack does it:
+kube-router (`provider: kuberouter` in `os/k0s/k0s.yaml.tmpl`, with its default
+`--enable-pod-egress`) adds one rule to the `nat` table's `POSTROUTING` chain:
+
+```text
+-m set --match-set kube-router-pod-subnets src
+-m set ! --match-set kube-router-pod-subnets dst
+-m set ! --match-set kube-router-node-ips dst
+-j MASQUERADE --random-fully
+```
+
+MASQUERADE takes the address of the interface the packet leaves on, the one the route to the target
+picks: the management interface's address, or the service interface's when its route wins. It is
+never the node address `198.18.0.1` on `sneakers0`, which is not on any network. Traffic between
+pods, to the node address and to Services keeps its own addresses. A target inside the cluster
+ranges (`10.244.0.0/16` and `10.96.0.0/12` by default) is never reached, since the box routes those <!-- scrub:allow=private-ip -->
+ranges inside itself; change the ranges in the settings when a network the box must reach overlaps
+them.
+
+The image suite checks it (`k0s.TestTheProductBundleBringsK0sAndTheHelloStack`): the hello pod
+connects to an address QEMU forwards to the host, and the capture of the box's NIC must show the
+connection opened from the box's DHCP address.
+
 ## sneakers-netd
 
 `sneakers-netd` runs as root in first boot and normal operation (`os/rootfs/services.d/netd.yaml`,
