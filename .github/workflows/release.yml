@@ -4,8 +4,10 @@ name: Release
 # Base Web and Product, each a signed and encrypted .bin, with the index a
 # mirror serves (docs/release.md).
 #
-# Production (push of a v tag): guard -> images (every Sneakers service
-# image, built from the source the pinned release.yaml names; no keys) ->
+# Production (push of a v tag): guard -> real bundles (the real product
+# through the update paths a box takes, lab keys only; real-bundle.yml) ->
+# images (every Sneakers service image, built from the source the pinned
+# release.yaml names; no keys) ->
 # build (no keys, no environment) -> sign (the production environment, the
 # only job that reads its secrets; it also makes the Base OS patch from the
 # previous release on the tag's channel and signs the index and SHA256SUMS)
@@ -61,9 +63,18 @@ jobs:
         if: github.event_name == 'push'
         run: bash build/release/check-production-keys.sh keys/production
 
+  # The real product through the update paths a box takes (the
+  # real-bundle job, lab keys only): a production tag builds nothing until
+  # it passes.
+  realbundles:
+    name: 🧪 Real bundle upgrades
+    needs: guard
+    if: needs.guard.outputs.channel == 'production'
+    uses: ./.github/workflows/real-bundle.yml
+
   images:
     name: 🐳 Service images (amd64)
-    needs: guard
+    needs: [guard, realbundles]
     if: needs.guard.outputs.channel == 'production'
     runs-on: ubuntu-latest
     timeout-minutes: 60
