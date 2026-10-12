@@ -242,9 +242,22 @@ func (e Ext4) Mkfs(ctx context.Context, device string) error {
 	return nil
 }
 
-// Mount mounts device at target, nosuid and nodev.
+// mountFS is unix.Mount; a test replaces it.
+var mountFS = unix.Mount
+
+// ext4Options turns off delayed allocation, keeping ext4's default
+// data=ordered mode: each journal commit then writes the data of the files
+// it covers before their metadata, so an fsync anywhere on the volume (a
+// database's, or containerd's when it records an image layer as unpacked)
+// also makes what was written before it durable. With delayed allocation a
+// power cut can leave files that were counted as written empty: a
+// container's binary from a layer unpacked moments before the cut then
+// fails with "exec format error" at every start (docs/disk-layout.md).
+const ext4Options = "nodelalloc"
+
+// Mount mounts device at target, nosuid and nodev, with ext4Options.
 func (e Ext4) Mount(_ context.Context, device, target string) error {
-	if err := unix.Mount(device, target, "ext4", unix.MS_NOSUID|unix.MS_NODEV, ""); err != nil {
+	if err := mountFS(device, target, "ext4", unix.MS_NOSUID|unix.MS_NODEV, ext4Options); err != nil {
 		return fmt.Errorf("keycustody: mount %s on %s: %w", device, target, err)
 	}
 	return nil

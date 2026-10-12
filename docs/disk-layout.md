@@ -15,6 +15,12 @@ whatever disk the box really has.
 
 - First boot's partitions are made at its protection step and then unlocked on every boot: state
   is mounted at `/var/lib`, backup at `/var/lib/sneakers/backup` ([key-custody.md](key-custody.md#at-boot)).
+- Both are ext4, mounted `nosuid,nodev,nodelalloc` in the default `data=ordered` mode. Without
+  delayed allocation each journal commit writes the data of the files it covers first, so a
+  program's fsync (PostgreSQL's, or containerd's when it records an image layer as unpacked) also
+  makes the files written before it durable. With delayed allocation a power cut soon after an
+  update could leave a just-unpacked layer's files empty while containerd counted the layer as
+  done: that container then failed at every start with `exec format error`.
 - The smallest disk is 64 GiB (`--disk-size`, 64G by default). A disk grown before the first
   power-on (an OVA disk, or a larger bare disk) gets the extra space in state and backup; nothing
   is stranded.

@@ -331,6 +331,11 @@ func TestTheRealBundlesUpdateInOrder(t *testing.T) {
 
 	b.powerLoss()
 	after := b.mustRun(vNext, "after a power loss", base, true, true)
+	// Without it, a layer unpacked just before the cut can come back with
+	// empty files: "exec format error" at each start of its container.
+	if m := lastLine(b.vm.Console(), "realci: state mount "); !strings.Contains(m, "nodelalloc") {
+		t.Fatalf("after a power loss: the state volume isn't mounted nodelalloc: %q", m)
+	}
 	if kept := podsKeptInPlace(before.pods, after.pods); len(kept) > 0 {
 		t.Fatalf("after a power loss: %v are the pods from before it, restarted in place, not quiesced", kept)
 	}
