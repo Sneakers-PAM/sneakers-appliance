@@ -4,6 +4,7 @@
 package osadmin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -73,12 +74,18 @@ type progress struct {
 	mu     sync.Mutex
 	loaded bool
 	rec    *progressRecord
-	// following is true while a goroutine follows the product coming up;
-	// closing stop (Close) ends it, and done counts it.
+	// following is true while a goroutine follows the product coming up,
+	// the record started at followed, as follower number gen; closing stop
+	// (Close) ends it, and done counts it. A follower of an earlier record
+	// never holds up a new one: it ends at its next look.
 	following bool
-	stop      chan struct{}
-	stopped   bool
-	done      sync.WaitGroup
+	followed  time.Time
+	gen       uint64
+	// ask calls off the follower's ask in flight, when there is one.
+	ask     context.CancelFunc
+	stop    chan struct{}
+	stopped bool
+	done    sync.WaitGroup
 }
 
 func (r *progressRecord) find(id string) int {

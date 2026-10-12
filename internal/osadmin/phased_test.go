@@ -5,6 +5,7 @@ package osadmin_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,12 +27,23 @@ import (
 type phasedProbe struct {
 	mu  sync.Mutex
 	res productup.Result
+	// err is what the probe fails with, when set.
+	err error
 }
 
 func (f *phasedProbe) Check(context.Context) (productup.Result, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.err != nil {
+		return productup.Result{}, f.err
+	}
 	return f.res, nil
+}
+
+func (f *phasedProbe) fail(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.err = err
 }
 
 func (f *phasedProbe) Steps() []productup.Step {
@@ -260,4 +272,175 @@ func TestAProductApplyStopsTheProductBeforeItSwitchesSlots(t *testing.T) {
 	if got := strings.Join(b.services.log(), ","); !strings.HasPrefix(got, "stop k0s,start k0s") {
 		t.Fatalf("services %s", got)
 	}
+}
+
+// A probe that can't read the product (a kubectl call that times out, a
+// stack that doesn't parse) never leaves the apply on its step with
+// nothing said: the step shows why, and when it persists past the
+// product's bound the apply fails with that reason, on Updates and in the
+// box state.
+func TestAProbeThatKeepsFailingFailsTheApplyWithItsReason(t *testing.T) {
+	p := &phasedProbe{}
+	p.fail(errors.New("k0s kubectl: context deadline exceeded"))
+	b, alice := applyPhased(t, p)
+	b.finishSetup()
+	waitSteps(t, alice, phasedHead+"k0s:ACTIVE images:PENDING quiesce:PENDING cluster:PENDING phase:data:PENDING phase:front:PENDING product_health:PENDING edge:PENDING")
+	waitDetail(t, alice, productup.StepK0s, "context deadline exceeded")
+	b.clk.Advance(osadmin.ProductUpBound + time.Minute)
+	alice = b.browser()
+	alice.signIn("alice")
+	got := waitSteps(t, alice, phasedHead+"k0s:FAILED images:PENDING quiesce:PENDING cluster:PENDING phase:data:PENDING phase:front:PENDING product_health:PENDING edge:PENDING")
+	if !got.GetFailed() || got.GetCode() != "UPGRADE_PRODUCT_START" {
+		t.Fatalf("failed %+v", got)
+	}
+	if d := step(t, got, productup.StepK0s).GetDetail(); !strings.Contains(d, "context deadline exceeded") {
+		t.Fatalf("detail %q", d)
+	}
+	b.waitState(boxstate.Failed)
+	if d := b.phase().GetFailedReason(); !strings.Contains(d, "context deadline exceeded") {
+		t.Fatalf("the box state's detail %q", d)
+	}
+}
+
+// A probe that fails on a phase is held to that phase's own timeout.
+func TestAProbeThatFailsOnAPhaseFailsWithinThePhasesTimeout(t *testing.T) {
+	p := &phasedProbe{res: productup.Result{Step: "phase:data", Detail: "Applying app-data", Timeout: time.Minute}}
+	b, alice := applyPhased(t, p)
+	b.finishSetup()
+	waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:ACTIVE phase:front:PENDING product_health:PENDING edge:PENDING")
+	p.fail(errors.New("the stack app-data doesn't read"))
+	waitDetail(t, alice, "phase:data", "doesn't read")
+	b.clk.Advance(2 * time.Minute)
+	alice = b.browser()
+	alice.signIn("alice")
+	got := waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:FAILED phase:front:PENDING product_health:PENDING edge:PENDING")
+	if d := step(t, got, "phase:data").GetDetail(); !strings.Contains(d, "doesn't read") {
+		t.Fatalf("detail %q", d)
+	}
+}
+
+// On a boot a probe that keeps failing leaves the box failed with its
+// reason once the bound passes.
+func TestABootWhoseProbeKeepsFailingSaysFailedWithItsReason(t *testing.T) {
+	p := &phasedProbe{}
+	p.fail(errors.New("k0s kubectl: context deadline exceeded"))
+	b := newBox(t, false, withPhased(p))
+	b.finishSetup()
+	b.installProduct("0.1.0")
+	b.setRunning(true)
+	if got := b.phase().GetState(); got != string(boxstate.Starting) {
+		t.Fatalf("coming up: %q", got)
+	}
+	time.Sleep(30 * time.Millisecond)
+	b.clk.Advance(osadmin.ProductUpBound + time.Minute)
+	b.phase()
+	b.waitState(boxstate.Failed)
+	if d := b.phase().GetFailedReason(); !strings.Contains(d, "context deadline exceeded") {
+		t.Fatalf("the box state's detail %q", d)
+	}
+}
+
+// waitDetail waits until the step id's detail on Updates has want.
+func waitDetail(t *testing.T, br *browser, id, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		p := br.progress(t)
+		for _, s := range p.GetSteps() {
+			if s.GetId() == id && strings.Contains(s.GetDetail(), want) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the step %s never said %q: %s", id, want, steps(p))
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// A reinstall of the installed version follows the product coming up as
+// an update does: after the reset, the install and then the reinstall,
+// each comes up phase by phase to every step done.
+func TestAReinstallAfterAResetFollowsThePhases(t *testing.T) {
+	p := &phasedProbe{}
+	fake := &fakeReset{}
+	b := newBox(t, false, withPhased(p), func(b *box, o *osadmin.Options) { fake.b = b; o.ProductReset = fake })
+	alice := b.browser()
+	alice.signIn("alice")
+	done := phasedHead + "k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:DONE phase:front:DONE product_health:DONE edge:DONE"
+	alice.installProduct(t, "0.2.0")
+	waitSteps(t, alice, done)
+	b.services.running = true
+	if _, err := resetAs(b, b.ssh("alice"), &osadminv1.ResetProductRequest{TotpCode: b.code("alice"), Confirm: "sneakers"}); err != nil {
+		t.Fatal(err)
+	}
+	alice.signIn("alice")
+	// The reset kept the bundle staged: Apply installs it again.
+	p.set(productup.Result{Step: "phase:data", Detail: "Applying app-data", Timeout: time.Minute})
+	if _, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:ACTIVE phase:front:PENDING product_health:PENDING edge:PENDING")
+	p.set(productup.Result{})
+	waitSteps(t, alice, done)
+	p.set(productup.Result{Step: "phase:data", Detail: "Applying app-data", Timeout: time.Minute})
+	alice.installProduct(t, "0.2.0")
+	waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:ACTIVE phase:front:PENDING product_health:PENDING edge:PENDING")
+	p.set(productup.Result{})
+	waitSteps(t, alice, done)
+	if h := alice.upgrades(t).GetHistory()[0]; h.GetAction() != "reinstall" || h.GetOutcome() != "ok" {
+		t.Fatalf("history %v", h)
+	}
+}
+
+// heldProbe holds its first ask until released, as a k0s command that
+// never answers would; every later ask answers res.
+type heldProbe struct {
+	phasedProbe
+	once    sync.Once
+	release chan struct{}
+	// cancelled is closed when the first ask's context ends before it's
+	// released.
+	cancelled chan struct{}
+}
+
+func (h *heldProbe) Check(ctx context.Context) (productup.Result, error) {
+	first := false
+	h.once.Do(func() { first = true })
+	if first {
+		select {
+		case <-h.release:
+		case <-ctx.Done():
+			close(h.cancelled)
+			<-h.release
+		}
+	}
+	return h.phasedProbe.Check(ctx)
+}
+
+// A follower still out on an earlier apply's ask never keeps the next
+// apply from being followed: the reinstall's own follower moves its
+// phases on. The earlier ask is called off before the product stops, so
+// it can never act (quiesce or place) on the product that comes up after.
+func TestAReinstallIsFollowedWhileAnEarlierAskIsStillOut(t *testing.T) {
+	h := &heldProbe{release: make(chan struct{}), cancelled: make(chan struct{})}
+	b := newBox(t, false, func(_ *box, o *osadmin.Options) {
+		o.ProductUp = h
+		o.Upgrade.ProductUpEvery = 5 * time.Millisecond
+	})
+	t.Cleanup(func() { close(h.release) })
+	alice := b.browser()
+	alice.signIn("alice")
+	alice.installProduct(t, "0.2.0")
+	waitSteps(t, alice, phasedHead+"k0s:ACTIVE images:PENDING quiesce:PENDING cluster:PENDING phase:data:PENDING phase:front:PENDING product_health:PENDING edge:PENDING")
+	h.set(productup.Result{Step: "phase:data", Detail: "Applying app-data", Timeout: time.Minute})
+	alice.installProduct(t, "0.2.0")
+	select {
+	case <-h.cancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the earlier apply's ask was still out after the product was stopped for the reinstall")
+	}
+	waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:ACTIVE phase:front:PENDING product_health:PENDING edge:PENDING")
+	h.set(productup.Result{})
+	waitSteps(t, alice, phasedHead+"k0s:DONE images:DONE quiesce:DONE cluster:DONE phase:data:DONE phase:front:DONE product_health:DONE edge:DONE")
 }

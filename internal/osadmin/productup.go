@@ -30,6 +30,15 @@ const ProductUpBound = 10 * time.Minute
 // up.
 const DefaultProductUpEvery = 3 * time.Second
 
+// checkBound bounds one ask of the product: a phased product's ask runs
+// several k0s commands in turn, each bounded on its own, and a box that
+// has just started k0s answers them slowly.
+const checkBound = 2 * time.Minute
+
+// unreadable leads a step's detail when the product's state can't be
+// read.
+const unreadable = "the product's state can't be read: "
+
 // productUpSteps follow restarting the product, all pending.
 var productUpSteps = []progressStep{
 	{ID: productup.StepK0s, Label: "Starting k0s", State: statePending},
@@ -117,30 +126,80 @@ func (s *Server) ResumeProductUp() {
 	s.followProductUp()
 }
 
-// followProductUp starts the follower unless one runs.
+// followProductUp starts the follower unless one follows this record
+// already. One still following an earlier record (its Check hadn't
+// answered yet when the record moved on) doesn't hold it up: it ends at
+// its next look.
 func (s *Server) followProductUp() {
 	s.progress.mu.Lock()
-	if s.progress.following || s.progress.stopped || s.progress.rec == nil {
+	if s.progress.stopped || s.progress.rec == nil {
 		s.progress.mu.Unlock()
 		return
+	}
+	started := s.progress.rec.Started
+	if s.progress.following && s.progress.followed.Equal(started) {
+		s.progress.mu.Unlock()
+		return
+	}
+	if s.progress.following {
+		s.o.Logger.Info("osadmin: an earlier follower is still out; a new one follows this record", log.F("version", s.progress.rec.Version))
+		if s.progress.ask != nil {
+			s.progress.ask()
+		}
 	}
 	if s.progress.stop == nil {
 		s.progress.stop = make(chan struct{})
 	}
-	s.progress.following = true
-	started := s.progress.rec.Started
+	s.progress.gen++
+	gen, at := s.progress.gen, s.progress.rec.active()
+	s.progress.following, s.progress.followed = true, started
 	s.progress.done.Add(1)
 	stop := s.progress.stop
 	s.progress.mu.Unlock()
+	s.o.Logger.Info("osadmin: following the product coming up", log.F("step", at))
 	go func() {
 		defer s.progress.done.Done()
 		defer func() {
 			s.progress.mu.Lock()
-			s.progress.following = false
+			if s.progress.gen == gen {
+				s.progress.following = false
+			}
 			s.progress.mu.Unlock()
 		}()
 		s.productUpLoop(started, stop)
 	}()
+}
+
+// callOffAsks ends every ask of the product in flight, the follower's and
+// the box state's: the product is about to stop, and an ask begun before
+// must never act (quiesce or place stacks) on what comes up after.
+func (s *Server) callOffAsks() {
+	s.progress.mu.Lock()
+	if s.progress.ask != nil {
+		s.progress.ask()
+	}
+	s.progress.mu.Unlock()
+	s.ready.mu.Lock()
+	if s.ready.cancel != nil {
+		s.ready.cancel()
+	}
+	s.ready.mu.Unlock()
+}
+
+// followIfNone starts the follower when a product apply's or revert's
+// record is coming up and nothing follows it, so the record never sits
+// on a step with nothing moving the product on.
+func (s *Server) followIfNone() {
+	if s.o.ProductUp == nil || !s.productComingUp() {
+		return
+	}
+	s.progress.mu.Lock()
+	idle := !s.progress.following && !s.progress.stopped
+	s.progress.mu.Unlock()
+	if idle {
+		s.o.Logger.Warn("osadmin: the product is coming up with nothing following it; following it again")
+		s.followProductUp()
+	}
 }
 
 // Close stops following the product and waits for it; the record keeps
@@ -201,20 +260,31 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 	since := s.o.Clock.Now()
 	stepSince := since
 	last := productup.Result{Step: "-"}
+	lastErr := ""
 	for {
 		r := s.progressSnapshot()
 		if r == nil || !r.Started.Equal(started) || !isProductUpStep(r.active()) {
-			s.o.Logger.Debug("osadmin: stopped following the product; the record moved on")
+			s.o.Logger.Info("osadmin: stopped following the product; the record moved on")
 			return
 		}
 		at := r.active()
-		ctx, cancel := context.WithTimeout(context.Background(), every+10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), checkBound)
+		s.progress.mu.Lock()
+		s.progress.ask = cancel
+		s.progress.mu.Unlock()
 		res, err := s.o.ProductUp.Check(ctx)
 		cancel()
 		now := s.o.Clock.Now()
 		switch {
 		case err != nil:
-			s.o.Logger.Debug("osadmin: the product's progress isn't known this time", log.F("step", at), log.F("error", err.Error()))
+			// The product's state can't be read this time: said on the
+			// step and logged when it changes, and held to the bound as
+			// the reason.
+			if msg := err.Error(); msg != lastErr {
+				lastErr = msg
+				s.o.Logger.Warn("osadmin: the product's progress can't be read", log.F("step", at), log.F("error", msg))
+				s.setStep(at, unreadable+msg)
+			}
 		case res.Step == "" || res.Held:
 			if res.Held {
 				s.productHeld(res)
@@ -228,11 +298,12 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 			}
 			s.o.Logger.Info("osadmin: the product is up", log.F("version", r.Version), log.F("seconds", int(now.Sub(since).Seconds())))
 			return
-		case res != last:
+		case res != last || lastErr != "":
 			if res.Step != last.Step {
 				stepSince = now
+				s.o.Logger.Info("osadmin: the product is at a new step", log.F("step", res.Step), log.F("detail", res.Detail))
 			}
-			last = res
+			last, lastErr = res, ""
 			at = res.Step
 			s.setStep(res.Step, res.Detail)
 		}
@@ -242,8 +313,13 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 			why = "it can't start: " + res.Detail
 		case err == nil && res.Timeout > 0 && now.Sub(stepSince) > res.Timeout:
 			why = fmt.Sprintf("it isn't ready after %s: %s", res.Timeout, res.Detail)
+		case err != nil && last.Timeout > 0 && last.Step == at && now.Sub(stepSince) > last.Timeout:
+			why = fmt.Sprintf("it isn't ready after %s: %s%s", last.Timeout, unreadable, lastErr)
 		case now.Sub(since) > s.productUpBound():
 			waiting := last.Detail
+			if lastErr != "" {
+				waiting = unreadable + lastErr
+			}
 			if waiting == "" {
 				waiting = "the step " + at + " didn't finish"
 			}

@@ -989,3 +989,24 @@ func TestAPhaseTakesItsWorkloadsOverFromAnotherStack(t *testing.T) {
 		t.Fatalf("the data phase's stack doesn't hold app-db: %+v", w)
 	}
 }
+
+// A k0s command that outlives its bound never holds the probe: it's
+// killed with every process it started (one that left a child holding
+// its output, here), and the probe answers within the bound, so the
+// box's phase loop keeps going.
+func TestACommandThatHangsNeverHoldsTheProbe(t *testing.T) {
+	p, _ := phasedProbe(t, newCluster())
+	p.Run = nil
+	p.AskTimeout = 300 * time.Millisecond
+	if err := os.WriteFile(filepath.Join(p.Slot, "k0s"), []byte("#!/bin/sh\nsleep 60 &\nsleep 60\n"), 0o755); err != nil { // #nosec G306 -- a test's fake k0s
+		t.Fatal(err)
+	}
+	started := time.Now()
+	r, err := p.Check(context.Background())
+	if took := time.Since(started); took > 10*time.Second {
+		t.Fatalf("the probe was held %s by a command bounded at %s", took, p.AskTimeout)
+	}
+	if err != nil || r.Step != productup.StepK0s {
+		t.Fatalf("%+v %v", r, err)
+	}
+}

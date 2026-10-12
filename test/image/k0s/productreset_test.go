@@ -158,8 +158,26 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 	if again == first {
 		t.Fatalf("the reinstalled product has the old data (%s)", first)
 	}
-	if tokenAfter := setupToken(ctx, t, sshPort, alice); tokenAfter == tokenBefore {
+	tokenAfter := setupToken(ctx, t, sshPort, alice)
+	if tokenAfter == tokenBefore {
 		t.Fatal("the reinstalled product has the old setup token")
+	}
+
+	// A reinstall right after that install, in the same run of accessd:
+	// it's followed as the install was, every phase comes back Ready, and
+	// the data and the setup token are kept.
+	adm = signIn(t, adminPort, alice)
+	adm.call(t, "UpgradeService/StageUpdate", map[string]any{"uploadId": adm.upload(t, bundle)}, &staged)
+	if out := answerOverSSH(ctx, t, sshPort, alice, staged.Package.Version, "sneakers", "reinstall"); !strings.Contains(out, "is reinstalled from the staged bundle") {
+		t.Fatalf("the reinstall's answer:\n%s", out)
+	}
+	back := regexp.MustCompile(`lab-hook: after the reinstall after the reset: product data: (\S+) phased pods ready: ([A-Za-z ]*)`).FindStringSubmatch(
+		box.Expect(`lab-hook: after the reinstall after the reset: .*`, 30*time.Minute))
+	if back == nil || back[1] != again || strings.TrimSpace(back[2]) == "" || strings.Contains(back[2], "False") {
+		t.Fatalf("after the reinstall after the reset: %v (the data before: %s)", back, again)
+	}
+	if tok := setupToken(ctx, t, sshPort, alice); tok != tokenAfter {
+		t.Fatal("the reinstall after the reset made a new setup token; it keeps the box's secrets")
 	}
 }
 

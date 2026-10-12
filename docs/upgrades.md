@@ -228,6 +228,24 @@ rollout and 443 still gate done and the history. An import's Verify step waits t
 data, and Verify is refused with `PRODUCT_NOT_READY`, naming what it waits for, until the product is
 ready again.
 
+While an apply, a reinstall or a revert comes up, one follower in osadmin asks the product every
+3 seconds and moves it on, phase by phase; the box state says updating meanwhile and asks nothing
+itself. So that nothing can leave the record sitting on a step:
+
+- **Each ask is bounded.** Every k0s command an ask runs is killed at 10 seconds with every
+  process it started, and the ask as a whole at 2 minutes, so a command that never answers, or
+  one that left a child holding its output, never holds the follower.
+- **An ask from before a stop never acts after it.** The product's stop calls off every ask in
+  flight (the follower's and the box state's), so an ask begun on the running product never
+  quiesces or places stacks on the one that comes up after.
+- **One follower per record.** A new apply's follower starts even while an earlier one's ask is
+  still out; the earlier one ends at its next look. When a record is coming up with nothing
+  following it, the next box-state ask (the edge's and :8443's) starts its follower again.
+- **An ask that fails is said.** Its error is logged at warn and shown as the step's detail ("the
+  product's state can't be read: ..."). One that keeps failing fails the step with that reason
+  within the phase's timeout, or the `ready.timeout`, with `UPGRADE_PRODUCT_START`, and the box
+  state says failed with it, as for a phase that doesn't come up.
+
 Each step is pending, active, done or failed, and `in_progress` is set while one is active. A
 failed step carries why in its detail and the failure's code (`UPGRADE_SIGNATURE`, say) in the
 record's `code`; the steps after it stay pending. A release the box doesn't come up on fails at
