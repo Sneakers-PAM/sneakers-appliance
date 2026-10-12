@@ -184,8 +184,18 @@ type report struct {
 func (b *realBox) waitReport(version string, timeout time.Duration) (report, bool) {
 	b.t.Helper()
 	done := regexp.MustCompile(`realci: report version=` + regexp.QuoteMeta(version) + `\s`)
+	failed := regexp.MustCompile(`realci: waiting version=` + regexp.QuoteMeta(version) + ` state=failed\b`)
 	deadline := time.Now().Add(timeout)
-	for !done.MatchString(b.vm.Console()) {
+	for {
+		c := b.vm.Console()
+		if done.MatchString(c) {
+			break
+		}
+		// The box gave the product up: three reports in a row (fifteen
+		// minutes) say failed, so waiting longer shows nothing new.
+		if n := len(failed.FindAllString(c, -1)); n >= failedReports && strings.HasSuffix(strings.TrimSpace(lastWaiting(c)), "state=failed") {
+			return report{}, false
+		}
 		if time.Now().After(deadline) {
 			return report{}, false
 		}
@@ -205,6 +215,13 @@ func (b *realBox) waitReport(version string, timeout time.Duration) (report, boo
 	return r, true
 }
 
+// failedReports is how many of the hook's failed states in a row end a
+// wait early.
+const failedReports = 3
+
+// lastWaiting is the hook's last waiting line.
+func lastWaiting(console string) string { return lastLine(console, "realci: waiting ") }
+
 // waiting is the hook's last lines from while the box didn't run: the
 // state, the pods, each pod's last wait-phase lines and the rows.
 func (b *realBox) waiting() string {
@@ -216,10 +233,27 @@ func (b *realBox) waiting() string {
 		}
 	}
 	out = append(out, waitPhaseLines(c)...)
+	out = append(out, crashLines(c)...)
 	if l := lastLine(c, `realci: rows waiting `); l != "" {
 		out = append(out, l)
 	}
 	return strings.Join(out, "\n")
+}
+
+var crashLine = regexp.MustCompile(`realci: crash (\S+): [^\r\n]*`)
+
+// crashLines is the last crash line the hook printed for each container.
+func crashLines(console string) []string {
+	last := map[string]string{}
+	for _, m := range crashLine.FindAllStringSubmatch(console, -1) {
+		last[m[1]] = m[0]
+	}
+	var out []string
+	for _, l := range last {
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
 }
 
 var waitPhaseLine = regexp.MustCompile(`realci: wait-phase (\S+): [^\r\n]*`)

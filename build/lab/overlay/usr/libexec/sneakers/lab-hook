@@ -114,8 +114,9 @@ durability() {
 # (pg_start), and the product's pods with their phase order, restarts,
 # init containers (each one's restarts and how it ended or why it waits),
 # why a container waits, and start and Ready times. While the box doesn't run, it prints the box's
-# state, the pods, each wait-phase init container's last lines and the
-# rows every five minutes, so a stuck update shows what holds it.
+# state, the pods, each wait-phase init container's last lines, each
+# crash-looping container's last lines and the rows every five minutes, so
+# a stuck update shows what holds it.
 realci_dbs="sneakers_identity sneakers_vault sneakers_workflow sneakers_audit sneakers_kratos sneakers_hydra"
 realci_mark=/var/lib/sneakers/lab-realci-rows
 # Every table's rows, as <table>=<count>, comma-separated.
@@ -158,6 +159,15 @@ realci_waits() {
     [ -z "$l" ] || say "realci: wait-phase $p: $(printf '%s' "$l" | tr '\n' ' ')"
   done
 }
+# realci_crashes: the last lines of each crash-looping container's
+# previous run, so a pod that won't stay up shows why.
+realci_crashes() {
+  k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name}{range .status.containerStatuses[?(@.state.waiting.reason=="CrashLoopBackOff")]}{" "}{.name}{end}{"\n"}{end}' 2>/dev/null |
+    while read -r p c rest; do
+      [ -n "$c" ] || continue
+      say "realci: crash $p/$c: $(k -n sneakers logs "$p" -c "$c" --previous --tail=5 2>/dev/null | tr '\n' ' ')"
+    done
+}
 box_state() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'
 }
@@ -187,6 +197,7 @@ realci() {
         say "realci: waiting version=$v state=$(box_state)"
         realci_pods "$v" waiting
         realci_waits
+        realci_crashes
         realci_rows "$v" waiting
         ticks=""
       fi

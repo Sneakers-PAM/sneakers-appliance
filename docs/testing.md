@@ -140,8 +140,8 @@ bundled PostgreSQL. Each time the box runs a product version it hadn't reported 
 prints the rows of every table in every database, how PostgreSQL's current start began (`first`,
 `clean` or `recovered`), and the product's pods (phase order, restarts, each init container's
 restarts and end, why a container waits, start and Ready times).
-While the box doesn't run, it prints the box's state, the pods, each `wait-phase` init container's last lines and the rows
-every five minutes.
+While the box doesn't run, it prints the box's state, the pods, each `wait-phase` init container's last lines, each
+crash-looping container's last lines and the rows every five minutes.
 
 **The legs** (`test/image/k0s/realbundle_test.go`, 8 GiB and 4 CPUs, 22, 8443 and 443 forwarded):
 
@@ -151,8 +151,9 @@ every five minutes.
 | recover | `TestTheRealBundlesRecoverFromAStuckUpdate` | the old base with `.12` and the MCP switch on, then `.13` on the old base, which that base doesn't bring up: the test records whether it got stuck, and if so the hook's lines and whether the rows were already short in that state. Then the base under test is applied in that state, and whether it brings `.13` up by itself is recorded (it can't: `.13`'s own data-phase wait fails, with the `wait-phase` lines in the log); the box must then take the product under test and run it with the checks above |
 | control | the upgrade test with `CONTROL=1` | the base under test is `CONTROL_COMMIT`, from before the quiesce fixes (#365, #370): the update to phases must fail there. The leg is allowed to fail (`continue-on-error`); it runs on pull requests and by hand |
 
-A leg takes about four hours on a GitHub runner (the builds about an hour, the boots and updates the
-rest), so the job doesn't gate every pull request. A run by hand takes `under_test`, the commit
+A leg takes about an hour and a half on a GitHub runner (the builds 15 to 25 minutes with the
+caches, the boots and updates about an hour; a wait ends early once the box has said `failed` three
+reports in a row), so the job doesn't gate every pull request. A run by hand takes `under_test`, the commit
 whose base and product to test. Only logs leave the run (the serial consoles, the build logs and the
 `go test` output, as the `real-bundle-logs-<leg>` artifact); nothing built and no key is uploaded.
 

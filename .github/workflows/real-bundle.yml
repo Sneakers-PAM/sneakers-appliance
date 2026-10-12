@@ -19,7 +19,8 @@ name: Real bundle upgrades
 #   the run. Pull requests and runs by hand only.
 #
 # Only logs leave the run: nothing built here, and no key, is uploaded.
-# A leg takes about four hours, so this runs on main after each merge,
+# A leg takes about an hour and a half (the builds 15 to 25 minutes, the
+# boots and updates about an hour), so this runs on main after each merge,
 # nightly, by hand, on a pull request that changes the job itself, and in
 # the release workflow before anything is built (workflow_call).
 on:
@@ -54,7 +55,7 @@ jobs:
     name: 🧪 Real bundles (${{ matrix.leg }})
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 350
+    timeout-minutes: 240
     continue-on-error: ${{ matrix.leg == 'control' }}
     # bash -eo pipefail, so a failing build or test isn't hidden by tee.
     defaults:
@@ -209,7 +210,7 @@ jobs:
           esac
           start="$(date +%s)"
           status=0
-          go test -tags image -timeout 300m -v -run "$run" ./test/image/k0s/ 2>&1 | tee "$SNEAKERS_LOG_DIR/go-test.log" || status=$?
+          go test -tags image -timeout 200m -v -run "$run" ./test/image/k0s/ 2>&1 | tee "$SNEAKERS_LOG_DIR/go-test.log" || status=$?
           echo "### The ${LEG} leg: exit ${status} after $(( ($(date +%s) - start) / 60 )) minutes" >> "$GITHUB_STEP_SUMMARY"
           grep -E '^\s+realbundle_test.go:[0-9]+: ' "$SNEAKERS_LOG_DIR/go-test.log" | sed 's/^ *//' >> "$GITHUB_STEP_SUMMARY" || true
           exit "$status"
