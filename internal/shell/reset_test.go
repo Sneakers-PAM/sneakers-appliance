@@ -24,7 +24,14 @@ import (
 
 type resetAccessd struct {
 	fakeAccessd
-	resets []*accessv1.ResetProductRequest
+	resets     []*accessv1.ResetProductRequest
+	reinstalls []*accessv1.ReinstallProductRequest
+}
+
+func (f *resetAccessd) ReinstallProduct(_ context.Context, r *connect.Request[accessv1.ReinstallProductRequest]) (*connect.Response[accessv1.ReinstallProductResponse], error) {
+	f.saw(r.Header())
+	f.reinstalls = append(f.reinstalls, r.Msg)
+	return connect.NewResponse(&accessv1.ReinstallProductResponse{Version: "0.2.0", Source: "mirror"}), nil
 }
 
 func (f *resetAccessd) ResetProduct(_ context.Context, r *connect.Request[accessv1.ResetProductRequest]) (*connect.Response[accessv1.ResetProductResponse], error) {
@@ -154,4 +161,38 @@ func TestTheResetIsAnOwnersOverSSHOnly(t *testing.T) {
 	}
 	_, _, err := runProduct(t, productinfo.Info{}, "sneakers reset")
 	assertCode(t, err, "SHELL_UNKNOWN")
+}
+
+// "<product> reinstall" reads the installed version typed and a new code,
+// sends both to accessd and says the data is kept. The product's commands
+// stay.
+func TestTheReinstallCommandSendsTheVersionAndANewCode(t *testing.T) {
+	f := &resetAccessd{}
+	e, out := resetEnv(t, f, "0.2.0\n123456\n")
+	if err := shell.Run(context.Background(), e, "sneakers reinstall"); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if len(f.reinstalls) != 1 || f.reinstalls[0].GetConfirm() != "0.2.0" || f.reinstalls[0].GetTotpCode() != "123456" {
+		t.Fatalf("reinstalls %v", f.reinstalls)
+	}
+	for _, want := range []string{"keeps its data", "Type 0.2.0", "Sneakers 0.2.0 is reinstalled from the mirror"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("no %q in:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out.String(), "123456") || !e.Product.Present() {
+		t.Fatalf("echoed the code, or dropped the product's commands:\n%s", out)
+	}
+	f = &resetAccessd{}
+	e, _ = resetEnv(t, f, "\n")
+	assertCode(t, shell.Run(context.Background(), e, "sneakers reinstall"), "ACCESS_CONFIRM")
+	if len(f.reinstalls) != 0 {
+		t.Fatal("an unconfirmed reinstall was sent")
+	}
+	admin := &shell.Env{Origin: shell.OriginSSH, Backend: &recordingBackend{}, Product: sneakers, Role: "admin"}
+	var help bytes.Buffer
+	admin.Out, admin.Err, admin.In = &help, &help, strings.NewReader("")
+	if err := shell.Run(context.Background(), admin, "help sneakers"); err != nil || strings.Contains(help.String(), "reinstall") {
+		t.Fatalf("an admin's help offers the reinstall (%v):\n%s", err, help.String())
+	}
 }

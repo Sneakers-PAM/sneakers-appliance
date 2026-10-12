@@ -122,13 +122,13 @@ func TestAnUpgradeKeepsThePreviousSlotAsTheWayBack(t *testing.T) {
 	}
 }
 
-func TestOnlyANewerVersionStages(t *testing.T) {
+func TestAnOlderVersionNeverStages(t *testing.T) {
 	e := newEnv(t, nil)
 	e.stage(t, "0.3.0")
 	if _, err := e.slots.Apply(); err != nil {
 		t.Fatal(err)
 	}
-	for _, v := range []string{"0.3.0", "0.2.0"} {
+	for _, v := range []string{"0.2.0", "0.2.9"} {
 		if err := e.slots.Stage(header(v), e.fill, e.key); !codes.Is(err, codes.UpgradeDowngrade) {
 			t.Fatalf("%s: want UPGRADE_DOWNGRADE, got %v", v, err)
 		}

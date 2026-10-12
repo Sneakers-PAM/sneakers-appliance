@@ -90,6 +90,12 @@ service AccessService {
   // owner and give a new authenticator code. It's the only way to the
   // reset: :8443 and the console are refused.
   rpc ResetProduct(ResetProductRequest) returns (ResetProductResponse);
+  // ReinstallProduct is the closed shell's "<product> reinstall": it takes
+  // a staged bundle of the installed version, or fetches and stages it
+  // from the box's update source, then applies it, each step as osadmin's
+  // UpgradeService method run as the login's admin (an owner, with a new
+  // authenticator code for the apply). The data is kept.
+  rpc ReinstallProduct(ReinstallProductRequest) returns (ReinstallProductResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -799,4 +805,19 @@ message ResetProductRequest {
 
 message ResetProductResponse {
   sneakers.appliance.osadmin.v1.ResetProductResponse result = 1;
+}
+
+message ReinstallProductRequest {
+  // totp_code is a new authenticator code, read at the command.
+  string totp_code = 1;
+  // confirm is the installed version, as typed.
+  string confirm = 2;
+}
+
+message ReinstallProductResponse {
+  // version is the version reinstalled; source is where the bundle came
+  // from: staged, or the source FetchUpdate named (mirror, builtin or
+  // direct).
+  string version = 1;
+  string source = 2;
 }

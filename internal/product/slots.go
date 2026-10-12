@@ -122,8 +122,9 @@ func (s Slots) Unstage() (string, error) {
 }
 
 // Stage fills the slot current doesn't name with h's bundle: fill unpacks
-// the verified, decrypted payload into the directory it's given. Only a
-// version newer than the installed one stages (UPGRADE_DOWNGRADE). The
+// the verified, decrypted payload into the directory it's given. An older
+// version than the installed one never stages (UPGRADE_DOWNGRADE); the
+// installed version itself does, for a reinstall. The
 // unpacked bundle must then check out against its release.yaml and key
 // (bundle.CheckProduct); only then is its header written and staged set.
 // Staging replaces what that slot held, a previous or an earlier staged
@@ -132,8 +133,8 @@ func (s Slots) Stage(h updatepkg.Header, fill func(dir string) error, key *ecdsa
 	if !h.IsProduct() {
 		return codes.New(codes.UpgradeFormat, "%s %s isn't a product bundle", h.Name, h.Version)
 	}
-	if cur := s.version(linkCurrent); cur != "" && semver.Compare("v"+h.Version, "v"+cur) <= 0 {
-		return codes.New(codes.UpgradeDowngrade, "the product bundle %s isn't newer than the installed %s", h.Version, cur)
+	if cur := s.version(linkCurrent); cur != "" && semver.Compare("v"+h.Version, "v"+cur) < 0 {
+		return codes.New(codes.UpgradeDowngrade, "the product bundle %s is older than the installed %s", h.Version, cur)
 	}
 	if err := os.MkdirAll(s.Dir, 0o755); err != nil { // #nosec G301 -- k0s reads the slots as root; nothing secret is in them
 		return fmt.Errorf("product: %w", err)

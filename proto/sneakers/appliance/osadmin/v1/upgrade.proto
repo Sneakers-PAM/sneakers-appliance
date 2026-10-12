@@ -500,6 +500,11 @@ message CheckUpdatesResponse {
   // and the Base OS it needs, such as "Base Web 0.4.0 needs Base OS 0.4.0
   // to before 0.5.0"; empty when there's none.
   string base_web_waits = 8;
+  // product_reinstall is the installed product version itself, when the
+  // source has it for this box: a reinstall, which keeps the data and
+  // runs the same apply as an update. Unset when it doesn't, or with no
+  // product installed.
+  UnitOffer product_reinstall = 9;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch

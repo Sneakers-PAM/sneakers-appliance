@@ -47,3 +47,14 @@ func TestTheShellsResetRunsAsTheOwnerWithItsOwnCode(t *testing.T) {
 	_, err = osadminv1connect.NewProductServiceClient(hc, url).ResetProduct(ctx, connect.NewRequest(&osadminv1.ResetProductRequest{TotpCode: b.code("alice"), Confirm: "sneakers"}))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
 }
+
+// The closed shell's "<product> reinstall" is an owner's, with the
+// installed version typed; with no product there's nothing to reinstall.
+func TestTheShellsReinstallIsAnOwnersOfTheInstalledVersion(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	_, err := b.shell("bob").ReinstallProduct(ctx, connect.NewRequest(&accessv1.ReinstallProductRequest{TotpCode: b.code("bob"), Confirm: "0.2.0"}))
+	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_FORBIDDEN")
+	_, err = b.shell("alice").ReinstallProduct(ctx, connect.NewRequest(&accessv1.ReinstallProductRequest{TotpCode: b.code("alice"), Confirm: "0.2.0"}))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "PRODUCT_NOT_INSTALLED")
+}

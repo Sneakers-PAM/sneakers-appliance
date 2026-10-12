@@ -15,6 +15,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -256,6 +257,7 @@ func (s *Server) stageProduct(ctx context.Context, path string, p *updatepkg.Pac
 		return err
 	}
 	s.removeUpload(path)
+	s.forgetResetKept()
 	s.o.Logger.Info("osadmin: product bundle staged", log.F("version", p.Header.Version))
 	return nil
 }
@@ -269,7 +271,11 @@ type BoxSecrets interface {
 // applyProduct switches to the staged product slot and restarts the
 // product, under the same maintenance gate as a base apply.
 func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, string, error) {
-	v := s.slots().Status().Staged
+	st := s.slots().Status()
+	v := st.Staged
+	// A bundle of the installed version is a reinstall: the same apply,
+	// from a fresh slot, with the data kept.
+	reinstall := v != "" && v == st.Installed
 	var err error
 	if v == "" {
 		err = codes.New(codes.UpgradeNotStaged, "no product bundle is staged; upload or fetch one and stage it first")
@@ -283,9 +289,51 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 			s.endMaintenance()
 		}
 	}
-	s.productHistory("apply", v, by.Actor, err, overrideDetail(overrode))
-	s.o.Logger.Info("osadmin: product apply", log.F("version", v), log.F("by", by.Actor), log.F("ok", err == nil))
+	action := "apply"
+	if reinstall {
+		action = "reinstall"
+		e := by
+		e.Action, e.Target = "product.reinstall", "product"
+		e.Detail = map[string]string{"version": v}
+		if surface := by.Detail["surface"]; surface != "" {
+			e.Detail["surface"] = surface
+		}
+		s.write(e, err)
+	}
+	if err == nil {
+		s.forgetResetKept()
+	}
+	s.productHistory(action, v, by.Actor, err, overrideDetail(overrode))
+	s.o.Logger.Info("osadmin: product apply", log.F("version", v), log.F("reinstall", reinstall), log.F("by", by.Actor), log.F("ok", err == nil))
 	return v, overrode, err
+}
+
+// resetKeptFile records the bundle a product reset kept as the staged
+// one, so the update window leaves installing it to an owner.
+const resetKeptFile = "product-reset-kept"
+
+func (s *Server) keepResetBundle(version string) {
+	if err := os.MkdirAll(s.o.Paths.APIDir(), 0o700); err != nil {
+		s.o.Logger.Warn("osadmin: the reset's kept bundle isn't recorded", log.F("error", err.Error()))
+		return
+	}
+	if err := os.WriteFile(s.ownPath(resetKeptFile), []byte(version), 0o600); err != nil {
+		s.o.Logger.Warn("osadmin: the reset's kept bundle isn't recorded", log.F("error", err.Error()))
+	}
+}
+
+func (s *Server) resetKept() string {
+	b, err := os.ReadFile(s.ownPath(resetKeptFile)) // #nosec G304 -- osadmin's own file
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func (s *Server) forgetResetKept() {
+	if err := os.Remove(s.ownPath(resetKeptFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		s.o.Logger.Warn("osadmin: the reset's kept bundle record didn't go", log.F("error", err.Error()))
+	}
 }
 
 // revertProduct goes back to the previous product slot.

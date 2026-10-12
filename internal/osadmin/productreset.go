@@ -162,6 +162,9 @@ func (s *Server) removeProduct(ctx context.Context, out *osadminv1.ResetProductR
 	}
 	kept, slotBytes, err := s.slots().Uninstall()
 	out.StagedVersion = kept
+	if kept != "" {
+		s.keepResetBundle(kept)
+	}
 	out.BytesRemoved += uint64(max(slotBytes, 0)) // #nosec G115 -- not negative
 	if err != nil {
 		return "slot", codes.Wrap(codes.ProductReset, err)
