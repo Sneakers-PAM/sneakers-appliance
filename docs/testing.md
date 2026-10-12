@@ -11,6 +11,7 @@
 | The disk guard on a real small volume: filled past 80% with removable files it recovers by itself; past 90% with a protected file it stays critical and touches nothing | `DISKGUARD_TEST_DIR=<a directory on a tmpfs or loop volume of 8 GiB or less> go test -tags integration -run Fill ./internal/diskguard/` | by hand (a tmpfs mount needs root; the test skips without the variable) |
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
 | The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a merge never cancels the suite already running on main, it waits for it; a pull request only builds the lab release and reports the root image and product bundle sizes |
+| The real Sneakers product through the update paths a box takes (QEMU, the real bundles) | `build/realci/build.sh`, then `go test -tags image -run 'TestTheRealBundles' ./test/image/k0s/` | after each merge to main, nightly at 05:41 UTC (01:41 ET), by hand, on a pull request that changes the job, and in the release workflow before anything is built (`real-bundle.yml`, [the real-bundle job](#the-real-bundle-job)) |
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
@@ -89,7 +90,8 @@ variables at all, like the first lab target. It adds swtpm as the TPM when asked
 when the runner has it. The serial line is a pair of FIFOs: the output goes to a file the tests
 match against, without its colour codes, and `Type` sends console input. `Stop` kills the VM,
 `WaitExit` waits for a guest reboot (QEMU runs with `-no-reboot`), and `Disk` hands the VM's disk
-to the next boot. On a failure the last lines of the console go to the test log and the job
+to the next boot (copied, or with `Disk.Move` renamed, for a disk too big to copy at every boot).
+`CPUs` sets the virtual CPUs (2 by default). On a failure the last lines of the console go to the test log and the job
 summary.
 
 Every VM has a QMP socket. `NoSerial` boots without a serial port and `NoVGA` without a display
@@ -102,6 +104,58 @@ VM's keyboard.
 a kernel panic) or QEMU exits, and if any service restarts three times or more. A service that's
 known to crash-loop on the image is named with its reason, and it fails once it stops looping, so
 the entry goes when its cause is fixed. Today there are none.
+
+## The real-bundle job
+
+The image suite boots the lab product, a hello page and stand-ins. The real-bundle job
+(`.github/workflows/real-bundle.yml`) boots the real Sneakers product, built the way the published
+lab bundles were, through the update paths a box takes, so a break between the real pieces
+(the phases, the box values and the switches together, or a product without phases updating to one
+with them) fails here and not on a box.
+
+**The builds** (`build/realci/build.sh`, LAB ONLY, one lab key set made for the run on a tmpfs):
+
+| Piece | Built from |
+|---|---|
+| the old base (the boxes' n6) | `build/lab/build.sh` at `OLD_BASE_COMMIT` (`build/realci/pins.env`), its raw disk |
+| the base under test (n7) | `build/lab/build.sh` at the commit under test, packed as a Base OS update (`sneakers-artifact bin-pack`, as the release workflow's lab job does) |
+| `.12`, the product without phases | this repository at `P12_APPLIANCE_COMMIT` with sneakers-release at `P12_RELEASE_COMMIT` |
+| `.13`, the first with phases | `P13_APPLIANCE_COMMIT` with `P13_RELEASE_COMMIT` |
+| `next`, the product under test (`0.1.0-lab.realci.next`) | the commit under test with `NEXT_RELEASE_COMMIT` (empty: sneakers-release's main) |
+
+Each product is the release path with lab keys (`build/realci/product.sh`, run in its own
+commit's checkout with that commit's tools): the service images from `build/release/images.sh`
+(each from the commit its release.yaml pins; the builds are reproducible, so `.13`'s are
+byte-identical to the published `.13`'s), `bundle fill`, each pinned manifest signed with the lab
+key, the production render with the lab's debug log level, product.yaml and the import Job, then
+`build/product/build.sh`. The stacks match the published bundles but for the version; only the
+generated box secrets differ, as on any new box. Every base is built by its own commit's scripts
+with this commit's lab hook, so the test reads the same lines from each. The `.12` and `.13`
+service images are cached; the product under test's are built every run.
+
+**The lab hook's real-product path.** With the Sneakers product installed (a `sneakers` stack), the
+hook ([k0s.md](k0s.md)) writes 1000 rows into a `realci_rows` table in each of the product's six
+databases once the box first runs it (once per box), through the root's `kubectl exec` into the
+bundled PostgreSQL. Each time the box runs a product version it hadn't reported since the boot, it
+prints the rows of every table in every database, how PostgreSQL's current start began (`first`,
+`clean` or `recovered`), and the product's pods (phase order, restarts, each init container's
+restarts and end, why a container waits, start and Ready times).
+While the box doesn't run, it prints the box's state, the pods, each `wait-phase` init container's last lines, each
+crash-looping container's last lines and the rows every five minutes.
+
+**The legs** (`test/image/k0s/realbundle_test.go`, 8 GiB and 4 CPUs, 22, 8443 and 443 forwarded):
+
+| Leg | Test | What it checks |
+|---|---|---|
+| upgrade | `TestTheRealBundlesUpdateInOrder` | the old base with `.12` and `sneakers mcp on` over SSH; the Base OS update to the base under test; `.12` to the product under test (no phases to phases); then a power loss. After each step the box runs the product within 45 minutes (else it's stuck: the failure names what holds it, such as a `wait-phase` init container backing off, with the hook's last lines); for a phased product every phase (data, identity, services, front) has a pod and each pod started only once the phases before it were Ready; no running pod or init container restarted, every init container (a phase's `wait-phase` among them) completed, and each pod is Ready; the MCP server runs; every database still counts, the 1000 rows are in each, no table that held rows has fewer, and PostgreSQL didn't start on a new data directory. After the power loss no pod is one from before it, restarted in place |
+| recover | `TestTheRealBundlesRecoverFromAStuckUpdate` | the old base with `.12` and the MCP switch on, then `.13` on the old base, which that base doesn't bring up: the test records whether it got stuck, and if so the hook's lines and whether the rows were already short in that state. Then the base under test is applied in that state, and whether it brings `.13` up by itself is recorded (it can't: `.13`'s own data-phase wait fails, with the `wait-phase` lines in the log); the box must then take the product under test and run it with the checks above |
+| control | the upgrade test with `CONTROL=1` | the base under test is `CONTROL_COMMIT`, from before the quiesce fixes (#365, #370): the update to phases must fail there. The leg is allowed to fail (`continue-on-error`); it runs on pull requests and by hand |
+
+A leg takes about an hour and a half on a GitHub runner (the builds 15 to 25 minutes with the
+caches, the boots and updates about an hour; a wait ends early once the box has said `failed` three
+reports in a row), so the job doesn't gate every pull request. A run by hand takes `under_test`, the commit
+whose base and product to test. Only logs leave the run (the serial consoles, the build logs and the
+`go test` output, as the `real-bundle-logs-<leg>` artifact); nothing built and no key is uploaded.
 
 ## The image suite
 

@@ -47,6 +47,24 @@ box_running() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: %s\r\n\r\n' "$1" | nc -w 5 "$1" "$2" 2>/dev/null | grep -q '"state":"running"'
 }
 
+# pg_in <database> <sql>: psql as postgres in the bundled PostgreSQL's
+# pod, through the root's kubectl.
+pg_in() { k -n sneakers exec sneakers-postgres-0 -c postgres -- psql -U postgres -d "$1" -qtAX -v ON_ERROR_STOP=1 -c "$2"; }
+# pg_start: how the bundled PostgreSQL's current start began, from its
+# log: first (a new data directory), clean (after a shutdown checkpoint)
+# or recovered. The image's first start runs initdb's own server and stops
+# it cleanly, so its init line comes first.
+pg_start() {
+  log="$(k -n sneakers logs sneakers-postgres-0 -c postgres 2>/dev/null)"
+  case "$log" in
+    *"init process complete"*) echo first ;;
+    *"database system was interrupted"*|*"not properly shut down"*) echo recovered ;;
+    *"database system was shut down"*) echo clean ;;
+    "") echo unknown ;;
+    *) echo first ;;
+  esac
+}
+
 # The image suite's durability product (build/lab/durability.sh): the
 # bundled PostgreSQL and a client on it. Once the box first runs it, 10000
 # rows go into the database, once per box (the mark is on the state
@@ -56,7 +74,7 @@ box_running() {
 # rows it counts and how the server's current start began: first (a new
 # data directory), clean (after a shutdown checkpoint) or recovered.
 durability_mark=/var/lib/sneakers/lab-durability-rows
-pg() { k -n sneakers exec sneakers-postgres-0 -c postgres -- psql -U postgres -d durability -qtAX -v ON_ERROR_STOP=1 -c "$1"; }
+pg() { pg_in durability "$1"; }
 durability_report() {
   if [ ! -e "$durability_mark" ]; then
     if pg "CREATE TABLE durability_rows (id bigserial PRIMARY KEY, v text NOT NULL)" >/dev/null &&
@@ -70,15 +88,8 @@ durability_report() {
   fi
   n="$(pg 'SELECT count(*) FROM durability_rows' 2>/dev/null)" || n=missing
   [ -n "$n" ] || n=missing
-  log="$(k -n sneakers logs sneakers-postgres-0 -c postgres 2>/dev/null)"
-  # The image's first start runs initdb's own server and stops it cleanly,
-  # so its init line comes first.
-  case "$log" in
-    *"init process complete"*) start=first ;;
-    *"database system was interrupted"*|*"not properly shut down"*) start=recovered ;;
-    *"database system was shut down"*) start=clean ;;
-    *) start=first ;;
-  esac
+  start="$(pg_start)"
+  [ "$start" != unknown ] || start=first
   say "durability: version=$1 rows=$n start=$start"
 }
 durability() {
@@ -88,6 +99,108 @@ durability() {
     if [ "$v" != "$last" ] && box_running 127.0.0.1 9180; then
       durability_report "$v"
       last="$v"
+    fi
+    sleep 5
+  done
+}
+
+# The real-bundle job's product (build/realci): the Sneakers product
+# itself, with its bundled PostgreSQL. Once the box first runs it, 1000
+# rows go into a realci_rows table in each of the product's databases,
+# once per box (the mark is on the state volume, so a lost database is
+# never filled again). Each time the box runs a product version it hadn't
+# reported since this boot, the hook prints, for the image test: the rows
+# of every table in every database, how the server's current start began
+# (pg_start), and the product's pods with their phase order, restarts,
+# init containers (each one's restarts and how it ended or why it waits),
+# why a container waits, and start and Ready times. While the box doesn't run, it prints the box's
+# state, the pods, each wait-phase init container's last lines, each
+# crash-looping container's last lines and the rows every five minutes, so
+# a stuck update shows what holds it.
+realci_dbs="sneakers_identity sneakers_vault sneakers_workflow sneakers_audit sneakers_kratos sneakers_hydra"
+realci_mark=/var/lib/sneakers/lab-realci-rows
+# Every table's rows, as <table>=<count>, comma-separated.
+realci_count_sql="SELECT string_agg(c.relname || '=' || (xpath('/row/n/text()', query_to_xml(format('SELECT count(*) AS n FROM %I.%I', s.nspname, c.relname), false, true, '')))[1]::text, ',' ORDER BY c.relname) FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE c.relkind IN ('r', 'p') AND s.nspname NOT IN ('pg_catalog', 'information_schema') AND s.nspname NOT LIKE 'pg_toast%'"
+realci_write() {
+  ok=1
+  for db in $realci_dbs; do
+    if ! pg_in "$db" "CREATE TABLE realci_rows (id bigserial PRIMARY KEY, v text NOT NULL)" >/dev/null ||
+      ! pg_in "$db" "INSERT INTO realci_rows (v) SELECT md5(g::text) FROM generate_series(1, 1000) g" >/dev/null; then
+      ok=""
+    fi
+  done
+  if [ -n "$ok" ]; then
+    : > "$realci_mark"
+    sync
+    say "realci: rows written"
+  else
+    say "realci: the rows couldn't be written"
+  fi
+}
+realci_rows() { # version when
+  line=""
+  for db in $realci_dbs; do
+    n="$(pg_in "$db" "$realci_count_sql" 2>/dev/null)" || n=missing
+    [ -n "$n" ] || n=empty
+    line="$line $db[$n]"
+  done
+  say "realci: rows $2 version=$1 start=$(pg_start)$line"
+}
+realci_pods() { # version when
+  say "realci: pods $2 version=$1: $(k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} app={.metadata.labels.app\.kubernetes\.io/name} order={.metadata.labels.sneakers-appliance/phase-order} phase={.status.phase} restarts={.status.containerStatuses[*].restartCount} init=[{range .status.initContainerStatuses[*]}{.name}/{.restartCount}/{.state.terminated.reason}{.state.waiting.reason},{end}] waiting={.status.containerStatuses[*].state.waiting.reason} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].status}@{.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
+}
+# realci_waits: the last lines of each pod's wait-phase init container
+# (the run before a restart, when there was one), so a phase stuck on its
+# wait shows why.
+realci_waits() {
+  for p in $(k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name}{" "}{end}' 2>/dev/null); do
+    l="$(k -n sneakers logs "$p" -c wait-phase --previous --tail=3 2>/dev/null)" || l=""
+    [ -n "$l" ] || l="$(k -n sneakers logs "$p" -c wait-phase --tail=3 2>/dev/null)" || l=""
+    [ -z "$l" ] || say "realci: wait-phase $p: $(printf '%s' "$l" | tr '\n' ' ')"
+  done
+}
+# realci_crashes: the last lines of each crash-looping container's
+# previous run, so a pod that won't stay up shows why.
+realci_crashes() {
+  k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name}{range .status.containerStatuses[?(@.state.waiting.reason=="CrashLoopBackOff")]}{" "}{.name}{end}{"\n"}{end}' 2>/dev/null |
+    while read -r p c rest; do
+      [ -n "$c" ] || continue
+      say "realci: crash $p/$c: $(k -n sneakers logs "$p" -c "$c" --previous --tail=5 2>/dev/null | tr '\n' ' ')"
+    done
+}
+box_state() {
+  printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'
+}
+realci() {
+  say "realci: the Sneakers product"
+  last="" seen="" ticks=""
+  while :; do
+    v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
+    if box_running 127.0.0.1 9180; then
+      ticks=""
+      # The box says running three times in a row before a report, so a
+      # report never catches the moment between an apply and its gate.
+      if [ "$v" != "$last" ]; then
+        seen="$seen."
+        if [ "${#seen}" -ge 3 ]; then
+          [ -e "$realci_mark" ] || realci_write
+          realci_rows "$v" running
+          realci_pods "$v" running
+          say "realci: report version=$v"
+          last="$v" seen=""
+        fi
+      fi
+    else
+      seen=""
+      ticks="$ticks."
+      if [ "${#ticks}" -ge 60 ]; then
+        say "realci: waiting version=$v state=$(box_state)"
+        realci_pods "$v" waiting
+        realci_waits
+        realci_crashes
+        realci_rows "$v" waiting
+        ticks=""
+      fi
     fi
     sleep 5
   done
@@ -108,6 +221,9 @@ wait_for "api up" k get --raw /readyz
 wait_for "node ready" k wait --for=condition=Ready node --all --timeout=10s
 if [ -d "$product/manifests/durability" ]; then
   durability
+fi
+if [ -d "$product/manifests/sneakers" ]; then
+  realci
 fi
 wait_for "hello pod ready" k -n sneakers-hello wait --for=condition=Ready pod -l app=hello --timeout=10s
 # After a power loss the first Ready hello pod is the old one, restarted
