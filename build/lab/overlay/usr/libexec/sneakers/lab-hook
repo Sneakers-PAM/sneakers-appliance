@@ -112,7 +112,8 @@ durability() {
 # reported since this boot, the hook prints, for the image test: the rows
 # of every table in every database, how the server's current start began
 # (pg_start), and the product's pods with their phase order, restarts,
-# start and Ready times. While the box doesn't run, it prints the box's
+# init containers (each one's restarts and how it ended or why it waits),
+# why a container waits, and start and Ready times. While the box doesn't run, it prints the box's
 # state, the pods and the rows every five minutes, so a stuck update shows
 # what holds it.
 realci_dbs="sneakers_identity sneakers_vault sneakers_workflow sneakers_audit sneakers_kratos sneakers_hydra"
@@ -145,7 +146,7 @@ realci_rows() { # version when
   say "realci: rows $2 version=$1 start=$(pg_start)$line"
 }
 realci_pods() { # version when
-  say "realci: pods $2 version=$1: $(k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} app={.metadata.labels.app\.kubernetes\.io/name} order={.metadata.labels.sneakers-appliance/phase-order} phase={.status.phase} restarts={.status.containerStatuses[*].restartCount} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].status}@{.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
+  say "realci: pods $2 version=$1: $(k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} app={.metadata.labels.app\.kubernetes\.io/name} order={.metadata.labels.sneakers-appliance/phase-order} phase={.status.phase} restarts={.status.containerStatuses[*].restartCount} init=[{range .status.initContainerStatuses[*]}{.name}/{.restartCount}/{.state.terminated.reason}{.state.waiting.reason},{end}] waiting={.status.containerStatuses[*].state.waiting.reason} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].status}@{.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
 }
 box_state() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'

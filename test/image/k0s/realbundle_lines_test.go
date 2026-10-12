@@ -14,12 +14,12 @@ import (
 // prints them for the real-bundle job.
 const (
 	realRowsLine = `lab-hook: realci: rows running version=0.1.0-lab.realci.13 start=clean sneakers_identity[admins=2,realci_rows=1000] sneakers_vault[folders=3,realci_rows=1000,secrets=0] sneakers_hydra[missing]`
-	realPodsLine = `lab-hook: realci: pods running version=0.1.0-lab.realci.13: sneakers-postgres-0 app=sneakers-postgres order=1 phase=Running restarts=0 started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;` +
-		`sneakers-vault-7d9 app=sneakers-vault order=2 phase=Running restarts=0 0 started=2026-10-12T10:00:40Z ready=True@2026-10-12T10:01:00Z;` +
-		`sneakers-workflow-5c1 app=sneakers-workflow order=3 phase=Running restarts=0 started=2026-10-12T10:01:05Z ready=True@2026-10-12T10:01:20Z;` +
-		`sneakers-gateway-6b2 app=sneakers-gateway order=4 phase=Running restarts=0 started=2026-10-12T10:01:25Z ready=True@2026-10-12T10:01:40Z;` +
-		`sneakers-mcp-4f3 app=sneakers-mcp order=4 phase=Running restarts=0 started=2026-10-12T10:01:25Z ready=True@2026-10-12T10:01:45Z;` +
-		`sneakers-import-x app=sneakers-import order= phase=Succeeded restarts=0 started=2026-10-12T09:00:00Z ready=False@2026-10-12T09:01:00Z;`
+	realPodsLine = `lab-hook: realci: pods running version=0.1.0-lab.realci.13: sneakers-postgres-0 app=sneakers-postgres order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;` +
+		`sneakers-vault-7d9 app=sneakers-vault order=2 phase=Running restarts=0 0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:40Z ready=True@2026-10-12T10:01:00Z;` +
+		`sneakers-workflow-5c1 app=sneakers-workflow order=3 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:01:05Z ready=True@2026-10-12T10:01:20Z;` +
+		`sneakers-gateway-6b2 app=sneakers-gateway order=4 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:01:25Z ready=True@2026-10-12T10:01:40Z;` +
+		`sneakers-mcp-4f3 app=sneakers-mcp order=4 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:01:25Z ready=True@2026-10-12T10:01:45Z;` +
+		`sneakers-import-x app=sneakers-import order= phase=Succeeded restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T09:00:00Z ready=False@2026-10-12T09:01:00Z;`
 )
 
 func TestTheRealRowsLineReads(t *testing.T) {
@@ -80,7 +80,7 @@ func TestTheRealPodsLineReads(t *testing.T) {
 
 func TestPhaseProblemsAreFound(t *testing.T) {
 	// The front phase started before the services were Ready.
-	early := strings.Replace(realPodsLine, "app=sneakers-gateway order=4 phase=Running restarts=0 started=2026-10-12T10:01:25Z", "app=sneakers-gateway order=4 phase=Running restarts=0 started=2026-10-12T10:01:10Z", 1)
+	early := strings.Replace(realPodsLine, "app=sneakers-gateway order=4 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:01:25Z", "app=sneakers-gateway order=4 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:01:10Z", 1)
 	pods, _ := readRealPods(early)
 	if p := phaseProblems(pods, true); len(p) != 1 || !strings.Contains(p[0], "sneakers-gateway") {
 		t.Fatalf("an early start: %v", p)
@@ -106,6 +106,29 @@ func TestPhaseProblemsAreFound(t *testing.T) {
 	pods, _ = readRealPods(strings.ReplaceAll(bad, "order=4", "order="))
 	if p := phaseProblems(pods, false); len(p) != 2 {
 		t.Fatalf("without phases: %v", p)
+	}
+}
+
+// The data phase stuck on its wait: the PostgreSQL pod's wait-phase init
+// container failing and backing off, so the server never starts.
+func TestAFailingInitContainerIsFound(t *testing.T) {
+	stuck := strings.Replace(realPodsLine, "sneakers-postgres-0 app=sneakers-postgres order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@",
+		"sneakers-postgres-0 app=sneakers-postgres order=1 phase=Pending restarts=0 init=[wait-phase/4/CrashLoopBackOff,] waiting=PodInitializing started=2026-10-12T10:00:00Z ready=False@", 1)
+	pods, err := readRealPods(stuck)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pods[0].init[0].name != "wait-phase" || pods[0].init[0].restarts != 4 || pods[0].init[0].state != "CrashLoopBackOff" || pods[0].waiting != "PodInitializing" {
+		t.Fatalf("read %+v", pods[0])
+	}
+	p := strings.Join(phaseProblems(pods, true), "\n")
+	if !strings.Contains(p, "sneakers-postgres-0's init container wait-phase restarted 4 times and is CrashLoopBackOff") || !strings.Contains(p, "sneakers-postgres-0 isn't Ready (Pending, PodInitializing)") {
+		t.Fatalf("a failing wait-phase: %s", p)
+	}
+	// One that completed after a restart is a problem too.
+	again, _ := readRealPods(strings.Replace(realPodsLine, "init=[wait-phase/0/Completed,]", "init=[wait-phase/1/Completed,]", 1))
+	if p := phaseProblems(again, true); len(p) != 1 || !strings.Contains(p[0], "wait-phase restarted 1 times") {
+		t.Fatalf("an init container that restarted: %v", p)
 	}
 }
 

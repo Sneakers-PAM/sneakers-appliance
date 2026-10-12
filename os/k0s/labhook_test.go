@@ -148,6 +148,11 @@ func TestTheLabHookReportsTheRealProduct(t *testing.T) {
 	if real < 0 || hello < 0 || real > hello {
 		t.Fatalf("the hook doesn't take the real product's path before it waits for the hello pod (realci at %d, hello at %d)", real, hello)
 	}
+	// The pods line carries each init container's restarts and end, so a
+	// phase stuck on its wait shows why.
+	if !strings.Contains(hook, "init=[{range .status.initContainerStatuses[*]}{.name}/{.restartCount}/{.state.terminated.reason}{.state.waiting.reason},{end}]") {
+		t.Fatal("the hook's pods line doesn't show the init containers")
+	}
 	var defs []string
 	for _, name := range []string{"pg_in", "pg_start", "realci_rows", "realci_pods"} {
 		fn := regexp.MustCompile(`(?m)^` + name + `\(\) \{.*\}\n`).FindString(hook)
@@ -175,7 +180,7 @@ k() {
     *"exec sneakers-postgres-0"*sneakers_hydra*) return 1 ;;
     *"exec sneakers-postgres-0"*) echo "realci_rows=1000,t=2" ;;
     *"logs sneakers-postgres-0"*) printf 'PostgreSQL init process complete\ndatabase system was shut down at x\n' ;;
-    *"get pods"*) echo "p app=a order=1 phase=Running restarts=0 started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;" ;;
+    *"get pods"*) echo "p app=a order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;" ;;
   esac
 }
 `
@@ -186,7 +191,7 @@ k() {
 	}
 	got := string(out)
 	rows := `lab-hook: realci: rows running version=0.1.0-x start=first sneakers_identity[realci_rows=1000,t=2] sneakers_vault[realci_rows=1000,t=2] sneakers_workflow[realci_rows=1000,t=2] sneakers_audit[realci_rows=1000,t=2] sneakers_kratos[realci_rows=1000,t=2] sneakers_hydra[missing]` + "\n"
-	pods := "lab-hook: realci: pods running version=0.1.0-x: p app=a order=1 phase=Running restarts=0 started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;\n"
+	pods := "lab-hook: realci: pods running version=0.1.0-x: p app=a order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;\n"
 	if got != rows+pods {
 		t.Fatalf("the hook printed\n%s\nwant\n%s%s", got, rows, pods)
 	}

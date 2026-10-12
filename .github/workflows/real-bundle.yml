@@ -151,6 +151,7 @@ jobs:
           source build/realci/pins.env
           echo "p12=$P12_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "p13=$P13_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "old=$OLD_BASE_COMMIT" >> "$GITHUB_OUTPUT"
       - name: Cache the .12 and .13 service images
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -158,6 +159,13 @@ jobs:
             ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p12 }}
             ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p13 }}
           key: realci-images-${{ steps.pins.outputs.p12 }}-${{ steps.pins.outputs.p13 }}-${{ hashFiles('build/release/images.sh') }}
+      # The old base's tree stamps its static tools with its own pins, so it
+      # builds its own when this commit's stamps differ (build/realci/build.sh).
+      - name: Cache the old base's static tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ${{ runner.temp }}/static-cache/${{ steps.pins.outputs.old }}
+          key: realci-components-${{ steps.pins.outputs.old }}
       - name: Build the bases and the real bundles
         env:
           UNDER_TEST: ${{ inputs.under_test }}
@@ -170,7 +178,7 @@ jobs:
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
-          KEYS="$keys" OUT="$RUNNER_TEMP/realci" LAYOUTS="$RUNNER_TEMP/layouts" bash build/realci/build.sh 2>&1 | tee "$RUNNER_TEMP/realci-build.log"
+          KEYS="$keys" OUT="$RUNNER_TEMP/realci" LAYOUTS="$RUNNER_TEMP/layouts" STATIC_CACHE="$RUNNER_TEMP/static-cache" bash build/realci/build.sh 2>&1 | tee "$RUNNER_TEMP/realci-build.log"
           {
             echo "### Real bundles (${{ matrix.leg }})"
             echo '```'

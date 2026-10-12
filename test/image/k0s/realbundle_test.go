@@ -223,7 +223,11 @@ func (b *realBox) mustRun(version, when string, base realRows, phased, mcp bool)
 	b.t.Helper()
 	r, ok := b.waitReport(version, 45*time.Minute)
 	if !ok {
-		b.t.Fatalf("%s: the box never ran %s within 45m (stuck); the lab hook's last lines:\n%s", when, version, b.waiting())
+		why := ""
+		if pods, err := readRealPods(lastLine(b.vm.Console(), `realci: pods waiting `)); err == nil {
+			why = strings.Join(phaseProblems(pods, phased), "\n")
+		}
+		b.t.Fatalf("%s: the box never ran %s within 45m (stuck):\n%s\nthe lab hook's last lines:\n%s", when, version, why, b.waiting())
 	}
 	problems := append(phaseProblems(r.pods, phased), rowProblems(base, r.rows)...)
 	// A first start after the install is a new data directory: the
@@ -438,14 +442,25 @@ type realPod struct {
 	name, app, phase string
 	order            int
 	restarts         []int
-	started          time.Time
-	ready            bool
-	readyAt          time.Time
+	init             []initStatus
+	// waiting is why its containers wait (PodInitializing, CrashLoopBackOff
+	// and the like), space-separated; empty when none does.
+	waiting string
+	started time.Time
+	ready   bool
+	readyAt time.Time
+}
+
+// initStatus is one init container: its restarts and how it ended
+// (Completed) or why it waits.
+type initStatus struct {
+	name, state string
+	restarts    int
 }
 
 var realPodsHead = regexp.MustCompile(`realci: pods \w+ version=\S+: (.*)$`)
 
-var realPodRE = regexp.MustCompile(`^(\S+) app=(\S*) order=(\d*) phase=(\S*) restarts=([\d ]*) started=(\S*) ready=(\w*)@(\S*)$`)
+var realPodRE = regexp.MustCompile(`^(\S+) app=(\S*) order=(\d*) phase=(\S*) restarts=([\d ]*) init=\[([^\]]*)\] waiting=([\w ]*) started=(\S*) ready=(\w*)@(\S*)$`)
 
 func readRealPods(line string) ([]realPod, error) {
 	m := realPodsHead.FindStringSubmatch(line)
@@ -463,7 +478,7 @@ func readRealPods(line string) ([]realPod, error) {
 		if m == nil {
 			return nil, fmt.Errorf("%q doesn't read", item)
 		}
-		p := realPod{name: m[1], app: m[2], phase: m[4], ready: m[7] == "True"}
+		p := realPod{name: m[1], app: m[2], phase: m[4], waiting: strings.TrimSpace(m[7]), ready: m[9] == "True"}
 		if m[3] != "" {
 			p.order, _ = strconv.Atoi(m[3])
 		}
@@ -471,17 +486,28 @@ func readRealPods(line string) ([]realPod, error) {
 			n, _ := strconv.Atoi(f)
 			p.restarts = append(p.restarts, n)
 		}
-		if m[6] != "" {
-			t, err := time.Parse(time.RFC3339, m[6])
-			if err != nil {
-				return nil, fmt.Errorf("%s started %q: %w", p.name, m[6], err)
+		for _, c := range strings.Split(m[6], ",") {
+			f := strings.SplitN(c, "/", 3)
+			if len(f) != 3 {
+				continue
 			}
-			p.started = t
+			n, err := strconv.Atoi(f[1])
+			if err != nil {
+				return nil, fmt.Errorf("%s init %q: %w", p.name, c, err)
+			}
+			p.init = append(p.init, initStatus{name: f[0], restarts: n, state: f[2]})
 		}
 		if m[8] != "" {
 			t, err := time.Parse(time.RFC3339, m[8])
 			if err != nil {
-				return nil, fmt.Errorf("%s ready %q: %w", p.name, m[8], err)
+				return nil, fmt.Errorf("%s started %q: %w", p.name, m[8], err)
+			}
+			p.started = t
+		}
+		if m[10] != "" {
+			t, err := time.Parse(time.RFC3339, m[10])
+			if err != nil {
+				return nil, fmt.Errorf("%s ready %q: %w", p.name, m[10], err)
 			}
 			p.readyAt = t
 		}
@@ -494,7 +520,9 @@ func readRealPods(line string) ([]realPod, error) {
 // data, identity, services, front.
 const phaseOrders = 4
 
-// phaseProblems checks the running pods: each Ready with no restarts and,
+// phaseProblems checks the running pods: each Ready with no restarts,
+// every init container completed without a restart (a phase's wait-phase
+// among them), and,
 // for a phased product, every phase there and each pod started only once
 // every pod of the phases before its own was Ready. A finished Job's pod
 // is left out.
@@ -511,8 +539,20 @@ func phaseProblems(pods []realPod, phased bool) []string {
 				break
 			}
 		}
+		for _, c := range p.init {
+			switch {
+			case c.restarts != 0:
+				out = append(out, fmt.Sprintf("%s's init container %s restarted %d times and is %s", p.name, c.name, c.restarts, c.state))
+			case c.state != "Completed":
+				out = append(out, fmt.Sprintf("%s's init container %s is %s, not Completed", p.name, c.name, c.state))
+			}
+		}
 		if !p.ready {
-			out = append(out, fmt.Sprintf("%s isn't Ready (%s)", p.name, p.phase))
+			why := p.phase
+			if p.waiting != "" {
+				why += ", " + p.waiting
+			}
+			out = append(out, fmt.Sprintf("%s isn't Ready (%s)", p.name, why))
 		}
 		if p.order > 0 && p.readyAt.After(readyBy[p.order]) {
 			readyBy[p.order] = p.readyAt

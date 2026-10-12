@@ -37,7 +37,10 @@
 #               commit (OUT/layouts by default); a commit already there
 #               isn't built again
 #   KERNEL, KERNELRELEASE, VERITYSETUP, OPENSSH, BUSYBOX, STATIC
-#               the components, as build/lab/build.sh takes them
+#               the components, as build/lab/build.sh takes them; a tree
+#               whose stamps differ builds its own static tools
+#   STATIC_CACHE  where those are kept per commit (OUT/static-cache by
+#               default)
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,6 +56,8 @@ done
 mkdir -p "$OUT" "$KEYS"
 OUT="$(abs "$OUT")" KEYS="$(abs "$KEYS")"
 layouts="$(abs "${LAYOUTS:-$OUT/layouts}")"
+# build/product/build.sh reads LAYOUTS too: each product gets its own.
+unset LAYOUTS
 mkdir -p "$layouts"
 export COSIGN_PASSWORD=""
 under="${UNDER_TEST:-$(git -C "$root" rev-parse HEAD)}"
@@ -89,6 +94,53 @@ release() {
 reuse=()
 keyset() { if [ -e "$KEYS/cosign.key" ]; then reuse=(REUSE_KEYS=1); else reuse=(); fi; }
 
+# components <tree>: the static tools that tree's root build takes. Each
+# one is stamped with the pins and build script of the tree that built it
+# (build/lib/stamp.sh), so a tree whose stamps differ from the given
+# components' builds its own with its own scripts, kept in
+# STATIC_CACHE/<commit> (CI caches it). Sets c_static, c_openssh and
+# c_busybox.
+components() {
+  local src="$1" commit stale cache
+  commit="$(git -C "$src" rev-parse HEAD)"
+  cache="${STATIC_CACHE:-$OUT/static-cache}/$commit"
+  # stale <static dir> <openssh dir> <busybox>: the tools whose stamp isn't
+  # this tree's.
+  stale() {
+    (
+      # shellcheck source=build/lib/stamp.sh
+      source "$src/build/lib/stamp.sh"
+      for t in cryptsetup e2fsprogs gptfdisk procps; do
+        stamp_check "$1/$t-amd64.stamp" "$(static_stamp "$t" amd64)" "$t" >/dev/null 2>&1 || echo "$t"
+      done
+      stamp_check "$2/openssh.stamp" "$(openssh_stamp)" openssh >/dev/null 2>&1 || echo openssh
+      stamp_check "$(dirname "$3")/busybox.stamp" "$(busybox_stamp)" busybox >/dev/null 2>&1 || echo busybox
+    )
+  }
+  c_static="$STATIC" c_openssh="$OPENSSH" c_busybox="$BUSYBOX"
+  stale="$(stale "$STATIC" "$OPENSSH" "$BUSYBOX")"
+  [ -n "$stale" ] || return 0
+  if [ -d "$cache" ] && [ -z "$(stale "$cache/static" "$cache/ssh" "$cache/ssh/busybox")" ]; then
+    say "components for ${commit:0:7}: from the cache"
+  else
+    say "components for ${commit:0:7}: building $(echo "$stale" | tr '\n' ' ')with its own scripts"
+    mkdir -p "$cache/static" "$cache/ssh" "$src/build/out"
+    cp -a "$STATIC"/*-amd64* "$src/build/out/"
+    cp -a "$OPENSSH/." "$cache/ssh/"
+    cp -a "$BUSYBOX" "$(dirname "$BUSYBOX")/busybox.stamp" "$cache/ssh/" 2>/dev/null || true
+    for t in $stale; do
+      case "$t" in
+        openssh) (cd "$src" && bash build/openssh/build.sh "$cache/ssh") > "$OUT/components-$t.log" 2>&1 || { tail -30 "$OUT/components-$t.log" >&2; exit 1; } ;;
+        busybox) (cd "$src" && bash build/busybox/build.sh "$cache/ssh") > "$OUT/components-$t.log" 2>&1 || { tail -30 "$OUT/components-$t.log" >&2; exit 1; } ;;
+        *) (cd "$src" && bash "build/static/$t.sh" amd64) > "$OUT/components-$t.log" 2>&1 || { tail -30 "$OUT/components-$t.log" >&2; exit 1; } ;;
+      esac
+    done
+    cp -a "$src/build/out/." "$cache/static/"
+    [ -z "$(stale "$cache/static" "$cache/ssh" "$cache/ssh/busybox")" ] || { echo "realci: ${commit:0:7}'s components are still stale" >&2; exit 1; }
+  fi
+  c_static="$cache/static" c_openssh="$cache/ssh" c_busybox="$cache/ssh/busybox"
+}
+
 # base <name> <commit> <version>
 base() {
   local src start
@@ -96,9 +148,10 @@ base() {
   if [ -s "$OUT/$1/version" ] && [ -n "$(ls "$OUT/$1/disk" 2>/dev/null)" ]; then say "base $1: $(cat "$OUT/$1/version"), built already"; return; fi
   start="$(date +%s)"
   keyset
+  components "$src"
   say "base $1 from $2"
-  (cd "$src" && env "${reuse[@]}" KERNEL="$KERNEL" KERNELRELEASE="$KERNELRELEASE" VERITYSETUP="$VERITYSETUP" \
-    OPENSSH="$OPENSSH" BUSYBOX="$BUSYBOX" STATIC="$STATIC" KEYS="$KEYS" VERSION="$3" OUT="$OUT/$1" \
+  (cd "$src" && env "${reuse[@]}" KERNEL="$KERNEL" KERNELRELEASE="$KERNELRELEASE" VERITYSETUP="$c_static/veritysetup-amd64" \
+    OPENSSH="$c_openssh" BUSYBOX="$c_busybox" STATIC="$c_static" KEYS="$KEYS" VERSION="$3" OUT="$OUT/$1" \
     bash build/lab/build.sh) > "$OUT/$1.log" 2>&1 || { tail -40 "$OUT/$1.log" >&2; exit 1; }
   say "base $1: $(cat "$OUT/$1/version") in $(( $(date +%s) - start ))s"
 }

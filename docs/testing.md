@@ -138,14 +138,15 @@ hook ([k0s.md](k0s.md)) writes 1000 rows into a `realci_rows` table in each of t
 databases once the box first runs it (once per box), through the root's `kubectl exec` into the
 bundled PostgreSQL. Each time the box runs a product version it hadn't reported since the boot, it
 prints the rows of every table in every database, how PostgreSQL's current start began (`first`,
-`clean` or `recovered`), and the product's pods (phase order, restarts, start and Ready times).
+`clean` or `recovered`), and the product's pods (phase order, restarts, each init container's
+restarts and end, why a container waits, start and Ready times).
 While the box doesn't run, it prints the box's state, the pods and the rows every five minutes.
 
 **The legs** (`test/image/k0s/realbundle_test.go`, 8 GiB and 4 CPUs, 22, 8443 and 443 forwarded):
 
 | Leg | Test | What it checks |
 |---|---|---|
-| upgrade | `TestTheRealBundlesUpdateInOrder` | the old base with `.12` and `sneakers mcp on` over SSH; the Base OS update to the base under test; `.12` to `.13` (no phases to phases); `.13` to `.14`; then a power loss. After each step the box runs the product within 45 minutes (else it's stuck, and the hook's last lines are in the failure); for a phased product every phase (data, identity, services, front) has a pod and each pod started only once the phases before it were Ready; no running pod restarted and each is Ready; the MCP server runs; every database still counts, the 1000 rows are in each, no table that held rows has fewer, and PostgreSQL didn't start on a new data directory. After the power loss no pod is one from before it, restarted in place |
+| upgrade | `TestTheRealBundlesUpdateInOrder` | the old base with `.12` and `sneakers mcp on` over SSH; the Base OS update to the base under test; `.12` to `.13` (no phases to phases); `.13` to `.14`; then a power loss. After each step the box runs the product within 45 minutes (else it's stuck: the failure names what holds it, such as a `wait-phase` init container backing off, with the hook's last lines); for a phased product every phase (data, identity, services, front) has a pod and each pod started only once the phases before it were Ready; no running pod or init container restarted, every init container (a phase's `wait-phase` among them) completed, and each pod is Ready; the MCP server runs; every database still counts, the 1000 rows are in each, no table that held rows has fewer, and PostgreSQL didn't start on a new data directory. After the power loss no pod is one from before it, restarted in place |
 | recover | `TestTheRealBundlesRecoverFromAStuckUpdate` | the old base with `.12` and the MCP switch on, then `.13` on the old base, which that base doesn't bring up: the test records whether it got stuck, and if so the hook's lines and whether the rows were already short in that state. Then the base under test is applied in that state; the box must run `.13` with the checks above, then take `.14` |
 | control | the upgrade test with `CONTROL=1` | the base under test is `CONTROL_COMMIT`, from before the quiesce fixes (#365, #370): the update to phases must fail there. The leg is allowed to fail (`continue-on-error`); it runs on pull requests and by hand |
 
