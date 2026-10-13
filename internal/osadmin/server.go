@@ -33,6 +33,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/onetime"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productimport"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
@@ -148,6 +149,13 @@ type Options struct {
 	// ImportChown hands the import directory's files to the import Job's
 	// user; nil is os.Chown (tests run unprivileged).
 	ImportChown func(path string, uid, gid int) error
+	// ImportJobs reads an import step's Job and its pods from the
+	// cluster, for a step that ended without writing its exit code (k0s's
+	// kubectl on the box); nil reads none, and such a step shows running.
+	ImportJobs productimport.JobReader
+	// ImportStopJob deletes an import step's Job and its pod, for a close
+	// while a step runs; nil leaves it to the stack's removal.
+	ImportStopJob func(ctx context.Context, namespace, job string) error
 	// BoxSecrets makes the Secrets the current product slot declares
 	// (boxsecrets.Store on the box) at each product apply and revert,
 	// before the product restarts; nil makes none.

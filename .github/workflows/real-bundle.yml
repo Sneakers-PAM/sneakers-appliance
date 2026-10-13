@@ -14,6 +14,10 @@ name: Real bundle upgrades
 #   phase up in order, no restarts and every row kept after each step.
 # - recover: the old base stuck on .13, then the base under test applied in
 #   that state, and the product under test.
+# - import: a new box on the base under test with the product under test
+#   takes an earlier install with a 727,000-record audit chain through the
+#   Import page (review, convert, check, import, verify), with the box's
+#   memory read at each step.
 # - control: the upgrade leg with the base from before the quiesce fixes
 #   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
 #   the run. Pull requests and runs by hand only.
@@ -64,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control"]' || '["upgrade","recover"]') }}
+        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control","import"]' || '["upgrade","recover","import"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -241,12 +245,13 @@ jobs:
           case "$LEG" in
             upgrade|control) run='^TestTheRealBundlesUpdateInOrder$' ;;
             recover) run='^TestTheRealBundlesRecoverFromAStuckUpdate$' ;;
+            import) run='^TestTheRealBundleImportsALargeAuditChain$' ;;
           esac
           start="$(date +%s)"
           status=0
           go test -tags image -timeout 200m -v -run "$run" ./test/image/k0s/ 2>&1 | tee "$SNEAKERS_LOG_DIR/go-test.log" || status=$?
           echo "### The ${LEG} leg: exit ${status} after $(( ($(date +%s) - start) / 60 )) minutes" >> "$GITHUB_STEP_SUMMARY"
-          grep -E '^\s+realbundle_test.go:[0-9]+: ' "$SNEAKERS_LOG_DIR/go-test.log" | sed 's/^ *//' >> "$GITHUB_STEP_SUMMARY" || true
+          grep -E '^\s+realbundle(_import)?_test.go:[0-9]+: ' "$SNEAKERS_LOG_DIR/go-test.log" | sed 's/^ *//' >> "$GITHUB_STEP_SUMMARY" || true
           exit "$status"
       - name: Upload the logs
         if: always()

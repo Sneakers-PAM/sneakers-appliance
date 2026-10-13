@@ -122,6 +122,7 @@ with them) fails here and not on a box.
 | `.12`, the product without phases | this repository at `P12_APPLIANCE_COMMIT` with sneakers-release at `P12_RELEASE_COMMIT` |
 | `.13`, the first with phases | `P13_APPLIANCE_COMMIT` with `P13_RELEASE_COMMIT` |
 | `next`, the product under test (`0.1.0-lab.realci.next`) | the commit under test with `NEXT_RELEASE_COMMIT` (empty: sneakers-release's main) |
+| the import leg's `sneakers-migrate` and `synth`, for the runner | next's sneakers-release commit |
 
 Each product is the release path with lab keys (`build/realci/product.sh`, run in its own
 commit's checkout with that commit's tools): the service images from `build/release/images.sh`
@@ -142,20 +143,30 @@ prints the rows of every table in every database, how PostgreSQL's current start
 `clean` or `recovered`), and the product's pods (phase order, restarts, each init container's
 restarts and end, why a container waits, start and Ready times).
 While the box doesn't run, it prints the box's state, the pods, each `wait-phase` init container's last lines, each
-crash-looping container's last lines and the rows every five minutes.
+crash-looping container's last lines and the rows every five minutes. Every minute it prints the
+box's memory (`realci: memory`: MemTotal and MemAvailable, what the product's pods use, the running
+import step's peak so far) and each product container that restarted, with how its last run ended
+(`realci: restarted <container>=<restarts>/<reason>/<exit code>`). Every five seconds it reads the
+running import step's `memory.peak`, and prints the peak once the step's pod is gone
+(`realci: import peak`).
 
-**The legs** (`test/image/k0s/realbundle_test.go`, 8 GiB and 4 CPUs, 22, 8443 and 443 forwarded):
+**The legs** (`test/image/k0s/realbundle_test.go` and `realbundle_import_test.go`, 8 GiB, the import leg 12 GiB, and 4 CPUs, 22, 8443 and 443 forwarded):
 
 | Leg | Test | What it checks |
 |---|---|---|
 | upgrade | `TestTheRealBundlesUpdateInOrder` | the old base with `.12` and `sneakers mcp on` over SSH; the Base OS update to the base under test; `.12` to the product under test (no phases to phases); then a power loss. After each step the box runs the product within 45 minutes (else it's stuck: the failure names what holds it, such as a `wait-phase` init container backing off, with the hook's last lines); for a phased product every phase (data, identity, services, front) has a pod and each pod started only once the phases before it were Ready; no running pod or init container restarted, every init container (a phase's `wait-phase` among them) completed, and each pod is Ready; the MCP server runs; every database still counts, the 1000 rows are in each, no table that held rows has fewer, and PostgreSQL didn't start on a new data directory. After the power loss no pod is one from before it, restarted in place, and the state volume is mounted `nodelalloc` ([disk-layout.md](disk-layout.md)) |
 | recover | `TestTheRealBundlesRecoverFromAStuckUpdate` | the old base with `.12` and the MCP switch on, then `.13` on the old base, which that base doesn't bring up: the test records whether it got stuck, and if so the hook's lines and whether the rows were already short in that state. Then the base under test is applied in that state, and whether it brings `.13` up by itself is recorded (it can't: `.13`'s own data-phase wait fails, with the `wait-phase` lines in the log); the box must then take the product under test and run it with the checks above |
+| import | `TestTheRealBundleImportsALargeAuditChain` | a new box (12 GiB) on the base under test's raw disk, with the product under test installed and running. The source is sneakers-release's synthetic source with a 727,000-record audit chain, more than the largest source measured (`build/realci/source.sh`): PostgreSQL and Kratos containers on the runner, seeded by the release's `synth` while the box comes up. It is exported to the box's import key as the appliance move takes it (a 37 MB bundle), then taken through the Import page's API: open, upload, review, convert (a proposal sheet that renames one secret), check, import with the first admin's email and its one-time password, and verify. Each step must pass, and the box ends in imported-users mode. The leg logs each step's time and peak memory, and the box's memory with the product running and with the import open ([import.md](import.md#memory) has the numbers) |
 | control | the upgrade test with `CONTROL=1` | the base under test is `CONTROL_COMMIT`, from before the quiesce fixes (#365, #370): the update to phases must fail there. The leg is allowed to fail (`continue-on-error`); it runs on pull requests and by hand |
 
 A leg takes up to about an hour and a quarter on a GitHub runner (the builds about 3 minutes when
 the next product's service images are cached, about 10 when they aren't; the boots and updates 15
 to 60 minutes; a wait ends early once the box has said `failed` three
-reports in a row), so the job doesn't gate every pull request. A run by hand takes `under_test`, the commit
+reports in a row), so the job doesn't gate every pull request. The import leg takes about half an
+hour: about 10 to 13 minutes for the builds, and about 12 for the box's first boot, the install,
+the import and the close. The source's seeding (4 to 9 minutes) runs while the box comes up, and
+each step takes under a minute (the import 46 seconds). It runs as its own leg next to the others, on pull requests that change the job,
+on main, nightly and in the release gate. A run by hand takes `under_test`, the commit
 whose base and product to test. Only logs leave the run (the serial consoles, the build logs and the
 `go test` output, as the `real-bundle-logs-<leg>` artifact); nothing built and no key is uploaded.
 

@@ -66,10 +66,16 @@ type realBox struct {
 	alice                  *lab
 	vm                     *harness.VM
 	boots                  int
+	// memMiB is the VM's memory; 0 is 8 GiB.
+	memMiB int
 }
 
 func (b *realBox) opts(img string) harness.Options {
-	return harness.Options{SecureBoot: harness.OffWithKeys, Keys: b.keys, MemMiB: 8192, CPUs: 4,
+	mem := b.memMiB
+	if mem == 0 {
+		mem = 8192
+	}
+	return harness.Options{SecureBoot: harness.OffWithKeys, Keys: b.keys, MemMiB: mem, CPUs: 4,
 		Disks: []harness.Disk{{Image: img, Move: true}}, Timeout: 5 * time.Hour,
 		HostFwd: []string{fmt.Sprintf("tcp:127.0.0.1:%d-:22", b.sshPort), fmt.Sprintf("tcp:127.0.0.1:%d-:8443", b.adminPort), fmt.Sprintf("tcp:127.0.0.1:%d-:443", b.hp)}}
 }
@@ -99,11 +105,19 @@ func (b *realBox) boot(img string) {
 // marker on the ESP, and sets it up.
 func newRealBox(t *testing.T, e realEnv) *realBox {
 	t.Helper()
+	return newRealBoxFrom(t, e, e.oldImage, e.oldVersion, 0)
+}
+
+// newRealBoxFrom installs the base on the raw disk img (its version
+// version), with the lab hook's marker on the ESP, in a VM of memMiB (0 is
+// 8 GiB), and sets it up.
+func newRealBoxFrom(t *testing.T, e realEnv, img, version string, memMiB int) *realBox {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Hour)
 	t.Cleanup(cancel)
-	b := &realBox{t: t, ctx: ctx, keys: e.keys, sshPort: freePort(t), adminPort: freePort(t), hp: freePort(t)}
+	b := &realBox{t: t, ctx: ctx, keys: e.keys, sshPort: freePort(t), adminPort: freePort(t), hp: freePort(t), memMiB: memMiB}
 	marked := filepath.Join(t.TempDir(), "marked.raw")
-	if out, err := exec.Command("cp", "--sparse=always", e.oldImage, marked).CombinedOutput(); err != nil { // #nosec G204 -- test-only, fixed tool
+	if out, err := exec.Command("cp", "--sparse=always", img, marked).CombinedOutput(); err != nil { // #nosec G204 -- test-only, fixed tool
 		t.Fatalf("cp: %v: %s", err, out)
 	}
 	marker := filepath.Join(t.TempDir(), "lab-hook")
@@ -119,7 +133,7 @@ func newRealBox(t *testing.T, e realEnv) *realBox {
 	b.vm.WaitExit(5 * time.Minute)
 	b.boot(b.vm.Disk(0))
 	b.vm.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
-	b.vm.Expect(regexp.QuoteMeta(e.oldVersion), 5*time.Minute)
+	b.vm.Expect(regexp.QuoteMeta(version), 5*time.Minute)
 	return b
 }
 

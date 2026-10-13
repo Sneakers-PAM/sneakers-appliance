@@ -147,8 +147,12 @@ type ImportRun struct {
 	Rehearsal            bool   `protobuf:"varint,11,opt,name=rehearsal,proto3" json:"rehearsal,omitempty"`
 	Wipe                 bool   `protobuf:"varint,12,opt,name=wipe,proto3" json:"wipe,omitempty"`
 	OwnerEmail           string `protobuf:"bytes,13,opt,name=owner_email,json=ownerEmail,proto3" json:"owner_email,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// reason says why a failed step ended when it didn't write its exit
+	// code and the box read it from the step's Job ("the review step ran
+	// out of memory (limit 4Gi)", say); empty otherwise.
+	Reason        string `protobuf:"bytes,14,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ImportRun) Reset() {
@@ -268,6 +272,13 @@ func (x *ImportRun) GetWipe() bool {
 func (x *ImportRun) GetOwnerEmail() string {
 	if x != nil {
 		return x.OwnerEmail
+	}
+	return ""
+}
+
+func (x *ImportRun) GetReason() string {
+	if x != nil {
+		return x.Reason
 	}
 	return ""
 }
@@ -792,7 +803,7 @@ const file_sneakers_appliance_osadmin_v1_import_proto_rawDesc = "" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04size\x18\x02 \x01(\x03R\x04size\x12\x1f\n" +
 	"\vuploaded_at\x18\x03 \x01(\tR\n" +
-	"uploadedAt\"\xf9\x02\n" +
+	"uploadedAt\"\x91\x03\n" +
 	"\tImportRun\x12\x10\n" +
 	"\x03job\x18\x01 \x01(\tR\x03job\x12\x12\n" +
 	"\x04step\x18\x02 \x01(\tR\x04step\x12\x14\n" +
@@ -810,7 +821,8 @@ const file_sneakers_appliance_osadmin_v1_import_proto_rawDesc = "" +
 	"\trehearsal\x18\v \x01(\bR\trehearsal\x12\x12\n" +
 	"\x04wipe\x18\f \x01(\bR\x04wipe\x12\x1f\n" +
 	"\vowner_email\x18\r \x01(\tR\n" +
-	"ownerEmail\"\xba\x03\n" +
+	"ownerEmail\x12\x16\n" +
+	"\x06reason\x18\x0e \x01(\tR\x06reason\"\xba\x03\n" +
 	"\x11GetImportResponse\x12\x1c\n" +
 	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x12\n" +

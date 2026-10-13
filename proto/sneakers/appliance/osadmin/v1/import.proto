@@ -86,6 +86,10 @@ message ImportRun {
   bool rehearsal = 11;
   bool wipe = 12;
   string owner_email = 13;
+  // reason says why a failed step ended when it didn't write its exit
+  // code and the box read it from the step's Job ("the review step ran
+  // out of memory (limit 4Gi)", say); empty otherwise.
+  string reason = 14;
 }
 
 message GetImportResponse {

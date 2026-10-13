@@ -171,6 +171,39 @@ realci_crashes() {
 box_state() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'
 }
+# realci_memory, every 5 seconds: each import step's peak memory, its
+# pod's memory.peak while it runs, printed once the pod is gone; and every
+# minute the box's memory (MemTotal and MemAvailable, kB), what the
+# product's pods use (the kubepods cgroup, bytes) and the import pod's
+# peak so far, for the sizes docs/import.md gives, and any product
+# container that restarted, with how its last run ended.
+imp_name="" imp_dir="" imp_peak="" mem_ticks=""
+realci_memory() {
+  cur="$(k -n sneakers get pods -l app.kubernetes.io/name=sneakers-migrate --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name} {.metadata.uid}{"\n"}{end}' 2>/dev/null | head -1)"
+  name="${cur%% *}" uid="${cur#* }"
+  if [ -n "$imp_name" ] && [ "$name" != "$imp_name" ]; then
+    say "realci: import peak pod=$imp_name peak=${imp_peak:-unknown}"
+    imp_name="" imp_dir="" imp_peak=""
+  fi
+  if [ -n "$name" ] && [ -z "$imp_name" ]; then
+    imp_name="$name"
+    imp_dir="$(ls -d /sys/fs/cgroup/kubepods*/pod"$uid" /sys/fs/cgroup/kubepods*/*/pod"$uid" 2>/dev/null | head -1)"
+    [ -n "$imp_dir" ] || say "realci: import pod $name has no cgroup pod$uid: $(ls -d /sys/fs/cgroup/kubepods* 2>/dev/null | tr '\n' ' ')"
+  fi
+  if [ -n "$imp_dir" ]; then
+    p="$(cat "$imp_dir/memory.peak" 2>/dev/null)" || p=""
+    [ -z "$p" ] || imp_peak="$p"
+  fi
+  mem_ticks="$mem_ticks."
+  if [ "${#mem_ticks}" -ge 12 ]; then
+    mem_ticks=""
+    say "realci: memory state=$(box_state) total=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo) available=$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo) pods=$(cat /sys/fs/cgroup/kubepods/memory.current 2>/dev/null || echo unknown) import=${imp_name:-none}:${imp_peak:-0}"
+    # A product container that restarted, and why its last run ended
+    # (OOMKilled, say).
+    k -n sneakers get pods -o jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.restartCount>0)]}{.name}={.restartCount}/{.lastState.terminated.reason}/{.lastState.terminated.exitCode}{" "}{end}{end}' 2>/dev/null |
+      while read -r r; do [ -z "$r" ] || say "realci: restarted $r"; done
+  fi
+}
 realci() {
   say "realci: the Sneakers product"
   # The state volume's mount options: nodelalloc keeps what containerd
@@ -179,6 +212,7 @@ realci() {
   last="" seen="" ticks=""
   while :; do
     v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
+    realci_memory
     if box_running 127.0.0.1 9180; then
       ticks=""
       # The box says running three times in a row before a report, so a

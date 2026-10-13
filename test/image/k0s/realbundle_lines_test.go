@@ -167,3 +167,23 @@ func TestTheLastLineIsFound(t *testing.T) {
 		t.Fatalf("another version: %q", got)
 	}
 }
+
+// The hook's memory line: the box's memory in kB, the product's pods in
+// bytes, read in MiB.
+func TestTheMemoryLineReads(t *testing.T) {
+	m, ok := readMemory(`lab-hook: realci: memory state=maintenance total=12249088 available=7340032 pods=3221225472 import=sneakers-migrate-review-1-abcde:1610612736`)
+	if !ok || m.state != "maintenance" || m.total != 11962 || m.available != 7168 || m.pods != 3072 {
+		t.Fatalf("read %+v %v", m, ok)
+	}
+	if m, ok := readMemory(`lab-hook: realci: memory state=running total=8000000 available=4000000 pods=unknown import=none:0`); !ok || m.pods != -1 {
+		t.Fatalf("pods unknown: %+v %v", m, ok)
+	}
+}
+
+// A step's peak is the hook's line for its pod.
+func TestTheImportPeakLineMatchesItsJob(t *testing.T) {
+	m := importPeakLine.FindStringSubmatch(`lab-hook: realci: import peak pod=sneakers-migrate-review-1-abcde peak=1610612736`)
+	if m == nil || !strings.HasPrefix(m[1], "sneakers-migrate-review-1-") || m[2] != "1610612736" {
+		t.Fatalf("%q", m)
+	}
+}

@@ -77,12 +77,14 @@ spec:
               value: console
             - name: LOG_LEVEL
               value: info
+          # sneakers-migrate holds every table in memory: about 2.3 KB an
+          # audit record, so 727,000 records peak at 1.6 GiB (docs/import.md).
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
-            limits:
               memory: 1Gi
+            limits:
+              memory: 4Gi
           securityContext:
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
