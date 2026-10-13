@@ -192,3 +192,35 @@ func jobEnding(step Step, jobJSON, podsJSON []byte) (ending, bool) {
 	}
 	return ending{}, false
 }
+
+// stopRunning deletes the Job of each step still running. A Job that can't
+// be deleted is logged, and the close goes on: k0s takes it away with the
+// stack.
+func (m *Manager) stopRunning() {
+	if m.StopJob == nil {
+		return
+	}
+	runs, err := m.Runs()
+	if err != nil {
+		m.lg().Warn("productimport: the steps can't be read before the close", log.F("error", err.Error()))
+		return
+	}
+	for _, r := range runs {
+		if r.Done {
+			continue
+		}
+		ns := "default"
+		var j stepJob
+		if raw, err := os.ReadFile(filepath.Join(m.Stack, "job-"+r.Job+".yaml")); err == nil && yaml.Unmarshal(raw, &j) == nil && j.Metadata.Namespace != "" { // #nosec G304 -- the box's own stack
+			ns = j.Metadata.Namespace
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), jobReadTimeout)
+		err := m.StopJob(ctx, ns, r.Job)
+		cancel()
+		if err != nil {
+			m.lg().Warn("productimport: a running step's Job can't be stopped; the stack's removal takes it", log.F("job", r.Job), log.F("error", err.Error()))
+			continue
+		}
+		m.lg().Info("productimport: the close stopped a running step", log.F("step", string(r.Step)), log.F("job", r.Job))
+	}
+}

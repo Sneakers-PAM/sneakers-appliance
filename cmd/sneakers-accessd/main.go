@@ -285,6 +285,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// An import step that ended without writing its exit code (killed
 		// for its memory, say) is read from its Job (docs/import.md).
 		ImportJobs: importJobs(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig),
+		// A close while a step runs stops it: its Job goes with its pod.
+		ImportStopJob: importStopJob(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig),
 		// The Secrets the installed product declares, made on this box
 		// once and kept on the state volume (docs/release.md#productyaml).
 		// They carry the product's email settings too (the Email page),
@@ -470,6 +472,18 @@ func importJobs(k0s, kubeconfig string) productimport.JobReader {
 			return nil, nil, err
 		}
 		return j, p, nil
+	}
+}
+
+// importStopJob deletes an import step's Job and, in the background, its
+// pod with the installed bundle's k0s.
+func importStopJob(k0s, kubeconfig string) func(ctx context.Context, ns, job string) error {
+	return func(ctx context.Context, ns, job string) error {
+		out, err := exec.CommandContext(ctx, k0s, "kubectl", "--kubeconfig", kubeconfig, "-n", ns, "delete", "job", job, "--ignore-not-found", "--cascade=background", "--wait=false").CombinedOutput() // #nosec G204 -- the installed bundle's k0s on a step Job the box named
+		if err != nil {
+			return fmt.Errorf("kubectl delete job %s: %w: %s", job, err, strings.TrimSpace(string(out)))
+		}
+		return nil
 	}
 }
 

@@ -153,6 +153,9 @@ type Options struct {
 	// cluster, for a step that ended without writing its exit code (k0s's
 	// kubectl on the box); nil reads none, and such a step shows running.
 	ImportJobs productimport.JobReader
+	// ImportStopJob deletes an import step's Job and its pod, for a close
+	// while a step runs; nil leaves it to the stack's removal.
+	ImportStopJob func(ctx context.Context, namespace, job string) error
 	// BoxSecrets makes the Secrets the current product slot declares
 	// (boxsecrets.Store on the box) at each product apply and revert,
 	// before the product restarts; nil makes none.

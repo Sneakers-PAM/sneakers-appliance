@@ -11,6 +11,7 @@
 package productimport
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -124,6 +125,10 @@ type Manager struct {
 	// writes its exit code (killed for its memory, say); nil reads none,
 	// and such a step shows running.
 	Jobs JobReader
+	// StopJob deletes a step's Job and its pod; Close stops a step still
+	// running with it, so an import never waits on a step to close. nil
+	// leaves it to the stack's removal.
+	StopJob func(ctx context.Context, namespace, job string) error
 	// MemAvailable is the box's available memory in bytes, or -1 when it
 	// can't be read; a step whose memory limit doesn't fit isn't started.
 	// nil checks nothing.
@@ -487,6 +492,7 @@ func (m *Manager) TakeOwnerPassword(job string) (string, error) {
 // Close removes the import's Jobs from the stack and everything in the
 // import directory: the export, the key and the outputs.
 func (m *Manager) Close() error {
+	m.stopRunning()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	jobs, _ := filepath.Glob(filepath.Join(m.Stack, "job-*.yaml"))

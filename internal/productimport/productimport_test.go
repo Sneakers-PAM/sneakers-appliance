@@ -479,3 +479,50 @@ func TestAJobThatCantBeReadLeavesTheStepRunning(t *testing.T) {
 		t.Fatalf("runs %+v %v", runs, err)
 	}
 }
+
+// Close never waits on a step: a step still running has its Job deleted
+// with its pod, and one that ended is left to the stack's removal.
+func TestCloseStopsARunningStepsJob(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	done, err := m.Start(productimport.Review, productimport.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finish(t, m, done.Job, "ok\n", 0, nil)
+	r, err := m.Start(productimport.Review, productimport.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Jobs = jobs{r.Job: {fmt.Sprintf(runningJob, r.Job), fmt.Sprintf(pod, r.Job, "Running", `{"running":{"startedAt":"2026-10-13T10:00:00Z"}}`)}}.read
+	var stopped []string
+	m.StopJob = func(_ context.Context, ns, job string) error {
+		stopped = append(stopped, ns+"/"+job)
+		return nil
+	}
+	if err := m.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if len(stopped) != 1 || stopped[0] != "sneakers/"+r.Job {
+		t.Fatalf("stopped %v, want the running step's Job only", stopped)
+	}
+	if _, err := os.Stat(m.Dir); !os.IsNotExist(err) {
+		t.Fatal("close left the import directory")
+	}
+}
+
+// A Job that can't be stopped doesn't keep the import open.
+func TestCloseGoesOnWhenAJobCantBeStopped(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	m.StopJob = func(context.Context, string, string) error { return fmt.Errorf("the API server is down") }
+	if err := m.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(m.Stack, "job-*.yaml")); len(left) != 0 {
+		t.Fatalf("close left jobs %v", left)
+	}
+}

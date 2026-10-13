@@ -19,6 +19,7 @@ import (
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 )
 
@@ -312,5 +313,74 @@ func TestAnOOMKilledStepShowsWhyAndTheNextStarts(t *testing.T) {
 	}
 	if _, err := ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "review"})); err != nil {
 		t.Fatalf("a step after a failed one: %v", err)
+	}
+}
+
+// A step the kernel killed doesn't hold the box: the import closes, its
+// switch goes off (so the held phases come back) and its stack goes away.
+// A step still running is stopped by the close, never waited for.
+func TestAnImportClosesAfterAnOOMKilledStepAndWhileOneRuns(t *testing.T) {
+	var stopped []string
+	oom := true
+	ib := newImportBox(t, func(_ *box, o *osadmin.Options) {
+		o.ImportJobs = func(_ context.Context, _, job string) ([]byte, []byte, error) {
+			if oom {
+				return []byte(`{"status":{"conditions":[{"type":"Failed","status":"True","reason":"BackoffLimitExceeded"}]}}`),
+					[]byte(`{"items":[{"status":{"phase":"Failed","containerStatuses":[{"name":"migrate","state":{"terminated":{"exitCode":137,"reason":"OOMKilled"}}}]}}]}`), nil
+			}
+			return []byte(`{"status":{"active":1}}`), []byte(`{"items":[]}`), nil
+		}
+		o.ImportStopJob = func(_ context.Context, ns, job string) error {
+			stopped = append(stopped, ns+"/"+job)
+			return nil
+		}
+	})
+	ctx := context.Background()
+	alice := ib.b.browser()
+	alice.signIn("alice")
+	alice.stepUp("alice")
+	ic := osadminv1connect.NewImportServiceClient(alice.hc, ib.b.ts.URL)
+	spec := func() productspec.Spec {
+		s, err := productspec.Parse([]byte(importYAML))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}()
+	for _, running := range []bool{false, true} {
+		oom = !running
+		if _, err := ic.OpenImport(ctx, connect.NewRequest(&osadminv1.OpenImportRequest{})); err != nil {
+			t.Fatal(err)
+		}
+		if alice.importUpload(t, "bundle", []byte("age-encrypted export")) != http.StatusOK {
+			t.Fatal("the upload failed")
+		}
+		run, err := ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "review"}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		g, _ := ic.GetImport(ctx, connect.NewRequest(&osadminv1.GetImportRequest{}))
+		want := "failed"
+		if running {
+			want = "running"
+		}
+		if st := g.Msg.GetRuns()[0].GetState(); st != want {
+			t.Fatalf("the step is %s, want %s", st, want)
+		}
+		if _, err := ic.CloseImport(ctx, connect.NewRequest(&osadminv1.CloseImportRequest{})); err != nil {
+			t.Fatalf("close with the step %s: %v", want, err)
+		}
+		if on, _ := ib.sw.On(spec, "import"); on {
+			t.Fatalf("close with the step %s left the import switch on: the box stays held", want)
+		}
+		if _, err := os.Stat(filepath.Join(ib.sw.Manifests, "sneakers-import")); !os.IsNotExist(err) {
+			t.Fatalf("close with the step %s left the import stack", want)
+		}
+		if running && (len(stopped) != 1 || stopped[0] != "default/"+run.Msg.GetJob()) {
+			t.Fatalf("the running step's Job wasn't stopped: %v", stopped)
+		}
+		if !running && len(stopped) != 0 {
+			t.Fatalf("a step that ended was stopped: %v", stopped)
+		}
 	}
 }
