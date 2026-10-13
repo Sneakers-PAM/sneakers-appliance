@@ -147,17 +147,27 @@ jobs:
         run: |
           bash build/busybox/build.sh out/static
           bash build/openssh/build.sh out/static
-      # The service images of .12 and .13 come from fixed sneakers-release
-      # commits, so they're cached (no key in them: they're the public
-      # images, unsigned); the product under test's are built every run.
+      # The service images come from fixed sneakers-release commits, so
+      # they're cached by commit (no key in them: they're the public images,
+      # unsigned): .12's and .13's, and next's once its commit is resolved.
+      # Nothing signed with the run's lab keys is cached, and no key: the
+      # old base and every bundle are built and signed each run
+      # (docs/testing.md#the-caches).
       - name: Read the pins
         id: pins
         run: |
           # shellcheck source=build/realci/pins.env
           source build/realci/pins.env
+          next="$NEXT_RELEASE_COMMIT"
+          if [ -z "$next" ]; then
+            next="$(git ls-remote https://github.com/Sneakers-PAM/sneakers-release.git refs/heads/main | cut -f1)"
+          fi
+          [[ "$next" =~ ^[0-9a-f]{40}$ ]] || { echo "sneakers-release's next commit is '$next'" >&2; exit 1; }
           echo "p12=$P12_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "p13=$P13_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "old=$OLD_BASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "realci: next is sneakers-release $next"
       - name: Cache the .12 and .13 service images
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -172,11 +182,19 @@ jobs:
         with:
           path: ${{ runner.temp }}/static-cache/${{ steps.pins.outputs.old }}
           key: realci-components-${{ steps.pins.outputs.old }}
+      - name: Restore the next product's service images
+        id: nextimages
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.next }}
+          key: realci-images-next-${{ steps.pins.outputs.next }}-${{ hashFiles('build/release/images.sh', 'build/tools/bundle/**') }}
       - name: Build the bases and the real bundles
         env:
           UNDER_TEST: ${{ inputs.under_test }}
           CONTROL: ${{ matrix.leg == 'control' && '1' || '' }}
+          NEXT_RELEASE: ${{ steps.pins.outputs.next }}
         run: |
+          start="$(date +%s)"
           keys="$RUNNER_TEMP/labkeys"
           mkdir -p "$keys"
           sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
@@ -185,6 +203,7 @@ jobs:
           VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
           KEYS="$keys" OUT="$RUNNER_TEMP/realci" LAYOUTS="$RUNNER_TEMP/layouts" STATIC_CACHE="$RUNNER_TEMP/static-cache" bash build/realci/build.sh 2>&1 | tee "$RUNNER_TEMP/realci-build.log"
+          echo "realci: the builds before the tests took $(( $(date +%s) - start ))s (next's service images from the cache: ${{ steps.nextimages.outputs.cache-hit || 'false' }})" | tee -a "$RUNNER_TEMP/realci-build.log"
           {
             echo "### Real bundles (${{ matrix.leg }})"
             echo '```'
@@ -193,6 +212,21 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           df -h /
+      # Every path this job caches, checked for the run's keys and any
+      # private key before anything is saved (the cache steps above save
+      # theirs at the end of the job; the legs don't write to them).
+      - name: Check the cached paths hold no key
+        run: |
+          KEYS="$RUNNER_TEMP/labkeys" bash build/realci/no-keys.sh build/out out/static \
+            "$RUNNER_TEMP/layouts" "$RUNNER_TEMP/static-cache" 2>&1 | tee "$RUNNER_TEMP/no-keys.log"
+          { echo '### Cached paths'; echo '```'; cat "$RUNNER_TEMP/no-keys.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      # Saved as soon as they're built, so a failing leg still fills it.
+      - name: Save the next product's service images
+        if: steps.nextimages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.next }}
+          key: ${{ steps.nextimages.outputs.cache-primary-key }}
       - name: Run the ${{ matrix.leg }} leg
         env:
           SNEAKERS_REQUIRE_TOOLS: "1"

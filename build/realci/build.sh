@@ -34,6 +34,9 @@
 #   OUT         the output directory
 #   UNDER_TEST  the commit under test (default HEAD); CONTROL=1 takes
 #               CONTROL_COMMIT from pins.env instead
+#   NEXT_RELEASE the sneakers-release commit "next" is built with (default
+#               NEXT_RELEASE_COMMIT, empty: its main now); the workflow
+#               resolves it once, to key next's service images on it
 #   LAYOUTS     a directory of service image layouts per sneakers-release
 #               commit (OUT/layouts by default); a commit already there
 #               isn't built again
@@ -64,7 +67,7 @@ export COSIGN_PASSWORD=""
 under="${UNDER_TEST:-$(git -C "$root" rev-parse HEAD)}"
 if [ "${CONTROL:-}" = 1 ]; then under="$CONTROL_COMMIT"; fi
 under="$(git -C "$root" rev-parse "$under^{commit}")"
-next_release="$NEXT_RELEASE_COMMIT"
+next_release="${NEXT_RELEASE:-$NEXT_RELEASE_COMMIT}"
 if [ -z "$next_release" ]; then
   next_release="$(git ls-remote https://github.com/Sneakers-PAM/sneakers-release.git refs/heads/main | cut -f1)"
 fi
