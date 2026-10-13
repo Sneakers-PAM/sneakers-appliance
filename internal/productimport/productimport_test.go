@@ -235,3 +235,74 @@ func TestRunsDropColourCodesFromTheOutput(t *testing.T) {
 		t.Fatalf("output %q, want %q", runs[0].Output, want)
 	}
 }
+
+// The step Jobs are sized for a large audit chain: sneakers-migrate holds
+// every table in memory, about 2.3 KB an audit record, so an export of
+// 727,000 records peaks at 1.6 GiB and twice that at 3.2 GiB.
+func TestTheJobTemplateIsSizedForALargeAuditChain(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "import-job.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var job struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Containers []struct {
+						Resources struct {
+							Requests map[string]string
+							Limits   map[string]string
+						}
+					}
+				}
+			}
+		}
+	}
+	if err := yaml.Unmarshal([]byte(strings.NewReplacer("${ARGS}", "[]").Replace(string(raw))), &job); err != nil {
+		t.Fatal(err)
+	}
+	r := job.Spec.Template.Spec.Containers[0].Resources
+	if r.Requests["memory"] != "1Gi" || r.Limits["memory"] != "4Gi" {
+		t.Fatalf("the step's memory is requests %s, limits %s; want 1Gi and 4Gi", r.Requests["memory"], r.Limits["memory"])
+	}
+}
+
+// open is a manager with an import open and a bundle uploaded.
+func open(t *testing.T, m *productimport.Manager) {
+	t.Helper()
+	if _, err := m.Open(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Save(productimport.Bundle, strings.NewReader("age-encrypted")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A step whose limit doesn't fit in the box's available memory isn't
+// started; one that fits is.
+func TestAStepThatCantFitIsRefused(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	m.MemAvailable = func() int64 { return 2 << 30 }
+	_, err := m.Start(productimport.Review, productimport.Options{})
+	if !codes.Is(err, codes.NotAvailable) || !strings.Contains(err.Error(), "4Gi") || !strings.Contains(err.Error(), "2.0 GiB") {
+		t.Fatalf("a step that can't fit: %v", err)
+	}
+	if left, _ := filepath.Glob(filepath.Join(m.Stack, "job-*.yaml")); len(left) != 0 {
+		t.Fatalf("a refused step left a Job %v", left)
+	}
+	m.MemAvailable = func() int64 { return 9 << 30 }
+	if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
+		t.Fatalf("a step that fits: %v", err)
+	}
+}
+
+// A box that can't read its memory starts the step.
+func TestAnUnknownMemoryDoesntRefuse(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	m.MemAvailable = func() int64 { return -1 }
+	if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -58,6 +58,7 @@ func (s *Server) importer() (*productimport.Manager, productinfo.Info, productsp
 	return &productimport.Manager{
 		Dir: filepath.Join(s.o.Paths.State, importDir), UID: spec.Import.UID,
 		Stack: filepath.Join(s.o.Switches.Manifests, stack), Template: filepath.Join(s.o.Switches.Slot, spec.Import.Job),
+		MemAvailable: s.memAvailable,
 		Clock: s.o.Clock, Logger: s.o.Logger, Chown: s.o.ImportChown,
 	}, info, spec, nil
 }

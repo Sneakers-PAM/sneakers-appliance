@@ -112,8 +112,12 @@ type Manager struct {
 	Stack string
 	// Template is the bundle's Job template.
 	Template string
-	Clock    clock.Clock
-	Logger   log.Logger
+	// MemAvailable is the box's available memory in bytes, or -1 when it
+	// can't be read; a step whose memory limit doesn't fit isn't started.
+	// nil checks nothing.
+	MemAvailable func() int64
+	Clock        clock.Clock
+	Logger       log.Logger
 	// chown is os.Chown; tests run unprivileged.
 	Chown func(path string, uid, gid int) error
 
@@ -342,18 +346,21 @@ func (m *Manager) Start(step Step, o Options) (Run, error) {
 	if err != nil {
 		return Run{}, err
 	}
-	if step == Convert {
-		// mapping --tsv writes a new file and refuses an existing one.
-		if err := os.Rename(filepath.Join(m.Dir, fileNames[Mapping]), filepath.Join(m.Dir, fileNames[Mapping]+".prev")); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return Run{}, fmt.Errorf("productimport: %w", err)
-		}
-	}
 	tpl, err := os.ReadFile(m.Template)
 	if err != nil {
 		return Run{}, codes.New(codes.NotAvailable, "the installed product carries no import Job template: %v", err)
 	}
 	argv, _ := json.Marshal(a)
 	doc := strings.NewReplacer("${JOB_NAME}", job, "${ARGS}", string(argv), "${HOST_DIR}", m.Dir).Replace(string(tpl))
+	if err := m.fits(step, doc); err != nil {
+		return Run{}, err
+	}
+	if step == Convert {
+		// mapping --tsv writes a new file and refuses an existing one.
+		if err := os.Rename(filepath.Join(m.Dir, fileNames[Mapping]), filepath.Join(m.Dir, fileNames[Mapping]+".prev")); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return Run{}, fmt.Errorf("productimport: %w", err)
+		}
+	}
 	if err := os.MkdirAll(m.Stack, 0o755); err != nil { // #nosec G301 -- k0s's stack directory
 		return Run{}, fmt.Errorf("productimport: %w", err)
 	}
