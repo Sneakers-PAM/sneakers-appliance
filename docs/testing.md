@@ -255,3 +255,5 @@ Both are read out of the kernel under test, so there's no copy of a font in this
 
 Not in the suite yet: an elevation through the real sshd (request, approval, certificate login, the
 time box, revocation).
+
+Proof line for the docs-only skip.
