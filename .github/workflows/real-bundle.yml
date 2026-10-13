@@ -54,7 +54,7 @@ jobs:
   real:
     name: 🧪 Real bundles (${{ matrix.leg }})
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 240
     continue-on-error: ${{ matrix.leg == 'control' }}
     # bash -eo pipefail, so a failing build or test isn't hidden by tee.
@@ -67,7 +67,7 @@ jobs:
         leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control"]' || '["upgrade","recover"]') }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       # Three real bundles, their service images and a box's disk with them
@@ -79,7 +79,7 @@ jobs:
           docker image prune -af >/dev/null
           df -h /
       - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version-file: go.mod
       - name: Install the build and boot tools
@@ -96,7 +96,7 @@ jobs:
       # either restores what the other built.
       - name: Cache the kernel
         id: kernel
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: build/out/kernel/amd64
           key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
@@ -107,7 +107,7 @@ jobs:
         run: bash build/kernel/build.sh amd64
       - name: Cache the static tools
         id: static
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/out/cryptsetup-amd64
@@ -119,7 +119,7 @@ jobs:
         run: bash build/static/cryptsetup.sh amd64
       - name: Cache the static e2fsprogs, gptfdisk and watch
         id: fstools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/out/mke2fs-amd64
@@ -138,7 +138,7 @@ jobs:
           bash build/static/procps.sh amd64
       - name: Cache the static OpenSSH and busybox
         id: sshtools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: out/static
           key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
@@ -169,7 +169,7 @@ jobs:
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "realci: next is sneakers-release $next"
       - name: Cache the .12 and .13 service images
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p12 }}
@@ -178,13 +178,13 @@ jobs:
       # The old base's tree stamps its static tools with its own pins, so it
       # builds its own when this commit's stamps differ (build/realci/build.sh).
       - name: Cache the old base's static tools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ runner.temp }}/static-cache/${{ steps.pins.outputs.old }}
           key: realci-components-${{ steps.pins.outputs.old }}
       - name: Restore the next product's service images
         id: nextimages
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.next }}
           key: realci-images-next-${{ steps.pins.outputs.next }}-${{ hashFiles('build/release/images.sh', 'build/tools/bundle/**') }}
@@ -223,7 +223,7 @@ jobs:
       # Saved as soon as they're built, so a failing leg still fills it.
       - name: Save the next product's service images
         if: steps.nextimages.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.next }}
           key: ${{ steps.nextimages.outputs.cache-primary-key }}
@@ -250,7 +250,7 @@ jobs:
           exit "$status"
       - name: Upload the logs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: real-bundle-logs-${{ matrix.leg }}
           path: |

@@ -29,15 +29,15 @@ jobs:
   image:
     name: 🖥️ Image suite (amd64)
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
       - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5.6.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version-file: go.mod
       - name: Install the build and boot tools
@@ -52,7 +52,7 @@ jobs:
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
       - name: Cache the kernel
         id: kernel
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: build/out/kernel/amd64
           key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
@@ -63,7 +63,7 @@ jobs:
         run: bash build/kernel/build.sh amd64
       - name: Cache the static tools
         id: static
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/out/cryptsetup-amd64
@@ -78,7 +78,7 @@ jobs:
       # all four).
       - name: Cache the static e2fsprogs, gptfdisk and watch
         id: fstools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             build/out/mke2fs-amd64
@@ -99,7 +99,7 @@ jobs:
       # restores what the other built.
       - name: Cache the static OpenSSH and busybox
         id: sshtools
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: out/static
           key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
