@@ -58,7 +58,7 @@ func (s *Server) importer() (*productimport.Manager, productinfo.Info, productsp
 	return &productimport.Manager{
 		Dir: filepath.Join(s.o.Paths.State, importDir), UID: spec.Import.UID,
 		Stack: filepath.Join(s.o.Switches.Manifests, stack), Template: filepath.Join(s.o.Switches.Slot, spec.Import.Job),
-		MemAvailable: s.memAvailable,
+		Jobs: s.o.ImportJobs, MemAvailable: s.memAvailable,
 		Clock: s.o.Clock, Logger: s.o.Logger, Chown: s.o.ImportChown,
 	}, info, spec, nil
 }
@@ -94,7 +94,7 @@ func runToWire(r productimport.Run) *osadminv1.ImportRun {
 	}
 	out := &osadminv1.ImportRun{Job: r.Job, Step: string(r.Step), State: st, ExitCode: int32(min(max(r.Exit, 0), 255)), // #nosec G115 -- clamped
 		StartedAt: r.Started.UTC().Format(time.RFC3339), Output: r.Output, OwnerPasswordWaiting: r.HasOwner,
-		Rehearsal: r.Options.Rehearsal, Wipe: r.Options.Wipe, OwnerEmail: r.Options.OwnerEmail}
+		Rehearsal: r.Options.Rehearsal, Wipe: r.Options.Wipe, OwnerEmail: r.Options.OwnerEmail, Reason: r.Reason}
 	if !r.Finished.IsZero() {
 		out.FinishedAt = r.Finished.UTC().Format(time.RFC3339)
 	}

@@ -41,6 +41,11 @@ const (
 	MaxFile = 2 << 30
 	// maxOutput is how much of a step's output is shown.
 	maxOutput = 256 << 10
+	// endedSuffix is the box's record of how a step ended that didn't
+	// write its exit code, as the step's Job said (Runs).
+	endedSuffix = ".ended.json"
+	// jobReadTimeout bounds one read of a step's Job.
+	jobReadTimeout = 10 * time.Second
 )
 
 // Kind is an uploaded file's kind, and its fixed name.
@@ -91,14 +96,17 @@ type Run struct {
 	Options Options   `json:"options"`
 	Started time.Time `json:"started"`
 	// Set from the output files when Runs reads them.
-	Finished  time.Time `json:"-"`
-	Done      bool      `json:"-"`
-	Exit      int       `json:"-"`
-	Output    string    `json:"-"`
-	HasOwner  bool      `json:"-"`
-	Report    []byte    `json:"-"`
-	ReviewDoc []byte    `json:"-"`
-	Template  []byte    `json:"-"`
+	Finished time.Time `json:"-"`
+	Done     bool      `json:"-"`
+	Exit     int       `json:"-"`
+	Output   string    `json:"-"`
+	HasOwner bool      `json:"-"`
+	// Reason says why a step ended that didn't write its exit code, as
+	// its Job said (it ran out of memory, say); empty otherwise.
+	Reason    string `json:"-"`
+	Report    []byte `json:"-"`
+	ReviewDoc []byte `json:"-"`
+	Template  []byte `json:"-"`
 }
 
 // Manager is the box's import directory and the import stack.
@@ -112,6 +120,10 @@ type Manager struct {
 	Stack string
 	// Template is the bundle's Job template.
 	Template string
+	// Jobs reads a step's Job from the cluster, for a step that never
+	// writes its exit code (killed for its memory, say); nil reads none,
+	// and such a step shows running.
+	Jobs JobReader
 	// MemAvailable is the box's available memory in bytes, or -1 when it
 	// can't be read; a step whose memory limit doesn't fit isn't started.
 	// nil checks nothing.
@@ -415,6 +427,9 @@ func (m *Manager) Runs() ([]Run, error) {
 					r.Finished = st.ModTime().UTC()
 				}
 			}
+		}
+		if !r.Done {
+			m.ended(r, base)
 		}
 		_, err := os.Stat(base + ".owner")
 		r.HasOwner = err == nil

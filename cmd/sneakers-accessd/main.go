@@ -66,6 +66,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productedge"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productimport"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
@@ -281,6 +282,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			Restart: rolloutRestart(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig),
 			Settled: stackSettled(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig), Logger: lg,
 		},
+		// An import step that ended without writing its exit code (killed
+		// for its memory, say) is read from its Job (docs/import.md).
+		ImportJobs: importJobs(filepath.Join(product.Dir, "current", "k0s"), elevated.DefaultKubeconfig),
 		// The Secrets the installed product declares, made on this box
 		// once and kept on the state volume (docs/release.md#productyaml).
 		// They carry the product's email settings too (the Email page),
@@ -440,6 +444,32 @@ func rolloutRestart(k0s, kubeconfig string) func(ctx context.Context, ns, kind, 
 			return fmt.Errorf("rollout restart %s/%s/%s: %w: %s", ns, kind, name, err, strings.TrimSpace(string(out)))
 		}
 		return nil
+	}
+}
+
+// importJobs reads an import step's Job and its pods with the installed
+// bundle's k0s, as JSON; a Job not applied yet answers an empty Job.
+func importJobs(k0s, kubeconfig string) productimport.JobReader {
+	return func(ctx context.Context, ns, job string) ([]byte, []byte, error) {
+		get := func(args ...string) ([]byte, error) {
+			cmd := exec.CommandContext(ctx, k0s, append([]string{"kubectl", "--kubeconfig", kubeconfig, "-n", ns, "get"}, args...)...) // #nosec G204 -- the installed bundle's k0s on a step Job the box named
+			var stderr strings.Builder
+			cmd.Stderr = &stderr
+			out, err := cmd.Output()
+			if err != nil {
+				return nil, fmt.Errorf("kubectl get %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+			}
+			return out, nil
+		}
+		j, err := get("job", job, "--ignore-not-found", "-o", "json")
+		if err != nil {
+			return nil, nil, err
+		}
+		p, err := get("pods", "-l", "job-name="+job, "-o", "json")
+		if err != nil {
+			return nil, nil, err
+		}
+		return j, p, nil
 	}
 }
 

@@ -4,6 +4,7 @@
 package productimport_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -304,5 +305,177 @@ func TestAnUnknownMemoryDoesntRefuse(t *testing.T) {
 	m.MemAvailable = func() int64 { return -1 }
 	if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// jobs is the cluster's answer for each step Job: kubectl get job -o json
+// and get pods -o json. A Job not there answers empty.
+type jobs map[string][2]string
+
+func (j jobs) read(_ context.Context, namespace, job string) ([]byte, []byte, error) {
+	if namespace != "sneakers" {
+		return nil, nil, fmt.Errorf("namespace %q", namespace)
+	}
+	a, ok := j[job]
+	if !ok {
+		return nil, []byte(`{"items":[]}`), nil
+	}
+	return []byte(a[0]), []byte(a[1]), nil
+}
+
+const (
+	failedJob  = `{"metadata":{"name":"%s"},"status":{"failed":1,"conditions":[{"type":"FailureTarget","status":"True","reason":"BackoffLimitExceeded"},{"type":"Failed","status":"True","reason":"BackoffLimitExceeded","message":"Job has reached the specified backoff limit","lastTransitionTime":"2026-10-13T10:05:00Z"}]}}`
+	runningJob = `{"metadata":{"name":"%s"},"status":{"active":1}}`
+	pod        = `{"items":[{"metadata":{"name":"%s-abcde"},"spec":{"containers":[{"name":"migrate","resources":{"limits":{"memory":"1Gi"},"requests":{"memory":"256Mi"}}}]},"status":{"phase":"%s","containerStatuses":[{"name":"migrate","state":%s}]}}]}`
+	oomKilled  = `{"terminated":{"exitCode":137,"reason":"OOMKilled","finishedAt":"2026-10-13T10:04:59Z"}}`
+)
+
+// A step the kernel killed for its memory never writes its exit code: the
+// box reads the Job, marks the step failed with 137 and says why, and a
+// new step may start.
+func TestAnOOMKilledStepEndsWithItsReason(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	r, err := m.Start(productimport.Review, productimport.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Jobs = jobs{r.Job: {fmt.Sprintf(failedJob, r.Job), fmt.Sprintf(pod, r.Job, "Failed", oomKilled)}}.read
+	runs, err := m.Runs()
+	if err != nil || len(runs) != 1 {
+		t.Fatalf("runs %+v %v", runs, err)
+	}
+	got := runs[0]
+	if !got.Done || got.Exit != 137 || got.Reason != "the review step ran out of memory (limit 1Gi)" || got.Finished.IsZero() {
+		t.Fatalf("an OOMKilled step: done %v exit %d reason %q finished %v", got.Done, got.Exit, got.Reason, got.Finished)
+	}
+	if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
+		t.Fatalf("a step after a failed one: %v", err)
+	}
+	// What the box read is kept: once k0s takes the Job away the step
+	// still shows how it ended.
+	m.Jobs = jobs{}.read
+	runs, _ = m.Runs()
+	if !runs[0].Done || runs[0].Exit != 137 || runs[0].Reason != got.Reason {
+		t.Fatalf("after the Job went: %+v", runs[0])
+	}
+}
+
+// A Job that failed before its step wrote anything (no output, no pod
+// left, or a container that ended in an error) ends the step too.
+func TestAJobThatFailedBeforeWritingEndsTheStep(t *testing.T) {
+	for name, c := range map[string]struct {
+		pods   func(job string) string
+		reason string
+		exit   int
+	}{
+		"no pod": {func(string) string { return `{"items":[]}` }, "the review step's Job failed (BackoffLimitExceeded: Job has reached the specified backoff limit)", 1},
+		"container exit": {func(job string) string {
+			return fmt.Sprintf(pod, job, "Failed", `{"terminated":{"exitCode":2,"reason":"Error","finishedAt":"2026-10-13T10:04:59Z"}}`)
+		}, "the review step ended with exit code 2 (Error) before it wrote its result", 2},
+		"evicted": {func(job string) string {
+			return `{"items":[{"metadata":{"name":"` + job + `-abcde"},"status":{"phase":"Failed","reason":"Evicted","message":"The node was low on resource: memory."}}]}`
+		}, "the review step's pod was evicted (The node was low on resource: memory.)", 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := manager(t)
+			open(t, m)
+			r, err := m.Start(productimport.Review, productimport.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Jobs = jobs{r.Job: {fmt.Sprintf(failedJob, r.Job), c.pods(r.Job)}}.read
+			runs, err := m.Runs()
+			if err != nil || len(runs) != 1 {
+				t.Fatalf("runs %+v %v", runs, err)
+			}
+			if got := runs[0]; !got.Done || got.Exit != c.exit || got.Reason != c.reason {
+				t.Fatalf("done %v exit %d reason %q; want exit %d reason %q", got.Done, got.Exit, got.Reason, c.exit, c.reason)
+			}
+			if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
+				t.Fatalf("a step after a failed one: %v", err)
+			}
+		})
+	}
+}
+
+// A container that ended but whose Job isn't marked failed yet ends the
+// step: the Job's restart policy is Never and it takes no retry.
+func TestAContainerThatEndedEndsTheStepBeforeTheJobSaysSo(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	r, err := m.Start(productimport.Review, productimport.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Jobs = jobs{r.Job: {fmt.Sprintf(runningJob, r.Job), fmt.Sprintf(pod, r.Job, "Failed", oomKilled)}}.read
+	runs, _ := m.Runs()
+	if !runs[0].Done || runs[0].Exit != 137 {
+		t.Fatalf("%+v", runs[0])
+	}
+}
+
+// A step still running, or whose Job k0s hasn't applied yet, stays
+// running, and no second step starts.
+func TestAStepStillRunningStaysRunning(t *testing.T) {
+	for name, j := range map[string]func(job string) jobs{
+		"running": func(job string) jobs {
+			return jobs{job: {fmt.Sprintf(runningJob, job), fmt.Sprintf(pod, job, "Running", `{"running":{"startedAt":"2026-10-13T10:00:00Z"}}`)}}
+		},
+		"pending":     func(job string) jobs { return jobs{job: {fmt.Sprintf(runningJob, job), `{"items":[]}`}} },
+		"not applied": func(string) jobs { return jobs{} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := manager(t)
+			open(t, m)
+			r, err := m.Start(productimport.Review, productimport.Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Jobs = j(r.Job).read
+			runs, err := m.Runs()
+			if err != nil || len(runs) != 1 || runs[0].Done || runs[0].Reason != "" {
+				t.Fatalf("runs %+v %v", runs, err)
+			}
+			if _, err := m.Start(productimport.Check, productimport.Options{}); !codes.Is(err, codes.NotAvailable) || !strings.Contains(err.Error(), "still running") {
+				t.Fatalf("a second step while one runs: %v", err)
+			}
+		})
+	}
+}
+
+// The step's own exit code wins over the Job's: a step that wrote it is
+// done as it said, and the cluster isn't asked.
+func TestTheStepsOwnExitCodeWins(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	r, err := m.Start(productimport.Review, productimport.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Jobs = func(context.Context, string, string) ([]byte, []byte, error) {
+		t.Fatal("the cluster was asked about a step that wrote its exit code")
+		return nil, nil, nil
+	}
+	finish(t, m, r.Job, "bad mapping\n", 3, nil)
+	runs, _ := m.Runs()
+	if !runs[0].Done || runs[0].Exit != 3 || runs[0].Reason != "" {
+		t.Fatalf("%+v", runs[0])
+	}
+}
+
+// A Job the box can't read leaves the step as it was.
+func TestAJobThatCantBeReadLeavesTheStepRunning(t *testing.T) {
+	m := manager(t)
+	open(t, m)
+	if _, err := m.Start(productimport.Review, productimport.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	m.Jobs = func(context.Context, string, string) ([]byte, []byte, error) {
+		return nil, nil, fmt.Errorf("the API server is down")
+	}
+	runs, err := m.Runs()
+	if err != nil || runs[0].Done {
+		t.Fatalf("runs %+v %v", runs, err)
 	}
 }

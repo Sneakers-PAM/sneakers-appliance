@@ -271,3 +271,46 @@ func TestVerifyWaitsForTheProductToBeReady(t *testing.T) {
 		t.Fatalf("verify once the product is ready: %v", err)
 	}
 }
+
+// A step the kernel killed for its memory never writes its exit code: the
+// page shows it failed with 137 and why, from the step's Job, and the next
+// step starts.
+func TestAnOOMKilledStepShowsWhyAndTheNextStarts(t *testing.T) {
+	var asked []string
+	ib := newImportBox(t, func(_ *box, o *osadmin.Options) {
+		o.ImportJobs = func(_ context.Context, ns, job string) ([]byte, []byte, error) {
+			asked = append(asked, ns+"/"+job)
+			return []byte(`{"status":{"conditions":[{"type":"Failed","status":"True","reason":"BackoffLimitExceeded"}]}}`),
+				[]byte(`{"items":[{"spec":{"containers":[{"name":"migrate","resources":{"limits":{"memory":"4Gi"}}}]},"status":{"phase":"Failed","containerStatuses":[{"name":"migrate","state":{"terminated":{"exitCode":137,"reason":"OOMKilled","finishedAt":"2026-10-13T10:04:59Z"}}}]}}]}`), nil
+		}
+	})
+	ctx := context.Background()
+	alice := ib.b.browser()
+	alice.signIn("alice")
+	alice.stepUp("alice")
+	ic := osadminv1connect.NewImportServiceClient(alice.hc, ib.b.ts.URL)
+	if _, err := ic.OpenImport(ctx, connect.NewRequest(&osadminv1.OpenImportRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if alice.importUpload(t, "bundle", []byte("age-encrypted export")) != http.StatusOK {
+		t.Fatal("the upload failed")
+	}
+	run, err := ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "review"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := ic.GetImport(ctx, connect.NewRequest(&osadminv1.GetImportRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := g.Msg.GetRuns()[0]
+	if r.GetState() != "failed" || r.GetExitCode() != 137 || r.GetReason() != "the review step ran out of memory (limit 4Gi)" || r.GetFinishedAt() == "" {
+		t.Fatalf("an OOMKilled step: %v", r)
+	}
+	if len(asked) == 0 || asked[0] != "default/"+run.Msg.GetJob() {
+		t.Fatalf("the Job read: %v", asked)
+	}
+	if _, err := ic.RunImportStep(ctx, connect.NewRequest(&osadminv1.RunImportStepRequest{Step: "review"})); err != nil {
+		t.Fatalf("a step after a failed one: %v", err)
+	}
+}
