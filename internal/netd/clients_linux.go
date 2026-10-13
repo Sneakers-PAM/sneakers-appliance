@@ -5,6 +5,8 @@
 
 package netd
 
+// A no-op comment.
+
 import (
 	"context"
 	"errors"
