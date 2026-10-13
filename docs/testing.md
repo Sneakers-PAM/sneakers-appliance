@@ -130,8 +130,9 @@ byte-identical to the published `.13`'s), `bundle fill`, each pinned manifest si
 key, the production render with the lab's debug log level, product.yaml and the import Job, then
 `build/product/build.sh`. The stacks match the published bundles but for the version; only the
 generated box secrets differ, as on any new box. Every base is built by its own commit's scripts
-with this commit's lab hook, so the test reads the same lines from each. The `.12` and `.13`
-service images are cached; the product under test's are built every run.
+with this commit's lab hook, so the test reads the same lines from each. The service images are
+cached by the sneakers-release commit they're built from; the bases and the bundles are built and
+signed every run ([the caches](#the-caches)).
 
 **The lab hook's real-product path.** With the Sneakers product installed (a `sneakers` stack), the
 hook ([k0s.md](k0s.md)) writes 1000 rows into a `realci_rows` table in each of the product's six
@@ -151,11 +152,42 @@ crash-looping container's last lines and the rows every five minutes.
 | recover | `TestTheRealBundlesRecoverFromAStuckUpdate` | the old base with `.12` and the MCP switch on, then `.13` on the old base, which that base doesn't bring up: the test records whether it got stuck, and if so the hook's lines and whether the rows were already short in that state. Then the base under test is applied in that state, and whether it brings `.13` up by itself is recorded (it can't: `.13`'s own data-phase wait fails, with the `wait-phase` lines in the log); the box must then take the product under test and run it with the checks above |
 | control | the upgrade test with `CONTROL=1` | the base under test is `CONTROL_COMMIT`, from before the quiesce fixes (#365, #370): the update to phases must fail there. The leg is allowed to fail (`continue-on-error`); it runs on pull requests and by hand |
 
-A leg takes about an hour and a half on a GitHub runner (the builds 15 to 25 minutes with the
-caches, the boots and updates about an hour; a wait ends early once the box has said `failed` three
+A leg takes up to about an hour and a quarter on a GitHub runner (the builds about 3 minutes when
+the next product's service images are cached, about 10 when they aren't; the boots and updates 15
+to 60 minutes; a wait ends early once the box has said `failed` three
 reports in a row), so the job doesn't gate every pull request. A run by hand takes `under_test`, the commit
 whose base and product to test. Only logs leave the run (the serial consoles, the build logs and the
 `go test` output, as the `real-bundle-logs-<leg>` artifact); nothing built and no key is uploaded.
+
+### The caches
+
+The repository is public, and a run from a fork can restore what a run on main cached, so the job
+caches nothing a key signed and no key. It caches only what no key goes into:
+
+| Cache | Key | What's in it |
+|---|---|---|
+| the kernel and the static tools | the hash of their sources and `build/ci/versions.env` (shared with the image suite) | `build/out/kernel/amd64`, the static cryptsetup, e2fsprogs, gptfdisk and watch in `build/out`, OpenSSH and busybox in `out/static` |
+| the old base's own static tools | `realci-components-<OLD_BASE_COMMIT>` | the tools its tree builds when its stamps differ |
+| `.12`'s and `.13`'s service images | `realci-images-<P12_RELEASE_COMMIT>-<P13_RELEASE_COMMIT>-<hash of build/release/images.sh>` | their OCI layouts, unsigned (the public images) |
+| the next product's service images | `realci-images-next-<sneakers-release commit>-<hash of build/release/images.sh and build/tools/bundle/>` | its OCI layouts, unsigned |
+
+The lab key set is made for each run on a tmpfs, and the old base, the base under test and the
+`.12`, `.13` and next bundles are built and signed with it every run, and checked with it as
+[the builds](#the-real-bundle-job) say. Their unsigned parts can't be kept apart from that: the old
+base's root carries the run's public keys (the release key and the Secure Boot certificates, built
+into its binaries), so its verity hash and UKI follow them, and each product's payload is encrypted
+to the run's update key. Together they take about two minutes. Next's images are resolved to a
+sneakers-release commit in the job's first steps (`NEXT_RELEASE` for `build/realci/build.sh`) and
+saved straight after the build, so a failing leg still fills the cache.
+
+Before anything is saved, `build/realci/no-keys.sh` checks every path the job caches (`build/out`,
+`out/static` and the image and component folders) and fails the leg on a `*.key` file, a PEM
+private key, an age identity or any line of the run's own private keys; the step summary lists
+each path, its file count and size. `build/realci/cache_test.sh` (in the Go CI job) checks
+no-keys.sh and that the workflow caches no other path.
+
+**To bust a cache**, change its key's inputs, or delete it: `gh cache list --key realci-images-`
+and `gh cache delete <key>`.
 
 ## The image suite
 
