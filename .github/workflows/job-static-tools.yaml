@@ -12,9 +12,13 @@ on:
 permissions:
   contents: read
 jobs:
+  changes:
+    if: github.event.pull_request.draft != true
+    uses: ./.github/workflows/changes.yml
   static-tools:
     name: 🔧 Static OpenSSH and busybox (${{ matrix.arch }})
-    if: github.event.pull_request.draft == false
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.changes.outputs.docs_only != 'true' }}
     strategy:
       fail-fast: false
       matrix:

@@ -17,9 +17,13 @@ on:
 permissions:
   contents: read
 jobs:
+  changes:
+    if: github.event.pull_request.draft != true
+    uses: ./.github/workflows/changes.yml
   go:
     name: ⚖️ Dependency licenses (Go)
-    if: github.event.pull_request.draft == false
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:

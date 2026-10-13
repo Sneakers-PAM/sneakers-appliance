@@ -10,9 +10,13 @@ on:
 permissions:
   contents: read
 jobs:
+  changes:
+    if: github.event.pull_request.draft != true
+    uses: ./.github/workflows/changes.yml
   lint:
     name: 🧾 YamlLint
-    if: github.event.pull_request.draft == false
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && (needs.changes.result != 'success' || needs.changes.outputs.yaml == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:

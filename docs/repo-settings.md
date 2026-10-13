@@ -9,6 +9,10 @@ Applied with the hub's `scaffold/apply-ruleset.sh`. It blocks deletion and force
 squash-merged pull request, and requires these checks: `checks / scrub`, `🧪 Build & Test`,
 `🔐 Gosec`, `🛡️ Govulncheck`, `🔏 License headers` and `⚖️ Dependency licenses (Go)`.
 
+A pull request that changes only documentation skips every one of those but the scrub; a job
+skipped by its `if:` reports success under its own name, so the required checks still pass
+([what a pull request runs](testing.md#what-a-pull-request-runs)).
+
 ## Tag rulesets (`refs/tags/v*`)
 
 - `build/ci/tag-ruleset.json` (`v-tags-immutable`): a `v*` tag can't be moved or deleted. No bypass

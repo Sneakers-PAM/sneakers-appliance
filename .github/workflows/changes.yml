@@ -1,0 +1,54 @@
+name: Changed paths
+# Called by every build, test, lint, licence and security workflow to decide
+# what a pull request needs (build/ci/changes.sh, docs/testing.md#what-a-pull-request-runs).
+# A pull request is compared with its base through the merge commit's first
+# parent; every other event (push to main, the nightly run, workflow_dispatch,
+# workflow_call) runs everything. A caller's job skipped by its `if:` reports
+# success under its own name, so a required check never waits on a docs-only
+# change. Callers start their `if:` from `!cancelled()`, so a failure here runs
+# everything instead of skipping it.
+on:
+  workflow_call:
+    outputs:
+      docs_only:
+        description: Every changed path is documentation (*.md, docs/**)
+        value: ${{ jobs.classify.outputs.docs_only }}
+      yaml:
+        description: A YAML file changed
+        value: ${{ jobs.classify.outputs.yaml }}
+      workflows:
+        description: A workflow or a local action changed
+        value: ${{ jobs.classify.outputs.workflows }}
+permissions:
+  contents: read
+jobs:
+  classify:
+    name: 🗂️ Classify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      yaml: ${{ steps.classify.outputs.yaml }}
+      workflows: ${{ steps.classify.outputs.workflows }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 2
+      - name: Classify the changed paths
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = pull_request ]; then
+            git diff --no-renames --name-only HEAD^1 HEAD > "$RUNNER_TEMP/paths"
+          else
+            : > "$RUNNER_TEMP/paths"
+          fi
+          bash build/ci/changes.sh "$EVENT" < "$RUNNER_TEMP/paths" | tee -a "$GITHUB_OUTPUT"
+          {
+            echo "### Changed paths"
+            echo
+            sed 's/^/- /' "$RUNNER_TEMP/paths"
+          } >> "$GITHUB_STEP_SUMMARY"

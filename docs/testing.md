@@ -16,6 +16,26 @@
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
 
+## What a pull request runs
+
+Every build, test, lint, licence and security workflow first calls `changes.yml`, which reads the
+pull request's changed paths (`build/ci/changes.sh`):
+
+- **Docs only** (every path is `*.md` or under `docs/`, which covers `AGENTS.md` and `CLAUDE.md`):
+  only the scrub (`checks / scrub`), `✅ PR Checks` and the label checker run. Everything else
+  skips: `🧪 Build & Test`, `🧹 GolangCI`, `🔑 Lab keys and tool interop`, `🔐 Gosec`,
+  `🛡️ Govulncheck`, `🔏 License headers`, `⚖️ Dependency licenses (Go)`, Static tools, the Image
+  E2E lab build, YamlLint and Actionlint. A job skipped by its `if:` reports success under its own
+  name, so the required checks pass and the merge never waits. The kernel and static tools
+  (`job-image-build.yaml`) and the real-bundle job only start on their own inputs anyway.
+- **Anything else** runs everything, as before. YamlLint runs only when a YAML file (or
+  `.yamllint`) changed, and Actionlint only when a workflow or a local action changed.
+- **Not a pull request** (push to `main`, the nightly runs, the weekly Go Security run,
+  `workflow_dispatch`, the release workflow's `workflow_call`): everything runs.
+
+If `changes.yml` itself fails, the jobs after it run instead of skipping (their `if:` starts from
+`!cancelled()`). `bash build/ci/docs_only_test.sh` checks the classifier and this wiring.
+
 ## The lab release
 
 `build/lab/build.sh` builds a whole release the way the release workflow does, signed with a key

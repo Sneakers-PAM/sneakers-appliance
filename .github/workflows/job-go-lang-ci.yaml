@@ -14,9 +14,13 @@ env:
   PROTOC_GEN_GO_VERSION: v1.36.11
   PROTOC_GEN_CONNECT_GO_VERSION: v1.21.0
 jobs:
+  changes:
+    if: github.event.pull_request.draft != true
+    uses: ./.github/workflows/changes.yml
   build-test:
     name: 🧪 Build & Test
-    if: github.event.pull_request.draft == false
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -75,7 +79,8 @@ jobs:
             go test -count=1 ./internal/netd/ ./internal/firewall/
   lint:
     name: 🧹 GolangCI
-    if: github.event.pull_request.draft == false
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -97,7 +102,8 @@ jobs:
           args: --timeout=3m
   lab-tools:
     name: 🔑 Lab keys and tool interop
-    if: github.event.pull_request.draft == false
+    needs: changes
+    if: ${{ !cancelled() && github.event.pull_request.draft == false && needs.changes.outputs.docs_only != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -116,12 +122,13 @@ jobs:
           sudo apt-get install -y -q efitools sbsigntool squashfs-tools cryptsetup-bin cpio systemd-ukify systemd-boot-efi python3-pefile
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Release environments keep the keys apart, the production units, pinned actions, the real-bundle pins and its key-free caches
+      - name: Release environments keep the keys apart, the production units, pinned actions, the docs-only skip, the real-bundle pins and its key-free caches
         run: |
           bash build/release/environments_test.sh
           bash build/release/units_test.sh
           bash build/ci/pinned_actions_test.sh
           bash build/ci/image_e2e_runs_test.sh
+          bash build/ci/docs_only_test.sh
           bash build/realci/pins_test.sh
           bash build/realci/cache_test.sh
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
