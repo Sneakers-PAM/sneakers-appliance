@@ -18,7 +18,10 @@ name: Real bundle upgrades
 #   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
 #   the run. Pull requests and runs by hand only.
 #
-# Only logs leave the run: nothing built here, and no key, is uploaded.
+# Only logs leave the run: nothing built here, and no key, is uploaded as
+# an artifact. The old base and the .12 and .13 bundles, with the lab key
+# set made when they were built, are kept in the Actions cache by their
+# pins and inputs and checked on restore (docs/testing.md#the-cache).
 # A leg takes about an hour and a half (the builds 15 to 25 minutes, the
 # boots and updates about an hour), so this runs on main after each merge,
 # nightly, by hand, on a pull request that changes the job itself, and in
@@ -147,17 +150,22 @@ jobs:
         run: |
           bash build/busybox/build.sh out/static
           bash build/openssh/build.sh out/static
-      # The service images of .12 and .13 come from fixed sneakers-release
-      # commits, so they're cached (no key in them: they're the public
-      # images, unsigned); the product under test's are built every run.
+      # The service images come from fixed sneakers-release commits, so
+      # they're cached by commit (no key in them: they're the public images,
+      # unsigned): .12's and .13's, and next's once its commit is resolved.
       - name: Read the pins
         id: pins
         run: |
           # shellcheck source=build/realci/pins.env
           source build/realci/pins.env
+          next="$(bash build/realci/cache.sh next)"
+          old_key="$(bash build/realci/cache.sh key)"
           echo "p12=$P12_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "p13=$P13_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "old=$OLD_BASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "old_key=$old_key" >> "$GITHUB_OUTPUT"
+          echo "realci: next is sneakers-release $next; the old bundles' cache key is $old_key"
       - name: Cache the .12 and .13 service images
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
@@ -172,19 +180,55 @@ jobs:
         with:
           path: ${{ runner.temp }}/static-cache/${{ steps.pins.outputs.old }}
           key: realci-components-${{ steps.pins.outputs.old }}
-      - name: Build the bases and the real bundles
-        env:
-          UNDER_TEST: ${{ inputs.under_test }}
-          CONTROL: ${{ matrix.leg == 'control' && '1' || '' }}
+      - name: Restore the next product's service images
+        id: nextimages
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.next }}
+          key: realci-images-next-${{ steps.pins.outputs.next }}-${{ hashFiles('build/release/images.sh', 'build/tools/bundle/**') }}
+      - name: Mount the lab keys' tmpfs
         run: |
           keys="$RUNNER_TEMP/labkeys"
           mkdir -p "$keys"
           sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
+      # The old base and the .12 and .13 bundles, with the lab key set that
+      # signed them, only on the exact key of their pins and inputs
+      # (build/realci/cache.sh, docs/testing.md#the-cache). The key set
+      # goes back onto the tmpfs; the base under test and next are signed
+      # with it.
+      - name: Restore the old bundles
+        id: old
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            ${{ runner.temp }}/labkeys
+            ${{ runner.temp }}/realci-old
+          key: ${{ steps.pins.outputs.old_key }}
+      - name: Build the bases and the real bundles
+        env:
+          UNDER_TEST: ${{ inputs.under_test }}
+          CONTROL: ${{ matrix.leg == 'control' && '1' || '' }}
+          NEXT_RELEASE: ${{ steps.pins.outputs.next }}
+          OLD_HIT: ${{ steps.old.outputs.cache-hit }}
+        run: |
+          keys="$RUNNER_TEMP/labkeys"
+          start="$(date +%s)"
+          # A restored set is checked before anything uses it; a miss builds
+          # it as before.
+          if [ "$OLD_HIT" = true ]; then
+            KEYS="$keys" OUT="$RUNNER_TEMP/realci" bash build/realci/cache.sh restore "$RUNNER_TEMP/realci-old" 2>&1 | tee "$RUNNER_TEMP/realci-build.log"
+          else
+            echo "realci: old bundles: no cache entry, building them" | tee "$RUNNER_TEMP/realci-build.log"
+          fi
           KERNEL=build/out/kernel/amd64/bzImage \
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
-          KEYS="$keys" OUT="$RUNNER_TEMP/realci" LAYOUTS="$RUNNER_TEMP/layouts" STATIC_CACHE="$RUNNER_TEMP/static-cache" bash build/realci/build.sh 2>&1 | tee "$RUNNER_TEMP/realci-build.log"
+          KEYS="$keys" OUT="$RUNNER_TEMP/realci" LAYOUTS="$RUNNER_TEMP/layouts" STATIC_CACHE="$RUNNER_TEMP/static-cache" bash build/realci/build.sh 2>&1 | tee -a "$RUNNER_TEMP/realci-build.log"
+          if [ "$OLD_HIT" != true ]; then
+            KEYS="$keys" OUT="$RUNNER_TEMP/realci" bash build/realci/cache.sh save "$RUNNER_TEMP/realci-old" 2>&1 | tee -a "$RUNNER_TEMP/realci-build.log"
+          fi
+          echo "realci: the builds before the tests took $(( $(date +%s) - start ))s (old bundles from the cache: ${OLD_HIT:-false})" | tee -a "$RUNNER_TEMP/realci-build.log"
           {
             echo "### Real bundles (${{ matrix.leg }})"
             echo '```'
@@ -193,6 +237,22 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           df -h /
+      # Saved as soon as they're built, so a failing leg still fills the
+      # cache; of legs racing on one key, the first save wins.
+      - name: Save the old bundles
+        if: steps.old.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: |
+            ${{ runner.temp }}/labkeys
+            ${{ runner.temp }}/realci-old
+          key: ${{ steps.pins.outputs.old_key }}
+      - name: Save the next product's service images
+        if: steps.nextimages.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.next }}
+          key: ${{ steps.nextimages.outputs.cache-primary-key }}
       - name: Run the ${{ matrix.leg }} leg
         env:
           SNEAKERS_REQUIRE_TOOLS: "1"

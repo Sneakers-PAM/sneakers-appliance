@@ -34,6 +34,12 @@
 #   OUT         the output directory
 #   UNDER_TEST  the commit under test (default HEAD); CONTROL=1 takes
 #               CONTROL_COMMIT from pins.env instead
+#   NEXT_RELEASE the sneakers-release commit "next" is built with (default
+#               NEXT_RELEASE_COMMIT, empty: its main now; build/realci/cache.sh
+#               next resolves it once for the job)
+#   OUT/base-old, OUT/product-12.bin and OUT/product-13.bin already there
+#               (build/realci/cache.sh restore) aren't built again; each
+#               product is bin-verified as one built here is
 #   LAYOUTS     a directory of service image layouts per sneakers-release
 #               commit (OUT/layouts by default); a commit already there
 #               isn't built again
@@ -64,7 +70,7 @@ export COSIGN_PASSWORD=""
 under="${UNDER_TEST:-$(git -C "$root" rev-parse HEAD)}"
 if [ "${CONTROL:-}" = 1 ]; then under="$CONTROL_COMMIT"; fi
 under="$(git -C "$root" rev-parse "$under^{commit}")"
-next_release="$NEXT_RELEASE_COMMIT"
+next_release="${NEXT_RELEASE:-$NEXT_RELEASE_COMMIT}"
 if [ -z "$next_release" ]; then
   next_release="$(git ls-remote https://github.com/Sneakers-PAM/sneakers-release.git refs/heads/main | cut -f1)"
 fi
@@ -178,12 +184,22 @@ cp "$bin" "$OUT/base-new.bin"
 "$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel lab --identity-uki "$OUT/base-old/work/sneakers-$old_version.efi" "$OUT/base-new.bin" >/dev/null
 say "base-new.bin $(stat -c %s "$OUT/base-new.bin") bytes, opens with the old base's UKI"
 
+# verify_product <label>: the box's own check of a product bundle, with
+# the key in the old base's signed UKI.
+verify_product() {
+  "$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel lab --identity-uki "$OUT/base-old/work/sneakers-$old_version.efi" "$OUT/product-$1.bin" >/dev/null
+}
+
 # product <label> <appliance commit> <release commit>
 product() {
   local label="$1" src rel lay b version start bin
   src="$(tree "$2")" rel="$(release "$3")" lay="$layouts/$3" b="$OUT/product-$label"
   version="0.1.0-lab.realci.$label"
-  if [ -s "$OUT/product-$label.bin" ]; then say "product .$label: built already"; return; fi
+  if [ -s "$OUT/product-$label.bin" ]; then
+    verify_product "$label"
+    say "product .$label: built already (or from the cache, build/realci/cache.sh), verified"
+    return
+  fi
   start="$(date +%s)"
   if [ ! -e "$lay/.done" ]; then
     say "service images for sneakers-release $3"
@@ -202,7 +218,7 @@ product() {
     --tlog-upload=false --use-signing-config=false "$b/work/bin/header.json" >/dev/null 2>&1
   bin="$("$tool" bin-seal --work "$b/work/bin" --bundle "$b/work/bin/header.sigstore.json" --out "$b/out")"
   cp "$bin" "$OUT/product-$label.bin"
-  "$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel lab --identity-uki "$OUT/base-old/work/sneakers-$old_version.efi" "$OUT/product-$label.bin" >/dev/null
+  verify_product "$label"
   say "product .$label: $version, $(stat -c %s "$OUT/product-$label.bin") bytes, $(wc -l < "$b/images.txt") images, phases: $(grep -c '^  - name:' <(sed -n '/^phases:/,/^[a-z]/p' "$src/build/product/sneakers/product.yaml")), in $(( $(date +%s) - start ))s"
   # The tree under the work directory is the unpacked bundle: drop it.
   rm -rf "$b/work/tree"
