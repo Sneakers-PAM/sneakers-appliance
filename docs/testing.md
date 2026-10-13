@@ -163,9 +163,9 @@ A leg takes up to about an hour and a quarter on a GitHub runner (the builds abo
 the next product's service images are cached, about 10 when they aren't; the boots and updates 15
 to 60 minutes; a wait ends early once the box has said `failed` three
 reports in a row), so the job doesn't gate every pull request. The import leg takes about half an
-hour: about 13 minutes for the builds, and about 15 for the box's first boot, the install and the
-import. The source's seeding (about 9 minutes) runs while the box comes up, and each step takes
-under a minute. It runs as its own leg next to the others, on pull requests that change the job,
+hour: about 10 to 13 minutes for the builds, and about 12 for the box's first boot, the install,
+the import and the close. The source's seeding (4 to 9 minutes) runs while the box comes up, and
+each step takes under a minute (the import 46 seconds). It runs as its own leg next to the others, on pull requests that change the job,
 on main, nightly and in the release gate. A run by hand takes `under_test`, the commit
 whose base and product to test. Only logs leave the run (the serial consoles, the build logs and the
 `go test` output, as the `real-bundle-logs-<leg>` artifact); nothing built and no key is uploaded.

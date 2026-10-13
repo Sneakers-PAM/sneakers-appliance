@@ -86,15 +86,18 @@ with a 727,000-record chain, a 37 MB bundle:
 
 | Step | Peak memory |
 |---|---|
-| export (on the source, not the box) | 1.6 GiB |
-| review | 1.5 GiB |
-| convert | 1.8 GiB |
-| check | 1.1 GiB |
-| import | 2.0 GiB |
+| export (on the source, not the box) | 1.6 to 1.8 GiB |
+| review | 1.0 to 1.5 GiB |
+| convert | 1.8 to 1.9 GiB |
+| check | 1.1 to 1.5 GiB |
+| import | 2.0 to 2.1 GiB |
+| verify | 2.6 GiB |
 
 Each step's Job (`build/product/sneakers/import-job.yaml`) requests 1Gi and is limited to 4Gi,
-about twice the largest peak, which leaves room for a chain of about 1.4 million records. A step
-that goes past its limit is killed by the kernel and ends as failed with that reason (above).
+about one and a half times the largest peak (verify's), which leaves room for a chain of about
+1.1 million records. A step that goes past its limit is killed by the kernel and ends as failed
+with that reason (above). Streaming the tables instead of holding them
+(Sneakers-PAM/sneakers-release#123) would take the steps' memory off the chain's length.
 
 **What the box needs.** With the product running on the same box, the box and the product use
 1.3 GiB. With the import open, and the gateway and the web apps held, they use 1.27 GiB. A step
