@@ -9,7 +9,7 @@ name: GoLic
 # minutes" in CLAUDE.md for the ruleset setting that keeps that true).
 on:
   pull_request:
-    branches: [main]
+    branches: [main, ci/425-docs-only-skip]
     types: [opened, synchronize, reopened, ready_for_review]
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

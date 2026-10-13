@@ -10,7 +10,7 @@ name: Image E2E
 # nightly and on demand. Neither is a required check.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, ci/425-docs-only-skip]
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]

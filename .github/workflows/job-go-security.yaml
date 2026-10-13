@@ -27,7 +27,7 @@ name: Go Security
 # already scanned the tree being merged.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, ci/425-docs-only-skip]
     types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: '17 6 * * 1'

@@ -12,7 +12,7 @@ name: License Check (Go)
 # merges, so nothing reruns on push to main.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, ci/425-docs-only-skip]
     types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
