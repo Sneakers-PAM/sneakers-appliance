@@ -292,10 +292,15 @@ func (b *realBox) lastMemory() memory {
 	return memory{}
 }
 
+// memoryLines are the hook's last memory lines, and its last line on a
+// product container that restarted.
 func (b *realBox) memoryLines() string {
 	all := memoryLine.FindAllString(b.vm.Console(), -1)
 	if len(all) > 5 {
 		all = all[len(all)-5:]
+	}
+	if l := lastLine(b.vm.Console(), "realci: restarted "); l != "" {
+		all = append(all, l)
 	}
 	return strings.Join(all, "\n")
 }
@@ -399,7 +404,24 @@ func TestTheRealBundleImportsALargeAuditChain(t *testing.T) {
 	if !page.Imported {
 		t.Fatal("the import passed, but the box isn't in imported-users mode")
 	}
+	// The hook names every product container that restarted with its
+	// memory line: none may have (the audit service once ran out of
+	// memory verifying a long chain).
+	after := b.lastMemory()
+	time.Sleep(10 * time.Second) // the restarted lines follow the memory line
+	if l := lastLine(b.vm.Console(), "realci: restarted "); l != "" {
+		t.Fatalf("a product container restarted during the import: %s", l)
+	}
+	t.Logf("after the import: %s", after)
 	t.Logf("the import of %d audit records: %s; the leg took %s", importRecords, strings.Join(took, ", "), time.Since(legStart).Round(time.Minute))
 	t.Logf("the box's memory: with the product running %s; with the import open %s", running, held)
 	adm.call(t, "ImportService/CloseImport", map[string]any{}, &struct{}{})
+	// Closed, the held phases come back and the box leaves maintenance.
+	deadline := time.Now().Add(15 * time.Minute)
+	for m := b.lastMemory(); m.state != "running"; m = b.lastMemory() {
+		if time.Now().After(deadline) {
+			t.Fatalf("15m after the close the box is still %s:\n%s", m.state, b.waiting())
+		}
+	}
+	t.Logf("after the close the box runs the product again")
 }

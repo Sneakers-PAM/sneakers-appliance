@@ -175,7 +175,8 @@ box_state() {
 # pod's memory.peak while it runs, printed once the pod is gone; and every
 # minute the box's memory (MemTotal and MemAvailable, kB), what the
 # product's pods use (the kubepods cgroup, bytes) and the import pod's
-# peak so far, for the sizes docs/import.md gives.
+# peak so far, for the sizes docs/import.md gives, and any product
+# container that restarted, with how its last run ended.
 imp_name="" imp_dir="" imp_peak="" mem_ticks=""
 realci_memory() {
   cur="$(k -n sneakers get pods -l app.kubernetes.io/name=sneakers-migrate --field-selector=status.phase=Running -o jsonpath='{range .items[*]}{.metadata.name} {.metadata.uid}{"\n"}{end}' 2>/dev/null | head -1)"
@@ -197,6 +198,10 @@ realci_memory() {
   if [ "${#mem_ticks}" -ge 12 ]; then
     mem_ticks=""
     say "realci: memory state=$(box_state) total=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo) available=$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo) pods=$(cat /sys/fs/cgroup/kubepods/memory.current 2>/dev/null || echo unknown) import=${imp_name:-none}:${imp_peak:-0}"
+    # A product container that restarted, and why its last run ended
+    # (OOMKilled, say).
+    k -n sneakers get pods -o jsonpath='{range .items[*]}{range .status.containerStatuses[?(@.restartCount>0)]}{.name}={.restartCount}/{.lastState.terminated.reason}/{.lastState.terminated.exitCode}{" "}{end}{end}' 2>/dev/null |
+      while read -r r; do [ -z "$r" ] || say "realci: restarted $r"; done
   fi
 }
 realci() {
