@@ -178,6 +178,11 @@ type upgrades struct {
 	// maintKind is what the maintenance is for, as the box-state stream
 	// names it (edgefall.KindUpdate or KindProductApply).
 	maintKind string
+	// applying is set from an apply's or revert's beginMaintenance until
+	// its endMaintenance, or a base one's reboot is asked for (its
+	// maintenance stays on): one at a time, so a second one is refused
+	// (UPGRADE_BUSY).
+	applying bool
 }
 
 // Maintenance reports an update being applied or reverted: the elevation
@@ -188,7 +193,24 @@ func (s *Server) Maintenance() bool {
 	return s.o.Clock.Now().Before(s.upgrades.maintUntil)
 }
 
-// beginMaintenance sets maintenance, then refuses when an elevated shell
+// applyUnderWay reports an apply or revert between its beginMaintenance
+// and its endMaintenance.
+func (s *Server) applyUnderWay() bool {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	return s.upgrades.applying
+}
+
+// applyDone ends an apply or revert whose maintenance stays on: a base
+// one's reboot has been asked for.
+func (s *Server) applyDone() {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	s.upgrades.applying = false
+}
+
+// beginMaintenance refuses while another apply or revert is under way
+// (UPGRADE_BUSY), sets maintenance, then refuses when an elevated shell
 // is already active, naming it: the owner ends it, waits for it, or
 // overrides. An override o names one active session, confirmed by typing
 // its admin and id; that session is terminated, audited with the reason,
@@ -197,6 +219,12 @@ func (s *Server) Maintenance() bool {
 // in between. It returns the id of the session the override ended.
 func (s *Server) beginMaintenance(ctx context.Context, what, kind string, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, error) {
 	s.upgrades.mu.Lock()
+	if s.upgrades.applying {
+		s.upgrades.mu.Unlock()
+		s.o.Logger.Info("osadmin: refused; another update is being applied", log.F("what", what), log.F("by", by.Actor))
+		return "", codes.New(codes.UpgradeBusy, "another update is being applied; wait for it to finish, then try again")
+	}
+	s.upgrades.applying = true
 	s.upgrades.maintUntil = s.o.Clock.Now().Add(MaintenanceBound)
 	s.upgrades.maintKind = kind
 	s.upgrades.mu.Unlock()
@@ -284,6 +312,7 @@ func (s *Server) endMaintenance() {
 	defer s.boxChanged()
 	s.upgrades.mu.Lock()
 	defer s.upgrades.mu.Unlock()
+	s.upgrades.applying = false
 	if !s.upgrades.maintUntil.IsZero() {
 		s.upgrades.maintUntil = time.Time{}
 		s.o.Logger.Info("osadmin: maintenance off")
@@ -1293,9 +1322,11 @@ func (s *Server) apply(ctx context.Context, by osaudit.Entry, o *osadminv1.Eleva
 			_, err := s.o.Image.Activate(ctx, connect.NewRequest(&initv1.ActivateRequest{}))
 			return err
 		})
-	}
-	if err != nil {
-		s.endMaintenance()
+		if err != nil {
+			s.endMaintenance()
+		} else {
+			s.applyDone()
+		}
 	}
 	s.history("apply", v, actor, err, overrideDetail(overrode))
 	s.o.Logger.Info("osadmin: apply", log.F("version", v), log.F("by", actor), log.F("ok", err == nil))
@@ -1497,9 +1528,11 @@ func (h *upgradeSvc) RevertUpdate(ctx context.Context, r *connect.Request[osadmi
 			_, err := h.s.o.Image.Rollback(ctx, connect.NewRequest(&initv1.RollbackRequest{By: c.session.Admin}))
 			return err
 		})
-	}
-	if err != nil {
-		h.s.endMaintenance()
+		if err != nil {
+			h.s.endMaintenance()
+		} else {
+			h.s.applyDone()
+		}
 	}
 	h.s.history("revert", "", c.session.Admin, err, overrideDetail(overrode))
 	if err != nil {
@@ -1526,6 +1559,10 @@ func (s *Server) UpgradeWindowTick(ctx context.Context) {
 		return
 	}
 	day := open.Format(time.DateOnly)
+	if s.applyUnderWay() {
+		s.o.Logger.Info("osadmin: the update window waits for the update being applied")
+		return
+	}
 	if s.o.Elevation != nil && s.o.Elevation.Active() {
 		s.o.Logger.Info("osadmin: the update window waits for an active elevated session to end")
 		return

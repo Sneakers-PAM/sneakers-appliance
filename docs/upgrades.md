@@ -582,7 +582,10 @@ shell's product group follows the same header ([ssh-and-elevation.md](ssh-and-el
 
 **The policy** (owner, no code): `automatic` applies a staged release once inside the daily window
 (default 02:00 local for 2 hours, 45 to 720 minutes), `manual` only when an owner applies it. The
-window applies a staged product bundle first, then a staged base release. `direct` (off by
+window applies a staged product bundle first, then a staged base release. One apply or revert
+runs at a time, of the product or the base: another one while it's under way is refused
+(`UPGRADE_BUSY`), whoever asks (an owner, the window, a host name or email change), and the window
+waits for the next minute's tick. `direct` (off by
 default) lets the box fetch from the release source when no mirror is set or the mirror fails. It's
 kept in `/var/lib/sneakers/osadmin-api/upgrade-policy.json`. **The history** of every fetch, stage, apply
 and revert, with its outcome and code, is in `/var/lib/sneakers/osadmin-api/upgrade-history.jsonl` and
