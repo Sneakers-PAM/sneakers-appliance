@@ -137,7 +137,7 @@ var Entries = []apperr.Entry{
 	{Code: UpgradeElevated, Symbol: "UPGRADE_ELEVATED", Title: "upgrade", Cause: "an elevated shell is open; it ends, or an owner terminates it or overrides it (which ends it), before an update applies or reverts"},
 	{Code: UpgradeProductBase, Symbol: "UPGRADE_PRODUCT_BASE", Title: "upgrade", Cause: "the product bundle doesn't fit the base version this box runs, or a base release is outside the installed product's base range"},
 	{Code: UpgradeNoReboot, Symbol: "UPGRADE_NO_REBOOT", Title: "upgrade", Cause: "an apply or revert was accepted, but the box didn't reboot within the bound"},
-	{Code: UpgradeBusy, Symbol: "UPGRADE_BUSY", Title: "upgrade", Cause: "a file is already coming in or waiting, or a stage is under way; verify or cancel it first"},
+	{Code: UpgradeBusy, Symbol: "UPGRADE_BUSY", Title: "upgrade", Cause: "a file is already coming in or waiting, a stage is under way, or another update is being applied; verify or cancel it, or wait for it, first"},
 	{Code: UpgradeProductStart, Symbol: "UPGRADE_PRODUCT_START", Title: "upgrade", Cause: "a product apply or revert restarted the product, but it wasn't ready within the bound: its workloads hadn't rolled out, its health check didn't answer, or 443 didn't answer with it"},
 	{Code: ProductNotReady, Symbol: "PRODUCT_NOT_READY", Title: "upgrade", Cause: "the product is still coming up or rolling out after an install, an update, a revert or an import's restart; try again once it's ready"},
 	{Code: ProductReset, Symbol: "PRODUCT_RESET", Title: "upgrade", Cause: "removing the product stopped before it finished: the product didn't stop, k0s didn't answer or its objects or data didn't go; the reason says which, and the reset run again finishes it"},

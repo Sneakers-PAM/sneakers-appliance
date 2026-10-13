@@ -159,6 +159,11 @@ whose base and product to test. Only logs leave the run (the serial consoles, th
 
 ## The image suite
 
+The `k0s` tests' first boot sets the box's update policy to `manual` once setup is done: they
+stage and apply every update themselves, and a new box's automatic window (02:00 for 2 hours, box
+time, which is UTC on CI) would otherwise apply what a test just staged first, so a run in that
+window failed with `UPGRADE_NOT_STAGED`.
+
 | Test | What it boots | What it checks |
 |---|---|---|
 | `harness.TestHarnessBootsToSerialBanner` | Secure Boot enforcing (lab keys), swtpm | `phase=firstboot` |

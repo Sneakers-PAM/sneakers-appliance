@@ -137,7 +137,7 @@ shell, the console and :8443 show the same sentence.
 | 2512 | `UPGRADE_ELEVATED` | an elevated shell is open (the refusal names it); it ends, or an owner terminates it or overrides it (which ends it), before an update applies or reverts |
 | 2513 | `UPGRADE_PRODUCT_BASE` | the product bundle doesn't fit the base version this box runs, or a base release is outside the installed product's base range |
 | 2514 | `UPGRADE_NO_REBOOT` | an apply or revert was accepted, but the box didn't reboot within the bound |
-| 2515 | `UPGRADE_BUSY` | a file is already coming in or waiting, or a stage is under way; verify or cancel it first |
+| 2515 | `UPGRADE_BUSY` | a file is already coming in or waiting, a stage is under way, or another update is being applied; verify or cancel it, or wait for it, first |
 | 2516 | `UPGRADE_PRODUCT_START` | a product apply or revert restarted the product, but it wasn't ready within the bound: its workloads hadn't rolled out, its health check didn't answer, or 443 didn't answer with it; the failed step says which ([upgrades.md](upgrades.md#when-the-product-is-ready)) |
 | 2517 | `PRODUCT_VALUE_UNAVAILABLE` | the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there ([ssh-and-elevation.md](ssh-and-elevation.md#product-values)) |
 | 2518 | `PRODUCT_NOT_READY` | the product is still coming up or rolling out after an install, an update, a revert or an import's restart; try again once it's ready ([upgrades.md](upgrades.md#when-the-product-is-ready)) |

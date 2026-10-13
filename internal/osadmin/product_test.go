@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -421,5 +422,107 @@ func TestAProductApplyMakesTheBoxSecretsBeforeK0sStarts(t *testing.T) {
 	}
 	if got := b.services.log()[before:]; len(got) != 0 {
 		t.Fatalf("services after a failed box secrets step %v", got)
+	}
+}
+
+// whileStopping runs during at the product's first stop, with an apply
+// under way, in a goroutine the stop waits for, at most 5s.
+func whileStopping(t *testing.T, b *box, during func()) {
+	t.Helper()
+	first := true
+	b.services.onStop = func() {
+		if !first {
+			return
+		}
+		first = false
+		done := make(chan struct{})
+		go func() { defer close(done); during() }()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Error("a second apply went ahead while one was under way")
+		}
+	}
+}
+
+// The window ticks each minute: one inside a product apply an owner
+// started leaves it alone, and the owner's apply goes through.
+func TestTheWindowLeavesAProductApplyUnderWayAlone(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	open := b.clk.Now().Local().Add(-10 * time.Minute).Format("15:04")
+	pol := &osadminv1.UpgradePolicy{Mode: "automatic", WindowStart: open, WindowMinutes: 60}
+	if _, err := alice.upgrade().SetUpgradePolicy(ctx, connect.NewRequest(&osadminv1.SetUpgradePolicyRequest{Policy: pol})); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	whileStopping(t, b, func() { b.srv.UpgradeWindowTick(ctx) })
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.services.log(); !slices.Equal(got, []string{"stop k0s", "start k0s"}) {
+		t.Fatalf("services %v", got)
+	}
+	if s := alice.productSlots(t); s.GetInstalledVersion() != "0.2.0" {
+		t.Fatalf("slots %v", s)
+	}
+	es, err := b.log.Entries()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range es {
+		if e.Actor == "window" {
+			t.Fatalf("the window acted during the owner's apply: %+v", e)
+		}
+	}
+}
+
+// A second apply, of the product or the base, while a product apply is
+// under way is refused (UPGRADE_BUSY), and the refusal leaves the first
+// one's maintenance on.
+func TestAnApplyWhileAProductApplyIsUnderWayIsRefused(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	ctx := context.Background()
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	b.staged(alice)
+	var errs []error
+	whileStopping(t, b, func() {
+		for _, target := range []osadminv1.UpdateTarget{product, osadminv1.UpdateTarget_UPDATE_TARGET_BASE} {
+			_, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: target, TotpCode: b.code("alice")}))
+			errs = append(errs, err)
+		}
+		if !b.srv.Maintenance() {
+			errs = append(errs, errors.New("a refused apply ended the maintenance of the one under way"))
+		}
+	})
+	if _, err := alice.upgrade().ApplyUpdate(ctx, connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")})); err != nil {
+		t.Fatal(err)
+	}
+	if len(errs) != 2 {
+		t.Fatalf("errors %v", errs)
+	}
+	for _, err := range errs {
+		if err == nil || !strings.Contains(err.Error(), "UPGRADE_BUSY") {
+			t.Errorf("want UPGRADE_BUSY, got %v", err)
+		}
+	}
+	if b.init.activated != 0 || b.init.reboots != 0 {
+		t.Fatal("the base release was activated during a product apply")
+	}
+	if got := b.services.log(); !slices.Equal(got, []string{"stop k0s", "start k0s"}) {
+		t.Fatalf("services %v", got)
+	}
+	if s := alice.productSlots(t); s.GetInstalledVersion() != "0.2.0" {
+		t.Fatalf("slots %v", s)
 	}
 }

@@ -435,9 +435,26 @@ func firstBoot(t *testing.T, vm *harness.VM, adminPort int) *lab {
 		a.call(t, "SetupService/AcknowledgeStep", map[string]any{"step": step}, &struct{}{})
 	}
 	a.call(t, "SetupService/AcknowledgeSingleAdmin", map[string]any{}, &struct{}{})
-	signIn(t, adminPort, alice)
+	manualUpdates(t, signIn(t, adminPort, alice))
 	vm.ExpectScreen(`Setup is done`, 2*time.Minute)
 	return alice
+}
+
+// manualUpdates sets the box's update policy to manual, keeping the rest
+// of it. A new box's is automatic in a daily window (02:00 for 2 hours),
+// whose tick would apply what a test stages before the test applies it;
+// the suite applies every update itself, at any time of day.
+func manualUpdates(t *testing.T, a *admin) {
+	t.Helper()
+	var got struct {
+		Policy map[string]any `json:"policy"`
+	}
+	a.call(t, "UpgradeService/GetUpgrades", map[string]any{}, &got)
+	if got.Policy == nil {
+		got.Policy = map[string]any{}
+	}
+	got.Policy["mode"] = "manual"
+	a.call(t, "UpgradeService/SetUpgradePolicy", map[string]any{"policy": got.Policy}, &struct{}{})
 }
 
 // admin is a signed-in :8443 browser.
