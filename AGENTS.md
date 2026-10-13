@@ -57,3 +57,7 @@ Follow the logging rules in `CLAUDE.md`. In short:
 - Open every PR as a draft. CI skips drafts, so run the full checks locally, push once they pass,
   and mark the PR ready when the work is finished; see CLAUDE.md "CI and Actions minutes".
 - <project-specific conventions, non-obvious constraints, and traps an agent should know>
+
+## CI status
+
+- CI proven green: 2026-10-13, real-bundle run 38475062763 on 69680ee (all legs: upgrade, recover, import). Push and move on; don't watch runs.
