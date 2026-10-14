@@ -71,6 +71,10 @@
 #              UPDATE_KEY instead of its UKI, and checked by this build's
 #              kit alone
 #   UPDATE_KEY the update key, for a base without its UKI
+#   KIT        the target build's sneakers-kit, which verifies each rebuilt
+#              patch target (default $OUT/sneakers-kit, where build/lab/build.sh
+#              puts it; the release workflow's layout has none, so its sign
+#              job passes the kit from the unsigned build)
 #   CHECK_FROM outputs to make a patch from that is built and checked but not
 #              published: it goes to $UNITS/checked-only, out of the index
 #   INDEX_ALSO directories whose .bin files the index lists too (an earlier
@@ -168,6 +172,10 @@ if [ -n "${BASEOS_INPUTS:-}" ] && ! [[ "$BASEOS_INPUTS" =~ ^[0-9a-f]{64}$ ]]; th
   echo "units: BASEOS_INPUTS isn't a SHA-256" >&2; exit 1
 fi
 pages="$OUT/work/osadmin"
+kit="${KIT:-$OUT/sneakers-kit}"
+if [ -n "${PATCH_FROM:-}${CHECK_FROM:-}" ] && [ ! -x "$kit" ]; then
+  echo "units: a patch is checked by this build's kit, and $kit isn't an executable (set KIT)" >&2; exit 1
+fi
 [ -f "$pages/index.html" ] || { echo "units: a Base OS always ships with its Base Web, and $pages has no :8443 pages (build with WEB set)" >&2; exit 1; }
 export COSIGN_PASSWORD="${COSIGN_PASSWORD:-}"
 work="$OUT/work/units"
@@ -246,7 +254,7 @@ patch() { # base dir
   fi
   "$tool" patch-check --base "$base/artifact" --release-key "$KEYS/cosign.pub" --channel "$channel" "${opener[@]}" --extract "$w/rebuilt" "$pbin"
   if [ -x "$base/sneakers-kit" ]; then "$base/sneakers-kit" verify "$w/rebuilt"; fi
-  "$OUT/sneakers-kit" verify "$w/rebuilt"
+  "$kit" verify "$w/rebuilt"
   local ps fs
   ps="$(stat -c %s "$pbin")" fs="$(stat -c %s "$osbin")"
   echo "units: patch $(basename "$pbin"): $ps bytes, the full file $fs bytes"

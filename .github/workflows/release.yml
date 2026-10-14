@@ -426,8 +426,9 @@ jobs:
             printf '%s\n' "${PREVIOUS#v}" > "$prev/version"
             patch_from="$prev"
           fi
+          chmod +x "$in/sneakers-kit"
           CHANNEL=production COMMIT="$GITHUB_SHA" BASEOS_INPUTS="$(cat "$in/inputs-baseOS")" STACKS="$in/stacks" \
-            PATCH_FROM="$patch_from" UPDATE_KEY="$keys/update.key" \
+            PATCH_FROM="$patch_from" UPDATE_KEY="$keys/update.key" KIT="$in/sneakers-kit" \
             OUT="$rel" KEYS="$keys" UNITS="$RUNNER_TEMP/signed/units" bash build/lab/units.sh
           units="$RUNNER_TEMP/signed/units"
           for f in sneakers-product-index.json SHA256SUMS; do

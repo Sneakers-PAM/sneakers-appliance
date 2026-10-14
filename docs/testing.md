@@ -70,7 +70,7 @@ update in the index), the Base Web `.bin`
 `INDEX_ALSO`). `CHECK_FROM` makes a patch that's built and checked but goes to `checked-only/`, out
 of the index. Every patch is opened as a box on its base opens it (that build's signed UKI),
 rebuilt from the base artifact with the box's own code (`sneakers-artifact patch-check`), and the
-rebuilt layout verified by both builds' kits. Each `.bin` has its input digest beside it
+rebuilt layout verified by both builds' kits (the target's is `$OUT/sneakers-kit`, or `KIT`; without an executable one a patch is refused before anything is sealed). Each `.bin` has its input digest beside it
 (`<file>.inputs`, also in its signed header): `units.sh inputs baseOS` (the appliance tree and the
 components in `KERNEL`, `VERITYSETUP`, `OPENSSH`, `BUSYBOX` and `STATIC`), `inputs baseWeb` (the
 built pages, `PAGES`) and `inputs product` (every file `build/product/build.sh` makes the bundle
