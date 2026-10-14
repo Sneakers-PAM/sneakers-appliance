@@ -107,5 +107,18 @@ if out="$(OUT="$work/nopages" KEYS="$work/keys" bash "$here/units.sh" 2>&1)"; th
 grep -q "a Base OS always ships with its Base Web" <<<"$out" || { echo "FAIL: no pages said: $out" >&2; exit 1; }
 [ ! -e "$work/nopages/units" ] && [ ! -e "$work/nopages/work" ] || { echo "FAIL: a build without pages wrote output" >&2; exit 1; }
 
+# A patch is checked by this build's kit: from KIT, or $OUT/sneakers-kit
+# where the lab build puts it. Without an executable one it's refused
+# before anything is sealed.
+mkdir -p "$work/nokit/work/osadmin"
+echo 0.0.0-lab.1-g1a2b3c4 > "$work/nokit/version"
+echo '<html></html>' > "$work/nokit/work/osadmin/index.html"
+for env in "PATCH_FROM=$work/out" "CHECK_FROM=$work/out" "PATCH_FROM=$work/out KIT=$work/nothing"; do
+  # shellcheck disable=SC2086
+  if out="$(env $env OUT="$work/nokit" KEYS="$work/keys" bash "$here/units.sh" 2>&1)"; then echo "FAIL: $env without a kit passed" >&2; exit 1; fi
+  grep -q "set KIT" <<<"$out" || { echo "FAIL: $env without a kit said: $out" >&2; exit 1; }
+  [ ! -e "$work/nokit/units" ] && [ ! -e "$work/nokit/work/units" ] || { echo "FAIL: $env without a kit wrote output" >&2; exit 1; }
+done
+
 echo "units: ok"
 
