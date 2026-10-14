@@ -55,6 +55,28 @@ func TestAFailedBoxSaysWhichPhaseAndWhy(t *testing.T) {
 	}
 }
 
+// accessd's failure reason can be one long unbroken run (a pod name, a path), with no
+// spaces to wrap at; the page's own stylesheet has to let it break inside the box
+// instead of running off it.
+func TestAFailedBoxWrapsALongUnbrokenReason(t *testing.T) {
+	w, src, _ := watcher(t)
+	src.err = nil
+	reason := "phase:identity sneakers/sneakers-vault-" + strings.Repeat("7c9", 100) + "-CrashLoopBackOff"
+	src.p = edgefall.Phase{ProductInstalled: true, ProductRunning: true, State: "failed", Step: "phase:identity", Detail: reason}
+	w.Poll(context.Background())
+	s := edgefall.NewServer(w.State)
+	s.SetDetail(w.Detail)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := rec.Body.String()
+	if !strings.Contains(body, reason) {
+		t.Fatalf("the page doesn't carry the exact reason: %s", body)
+	}
+	if !strings.Contains(body, "#sneakers-box-detail{overflow-wrap:anywhere}") {
+		t.Fatalf("the page's stylesheet doesn't wrap the detail: %s", body)
+	}
+}
+
 // An edgefall that restarts while the box is failed has no push to go
 // on: its first ask of GetPhase gives the phase and the reason, and it
 // serves them on the page and the stream at once.
