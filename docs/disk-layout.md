@@ -106,9 +106,9 @@ audited: `disk.alert.start` with `detail.level` when a level is reached, `disk.a
 the level that cleared and `detail.now` when it drops, both with `detail.volume`, `detail.percent`,
 `detail.used` and `detail.total`.
 
-The guard also samples every hour, keeping a day of samples: each volume's use and each data path
-the installed bundle's `product.yaml` declares (`data`, [release.md](release.md#productyaml); with
-none declared, every directory under `/var/lib/sneakers-data`). Status warns when:
+The guard also samples every hour, keeping ten days of samples: each volume's use and each data
+path the installed bundle's `product.yaml` declares (`data`, [release.md](release.md#productyaml);
+with none declared, every directory under `/var/lib/sneakers-data`). Status warns when:
 
 - a volume is at its warning or critical level (`WARNING_KIND_DISK_SPACE`, `critical` set at 90%);
 - a volume would fill within a week at the last day's rate (`WARNING_KIND_DISK_GROWTH`). The rate
@@ -122,3 +122,24 @@ none declared, every directory under `/var/lib/sneakers-data`). Status warns whe
 The warnings show on :8443 Status and on the console's status screen (a critical one in the alert
 colour). Status also carries each volume with its level (`volumes`), the data paths with their size,
 growth and WAL (`data_paths`) and the last cleanup with what each step freed (`last_cleanup`).
+
+#### A one-time step doesn't read as a steady rate
+
+An update, a revert, a reinstall, a product reset or an import each change a volume once, not a
+day after day. The guard reads the box's own upgrade history (`upgrade-history.jsonl`) and its
+imported-users marker (`imported.json`) for every one of these that finished in the last day, and
+leaves the sample pair either side of one out of the growth rate: a box that updates, then
+reinstalls, doesn't get told it "fills in 3 days" from the two one-time steps that really happened.
+
+With no such step nearby, the rate reads exactly as before: hours of clean samples are enough.
+Once one is nearby, the rate needs at least three days of clean (non-windowed) samples behind it
+before it's trusted:
+
+- with three days of clean history and a real, sustained climb, the usual forecast still warns
+  ("The state volume grew 3.0 GiB in the last 72 hours; at that rate it fills in about 6 days.");
+- short of that, but with a step that explains the jump, the step is named instead of forecast
+  ("The state volume grew +2.1 GiB from the v0.1.0-rc.2 update (one-time); it's at 19%.");
+- short of that, with nothing to explain it either, Status says so plainly ("The state volume: not
+  enough history yet to forecast.") rather than guess.
+
+A steady grower outside every window still warns with the forecast, same as always.

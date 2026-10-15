@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,6 +46,15 @@ type Watch struct {
 
 // WALPath is the watch's write-ahead log directory.
 func (w Watch) WALPath() string { return filepath.Join(w.Path, w.WAL) }
+
+// Window is a one-time step in a volume's size that the growth trend
+// skips: an update, revert, reinstall, reset or import the box recorded
+// itself. At is when it finished; Label names it for the message ("the
+// v0.1.0-rc.2 update", "a product reinstall").
+type Window struct {
+	At    time.Time
+	Label string
+}
 
 // The kinds of warning.
 const (
@@ -93,13 +103,22 @@ type Report struct {
 const (
 	DefaultCleanEvery  = time.Hour
 	DefaultSampleEvery = time.Hour
-	// sampleKeep is how many samples are kept: a day's, hourly, and one.
-	sampleKeep = 25
+	// sampleKeep is how many samples are kept: ten days, hourly, and one.
+	// The clean growth trend needs minCleanSpan of them once a window's
+	// in the way, and fillWarnDays' worth besides.
+	sampleKeep = 24*10 + 1
 	// fillWarnDays: a volume that would fill within this many days at the
 	// last day's rate is growing too fast.
 	fillWarnDays = 7
 	// growthMinSpan: the growth warning needs samples this far apart.
 	growthMinSpan = 6 * time.Hour
+	// minCleanSpan: once a window sits in the recent history, the trend
+	// behind it needs at least this much clean (non-windowed) coverage
+	// before a forecast is trusted.
+	minCleanSpan = 3 * 24 * time.Hour
+	// recentWindowLookback: a window older than this no longer falls in
+	// the span rate() itself reads, so it can't be changing that read.
+	recentWindowLookback = 25 * time.Hour
 )
 
 // Guard watches the volumes, audits each alert as it starts and clears,
@@ -109,6 +128,10 @@ type Guard struct {
 	Volumes []Volume
 	// Watches are the product's data paths, read again at each sample.
 	Watches func() []Watch
+	// Windows are the box's own update, revert, reinstall, reset and
+	// import events, read again at each tick: a growth warning never
+	// reads one of their one-time steps as a steady rate.
+	Windows func() []Window
 	Cleaner *Cleaner
 	// Archive reports the OS audit archive's state, for its warning.
 	Archive func() *osaudit.ArchiveReport
@@ -379,6 +402,13 @@ func (g *Guard) watches() []Watch {
 	return g.Watches()
 }
 
+func (g *Guard) windows() []Window {
+	if g.Windows == nil {
+		return nil
+	}
+	return g.Windows()
+}
+
 // rate is how fast name grew per day over the last day's samples: from the
 // oldest sample at most a day old (and at least an hour) to the newest. It
 // also gives what really grew and over what span.
@@ -409,11 +439,151 @@ func (g *Guard) rate(now time.Time, get func(sample) (int64, bool)) (perDay, gre
 	return 0, 0, 0, false
 }
 
+// anyWindowRecent reports a window within recentWindowLookback of now: the
+// same span rate() itself reads, so a window outside it can't be the
+// reason a short read looks wrong.
+func anyWindowRecent(now time.Time, windows []Window) bool {
+	for _, w := range windows {
+		if d := now.Sub(w.At); d >= 0 && d <= recentWindowLookback {
+			return true
+		}
+	}
+	return false
+}
+
+// windowBetween is the windows that finished in (from, to], joined for the
+// message; ok is false when there are none.
+func windowBetween(windows []Window, from, to time.Time) (label string, ok bool) {
+	var labels []string
+	for _, w := range windows {
+		if w.At.After(from) && !w.At.After(to) {
+			labels = append(labels, w.Label)
+		}
+	}
+	if len(labels) == 0 {
+		return "", false
+	}
+	return strings.Join(labels, "; "), true
+}
+
+// cleanGrowth is name's trend with every window's step left out: the
+// median of the per-day rate between clean (non-windowed) samples, what
+// really grew and over what span the clean samples cover, whether that
+// coverage reaches minCleanSpan, and the step each window explains, for
+// one that finished within recentWindowLookback (so an old update
+// doesn't linger in the message).
+func (g *Guard) cleanGrowth(now time.Time, windows []Window, get func(sample) (int64, bool)) (medianPerDay, grew int64, span time.Duration, enough bool, steps []string) {
+	type point struct {
+		at  time.Time
+		val int64
+	}
+	var pts []point
+	for _, s := range g.st.Samples {
+		if v, ok := get(s); ok {
+			pts = append(pts, point{s.At, v})
+		}
+	}
+	if len(pts) < 2 {
+		return 0, 0, 0, false, nil
+	}
+	var rates []float64
+	for i := 1; i < len(pts); i++ {
+		a, b := pts[i-1], pts[i]
+		d := b.at.Sub(a.at)
+		if d <= 0 {
+			continue
+		}
+		if label, hit := windowBetween(windows, a.at, b.at); hit {
+			if delta := b.val - a.val; delta != 0 && now.Sub(b.at) <= recentWindowLookback {
+				steps = append(steps, stepText(delta, label))
+			}
+			continue
+		}
+		rates = append(rates, float64(b.val-a.val)*float64(24*time.Hour)/float64(d))
+		grew += b.val - a.val
+		span += d
+	}
+	if len(rates) == 0 {
+		return 0, grew, span, false, steps
+	}
+	return int64(median(rates)), grew, span, span >= minCleanSpan, steps
+}
+
+// stepText names a window's step for the message: "+2.1 GiB from the
+// v0.1.0-rc.2 update (one-time)".
+func stepText(delta int64, label string) string {
+	return fmt.Sprintf("%s from %s (one-time)", signedBytes(delta), label)
+}
+
+// signedBytes is Bytes with the sign of n kept: "+2.1 GiB", "-900.0 MiB".
+func signedBytes(n int64) string {
+	if n < 0 {
+		return "-" + Bytes(-n)
+	}
+	return "+" + Bytes(n)
+}
+
+// median of xs, 0 for none.
+func median(xs []float64) float64 {
+	if len(xs) == 0 {
+		return 0
+	}
+	s := append([]float64(nil), xs...)
+	sort.Float64s(s)
+	n := len(s)
+	if n%2 == 1 {
+		return s[n/2]
+	}
+	return (s[n/2-1] + s[n/2]) / 2
+}
+
+// growthWarning is what Status says about v's trend. With no window in
+// the last day, it reads exactly as before: the forecast once there are
+// hours of samples. With one, a short read isn't trusted on its own: the
+// forecast needs minCleanSpan of clean samples behind it; short of that,
+// the window's own step is named when it explains the jump, or the box
+// says plainly that there isn't enough history yet.
+func (g *Guard) growthWarning(now time.Time, v VolumeReport, windows []Window) *Warning {
+	name := v.Name
+	get := func(s sample) (int64, bool) { n, ok := s.Volumes[name]; return n, ok }
+	if !anyWindowRecent(now, windows) {
+		// A trend needs hours of samples: one jump between two hourly
+		// samples is a fill, which the space warning already covers, and
+		// scaled up to a day it reads as many times the disk.
+		perDay, grew, span, ok := g.rate(now, get)
+		if !ok || perDay <= 0 || span < growthMinSpan {
+			return nil
+		}
+		if days := float64(v.Avail) / float64(perDay); days < fillWarnDays {
+			return &Warning{Kind: WarnGrowth, Detail: fmt.Sprintf(
+				"The %s volume grew %s in the last %s; at that rate it fills in %s.", strings.ToLower(v.Label), Bytes(grew), spanText(span), daysText(days))}
+		}
+		return nil
+	}
+	medianPerDay, grew, span, enough, steps := g.cleanGrowth(now, windows, get)
+	if enough && medianPerDay > 0 {
+		if days := float64(v.Avail) / float64(medianPerDay); days < fillWarnDays {
+			return &Warning{Kind: WarnGrowth, Detail: fmt.Sprintf(
+				"The %s volume grew %s in the last %s; at that rate it fills in %s.", strings.ToLower(v.Label), Bytes(grew), spanText(span), daysText(days))}
+		}
+	}
+	if len(steps) > 0 {
+		return &Warning{Kind: WarnGrowth, Detail: fmt.Sprintf(
+			"The %s volume grew %s; it's at %d%%.", strings.ToLower(v.Label), strings.Join(steps, ", "), int(v.Percent))}
+	}
+	if enough {
+		// A clean, flat or shrinking trend behind it: nothing to say.
+		return nil
+	}
+	return &Warning{Kind: WarnGrowth, Detail: fmt.Sprintf("The %s volume: not enough history yet to forecast.", strings.ToLower(v.Label))}
+}
+
 func (g *Guard) build(now time.Time, vols []VolumeReport) Report {
 	r := Report{At: now, Volumes: vols}
 	if g.Cleaner != nil {
 		r.Cleanup = g.Cleaner.Last()
 	}
+	windows := g.windows()
 	for _, v := range vols {
 		if v.Err != "" || v.SharedWith != "" {
 			continue
@@ -421,17 +591,8 @@ func (g *Guard) build(now time.Time, vols []VolumeReport) Report {
 		if v.Level >= LevelWarning {
 			r.Warnings = append(r.Warnings, spaceWarning(v))
 		}
-		name := v.Name
-		// A trend needs hours of samples: one jump between two hourly
-		// samples is a fill, which the space warning already covers, and
-		// scaled up to a day it reads as many times the disk.
-		perDay, grew, span, ok := g.rate(now, func(s sample) (int64, bool) { n, ok := s.Volumes[name]; return n, ok })
-		if ok && perDay > 0 && span >= growthMinSpan {
-			days := float64(v.Avail) / float64(perDay)
-			if days < fillWarnDays {
-				r.Warnings = append(r.Warnings, Warning{Kind: WarnGrowth, Detail: fmt.Sprintf(
-					"The %s volume grew %s in the last %s; at that rate it fills in %s.", strings.ToLower(v.Label), Bytes(grew), spanText(span), daysText(days))})
-			}
+		if w := g.growthWarning(now, v, windows); w != nil {
+			r.Warnings = append(r.Warnings, *w)
 		}
 	}
 	for _, w := range g.watches() {

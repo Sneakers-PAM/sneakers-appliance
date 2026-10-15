@@ -356,3 +356,127 @@ func TestPruneBlockedWarning(t *testing.T) {
 		t.Fatalf("%+v", r.Warnings)
 	}
 }
+
+// growthDetail is the first growth warning's text, or "".
+func growthDetail(r diskguard.Report) string {
+	for _, w := range r.Warnings {
+		if w.Kind == diskguard.WarnGrowth {
+			return w.Detail
+		}
+	}
+	return ""
+}
+
+// A one-time step (an update, a reinstall, a revert, a reset or an
+// import) that lands inside the guard's own recorded windows is never
+// read as a steady rate: it's named instead, with no alarm.
+func TestGrowthSkipsAOneTimeUpdateStep(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 20}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	g.Tick(context.Background()) // flat, 20%
+	clk.t = clk.t.Add(time.Hour)
+	g.Tick(context.Background()) // flat, 20%
+	clk.t = clk.t.Add(time.Hour)
+	windowAt := clk.t
+	d.set("/state", 24) // the update's +4 GiB step
+	g.Windows = func() []diskguard.Window {
+		return []diskguard.Window{{At: windowAt, Label: "the v0.1.0-rc.2 update"}}
+	}
+	g.Tick(context.Background())
+	clk.t = clk.t.Add(time.Hour)
+	g.Tick(context.Background()) // flat, 24%
+	clk.t = clk.t.Add(time.Hour)
+	r := g.Tick(context.Background()) // flat, 24%
+
+	w := growthDetail(r)
+	if strings.Contains(w, "fills in") {
+		t.Fatalf("a one-time step raised a forecast alarm: %q", w)
+	}
+	if !strings.Contains(w, "+4.0 GiB from the v0.1.0-rc.2 update (one-time)") {
+		t.Fatalf("the step isn't named: %q", w)
+	}
+}
+
+// A steady grower outside any recorded window still warns with the
+// forecast, exactly as before the fix.
+func TestGrowthWarnsOnASteadyLeakAsBefore(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 93}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	var r diskguard.Report
+	for day := range 5 {
+		clk.t = clk.t.Add(24 * time.Hour)
+		d.set("/state", 93+float64(day+1))
+		r = g.Tick(context.Background())
+	}
+	w := growthDetail(r)
+	if !strings.Contains(w, "fills in") {
+		t.Fatalf("a steady leak outside any window didn't warn: %q", w)
+	}
+	if !strings.Contains(w, "1.0 GiB") {
+		t.Fatalf("the growth isn't what really grew: %q", w)
+	}
+}
+
+// A window in the middle of an otherwise steady climb is left out: the
+// forecast comes from the clean part alone, not the step beside it.
+func TestGrowthMixedSeriesUsesOnlyTheCleanPart(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 85}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	g.Tick(context.Background())            // day 0, 85%
+	for _, pct := range []float64{86, 87} { // two clean days, +1% each
+		clk.t = clk.t.Add(24 * time.Hour)
+		d.set("/state", pct)
+		g.Tick(context.Background())
+	}
+	clk.t = clk.t.Add(24 * time.Hour)
+	windowAt := clk.t
+	d.set("/state", 93) // a reinstall's one-time +6%
+	g.Windows = func() []diskguard.Window {
+		return []diskguard.Window{{At: windowAt, Label: "a product reinstall"}}
+	}
+	g.Tick(context.Background())
+	clk.t = clk.t.Add(24 * time.Hour)
+	d.set("/state", 94) // back to the same clean +1%/day
+	r := g.Tick(context.Background())
+
+	w := growthDetail(r)
+	if !strings.Contains(w, "fills in") {
+		t.Fatalf("the clean trend alone didn't warn: %q", w)
+	}
+	if !strings.Contains(w, "3.0 GiB") || strings.Contains(w, "9.0 GiB") {
+		t.Fatalf("the reinstall's step leaked into the clean growth: %q", w)
+	}
+}
+
+// Short of minCleanSpan of clean samples behind a recent window, the box
+// says plainly that it can't forecast yet, rather than guess.
+func TestGrowthNotEnoughHistoryYet(t *testing.T) {
+	d := &disks{pct: map[string]float64{"/state": 50}, dev: map[string]uint64{}}
+	clk := &clock{t: time.Date(2026, 10, 9, 0, 0, 0, 0, time.UTC)}
+	g := newGuard(t, d, clk, &entries{})
+	g.Cleaner = nil
+	g.Tick(context.Background()) // day 0, 50%
+	clk.t = clk.t.Add(24 * time.Hour)
+	windowAt := clk.t
+	g.Windows = func() []diskguard.Window {
+		return []diskguard.Window{{At: windowAt, Label: "a product reset"}}
+	}
+	g.Tick(context.Background()) // day 1, still 50%: the reset changed nothing here
+	clk.t = clk.t.Add(24 * time.Hour)
+	d.set("/state", 52) // day 2, a clean +2%, but only a day of clean history
+	r := g.Tick(context.Background())
+
+	w := growthDetail(r)
+	if !strings.Contains(w, "not enough history yet to forecast") {
+		t.Fatalf("short of clean history, the box should say so plainly: %q", w)
+	}
+	if strings.Contains(w, "fills in") {
+		t.Fatalf("not enough history was still read as a forecast: %q", w)
+	}
+}
