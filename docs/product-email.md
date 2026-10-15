@@ -30,6 +30,28 @@ names (`email.restart`). **Send test email** sends a short message to an address
 the settings on the page (with the saved password unless you type one), the same way the product
 sends; it needs a step-up and is audited as `product.email.test-send`. The test changes nothing.
 
+## Send test email: failures
+
+Every failure `Send` (`internal/boxsettings/send.go`) can return, what it means, and the likely
+fix:
+
+| Message | Cause | Fix |
+|---|---|---|
+| `no relay is set` | `Host` is empty. | Set a relay host (and the rest of the settings) and save before testing. |
+| `the test address %q isn't a plain email address` | The typed test address doesn't parse as one plain address. | Retype it as a single address, no display name. |
+| `the relay <addr> can't be reached: ...` | The TCP dial to `host:port` failed. | Check the host and port, and that the box can reach that address and port. |
+| `TLS with the relay failed: ...` | The implicit-TLS handshake failed (`TLS == tls`). | Confirm the relay speaks TLS on that port; add its CA to Relay CA if it's privately signed, or accept the risk and turn off Verify. |
+| `the relay didn't greet: ...` | `smtp.NewClient` failed: the box connected but got no valid SMTP greeting. | Confirm the port is actually the relay's SMTP port. |
+| `the relay doesn't offer STARTTLS; nothing was sent` | `TLS == starttls`, but the relay's `EHLO` doesn't list the `STARTTLS` extension. | Pick the TLS mode the relay actually supports on that port. |
+| `STARTTLS with the relay failed: ...` | The STARTTLS upgrade itself failed. | Same as the implicit-TLS failure: check the certificate, the Relay CA, or Verify. |
+| `the relay offers no AUTH, and a username is set` | `Username` is set, but the relay's `EHLO` lists no `AUTH` extension. | Clear the username and password if this relay needs none, or confirm the relay and port. |
+| `the relay refused the username and password: ...` (password scrubbed) | `c.Auth` failed: the relay rejected PLAIN or LOGIN with this username and password. | Re-check the username, and re-enter and save the password. |
+| `the relay refused the from address: ...` | `c.Mail(e.From)` was refused. | Set From to an address the relay account may send as. |
+| `the relay refused the test address: ...` | `c.Rcpt(to)` was refused. | Try a different recipient, or check the relay's own rules on who it will relay to. |
+| `the relay refused the message: ...` | `c.Data()` was refused. | Check the relay's own policy, size or content-filtering logs. |
+| `the message didn't go out: ...` | Writing the message body failed (the connection dropped mid-send). | Check the network path to the relay, then retry. |
+| `the relay didn't take the message: ...` | Closing the data writer got a non-OK final response. | Check the relay's own delivery logs for the rejection reason. |
+
 ## How the product reads them
 
 `product.yaml` declares what the product reads ([release.md](release.md#productyaml)):
