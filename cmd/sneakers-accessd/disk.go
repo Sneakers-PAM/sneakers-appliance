@@ -74,6 +74,7 @@ func diskGuard(state string, paths osadmin.Paths, audit *osaudit.Log, busy func(
 			{Name: "backup", Label: "Backup", Path: filepath.Join(state, "backup")},
 		},
 		Watches:      watches,
+		Windows:      osadmin.DiskGuardWindows(paths),
 		Cleaner:      cleaner,
 		Archive:      auditStep.Archive,
 		PruneBlocked: audit.PruneBlocked,
