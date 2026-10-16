@@ -20,5 +20,5 @@
 |           ! A factory reset asked for by alice runs in 23h59m                |
 |             unless it's cancelled: press C.                                  |
 +------------------------------------------------------------------------------+
-|          R  Recover access     C  Cancel the reset                           |
+|          R  Recover access     N  Network     C  Cancel the reset            |
 +------------------------------------------------------------------------------+

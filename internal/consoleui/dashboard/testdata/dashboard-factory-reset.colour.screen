@@ -20,5 +20,5 @@
 \e[34m|\e[0m   \e[1;31m!\e[0m \e[1;37mA factory reset asked for by alice runs in 23h59m\e[0m        \e[34m|\e[0m
 \e[34m|\e[0m     \e[1;37munless it's cancelled: press C.\e[0m                          \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m  \e[2mR  Recover access\e[0m\e[2m     \e[0m\e[2mC  Cancel the reset\e[0m                   \e[34m|\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m\e[2m     \e[0m\e[2mN  Network\e[0m\e[2m     \e[0m\e[2mC  Cancel the reset\e[0m    \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m

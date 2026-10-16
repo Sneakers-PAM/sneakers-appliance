@@ -20,5 +20,5 @@
 |           ! The admin page can be reached from the internet.                 |
 |             Limit who can connect on the admin page, Network.                |
 +------------------------------------------------------------------------------+
-|          R  Recover access                                                   |
+|          R  Recover access     N  Network                                    |
 +------------------------------------------------------------------------------+

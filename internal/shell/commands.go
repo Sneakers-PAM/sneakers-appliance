@@ -153,8 +153,8 @@ var specs = []spec{
 		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.",
 		example: "  network show\n  network show -o json"},
 	{path: "network set", owner: true, use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet, question: true, complete: completeKeys(networkKeys),
-		long:    "Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.",
-		example: "  network set ?\n  network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org\n  network set time-zone=America/New_York\n  network set https-proxy="},
+		long:    "Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm; a change to the management interface's IPv4 or IPv6 mode or address can, so it always gets the 120-second window. Owners only. With no arguments, or ?, it lists the keys. The same settings are also on :8443 or the console's network screen.",
+		example: "  network set ?\n  network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org\n  network set time-zone=America/New_York\n  network set https-proxy=\n  network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1"},
 	{path: "network confirm", owner: true, use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
 		long:    "Keeps the network change the token names, so it doesn't revert. network set and network allow-list reset print the token.",
 		example: "  network confirm 7K2Q-MX4D"},
@@ -766,7 +766,7 @@ func yes(e *Env, prompt string) bool {
 
 func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags map[string]string) (Result, error) {
 	if len(args) == 0 || len(args) == 1 && args[0] == "?" {
-		return Result{Text: "network set takes key=value pairs, applied on top of the current settings:\n\n" + keyList(networkKeys) + "\nThe interfaces' addresses are set on :8443 or the console's network screen.", Data: keyData(networkKeys)}, nil
+		return Result{Text: "network set takes key=value pairs, applied on top of the current settings:\n\n" + keyList(networkKeys) + "\nThe same settings are also on :8443 or the console's network screen.", Data: keyData(networkKeys)}, nil
 	}
 	if _, err := parseKeys("network set", networkKeys, args); err != nil {
 		return Result{}, err

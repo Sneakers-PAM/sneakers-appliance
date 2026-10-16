@@ -20,5 +20,5 @@
 \e[34m|\e[0m   \e[1;31m!\e[0m \e[1;37mThe admin page can be reached from the internet.\e[0m         \e[34m|\e[0m
 \e[34m|\e[0m     \e[2mLimit who can connect on the admin page, Network.\e[0m        \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m  \e[2mR  Recover access\e[0m                                           \e[34m|\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m\e[2m     \e[0m\e[2mN  Network\e[0m                            \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m

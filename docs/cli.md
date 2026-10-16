@@ -427,7 +427,7 @@ Example:
 
 Change network settings (reverts in 120 s unless confirmed).
 
-Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm. Owners only. With no arguments, or ?, it lists the keys. The interfaces' addresses are set on :8443 or the console's network screen.
+Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm; a change to the management interface's IPv4 or IPv6 mode or address can, so it always gets the 120-second window. Owners only. With no arguments, or ?, it lists the keys. The same settings are also on :8443 or the console's network screen.
 
 Offered over: SSH and console.
 
@@ -444,6 +444,12 @@ network set key=value...
 | `allow-list=` | the networks that may reach SSH and :8443, comma-separated CIDRs | `allow-list=192.0.2.0/24,198.51.100.0/24` |
 | `time-zone=` | the time zone the box shows times in, an IANA name | `time-zone=America/New_York` |
 | `https-proxy=` | the proxy for outbound HTTPS, a URL; empty for none | `https-proxy=http://192.0.2.8:3128` |
+| `ipv4=` | the management interface's IPv4 mode: dhcp, static or off | `ipv4=static` |
+| `ipv4-address=` | the IPv4 address and its prefix length, in static mode; empty clears it | `ipv4-address=192.0.2.10/24` |
+| `ipv4-gateway=` | the IPv4 gateway, in static mode; empty for none | `ipv4-gateway=192.0.2.1` |
+| `ipv6=` | the management interface's IPv6 mode: slaac, dhcpv6, static or off | `ipv6=static` |
+| `ipv6-address=` | the IPv6 address and its prefix length, in static mode; empty clears it | `ipv6-address=2001:db8::10/64` |
+| `ipv6-gateway=` | the IPv6 gateway, in static mode; empty for none | `ipv6-gateway=2001:db8::1` |
 
 Example:
 
@@ -452,6 +458,7 @@ Example:
   network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org
   network set time-zone=America/New_York
   network set https-proxy=
+  network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1
 ```
 
 ## `network show`

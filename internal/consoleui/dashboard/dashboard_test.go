@@ -266,8 +266,8 @@ func TestInfoCountsTheNodes(t *testing.T) {
 // address, and cancelling a factory reset counting down.
 func TestTheDashboardOffersOnlyItsKeys(t *testing.T) {
 	d := data(status())
-	if got := dashboard.Keys(d).String(); got != "R  Recover access" {
-		t.Fatalf("%q", got)
+	if got := dashboard.Keys(d).String(); !strings.Contains(got, "N  Network") {
+		t.Fatalf("the network editor is offered with an address too: %q", got)
 	}
 	d.Status.Status.ManagementAddresses = nil
 	if got := dashboard.Keys(d).String(); !strings.Contains(got, "N  Network") {
@@ -469,12 +469,24 @@ func TestOtherKeysDoNothing(t *testing.T) {
 	d := start(t, e)
 	d.Expect(t, "R  Recover access")
 	d.Type(t, "reboot")
-	d.Type(t, "n")
 	d.Type(t, "c")
 	d.Expect(t, "all services running")
 	if len(e.net.list()) != 0 {
 		t.Fatal("a call was made")
 	}
+}
+
+// N offers the network editor whenever netd is installed, not only when
+// the box has no address: a box that got a DHCP lease can still be moved
+// to a static one by hand (#422).
+func TestNOffersTheNetworkEditorWithAnAddressToo(t *testing.T) {
+	e := newEnv()
+	d := start(t, e)
+	d.Expect(t, "N  Network")
+	d.Type(t, "n")
+	d.Expect(t, "Set an address by hand")
+	d.Type(t, "b")
+	d.Expect(t, "R  Recover access")
 }
 
 // The cursor and function keys do nothing in Recover access, and every

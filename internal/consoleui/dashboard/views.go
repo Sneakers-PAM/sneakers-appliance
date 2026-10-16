@@ -274,16 +274,12 @@ func Warnings(c consoleui.Chrome, d Data, now time.Time) []tui.Line {
 	return out
 }
 
-// HasAddress reports whether the box has a management address to show.
-func HasAddress(d Data) bool {
-	return d.NetErr == nil && len(sources.Hosts(d.Status.Status.GetManagementAddresses())) > 0
-}
-
 // Keys are the dashboard's keys: Recover access always, the network
-// editor without an address, and cancelling a factory reset counting down.
+// editor whenever netd is installed (not only without an address), and
+// cancelling a factory reset counting down.
 func Keys(d Data) tui.Line {
 	ks := []tui.Line{consoleui.Key("R", "Recover access")}
-	if !HasAddress(d) && !sources.IsNotInstalled(d.NetErr) {
+	if !sources.IsNotInstalled(d.NetErr) {
 		ks = append(ks, consoleui.Key("N", "Network"))
 	}
 	if fr := d.Status.Status.GetFactoryReset(); fr.GetState() == osadminv1.FactoryResetState_FACTORY_RESET_STATE_COUNTDOWN {

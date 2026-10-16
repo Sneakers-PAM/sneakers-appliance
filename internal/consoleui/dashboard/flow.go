@@ -81,7 +81,7 @@ func Run(ctx context.Context, u *tui.UI, d Deps) error {
 		case "r":
 			err = k.recoverAccess(ctx)
 		case "n":
-			if !HasAddress(k.data) && !sources.IsNotInstalled(k.data.NetErr) {
+			if !sources.IsNotInstalled(k.data.NetErr) {
 				_, err = netedit.Edit(ctx, u, netedit.Deps{Chrome: k.c, Network: d.Network, Logger: d.Logger})
 			}
 		case "c":
