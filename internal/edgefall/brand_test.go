@@ -160,6 +160,33 @@ func TestAProductsBrandShowsOnThePage(t *testing.T) {
 	}
 }
 
+// The mark the base look falls back to, and a brand with colours but no
+// logo, is inline SVG: it needs no request, so it's always there the
+// moment the page or the overlay builds, with or without the box
+// answering. The CSS still tints it the brand's accent. Before this it
+// was only the words "Sneakers-PAM" (#432).
+func TestTheMarkIsInlineSVGNotJustWords(t *testing.T) {
+	_, basePage := get(t, serve(t, boxstate.Starting).URL+"/")
+	if !strings.Contains(basePage, `<svg class="mark"`) || strings.Contains(basePage, `<p class="mark">`) {
+		t.Fatalf("the base look's mark isn't inline SVG: %s", basePage)
+	}
+
+	dir := product(t, "a", map[string]string{"brand.yaml": strings.Replace(brandYAML, "logo: logo.svg\n", "", 1)})
+	ts, _ := serveBranded(t, boxstate.Starting, dir)
+	res, body := get(t, ts.URL+"/")
+	if !strings.Contains(body, `<svg class="mark"`) || strings.Contains(body, `class="logo"`) {
+		t.Fatalf("colours with no logo: %s", body)
+	}
+	if css := styleOf(t, res, body); !strings.Contains(css, ".mark{color:#ffb000}") {
+		t.Fatalf("the mark isn't tinted the brand's accent: %s", css)
+	}
+
+	_, js := get(t, serve(t, boxstate.Starting).URL+"/_box/poll.js")
+	if !strings.Contains(js, "MARK_SVG") || !strings.Contains(js, "mark.innerHTML = MARK_SVG") {
+		t.Fatalf("the overlay's mark isn't inline SVG: %s", js)
+	}
+}
+
 // A brand the bundle check would refuse never reaches the page.
 func TestAMalformedBrandIsIgnored(t *testing.T) {
 	_, basePage := get(t, serve(t, boxstate.Rebooting).URL+"/")

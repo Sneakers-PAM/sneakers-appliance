@@ -59,6 +59,13 @@
   };
   var OFF = ["Sneakers-PAM has shut down", "Power it on again to use it. This page reloads when it's back."];
   var UNREACHABLE = ["Sneakers-PAM can't be reached", "This page reloads when it's back."];
+  // The Sneakers mark, inlined: it never needs a request, so it's there
+  // the moment the overlay builds, before any brand logo could load (or
+  // while it can't). A product logo from the bundle's brand still
+  // replaces it once it loads.
+  var MARK_SVG = '<svg viewBox="0 0 64 64" role="img" aria-label="Sneakers-PAM" focusable="false">' +
+    '<path d="M6 43c0-13 4-25 13-27h8c2 8 9 13 18 14l8 2c5 1 7 5 7 9v2H6z" fill="currentColor"/>' +
+    '<rect x="4" y="44" width="58" height="10" rx="5" fill="currentColor"/></svg>';
 
   var root = document.documentElement;
   var onPage = root.hasAttribute("data-sneakers-box");
@@ -135,10 +142,9 @@
     var box = el("div", { maxWidth: "34rem", padding: "2rem" });
     box.setAttribute("role", "status");
     box.setAttribute("aria-live", "polite");
-    var mark = el("p", {
-      margin: "0 0 1.5rem", fontWeight: "700", letterSpacing: ".08em", textTransform: "uppercase",
-      color: look.accent, fontSize: ".9rem"
-    }, "Sneakers-PAM");
+    // MARK_SVG is a fixed constant, never user data.
+    var mark = el("div", { margin: "0 auto 1.5rem", width: "2.75rem", height: "2.75rem", color: look.accent });
+    mark.innerHTML = MARK_SVG;
     var spin = el("div", {
       width: "2.25rem", height: "2.25rem", margin: "0 auto 1.5rem", border: "3px solid " + look.track,
       borderTopColor: look.accent, borderRadius: "50%"

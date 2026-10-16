@@ -161,16 +161,20 @@ with it. Each load runs the bundle's brand check again; a brand that fails it is
 warning) and the base look stays, and colours that fail the contrast check give way to the base
 colours while the logo stays.
 
-- **The page:** the logo replaces the wordmark, carried in the page itself as a `data:` image, so
-  it shows even when edgefall lets 443 go between the page and another request; the colours are
+- **The mark:** with no brand logo, every edge status page and the overlay show the Sneakers mark
+  inlined as SVG (`fill="currentColor"`, tinted by the brand's accent colour when there is one),
+  so it never needs a request: it's there the moment the page or the overlay builds, whether or not
+  the box is reachable. A brand logo still replaces it once it's there.
+- **The page:** the logo replaces the mark, carried in the page itself as a `data:` image, so it
+  shows even when edgefall lets 443 go between the page and another request; the colours are
   added to the page's one stylesheet as the checked `#rrggbb` values. The CSP still pins that
   stylesheet by its hash, so a brand never loosens it: no `unsafe-inline`, no other origin.
 - **The state:** `/_box/state` adds `"brand":{"background":"#rrggbb","text":"#rrggbb","accent":"#rrggbb","logo":"/_box/logo"}`
   (each field only when the brand has it).
 - **The overlay:** the poller takes the brand from the first state answer that has one, while the
-  box still answers, and loads the logo then, so the overlay shows it after the box has gone away.
-  It checks the colours itself. A product page's CSP needs `img-src 'self'` for the logo; without
-  it the overlay shows the wordmark.
+  box still answers, and loads the logo then, so the overlay shows it after the box has gone away;
+  until then, and if it never loads, the inline mark stays up. It checks the colours itself. A
+  product page's CSP needs `img-src 'self'` for the logo; without it the overlay keeps the mark.
 
 ## The poller
 
