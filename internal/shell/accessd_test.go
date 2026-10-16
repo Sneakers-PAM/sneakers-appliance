@@ -161,6 +161,53 @@ func TestNetworkSet(t *testing.T) {
 	}
 }
 
+// network set takes the management interface's IPv4 and IPv6 mode and
+// address too (#422): ipv4, ipv4-address, ipv4-gateway and the ipv6
+// equivalents, on top of whatever the interface already has.
+func TestNetworkSetIPv4AndIPv6(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "box.sneakers.example.org", Management: &netdv1.Interface{Name: "ens192"}}}
+	s, _ := withAccessd(t, f)
+	out, _, err := runWith(t, s, "network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1 ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1", "n\n")
+	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+		t.Fatalf("%v %q", err, out)
+	}
+	got := f.set[0].GetManagement()
+	if got.GetName() != "ens192" || got.GetIpv4().GetMode() != netdv1.Ipv4Mode_IPV4_MODE_STATIC || got.GetIpv4().GetAddress() != "192.0.2.10/24" || got.GetIpv4().GetGateway() != "192.0.2.1" ||
+		got.GetIpv6().GetMode() != netdv1.Ipv6Mode_IPV6_MODE_STATIC || got.GetIpv6().GetAddress() != "2001:db8::10/64" || got.GetIpv6().GetGateway() != "2001:db8::1" {
+		t.Fatalf("%v", got)
+	}
+
+	// Off, and a cleared gateway: the existing interface stays named, the
+	// address keys clear.
+	out, _, err = runWith(t, s, "network set ipv4=off ipv4-address= ipv4-gateway=", "n\n")
+	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+		t.Fatalf("%v %q", err, out)
+	}
+	got = f.set[1].GetManagement()
+	if got.GetIpv4().GetMode() != netdv1.Ipv4Mode_IPV4_MODE_OFF || got.GetIpv4().GetAddress() != "" || got.GetIpv4().GetGateway() != "" {
+		t.Fatalf("%v", got)
+	}
+
+	// Back to DHCP, completing the round trip.
+	out, _, err = runWith(t, s, "network set ipv4=dhcp", "n\n")
+	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+		t.Fatalf("%v %q", err, out)
+	}
+	if got := f.set[2].GetManagement().GetIpv4().GetMode(); got != netdv1.Ipv4Mode_IPV4_MODE_DHCP {
+		t.Fatalf("%v", got)
+	}
+
+	// An unrecognized mode is forwarded unspecified; netd's own validation
+	// refuses it (internal/network, "use dhcp, static or off").
+	_, _, err = runWith(t, s, "network set ipv4=bogus", "n\n")
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	if got := f.set[3].GetManagement().GetIpv4().GetMode(); got != netdv1.Ipv4Mode_IPV4_MODE_UNSPECIFIED {
+		t.Fatalf("%v", got)
+	}
+}
+
 // A change netd keeps at once (the time zone) has no revert window, so
 // network set says it's kept instead of "reverts in 0 seconds".
 func TestNetworkSetKeptAtOnce(t *testing.T) {

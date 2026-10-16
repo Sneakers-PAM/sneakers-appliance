@@ -20,5 +20,5 @@
 |     UPGRADE_SIGNATURE (2505): the package isn't signed       |
 |     by this box's release key                                |
 +--------------------------------------------------------------+
-|  R  Recover access                                           |
+|  R  Recover access     N  Network                            |
 +--------------------------------------------------------------+

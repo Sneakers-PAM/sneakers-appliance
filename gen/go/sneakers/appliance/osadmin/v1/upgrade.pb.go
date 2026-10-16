@@ -1878,8 +1878,13 @@ type CheckUpdatesResponse struct {
 	// runs the same apply as an update. Unset when it doesn't, or with no
 	// product installed.
 	ProductReinstall *UnitOffer `protobuf:"bytes,9,opt,name=product_reinstall,json=productReinstall,proto3" json:"product_reinstall,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// publishing_note says a newer release on the direct source is still
+	// being published, so this check shows an older one, such as "v0.1.0-rc.3
+	// is being published; showing v0.1.0-rc.2". Empty when the newest release
+	// on the box's channel verified, or the source isn't direct.
+	PublishingNote string `protobuf:"bytes,10,opt,name=publishing_note,json=publishingNote,proto3" json:"publishing_note,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *CheckUpdatesResponse) Reset() {
@@ -1973,6 +1978,13 @@ func (x *CheckUpdatesResponse) GetProductReinstall() *UnitOffer {
 		return x.ProductReinstall
 	}
 	return nil
+}
+
+func (x *CheckUpdatesResponse) GetPublishingNote() string {
+	if x != nil {
+		return x.PublishingNote
+	}
+	return ""
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch
@@ -3361,7 +3373,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\rproduct_range\x18\v \x01(\tR\fproductRange\x12\x16\n" +
 	"\x06commit\x18\f \x01(\tR\x06commit\x12*\n" +
 	"\x11includes_base_web\x18\r \x01(\tR\x0fincludesBaseWeb\"\x15\n" +
-	"\x13CheckUpdatesRequest\"\xe7\x03\n" +
+	"\x13CheckUpdatesRequest\"\x90\x04\n" +
 	"\x14CheckUpdatesResponse\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12!\n" +
@@ -3372,7 +3384,9 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\bbase_web\x18\x06 \x03(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\abaseWeb\x12B\n" +
 	"\aproduct\x18\a \x03(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\aproduct\x12$\n" +
 	"\x0ebase_web_waits\x18\b \x01(\tR\fbaseWebWaits\x12U\n" +
-	"\x11product_reinstall\x18\t \x01(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\x10productReinstall\"\xa1\a\n" +
+	"\x11product_reinstall\x18\t \x01(\v2(.sneakers.appliance.osadmin.v1.UnitOfferR\x10productReinstall\x12'\n" +
+	"\x0fpublishing_note\x18\n" +
+	" \x01(\tR\x0epublishingNote\"\xa1\a\n" +
 	"\fMirrorStatus\x12\x16\n" +
 	"\x06scheme\x18\x01 \x01(\tR\x06scheme\x12\x12\n" +
 	"\x04note\x18\x02 \x01(\tR\x04note\x12\x1b\n" +

@@ -615,6 +615,26 @@ jobs:
             for b in "$units"/*.bin; do echo "- $(basename "$b") ($(sha256sum < "$b" | cut -d' ' -f1))"; done
             echo "- release.yaml and $(wc -l < "$in/images.txt") image countersignatures"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Service repo release checklist
+        env:
+          RELEASE_REPO: ${{ needs.guard.outputs.release_repo }}
+          RELEASE_COMMIT: ${{ needs.guard.outputs.release_commit }}
+          WEB_REPO: ${{ needs.guard.outputs.web_repo }}
+          WEB_COMMIT: ${{ needs.guard.outputs.web_commit }}
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          in="$RUNNER_TEMP/unsigned-amd64"
+          pre=()
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]] && pre=(--prerelease)
+          go run ./build/tools/svcchecklist --release "$in/release.yaml" \
+            --release-repo "$RELEASE_REPO" --release-commit "$RELEASE_COMMIT" \
+            --web-repo "$WEB_REPO" --web-commit "$WEB_COMMIT" "${pre[@]}" --out "$RUNNER_TEMP/checklist.md"
+          cat "$RUNNER_TEMP/checklist.md" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$RUNNER_TEMP/notes.md"
+          printf '\n' >> "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/checklist.md" >> "$RUNNER_TEMP/notes.md"
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
   lab:
     name: 🧪 Lab dry run (never published)
     needs: guard
@@ -720,6 +740,16 @@ jobs:
             echo "- $(basename "$product"): $(stat -c %s "$product") bytes, verified, decrypted and checked"
             echo "- nothing was published or uploaded"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Service repo release checklist (dry run; nothing is written to any service repo)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # shellcheck source=build/release/pins.env
+          source build/release/pins.env
+          work="$RUNNER_TEMP/work"
+          go run ./build/tools/svcchecklist --release "$work/release.yaml" \
+            --release-repo "$SNEAKERS_RELEASE_REPO" --release-commit "$SNEAKERS_RELEASE_COMMIT" \
+            --web-repo "$SNEAKERS_WEB_REPO" --web-commit "$SNEAKERS_WEB_COMMIT" >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the lab keys
         if: always()
         run: sudo umount "$RUNNER_TEMP/labkeys" || true

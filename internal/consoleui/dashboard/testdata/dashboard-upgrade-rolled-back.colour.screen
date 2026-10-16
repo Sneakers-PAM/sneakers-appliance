@@ -20,5 +20,5 @@
 \e[34m|\e[0m   \e[1;31m!\e[0m \e[1;37mThe upgrade to 0.1.1 was rolled back.\e[0m                    \e[34m|\e[0m
 \e[34m|\e[0m     \e[2mThe box runs 0.1.0 again.\e[0m                                \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m
-\e[34m|\e[0m  \e[2mR  Recover access\e[0m                                           \e[34m|\e[0m
+\e[34m|\e[0m  \e[2mR  Recover access\e[0m\e[2m     \e[0m\e[2mN  Network\e[0m                            \e[34m|\e[0m
 \e[34m+--------------------------------------------------------------+\e[0m

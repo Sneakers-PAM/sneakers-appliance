@@ -466,8 +466,10 @@ func (s *Services) networkShow(ctx context.Context) (Result, error) {
 	return Result{Text: b.String(), Data: data}, nil
 }
 
-// networkSet applies key=value pairs on top of the current settings. The
-// interfaces' addressing is set on :8443 or the console's network screen.
+// networkSet applies key=value pairs on top of the current settings,
+// including the management interface's IPv4 and IPv6 mode and address
+// (ipv4, ipv4-address, ipv4-gateway and the ipv6 equivalents); the same
+// settings are also on :8443 or the console's network screen.
 func (s *Services) networkSet(ctx context.Context, args []string) (Result, error) {
 	cur, err := s.Network.GetNetwork(ctx, connect.NewRequest(&accessv1.GetNetworkRequest{}))
 	if err != nil {

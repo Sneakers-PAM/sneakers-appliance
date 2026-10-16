@@ -349,3 +349,98 @@ func TestTheRepositoryOverrideIsForLabBuildsOnly(t *testing.T) {
 		t.Fatalf("cleared: %v", st)
 	}
 }
+
+// A release can exist in the list before its files are uploaded (it's
+// still being signed and published): the check skips it for the newest
+// one that has files, with no error, and the Updates page says which
+// release it's waiting on.
+func TestUpdateCheckSkipsANewestReleaseWithNoFilesYet(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	// v0.2.0 is in the list (its draft was published) but has no assets
+	// yet: the run that signs and uploads them hasn't finished.
+	g.release("v0.2.0", false, false)
+	builtin(t, alice, nil)
+
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" {
+		t.Fatalf("a release with no files yet: %v %v", c, err)
+	}
+	if c.GetPublishingNote() != "v0.2.0 is being published; showing v0.1.1" {
+		t.Fatalf("publishing note: %q", c.GetPublishingNote())
+	}
+	if st := mirrorStatus(t, alice); st.GetReleaseTag() != "v0.1.1" {
+		t.Fatalf("status %v", st)
+	}
+
+	// Once its files are signed and uploaded the next check picks it up.
+	g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0" || c.GetPublishingNote() != "" {
+		t.Fatalf("once it's published: %v %v", c, err)
+	}
+
+	// A fetch of the file the offer named takes the release it came from.
+	f, err := alice.upgrade().FetchUpdate(context.Background(), connect.NewRequest(&osadminv1.FetchUpdateRequest{FileName: "sneakers-product-0.2.0-amd64.bin"}))
+	if err != nil || f.Msg.GetSource() != "direct" {
+		t.Fatalf("fetch %v %v", f, err)
+	}
+}
+
+// A release's index may be there but not verify (a bad signature, or a
+// run that uploaded a corrupt file): the check skips it the same way,
+// naming why on the Updates page.
+func TestUpdateCheckSkipsANewestReleaseWithAnInvalidIndex(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	g.publish(t, "v0.2.0", testpki.ECDSA(t), productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	builtin(t, alice, nil)
+
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" {
+		t.Fatalf("a release whose index doesn't verify: %v %v", c, err)
+	}
+	if c.GetPublishingNote() != "v0.2.0's index doesn't verify; showing v0.1.1" {
+		t.Fatalf("publishing note: %q", c.GetPublishingNote())
+	}
+}
+
+// The newest release on the channel, with its files there and signed,
+// needs no fallback and no publishing note.
+func TestUpdateCheckTakesTheNewestReleaseWhenItVerifies(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" || c.GetPublishingNote() != "" {
+		t.Fatalf("the newest, verified release: %v %v", c, err)
+	}
+}
+
+// When nothing on the channel has a usable index the check fails, rather
+// than silently answering an empty offer.
+func TestUpdateCheckFailsWhenNoReleaseVerifies(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", testpki.ECDSA(t), productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	builtin(t, alice, nil)
+	if _, err := checkNow(alice); err == nil {
+		t.Fatal("no release on the channel verifies; the check should fail")
+	}
+}

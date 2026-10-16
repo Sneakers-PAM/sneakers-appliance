@@ -41,6 +41,67 @@ var networkKeys = []Key{
 		set: func(st *netdv1.Settings, v string) { st.TimeZone = v }},
 	{Name: "https-proxy", Help: "the proxy for outbound HTTPS, a URL; empty for none", Example: "https-proxy=http://192.0.2.8:3128",
 		set: func(st *netdv1.Settings, v string) { st.HttpsProxy = v }},
+	{Name: "ipv4", Help: "the management interface's IPv4 mode: dhcp, static or off", Example: "ipv4=static",
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Mode = ipv4Mode(v) }},
+	{Name: "ipv4-address", Help: "the IPv4 address and its prefix length, in static mode; empty clears it", Example: "ipv4-address=192.0.2.10/24",
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Address = v }},
+	{Name: "ipv4-gateway", Help: "the IPv4 gateway, in static mode; empty for none", Example: "ipv4-gateway=192.0.2.1",
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Gateway = v }},
+	{Name: "ipv6", Help: "the management interface's IPv6 mode: slaac, dhcpv6, static or off", Example: "ipv6=static",
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv6.Mode = ipv6Mode(v) }},
+	{Name: "ipv6-address", Help: "the IPv6 address and its prefix length, in static mode; empty clears it", Example: "ipv6-address=2001:db8::10/64",
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv6.Address = v }},
+	{Name: "ipv6-gateway", Help: "the IPv6 gateway, in static mode; empty for none", Example: "ipv6-gateway=2001:db8::1",
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv6.Gateway = v }},
+}
+
+// management is st's management interface, with its IPv4 and IPv6 blocks,
+// created if netd gave none yet (a box has one by the time setup finishes).
+// The mode and address keys apply in the same network set, so a half-typed
+// one (an address with no ipv4=static) is caught by netd's own validation,
+// the same way an invalid mode or address is.
+func management(st *netdv1.Settings) *netdv1.Interface {
+	if st.Management == nil {
+		st.Management = &netdv1.Interface{}
+	}
+	if st.Management.Ipv4 == nil {
+		st.Management.Ipv4 = &netdv1.Ipv4{}
+	}
+	if st.Management.Ipv6 == nil {
+		st.Management.Ipv6 = &netdv1.Ipv6{}
+	}
+	return st.Management
+}
+
+// ipv4Mode and ipv6Mode parse the key's value; anything unrecognized stays
+// unspecified, which netd's validation refuses by name (use dhcp, static
+// or off), the same way it refuses a bad address.
+func ipv4Mode(v string) netdv1.Ipv4Mode {
+	switch v {
+	case "dhcp":
+		return netdv1.Ipv4Mode_IPV4_MODE_DHCP
+	case "static":
+		return netdv1.Ipv4Mode_IPV4_MODE_STATIC
+	case "off":
+		return netdv1.Ipv4Mode_IPV4_MODE_OFF
+	default:
+		return netdv1.Ipv4Mode_IPV4_MODE_UNSPECIFIED
+	}
+}
+
+func ipv6Mode(v string) netdv1.Ipv6Mode {
+	switch v {
+	case "slaac":
+		return netdv1.Ipv6Mode_IPV6_MODE_SLAAC
+	case "dhcpv6":
+		return netdv1.Ipv6Mode_IPV6_MODE_DHCPV6
+	case "static":
+		return netdv1.Ipv6Mode_IPV6_MODE_STATIC
+	case "off":
+		return netdv1.Ipv6Mode_IPV6_MODE_OFF
+	default:
+		return netdv1.Ipv6Mode_IPV6_MODE_UNSPECIFIED
+	}
 }
 
 // NetworkKeys are the keys network set takes.

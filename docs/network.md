@@ -71,7 +71,17 @@ Every page can show the window: `StatusService.GetStatus` carries `network_chang
 The console's network editor changes only what it edits: it starts from the box's current settings
 (`Get`), puts the static address on its family and, when one is typed, the DNS server, and keeps
 NTP, the host name, the search domains, the allow-list, the time zone, the proxy and the cluster
-ranges.
+ranges. The dashboard offers it (press N) whenever netd is installed, not only on the first-boot
+screen a failed DHCP lease shows: a box that already has a DHCP address can still be moved to a
+static one by hand.
+
+`network set` takes the management interface's IPv4 and IPv6 mode and address the same way:
+`ipv4=dhcp|static|off`, `ipv4-address=<address>/<prefix>`, `ipv4-gateway=`, and `ipv6`,
+`ipv6-address`, `ipv6-gateway` for IPv6 (`help network set` lists them with examples). A change to
+the mode or address goes through the same `Set`/`Confirm` window as any other interface change,
+since it can cut the admin off; `network set dns=...` and the like still keep at once. The service
+interface's addressing has no post-setup editor yet (console, SSH or :8443): it's set at first
+boot and stays until that's added.
 
 The window survives a restart: while a change waits, netd keeps the previous settings in
 `network.prev.yaml` next to `network.yaml`. If netd stops or the box loses power inside the
