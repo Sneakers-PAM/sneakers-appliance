@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -40,13 +41,16 @@ func TestTheLabHookSamplesThePhasesOnceTheBoxRuns(t *testing.T) {
 	if _, err := exec.LookPath("nc"); err != nil {
 		t.Skip("no nc on this host")
 	}
-	state := `{"state":"starting"}`
+	// state is read by the server's handler goroutine and written by this
+	// goroutine between requests; atomic.Value keeps that race-free.
+	var state atomic.Value
+	state.Store(`{"state":"starting"}`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/_box/state" {
 			http.NotFound(w, r)
 			return
 		}
-		_, _ = w.Write([]byte(state))
+		_, _ = w.Write([]byte(state.Load().(string)))
 	}))
 	t.Cleanup(srv.Close)
 	host, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
@@ -60,7 +64,7 @@ func TestTheLabHookSamplesThePhasesOnceTheBoxRuns(t *testing.T) {
 	if ask() {
 		t.Fatal("box_running says running while the box is starting")
 	}
-	state = `{"state":"running","brand":{}}`
+	state.Store(`{"state":"running","brand":{}}`)
 	if !ask() {
 		t.Fatal("box_running doesn't say running")
 	}
