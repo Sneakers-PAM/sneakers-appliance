@@ -71,5 +71,5 @@ func run(args []string) error {
 		fmt.Print(md)
 		return nil
 	}
-	return os.WriteFile(*out, []byte(md), 0o644) // #nosec G306 -- a job summary or notes fragment, never a secret
+	return os.WriteFile(*out, []byte(md), 0o644) // #nosec G306 G703 -- --out is this build tool's own flag, a workflow-chosen local path, never user input; the file is a job summary or notes fragment, never a secret
 }
