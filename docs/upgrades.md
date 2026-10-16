@@ -467,6 +467,17 @@ unchanged.
   no list is kept, the box takes the latest stable release's files instead
   (`releases/latest/download/<file>`), which need no API call; an rc box then misses a newer rc
   until the API answers again.
+- **A release still being published.** A tag can exist on the channel before its files are signed
+  and uploaded (the Release is made first, then the Publish job writes the index and the `.bin`s to
+  it), and an index can fail to verify (a run that uploaded a corrupt file, or signed with the wrong
+  key). Either way the box skips it and tries the next release down on the channel, with no error:
+  the check offered as if it were the only one there. `CheckUpdatesResponse.publishing_note` says so
+  when it happens, such as "v0.1.0-rc.3 is being published; showing v0.1.0-rc.2" or "v0.1.0-rc.3's
+  index doesn't verify; showing v0.1.0-rc.2"; it's empty once the newest release on the channel
+  verifies. The pick is kept for the rest of the session, so a later fetch of one of the offered
+  files takes the same release the offer came from. The next check (on its own, or Check now) picks
+  the newer release up once its files are there and verify. When nothing on the channel has a usable
+  index the check fails, the same as an unreachable source.
 - **Trust.** HTTPS is checked against the system roots (Go's embedded Mozilla roots; the update
   trust's private CAs are for internal mirrors only). The index must come with
   `sneakers-product-index.json.sigstore.json`, a signature by the box's release key over it: an

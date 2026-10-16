@@ -12,9 +12,7 @@ package osadmin
 
 import (
 	"context"
-	"crypto/x509"
 	"errors"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -151,7 +149,7 @@ func (h *upgradeSvc) ListProductVersions(ctx context.Context, _ *connect.Request
 	installed := s.slots().Status().Installed
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src, false)
+		idx, _, err := s.fetchIndex(ctx, src, false)
 		if err != nil {
 			lastErr = err
 			continue
@@ -182,7 +180,7 @@ func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[os
 	inst, hasProduct := s.slots().Installed()
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src, false)
+		idx, _, err := s.fetchIndex(ctx, src, false)
 		if err != nil {
 			lastErr = err
 			continue
@@ -203,27 +201,21 @@ func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[os
 
 // fetchIndex reads src's index; force asks the GitHub API again for the
 // release to read it from (Check now). The GitHub source's index must be
-// signed by the release key.
-func (s *Server) fetchIndex(ctx context.Context, src source, force bool) (idx updatepkg.Index, err error) {
-	started := time.Now()
-	var (
-		resp *http.Response
-		peer *x509.Certificate
-	)
-	src, err = s.resolve(ctx, src, force)
-	if err == nil {
-		resp, peer, err = s.open(ctx, src, "product index")
+// signed by the release key, and a release still being published (no
+// index yet, or one that doesn't verify) is skipped for an older one:
+// note then names the newer release skipped, for the Updates page.
+func (s *Server) fetchIndex(ctx context.Context, src source, force bool) (idx updatepkg.Index, note string, err error) {
+	if src.direct {
+		return s.resolveDirectIndex(ctx, src, force)
 	}
+	started := time.Now()
+	resp, peer, err := s.open(ctx, src, "product index")
 	if err == nil {
-		if src.direct {
-			idx, err = s.readSignedIndex(ctx, src, resp.Body)
-		} else {
-			idx, err = updatepkg.ReadIndex(resp.Body)
-		}
+		idx, err = updatepkg.ReadIndex(resp.Body)
 		_ = resp.Body.Close()
 	}
 	s.fetched(ctx, src, "product index", peer, started, 0, err)
-	return idx, err
+	return idx, "", err
 }
 
 // stageProduct stages a verified product bundle: it must fit the running

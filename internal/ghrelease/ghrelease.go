@@ -65,13 +65,14 @@ func ChannelFor(version string) string {
 	return Stable
 }
 
-// Pick is the release a box on channel takes from rels: never a draft;
-// for stable, the newest release not flagged prerelease whose tag has no
-// pre-release part; for rc, the newest of those and the releases flagged
-// prerelease whose tag ends in -rc.<n>.
-func Pick(rels []Release, channel string) (Release, bool) {
-	var best Release
-	found := false
+// Candidates is every release a box on channel may take from rels, newest
+// first: never a draft; for stable, a release not flagged prerelease whose
+// tag has no pre-release part; for rc, those plus releases flagged
+// prerelease whose tag ends in -rc.<n>. A box that checks while the newest
+// is still being published tries the next one down (Pick takes only the
+// first).
+func Candidates(rels []Release, channel string) []Release {
+	var out []Release
 	for _, r := range rels {
 		tag := r.TagName
 		if r.Draft || semver.Canonical(tag) != tag {
@@ -84,11 +85,19 @@ func Pick(rels []Release, channel string) (Release, bool) {
 		default:
 			continue
 		}
-		if !found || semver.Compare(tag, best.TagName) > 0 {
-			best, found = r, true
-		}
+		out = append(out, r)
 	}
-	return best, found
+	slices.SortStableFunc(out, func(a, b Release) int { return semver.Compare(b.TagName, a.TagName) })
+	return out
+}
+
+// Pick is the newest of Candidates.
+func Pick(rels []Release, channel string) (Release, bool) {
+	c := Candidates(rels, channel)
+	if len(c) == 0 {
+		return Release{}, false
+	}
+	return c[0], true
 }
 
 // Previous is the release a release tagged tag patches from: the newest

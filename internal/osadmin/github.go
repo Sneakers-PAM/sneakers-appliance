@@ -37,11 +37,14 @@ const indexSigSuffix = ".sigstore.json"
 const maxIndexSig = 64 << 10
 
 // githubState is the GitHub source's lister and the release last picked.
+// tagSet is false until a release is resolved for url; false also picks a
+// release fresh instead of reusing a stale tag from a different source.
 type githubState struct {
 	mu     sync.Mutex
 	lister *ghrelease.Lister
 	url    string
 	tag    string
+	tagSet bool
 }
 
 // releaseURLs is the GitHub source for policy p: the repository, its
@@ -106,7 +109,7 @@ func (s *Server) githubLister(api string) (*ghrelease.Lister, error) {
 		return nil, err
 	}
 	s.github.lister = &ghrelease.Lister{HTTP: hc, URL: api, Now: s.o.Clock.Now}
-	s.github.url, s.github.tag = api, ""
+	s.github.url, s.github.tag, s.github.tagSet = api, "", false
 	return s.github.lister, nil
 }
 
@@ -114,45 +117,135 @@ func (s *Server) githubLister(api string) (*ghrelease.Lister, error) {
 func (s *Server) forgetGitHub() {
 	s.github.mu.Lock()
 	defer s.github.mu.Unlock()
-	s.github.lister, s.github.url, s.github.tag = nil, "", ""
+	s.github.lister, s.github.url, s.github.tag, s.github.tagSet = nil, "", "", false
 }
 
-// pickRelease is the tag the GitHub source fetches from, or "" for the
-// latest stable release (no API configured, or the API couldn't be read
-// and no list was cached). force asks the API again (Check now).
-func (s *Server) pickRelease(ctx context.Context, force bool) (string, error) {
+// resolveDirectIndex finds the newest release on the box's channel whose
+// product index is there and verifies: a release with no files yet, or
+// whose index doesn't verify, is skipped and the next older one tried,
+// with no error (docs/upgrades.md#the-github-source). idx is read from
+// the release it resolves to; note names a newer release it skipped, for
+// the Updates page. The pick is cached (githubState.tag) so a later fetch
+// of one of idx's files takes the same release.
+func (s *Server) resolveDirectIndex(ctx context.Context, idxSrc source, force bool) (idx updatepkg.Index, note string, err error) {
 	p := s.policy()
 	repo, _, api := s.releaseURLs(p)
 	channel, _ := s.releaseChannel(p)
 	if api == "" {
-		return "", nil
+		return s.resolveDirectLatest(ctx, idxSrc)
 	}
 	l, err := s.githubLister(api)
 	if err != nil {
-		return "", err
+		return updatepkg.Index{}, "", err
 	}
 	started := time.Now()
 	rels, lerr := l.Releases(ctx, force)
-	r, ok := ghrelease.Pick(rels, channel)
+	candidates := ghrelease.Candidates(rels, channel)
 	fields := []log.Field{log.F("repo", repo), log.F("channel", channel), log.F("releases", len(rels)), log.F("force", force), log.F("ms", time.Since(started).Milliseconds())}
-	s.github.mu.Lock()
-	defer s.github.mu.Unlock()
-	switch {
-	case ok:
+	if len(candidates) == 0 {
 		if lerr != nil {
-			s.o.Logger.Warn("osadmin: the GitHub releases list wasn't read again; using the last one", append(fields, log.F("tag", r.TagName), log.F("error", lerr.Error()))...)
-		} else {
-			s.o.Logger.Info("osadmin: GitHub release picked", append(fields, log.F("tag", r.TagName))...)
+			s.o.Logger.Warn("osadmin: the GitHub releases list can't be read; fetching from the latest stable release", append(fields, log.F("error", lerr.Error()))...)
+			return s.resolveDirectLatest(ctx, idxSrc)
 		}
-		s.github.tag = r.TagName
-		return r.TagName, nil
-	case lerr != nil:
-		s.o.Logger.Warn("osadmin: the GitHub releases list can't be read; fetching from the latest stable release", append(fields, log.F("error", lerr.Error()))...)
-		s.github.tag = ""
+		s.o.Logger.Warn("osadmin: the repository has no release on the box's channel", fields...)
+		return updatepkg.Index{}, "", codes.New(codes.UpgradeUpload, "%s has no %s release yet", repo, channel)
+	}
+	if lerr != nil {
+		s.o.Logger.Warn("osadmin: the GitHub releases list wasn't read again; using the last one", append(fields, log.F("error", lerr.Error()))...)
+	}
+	newest := candidates[0].TagName
+	var lastErr, newestErr error
+	for i, r := range candidates {
+		idx, ferr := s.fetchIndexAt(ctx, idxSrc, r.TagName)
+		if ferr != nil {
+			s.o.Logger.Info("osadmin: the GitHub release's index isn't ready; trying the next one on the channel", log.F("tag", r.TagName), log.F("error", ferr.Error()))
+			lastErr = ferr
+			if i == 0 {
+				newestErr = ferr
+			}
+			continue
+		}
+		s.github.mu.Lock()
+		s.github.tag, s.github.tagSet = r.TagName, true
+		s.github.mu.Unlock()
+		s.o.Logger.Info("osadmin: GitHub release picked", append(fields, log.F("tag", r.TagName))...)
+		if r.TagName != newest {
+			note = newest + publishingReason(newestErr) + "; showing " + r.TagName
+			s.o.Logger.Info("osadmin: a newer GitHub release was skipped", log.F("newest", newest), log.F("showing", r.TagName), log.F("why", describe(newestErr)))
+		}
+		return idx, note, nil
+	}
+	return updatepkg.Index{}, "", lastErr
+}
+
+// publishingReason is the Updates page's reason for skipping the newest
+// release on the channel, from the error its index fetch gave: not there
+// yet (still being signed and uploaded), or there but not verifying.
+func publishingReason(err error) string {
+	if symbolOf(err) == "UPGRADE_SIGNATURE" {
+		return "'s index doesn't verify"
+	}
+	return " is being published"
+}
+
+// resolveDirectLatest reads the latest stable release's index, which needs
+// no API call: the fallback when the API can't be read and no list was
+// ever cached, or no repository is configured at all.
+func (s *Server) resolveDirectLatest(ctx context.Context, idxSrc source) (updatepkg.Index, string, error) {
+	idx, err := s.fetchIndexAt(ctx, idxSrc, "")
+	if err != nil {
+		return updatepkg.Index{}, "", err
+	}
+	s.github.mu.Lock()
+	s.github.tag, s.github.tagSet = "", true
+	s.github.mu.Unlock()
+	return idx, "", nil
+}
+
+// fetchIndexAt reads and verifies the signed index from the GitHub
+// source's release tagged tag ("" for the latest stable release).
+func (s *Server) fetchIndexAt(ctx context.Context, src source, tag string) (updatepkg.Index, error) {
+	started := time.Now()
+	if tag == "" {
+		src.url = src.base + "/latest/download/" + src.file
+	} else {
+		src.url = src.base + "/download/" + tag + "/" + src.file
+	}
+	resp, peer, err := s.open(ctx, src, "product index")
+	var idx updatepkg.Index
+	if err == nil {
+		idx, err = s.readSignedIndex(ctx, src, resp.Body)
+		_ = resp.Body.Close()
+	}
+	s.fetched(ctx, src, "product index", peer, started, 0, err)
+	return idx, err
+}
+
+// pickRelease is the tag a file other than the product index is fetched
+// from: the release the last index resolution (resolveDirectIndex) picked,
+// so the fetch takes the same release the offer named it from. Unset
+// (never resolved yet, or the source changed), it resolves one first, the
+// same way a check does; force asks the API again (Check now).
+func (s *Server) pickRelease(ctx context.Context, force bool) (string, error) {
+	s.github.mu.Lock()
+	tag, ok := s.github.tag, s.github.tagSet
+	s.github.mu.Unlock()
+	if ok && !force {
+		return tag, nil
+	}
+	p := s.policy()
+	_, web, api := s.releaseURLs(p)
+	if api == "" {
 		return "", nil
 	}
-	s.o.Logger.Warn("osadmin: the repository has no release on the box's channel", fields...)
-	return "", codes.New(codes.UpgradeUpload, "%s has no %s release yet", repo, channel)
+	idxSrc := source{name: "direct", base: web, direct: true, file: updatepkg.IndexName}
+	if _, _, err := s.resolveDirectIndex(ctx, idxSrc, force); err != nil {
+		return "", err
+	}
+	s.github.mu.Lock()
+	tag = s.github.tag
+	s.github.mu.Unlock()
+	return tag, nil
 }
 
 // resolve fills in a GitHub source's URL from the release picked.

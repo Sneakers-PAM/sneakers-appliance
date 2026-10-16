@@ -505,6 +505,11 @@ message CheckUpdatesResponse {
   // runs the same apply as an update. Unset when it doesn't, or with no
   // product installed.
   UnitOffer product_reinstall = 9;
+  // publishing_note says a newer release on the direct source is still
+  // being published, so this check shows an older one, such as "v0.1.0-rc.3
+  // is being published; showing v0.1.0-rc.2". Empty when the newest release
+  // on the box's channel verified, or the source isn't direct.
+  string publishing_note = 10;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch

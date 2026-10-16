@@ -248,13 +248,13 @@ func (h *upgradeSvc) CheckUpdates(ctx context.Context, _ *connect.Request[osadmi
 	}
 	var lastErr error
 	for _, src := range srcs {
-		idx, err := s.fetchIndex(ctx, src, true)
+		idx, note, err := s.fetchIndex(ctx, src, true)
 		if err != nil {
 			lastErr = err
 			continue
 		}
 		out := s.offers(idx, base)
-		out.Source, out.Url, out.CheckedAt = src.name, src.base, timestamppb.New(s.o.Clock.Now())
+		out.Source, out.Url, out.CheckedAt, out.PublishingNote = src.name, src.base, timestamppb.New(s.o.Clock.Now()), note
 		s.checks.mu.Lock()
 		s.checks.last = proto.CloneOf(out)
 		s.checks.mu.Unlock()
