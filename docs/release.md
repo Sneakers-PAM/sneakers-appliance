@@ -622,3 +622,32 @@ production release ships full units only: no bridge copy and no patch (`build/la
 release isn't in the workflow yet: every release builds all three. Every image in the product bundle is signed with the
 release key, third-party ones included. amd64 only for now; arm64
 follows its kernel build.
+
+## The service repo checklist
+
+Publishing a service repo's own GitHub Release stays manual (as the appliance's own does), but
+working out *what* to publish for a given appliance release was worked out by hand each time,
+with mistakes to catch. `go run ./build/tools/svcchecklist` (`internal/svcrelease`) computes it
+from `release.yaml`'s own `build` blocks (every service's `build.repository` and `build.commit`)
+plus the pinned sources above (`SNEAKERS_RELEASE_REPO`/`COMMIT`, `SNEAKERS_WEB_REPO`/`COMMIT`),
+de-duplicated. It reads GitHub read-only, with no write to any service repo. For each repository:
+
+- **Unchanged:** the pinned commit already carries a `v*` tag. The checklist says "unchanged
+  since `vX`"; if release-drafter still has a draft for that version (stale), it says to delete it.
+- **Changed:** the pinned commit has no tag yet. The checklist says to publish the draft
+  release-drafter made for it (its `tag_name`), naming:
+  - **Target:** the full pinned SHA; when the repository's default branch has moved past it, it
+    says by how many commits, so the target isn't mistaken for the branch's current HEAD.
+  - **Notes to remove:** the draft's note lines naming a PR number merged after the pin (found in
+    the commits between the pin and the default branch, by the `(#N)` GitHub's squash merge
+    appends to the commit message), by PR number.
+  - **Line to add:** "Image built from `<sha>`".
+  - **Prerelease:** ticked when the appliance release being checked is itself one.
+  - **No draft:** release-drafter hasn't made one yet; create it first.
+- **Other drafts:** a repository with more than one draft lists every one beyond the first as
+  stale, to delete.
+
+The **Publish** job runs it after the release and its notes exist, writes the checklist to the
+run's job summary and appends it to the release's notes under "## Service repo releases"; the
+**Lab dry run** job runs the same tool (against its own built `release.yaml`, the production pins)
+and writes it to the job summary only, since a lab run publishes nothing.
