@@ -12,6 +12,8 @@
 // lists each service's build block, fill puts the digests of the images
 // built (one OCI layout per service, --layouts) in place of the
 // placeholders, and push pushes one built image to its registry by digest.
+// index joins the images each architecture's runner built into one image
+// index per service, the layouts fill, the sign job and push then take.
 // pull and manifest take --layouts too, and read a built image from its
 // layout instead of a registry.
 package main
@@ -46,7 +48,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: bundle pull|check|manifest|images|sources|fill|push|version [flags]")
+		return fmt.Errorf("usage: bundle pull|check|manifest|images|sources|fill|index|push|version [flags]")
 	}
 	switch args[0] {
 	case "manifest":
@@ -57,6 +59,8 @@ func run(args []string) error {
 		return sources(args[1:], os.Stdout)
 	case "fill":
 		return fill(args[1:], os.Stdout)
+	case "index":
+		return index(args[1:])
 	case "push":
 		return push(args[1:])
 	case "version":
@@ -106,7 +110,7 @@ func run(args []string) error {
 		lg := log.NewLoggerWithOptions("bundle", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatConsole), log.WithDefaultLevel(log.LevelInfo))
 		return bundle.Pull(ctx, bundle.PullOptions{Release: rel, Arch: *arch, Signatures: *sigs, Key: key, Out: *out, ModTime: epoch, PlainHTTP: *plain, Layouts: *layouts, Logger: lg})
 	default:
-		return fmt.Errorf("unknown command %q (pull, check, manifest, images, sources, fill or push)", args[0])
+		return fmt.Errorf("unknown command %q (pull, check, manifest, images, sources, fill, index or push)", args[0])
 	}
 }
 
@@ -308,6 +312,25 @@ func fill(args []string, w io.Writer) error {
 	}
 	_, err = w.Write(out)
 	return err
+}
+
+// index joins the per-architecture layouts directories given as arguments
+// (each an OCI layout per service, from build/release/images.sh on that
+// architecture's runner) into --out, one image index per service
+// (bundle.Index).
+func index(args []string) error {
+	fl := flag.NewFlagSet("bundle index", flag.ContinueOnError)
+	out := fl.String("out", "", "the joined layouts directory (empty or missing)")
+	if err := fl.Parse(args); err != nil {
+		return err
+	}
+	if *out == "" {
+		return fmt.Errorf("bundle index: --out names no directory")
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	lg := log.NewLoggerWithOptions("bundle", log.WithOutput(os.Stderr), log.WithDefaultFormat(log.FormatConsole), log.WithDefaultLevel(log.LevelInfo))
+	return bundle.Index(ctx, lg, *out, fl.Args()...)
 }
 
 // push pushes every service image the release built to the image its

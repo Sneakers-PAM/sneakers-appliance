@@ -159,3 +159,12 @@ func TestVersionPrintsTheReleasesVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestIndexNeedsAnOutAndTwoArchitectures(t *testing.T) {
+	if err := run([]string{"index", t.TempDir(), t.TempDir()}); err == nil || !strings.Contains(err.Error(), "--out") {
+		t.Fatalf("no --out: %v", err)
+	}
+	if err := run([]string{"index", "--out", filepath.Join(t.TempDir(), "out"), t.TempDir()}); err == nil || !strings.Contains(err.Error(), "two") {
+		t.Fatalf("one architecture: %v", err)
+	}
+}

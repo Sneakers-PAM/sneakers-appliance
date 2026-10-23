@@ -7,8 +7,10 @@ name: Release
 # Production (push of a v tag): guard -> real bundles (the real product
 # through the update paths a box takes, lab keys only; real-bundle.yml) ->
 # images (every Sneakers service image, built from the source the pinned
-# release.yaml names; no keys) ->
-# build (no keys, no environment) -> sign (the production environment, the
+# release.yaml names, once per architecture on a runner of that
+# architecture; no keys) ->
+# build (no keys, no environment; it first joins each service's amd64 and
+# arm64 builds into one image index) -> sign (the production environment, the
 # only job that reads its secrets; it also makes the Base OS patch from the
 # previous release on the tag's channel and signs the index and SHA256SUMS)
 # -> publish (verify, push the service images and sneakers-os to GHCR by
@@ -73,10 +75,18 @@ jobs:
     uses: ./.github/workflows/real-bundle.yml
 
   images:
-    name: 🐳 Service images (amd64)
+    name: 🐳 Service images (${{ matrix.arch }})
     needs: [guard, realbundles]
     if: needs.guard.outputs.channel == 'production'
-    runs-on: ubuntu-24.04
+    # Each architecture builds natively, so no emulation; the build job
+    # joins the two into one index per service (bundle index).
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
       contents: read
@@ -100,12 +110,13 @@ jobs:
       - name: Build the service images
         env:
           RELEASE_COMMIT: ${{ needs.guard.outputs.release_commit }}
+          PLATFORM: linux/${{ matrix.arch }}
         run: |
           [ "$(git -C .pinned/sneakers-release rev-parse HEAD)" = "$RELEASE_COMMIT" ]
           RELEASE=.pinned/sneakers-release/manifest/release.yaml OUT="$RUNNER_TEMP/service-images" \
             bash build/release/images.sh
           {
-            echo "### Service images (amd64)"
+            echo "### Service images ($PLATFORM)"
             echo '```'
             for d in "$RUNNER_TEMP"/service-images/*/; do
               echo "$(basename "$d") $(sed -n 's/.*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$d/index.json" | head -1)"
@@ -115,7 +126,7 @@ jobs:
       - name: Upload the service images
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
-          name: service-images-amd64
+          name: service-images-${{ matrix.arch }}-native
           path: ${{ runner.temp }}/service-images
           if-no-files-found: error
           retention-days: 7
@@ -161,8 +172,32 @@ jobs:
       - name: Download the service images
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
-          name: service-images-amd64
+          pattern: service-images-*-native
+          path: ${{ runner.temp }}/native
+      # One layout per service whose root is an image index naming its
+      # linux/amd64 and linux/arm64 builds, both from the commit its build
+      # block names. That index digest is what release.yaml pins, the sign
+      # job countersigns and the publish job pushes; an amd64 product bundle
+      # carries only the amd64 image under it.
+      - name: Join the architectures into one index per service
+        run: |
+          go run ./build/tools/bundle index --out "$RUNNER_TEMP/service-images" \
+            "$RUNNER_TEMP/native/service-images-amd64-native" "$RUNNER_TEMP/native/service-images-arm64-native"
+          {
+            echo "### Service images (linux/amd64 and linux/arm64 index)"
+            echo '```'
+            for d in "$RUNNER_TEMP"/service-images/*/; do
+              echo "$(basename "$d") $(sed -n 's/.*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$d/index.json" | head -1)"
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the joined service images
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: service-images
           path: ${{ runner.temp }}/service-images
+          if-no-files-found: error
+          retention-days: 7
       # Before the long build: every service image the pinned release.yaml
       # names was built, and with its digests in place every image is
       # pinned by a digest, not a placeholder.
@@ -238,7 +273,7 @@ jobs:
       - name: Download the service images
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
-          name: service-images-amd64
+          name: service-images
           path: ${{ runner.temp }}/service-images
       - name: Install the pinned signers
         run: |
@@ -540,6 +575,11 @@ jobs:
         with:
           pattern: '*-amd64'
           path: ${{ runner.temp }}
+      - name: Download the service images
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: service-images
+          path: ${{ runner.temp }}/service-images
       - name: Install the pinned cosign
         run: |
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
@@ -579,9 +619,10 @@ jobs:
             verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
           done < "$in/images.txt"
           # Every service image the release built, to the image release.yaml
-          # names, by the digest it pins (and the version tag); each push is
+          # names, by the index digest it pins (and the version tag), with
+          # the linux/amd64 and linux/arm64 images under it; each push is
           # read back by that digest.
-          go run ./build/tools/bundle push --release "$in/release.yaml" --layouts "$RUNNER_TEMP/service-images-amd64" --tag "$VERSION"
+          go run ./build/tools/bundle push --release "$in/release.yaml" --layouts "$RUNNER_TEMP/service-images" --tag "$VERSION"
           repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sneakers-os"
           digest="$("$in/sneakers-artifact" push --layout "$signed/artifact" --repo "$repo" --tag "$VERSION")"
           "$in/sneakers-kit" verify "$repo@$digest"

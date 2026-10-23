@@ -122,9 +122,10 @@ jobs:
           sudo apt-get install -y -q efitools sbsigntool squashfs-tools cryptsetup-bin cpio systemd-ukify systemd-boot-efi python3-pefile
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Release environments keep the keys apart, the production units and their seal step, pinned actions, the docs-only skip, the real-bundle pins and its key-free caches
+      - name: Release environments keep the keys apart, the native per-architecture image builds, the production units and their seal step, pinned actions, the docs-only skip, the real-bundle pins and its key-free caches
         run: |
           bash build/release/environments_test.sh
+          bash build/release/images_test.sh
           bash build/release/units_test.sh
           bash build/release/seal_test.sh
           bash build/ci/pinned_actions_test.sh
