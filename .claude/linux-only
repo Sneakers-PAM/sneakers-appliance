@@ -1,0 +1,2 @@
+# Linux-only: the build and tests run only on Linux, so the local pre-push
+# build/lint/test gate is not installed here and CI is the gate.

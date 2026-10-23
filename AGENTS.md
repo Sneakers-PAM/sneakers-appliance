@@ -54,8 +54,12 @@ Follow the logging rules in `CLAUDE.md`. In short:
 
 - See `CLAUDE.md` for the branch/commit/PR rules; they are enforced by the git hooks in
   `.claude/hooks` (run `bash .claude/hooks/install.sh` once per clone).
-- Open every PR as a draft. CI skips drafts, so run the full checks locally, push once they pass,
-  and mark the PR ready when the work is finished; see CLAUDE.md "CI and Actions minutes".
+- Open every PR as a draft and mark it ready when the work is finished; see CLAUDE.md "CI and
+  Actions minutes".
+- This repo is Linux-only (`.claude/linux-only`): its build and tests can't run on macOS, so there
+  is no local pre-push build/lint/test gate and CI on GitHub-hosted runners is the gate. Run what
+  can run locally (for example `GOOS=linux go vet ./...`), push once, and let CI decide. The
+  identity and forbidden-text hooks still run on every commit and push.
 - <project-specific conventions, non-obvious constraints, and traps an agent should know>
 
 ## CI status
