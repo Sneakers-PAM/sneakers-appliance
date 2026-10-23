@@ -6,11 +6,14 @@
 # service image from the source release.yaml pins for it (each service's
 # build block: the repository, the full commit, the Dockerfile and its
 # context, the target and build args), with the repository's own
-# Dockerfile, for linux/amd64, and leaves each as an OCI layout,
-# OUT/<service>/, with the commit it was built from in build-commit (bundle
-# fill refuses an image from any other commit). Nothing is pushed: the build job fills the digests into
-# release.yaml (bundle fill), the sign job countersigns them and the publish
-# job pushes them by digest.
+# Dockerfile, for one platform (PLATFORM), and leaves each as an OCI
+# layout, OUT/<service>/, with the commit it was built from in build-commit
+# (bundle fill refuses an image from any other commit). The release runs it
+# once per architecture, each on a runner of that architecture, and bundle
+# index joins the two builds of each service into one image index. Nothing
+# is pushed: the build job fills the index digests into release.yaml
+# (bundle fill), the sign job countersigns them and the publish job pushes
+# them by digest.
 #
 # Each build is stamped with the service's version and commit (the VERSION
 # and COMMIT build args the Dockerfiles take), with no provenance or SBOM
@@ -21,6 +24,8 @@
 # Inputs (environment):
 #   RELEASE   sneakers-release's manifest/release.yaml at the pinned commit
 #   OUT       the layouts directory (empty or missing)
+#   PLATFORM  linux/amd64 (the default) or linux/arm64; build it on a runner
+#             of that architecture, since nothing here sets up emulation
 #   BUILDER   a docker buildx builder with the docker-container driver
 #             (default: one made for the run, sneakers-release-images)
 set -euo pipefail
@@ -28,6 +33,11 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 : "${RELEASE:?}" "${OUT:?}"
+platform="${PLATFORM:-linux/amd64}"
+case "$platform" in
+  linux/amd64 | linux/arm64) ;;
+  *) echo "images: PLATFORM $platform isn't linux/amd64 or linux/arm64" >&2; exit 1 ;;
+esac
 if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT")" ]; then
   echo "images: $OUT isn't empty" >&2
   exit 1
@@ -40,7 +50,7 @@ if ! docker buildx inspect "$builder" >/dev/null 2>&1; then
   docker buildx create --name "$builder" --driver docker-container >/dev/null
 fi
 mkdir -p "$OUT"
-echo "images: $(wc -l < "$work/sources") service images to build"
+echo "images: $(wc -l < "$work/sources") service images to build for $platform"
 while read -r name image version repo commit dockerfile context target buildargs; do
   src="$work/src/$name"
   start="$(date +%s)"
@@ -51,7 +61,7 @@ while read -r name image version repo commit dockerfile context target buildargs
   got="$(git -C "$src" rev-parse HEAD)"
   [ "$got" = "$commit" ] || { echo "images: $repo fetched $got for $commit" >&2; exit 1; }
   epoch="$(git -C "$src" log -1 --format=%ct)"
-  args=(--builder "$builder" --platform linux/amd64 --provenance=false --sbom=false
+  args=(--builder "$builder" --platform "$platform" --provenance=false --sbom=false
     --build-arg "VERSION=$version" --build-arg "COMMIT=$commit" --build-arg "SOURCE_DATE_EPOCH=$epoch"
     -f "$src/$dockerfile" --output "type=oci,dest=$work/$name.tar,rewrite-timestamp=true")
   [ "$target" = - ] || args+=(--target "$target")
@@ -68,4 +78,4 @@ while read -r name image version repo commit dockerfile context target buildargs
   dgst="$(sed -n 's/.*"digest":"\(sha256:[0-9a-f]\{64\}\)".*/\1/p' "$OUT/$name/index.json" | head -1)"
   echo "images: $name $dgst in $(( $(date +%s) - start ))s"
 done < "$work/sources"
-echo "images: built $(find "$OUT" -mindepth 1 -maxdepth 1 -type d | wc -l) images in $OUT"
+echo "images: built $(find "$OUT" -mindepth 1 -maxdepth 1 -type d | wc -l) $platform images in $OUT"
