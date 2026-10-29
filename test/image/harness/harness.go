@@ -56,6 +56,15 @@ type Disk struct {
 	// VM's directory), for a disk too big to copy at every boot, such as
 	// the previous boot's Disk with a real product on it.
 	Move bool
+	// Format is the image's format: raw (the default) or qcow2.
+	Format string
+}
+
+func (d Disk) format() string {
+	if d.Format == "" {
+		return "raw"
+	}
+	return d.Format
 }
 
 // Options shape one boot.
@@ -85,6 +94,19 @@ type Options struct {
 	// Capture, when set, is a pcap file QEMU writes every frame on the
 	// guest's NIC to (its filter-dump): what the box's network sees.
 	Capture string
+	// SCSI attaches each disk to its own VirtIO SCSI controller, as
+	// Proxmox VE's virtio-scsi-single does, instead of virtio-blk.
+	SCSI bool
+	// GuestAgent adds the virtio-serial port org.qemu.guest_agent.0 that
+	// Proxmox VE gives a VM with the agent on; VM.Agent talks to it.
+	GuestAgent bool
+	// Vars, when set, is a previous boot's vars store (VM.Vars) to boot
+	// with instead of a new one, so what the firmware or the box wrote to
+	// it carries over, as on a reboot. SecureBoot is then ignored.
+	Vars string
+	// TPMState, when set, is a previous boot's TPM state (VM.TPMState),
+	// copied for this boot. It needs TPM.
+	TPMState string
 }
 
 // Paths of the pinned firmware (Ubuntu's ovmf package in CI).
@@ -139,6 +161,9 @@ type VM struct {
 	// qmpSock is QEMU's QMP socket: screendumps and the keyboard.
 	qmpSock string
 	vga     bool
+	// agentSock is the guest agent port's host end, when it has one.
+	agentSock string
+	formats   []string
 }
 
 // Boot starts QEMU with o and returns once it's running.
@@ -147,15 +172,17 @@ func Boot(t testing.TB, o Options) *VM {
 	Need(t, []string{"qemu-system-x86_64", "swtpm", "virt-fw-vars", "qemu-img"}, OVMFCode, OVMFVars)
 	dir := t.TempDir()
 	vars := filepath.Join(dir, "vars.fd")
-	switch o.SecureBoot {
-	case Enrolled:
+	switch {
+	case o.Vars != "":
+		copyFile(t, o.Vars, vars)
+	case o.SecureBoot == Enrolled:
 		owner := "5d4c8e4b-3b9b-4b58-9e2c-0d7e1f2a3b4c"
 		run(t, "virt-fw-vars", "--input", OVMFVars, "--output", vars,
 			"--set-pk", owner, filepath.Join(o.Keys, "PK.crt"),
 			"--add-kek", owner, filepath.Join(o.Keys, "KEK.crt"),
 			"--add-db", owner, filepath.Join(o.Keys, "db.crt"),
 			"--secure-boot")
-	case OffWithKeys:
+	case o.SecureBoot == OffWithKeys:
 		owner := "5d4c8e4b-3b9b-4b58-9e2c-0d7e1f2a3b4c"
 		run(t, "virt-fw-vars", "--input", OVMFVars, "--output", vars,
 			"--set-pk", owner, filepath.Join(o.Keys, "PK.crt"),
@@ -239,7 +266,9 @@ func Boot(t testing.TB, o Options) *VM {
 	if o.TPM {
 		sock := filepath.Join(dir, "swtpm.sock")
 		state := filepath.Join(dir, "tpm")
-		if err := os.Mkdir(state, 0o700); err != nil {
+		if o.TPMState != "" {
+			run(t, "cp", "-a", o.TPMState, state)
+		} else if err := os.Mkdir(state, 0o700); err != nil {
 			t.Fatal(err)
 		}
 		tpm := exec.CommandContext(ctx, "swtpm", "socket", "--tpm2", "--tpmstate", "dir="+state, "--ctrl", "type=unixio,path="+sock) // #nosec G204 -- test-only, fixed tool
@@ -250,8 +279,11 @@ func Boot(t testing.TB, o Options) *VM {
 		waitFor(t, sock)
 		args = append(args, "-chardev", "socket,id=chrtpm,path="+sock, "-tpmdev", "emulator,id=tpm0,chardev=chrtpm", "-device", "tpm-tis,tpmdev=tpm0")
 	}
+	var formats []string
 	for i, d := range o.Disks {
-		img := filepath.Join(dir, fmt.Sprintf("disk%d.raw", i))
+		f := d.format()
+		formats = append(formats, f)
+		img := filepath.Join(dir, fmt.Sprintf("disk%d.%s", i, f))
 		switch {
 		case d.Image != "" && d.Move:
 			if err := os.Rename(d.Image, img); err != nil {
@@ -260,12 +292,23 @@ func Boot(t testing.TB, o Options) *VM {
 		case d.Image != "":
 			run(t, "cp", "--sparse=always", d.Image, img)
 		default:
-			run(t, "qemu-img", "create", "-f", "raw", img, fmt.Sprintf("%dG", max(d.SizeGiB, 1)))
+			run(t, "qemu-img", "create", "-f", f, img, fmt.Sprintf("%dG", max(d.SizeGiB, 1)))
 		}
 		if d.Image != "" && d.SizeGiB > 0 {
-			run(t, "qemu-img", "resize", "-f", "raw", img, fmt.Sprintf("%dG", d.SizeGiB))
+			run(t, "qemu-img", "resize", "-f", f, img, fmt.Sprintf("%dG", d.SizeGiB))
 		}
-		args = append(args, "-drive", fmt.Sprintf("if=none,id=d%d,format=raw,file=%s", i, img), "-device", fmt.Sprintf("virtio-blk-pci,drive=d%d", i))
+		args = append(args, "-drive", fmt.Sprintf("if=none,id=d%d,format=%s,file=%s", i, f, img))
+		if o.SCSI {
+			args = append(args, "-device", fmt.Sprintf("virtio-scsi-pci,id=scsi%d", i), "-device", fmt.Sprintf("scsi-hd,drive=d%d,bus=scsi%d.0", i, i))
+		} else {
+			args = append(args, "-device", fmt.Sprintf("virtio-blk-pci,drive=d%d", i))
+		}
+	}
+	var agentSock string
+	if o.GuestAgent {
+		agentSock = filepath.Join(qdir, "qga.sock")
+		args = append(args, "-chardev", "socket,id=qga0,path="+agentSock+",server=on,wait=off",
+			"-device", "virtio-serial-pci,id=qga0s", "-device", "virtserialport,chardev=qga0,name="+AgentPort)
 	}
 	cmd := exec.CommandContext(ctx, "qemu-system-x86_64", args...) // #nosec G204 -- test-only, fixed tool
 	var stderr bytes.Buffer
@@ -274,7 +317,7 @@ func Boot(t testing.TB, o Options) *VM {
 		cancel()
 		t.Fatal(err)
 	}
-	vm := &VM{t: t, cmd: cmd, serial: serial, cancel: cancel, dir: dir, done: make(chan struct{}), in: ser + ".in", qmpSock: qmpSock, vga: !o.NoVGA}
+	vm := &VM{t: t, cmd: cmd, serial: serial, cancel: cancel, dir: dir, done: make(chan struct{}), in: ser + ".in", qmpSock: qmpSock, vga: !o.NoVGA, agentSock: agentSock, formats: formats}
 	copied := make(chan struct{})
 	go func() {
 		defer close(copied)
@@ -386,8 +429,20 @@ func (vm *VM) Console() string {
 }
 
 // Disk is the path of the VM's copy of disk i. Once the VM has exited it
-// holds what the guest wrote, and a later Boot can take it as its Image.
-func (vm *VM) Disk(i int) string { return filepath.Join(vm.dir, fmt.Sprintf("disk%d.raw", i)) }
+// holds what the guest wrote, and a later Boot can take it as its Image
+// (in the same Format).
+func (vm *VM) Disk(i int) string {
+	return filepath.Join(vm.dir, fmt.Sprintf("disk%d.%s", i, vm.formats[i]))
+}
+
+// Vars is the VM's vars store. Once the VM has exited it holds what the
+// firmware and the box wrote (enrolled keys, boot entries), for a later
+// Boot's Options.Vars.
+func (vm *VM) Vars() string { return filepath.Join(vm.dir, "vars.fd") }
+
+// TPMState is the VM's TPM state directory, for a later Boot's
+// Options.TPMState once the VM has exited.
+func (vm *VM) TPMState() string { return filepath.Join(vm.dir, "tpm") }
 
 // Stop powers the VM off (QEMU is killed) and waits for it to go. Its disk
 // keeps what the guest had synced.
