@@ -186,6 +186,25 @@ func TestThePowerSocketServesOnlyPower(t *testing.T) {
 	}
 }
 
+// The guest agent's poweroff is the hypervisor only when it runs as root,
+// as init starts it.
+func TestTheHypervisorPowerOffRunsAsRoot(t *testing.T) {
+	if initapi.DefaultCallers[initapi.HypervisorPowerPath] != power.KindHypervisor {
+		t.Fatalf("%v", initapi.DefaultCallers[initapi.HypervisorPowerPath])
+	}
+	m, c := servePower(t, power.KindHypervisor)
+	_, err := c.PowerOff(context.Background(), connect.NewRequest(&initv1.PowerOffRequest{}))
+	if me() == 0 {
+		if err != nil || !m.did("poweroff") {
+			t.Fatalf("%v %v", err, m.steps)
+		}
+		return
+	}
+	if connect.CodeOf(err) != connect.CodePermissionDenied || m.did("poweroff") {
+		t.Fatalf("a hypervisor caller that isn't root powered off: %v %v", err, m.steps)
+	}
+}
+
 // The dashboard and the setup wizard reboot and power off as the console,
 // with the closed shell's rules (graceful by default, never a reset).
 func TestTheConsoleProgramsAreShellCallers(t *testing.T) {

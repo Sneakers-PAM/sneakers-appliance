@@ -15,6 +15,7 @@ connection's peer is read with `SO_PEERCRED`, and init reads the peer's program 
 |---|---|---|
 | `/usr/bin/sneakers-accessd` (the :8443 API's backend) | yes | yes |
 | `/usr/bin/sneakers-shell` as root (the console) or as an admin uid | yes | no |
+| `/usr/libexec/sneakers/sneakers-hvpower` as root (the QEMU guest agent's `/sbin/poweroff`, `/sbin/halt` and `/sbin/reboot`, amd64) | drained only; `forced` is `POWER_CALLER` | no |
 | anything else | `POWER_CALLER` | `POWER_CALLER` |
 
 Every request is audited with the caller (`detail.caller`, `uid`, `pid`), whether it was refused or

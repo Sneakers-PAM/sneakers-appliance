@@ -140,6 +140,19 @@ jobs:
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
           bash build/static/procps.sh amd64
+      # The QEMU guest agent the amd64 root carries (Proxmox VE and KVM).
+      - name: Cache the static qemu-ga
+        id: qga
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/out/qemu-ga-amd64
+            build/out/qemu-ga-amd64.rpcs
+            build/out/qemu-ga-amd64.stamp
+          key: static-qga-amd64-${{ hashFiles('build/static/qemu-ga.sh', 'build/ci/versions.env', 'build/lib/**', 'os/rootfs/services.d/qemu-ga.yaml') }}
+      - name: Build the static qemu-ga
+        if: steps.qga.outputs.cache-hit != 'true'
+        run: bash build/static/qemu-ga.sh amd64
       - name: Cache the static OpenSSH and busybox
         id: sshtools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0

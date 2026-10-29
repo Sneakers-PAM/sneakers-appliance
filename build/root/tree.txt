@@ -25,13 +25,17 @@ lrwxrwxrwx 0/0 /opt -> /var/lib/opt
 drwxr-xr-x 0/0 /proc
 drwxr-xr-x 0/0 /run
 drwxr-xr-x 0/0 /sbin
+lrwxrwxrwx 0/0 /sbin/halt -> /usr/libexec/sneakers/sneakers-hvpower
 -rwxr-xr-x 0/0 /sbin/init
+lrwxrwxrwx 0/0 /sbin/poweroff -> /usr/libexec/sneakers/sneakers-hvpower
+lrwxrwxrwx 0/0 /sbin/reboot -> /usr/libexec/sneakers/sneakers-hvpower
 drwxr-xr-x 0/0 /sys
 drwxr-xr-x 0/0 /tmp
 drwxr-xr-x 0/0 /usr
 drwxr-xr-x 0/0 /usr/bin
 lrwxrwxrwx 0/0 /usr/bin/helm -> /var/lib/sneakers/product/current/helm
 lrwxrwxrwx 0/0 /usr/bin/kubectl -> /var/lib/sneakers/product/current/k0s
+-rwxr-xr-x 0/0 /usr/bin/qemu-ga
 -rwxr-xr-x 0/0 /usr/bin/sneakers-accessd
 -rwxr-xr-x 0/0 /usr/bin/sneakers-console
 -rwxr-xr-x 0/0 /usr/bin/sneakers-edgefall
@@ -52,6 +56,7 @@ drwxr-xr-x 0/0 /usr/lib/sneakers/services.d
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/k0s.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/netd.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/osadmin.yaml
+-rw-r--r-- 0/0 /usr/lib/sneakers/services.d/qemu-ga.yaml
 -rw-r--r-- 0/0 /usr/lib/sneakers/services.d/sshd.yaml
 drwxr-xr-x 0/0 /usr/libexec
 drwxr-xr-x 0/0 /usr/libexec/k0s
@@ -64,6 +69,7 @@ drwxr-xr-x 0/0 /usr/libexec/openssh
 drwxr-xr-x 0/0 /usr/libexec/sneakers
 -rwxr-xr-x 0/0 /usr/libexec/sneakers-elevated
 -rwxr-xr-x 0/0 /usr/libexec/sneakers/k0s-interim
+-rwxr-xr-x 0/0 /usr/libexec/sneakers/sneakers-hvpower
 drwxr-xr-x 0/0 /usr/sbin
 -rwxr-xr-x 0/0 /usr/sbin/cryptsetup
 -rwxr-xr-x 0/0 /usr/sbin/mkfs.ext4

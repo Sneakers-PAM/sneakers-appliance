@@ -32,6 +32,7 @@ owner.
 | `/etc/{passwd,group,shadow}` | links into `/run/sneakers/accounts/`, which accessd renders |
 | `/etc/resolv.conf` | a link to `/run/sneakers/resolv.conf` |
 | `/usr/sbin/{cryptsetup,veritysetup,mkfs.ext4,sgdisk}` | the static tools, when `STATIC` is given |
+| `/usr/bin/qemu-ga`, `/usr/libexec/sneakers/sneakers-hvpower`, `/sbin/{poweroff,halt,reboot} -> sneakers-hvpower` | amd64 only: the QEMU guest agent (`build/static/qemu-ga.sh`, run by the `qemu-ga` service with an allow-list of RPCs) and the poweroff, halt and reboot it runs when the hypervisor asks for a shutdown, which ask init for a drained one ([static-tools.md](static-tools.md#the-qemu-guest-agent)); the arm64 root has neither, nor the `qemu-ga` service |
 | `/usr/bin/watch`, `/usr/share/terminfo/` | the root shell's static `watch` (procps-ng, `build/static/procps.sh`) and the terminal descriptions it draws with: the `TERMINFO_ENTRIES` in `build/ci/versions.env` (xterm, PuTTY, screen, tmux, the VT and Linux consoles) |
 
 `build/root/build.sh` takes its inputs from the environment (the header lists them): the version,

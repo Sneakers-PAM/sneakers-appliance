@@ -25,7 +25,8 @@
 #                  mke2fs-<arch>, sgdisk-<arch>, watch-<arch>,
 #                  terminfo-<arch>/ and their stamps (build/static); first
 #                  boot can't make the state volumes without the first four,
-#                  and the root shell's watch draws with the terminfo entries
+#                  and the root shell's watch draws with the terminfo entries;
+#                  on amd64 also qemu-ga-amd64, the QEMU guest agent
 #   SERVICES       the service table (default os/rootfs/services.d)
 #   OSADMIN_ASSETS the :8443 static pages (sneakers-web apps/appliance-admin;
 #                  optional, the directory stays empty without them)
@@ -61,7 +62,10 @@ for b in sshd sshd-session sshd-auth ssh-keygen; do
   [ -f "$OPENSSH/$b" ] || { echo "root: $OPENSSH/$b is missing (build/openssh/build.sh)" >&2; exit 1; }
 done
 [ -f "$BUSYBOX" ] || { echo "root: $BUSYBOX is missing (build/busybox/build.sh)" >&2; exit 1; }
-for b in cryptsetup veritysetup mke2fs sgdisk watch; do
+tools=(cryptsetup veritysetup mke2fs sgdisk watch) stamps=(cryptsetup e2fsprogs gptfdisk procps)
+# The QEMU guest agent, for Proxmox VE and other KVM hosts: amd64 only.
+if [ "$arch" = amd64 ]; then tools+=(qemu-ga) stamps+=(qemu-ga); fi
+for b in "${tools[@]}"; do
   [ -f "$STATIC/$b-$arch" ] || { echo "root: $STATIC/$b-$arch is missing (build/static)" >&2; exit 1; }
 done
 # shellcheck source=/dev/null
@@ -73,10 +77,12 @@ done
 source "$root/build/lib/stamp.sh"
 stamp_check "$(dirname "$BUSYBOX")/busybox.stamp" "$(busybox_stamp)" busybox || exit 1
 stamp_check "$OPENSSH/openssh.stamp" "$(openssh_stamp)" OpenSSH || exit 1
-for t in cryptsetup e2fsprogs gptfdisk procps; do
+for t in "${stamps[@]}"; do
   stamp_check "$STATIC/$t-$arch.stamp" "$(static_stamp "$t" "$arch")" "static $t" || exit 1
 done
-for f in "$RELEASE" "$BUSYBOX" "$OPENSSH"/{sshd,sshd-session,sshd-auth,ssh-keygen} "$STATIC"/{cryptsetup,veritysetup,mke2fs,sgdisk,watch}-"$arch"; do
+inputs=("$RELEASE" "$BUSYBOX" "$OPENSSH"/{sshd,sshd-session,sshd-auth,ssh-keygen})
+for b in "${tools[@]}"; do inputs+=("$STATIC/$b-$arch"); done
+for f in "${inputs[@]}"; do
   echo "root: input $f sha256 $(sha256sum "$f" | cut -d' ' -f1)"
 done
 
@@ -118,6 +124,14 @@ install -m 0755 "$STATIC/watch-$arch" "$tree/usr/bin/watch"
 for t in $TERMINFO_ENTRIES; do
   install -D -m 0644 "$STATIC/terminfo-$arch/${t:0:1}/$t" "$tree/usr/share/terminfo/${t:0:1}/$t"
 done
+# The QEMU guest agent (spec 1 Section 2.8), and the poweroff, halt and
+# reboot it runs when the hypervisor asks for a shutdown: they ask init for
+# a drained one.
+if [ "$arch" = amd64 ]; then
+  install -m 0755 "$STATIC/qemu-ga-$arch" "$tree/usr/bin/qemu-ga"
+  gobuild "$tree/usr/libexec/sneakers/sneakers-hvpower" sneakers-hvpower
+  for c in poweroff halt reboot; do ln -s /usr/libexec/sneakers/sneakers-hvpower "$tree/sbin/$c"; done
+fi
 
 # What the base OS gives k0s, which itself comes with the product bundle
 # (docs/k0s.md): its config template, containerd's config (k0s would
@@ -149,6 +163,10 @@ install -m 0644 "$RELEASE" "$tree/usr/share/sneakers/release/release.yaml"
 shopt -s nullglob
 svc=("$services"/*.yaml)
 shopt -u nullglob
+if [ "$arch" != amd64 ]; then
+  for i in "${!svc[@]}"; do [ "$(basename "${svc[$i]}")" != qemu-ga.yaml ] || unset 'svc[i]'; done
+  svc=("${svc[@]}")
+fi
 [ "${#svc[@]}" -gt 0 ] || { echo "root: no service table in $services" >&2; exit 1; }
 install -m 0644 "${svc[@]}" "$tree/usr/lib/sneakers/services.d/"
 if [ -n "${OSADMIN_ASSETS:-}" ]; then

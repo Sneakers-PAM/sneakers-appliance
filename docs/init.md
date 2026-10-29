@@ -104,9 +104,16 @@ reports the table's on-demand services and the ones with `start-when`.
 served alone on `/run/sneakers/power.sock`, mode 0666 in a searchable `/run/sneakers`, which admits
 root and the admin uids, so the
 closed shell's logins can reboot. On both sockets it answers only `sneakers-accessd` (the :8443
-API's backend; `sneakers-osadmin` runs unprivileged and can't reach either socket) and
-`sneakers-shell`, told apart by the peer's executable, and the factory reset only accessd. See
+API's backend; `sneakers-osadmin` runs unprivileged and can't reach either socket),
+`sneakers-shell`, and, as root, `sneakers-hvpower` (the guest agent's poweroff, a drained shutdown
+or reboot only), told apart by the peer's executable, and the factory reset only accessd. See
 [factory-reset.md](factory-reset.md) for what each request does.
+
+Init has no udev, so it gives each named virtio-serial port its `/dev/virtio-ports/<name>` link
+itself (`internal/vports`), and keeps the links in step with `/sys/class/virtio-ports` every two
+seconds while it runs, for a port the host adds or names later. The guest agent's service waits for
+`/dev/virtio-ports/org.qemu.guest_agent.0` with `start-when`, so a VM without the agent port
+never starts it.
 
 ## PID 1
 

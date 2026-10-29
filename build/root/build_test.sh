@@ -24,7 +24,7 @@ mkdir -p "$work/openssh"
 for b in sshd sshd-session sshd-auth ssh-keygen; do printf '#!/bin/false\n# %s\n' "$b" > "$work/openssh/$b"; done
 printf '#!/bin/false\n# busybox\n' > "$work/busybox"
 mkdir -p "$work/static"
-for b in cryptsetup veritysetup mke2fs sgdisk watch; do printf '#!/bin/false\n# %s\n' "$b" > "$work/static/$b-amd64"; done
+for b in cryptsetup veritysetup mke2fs sgdisk watch qemu-ga; do printf '#!/bin/false\n# %s\n' "$b" > "$work/static/$b-amd64"; done
 # shellcheck source=/dev/null
 source "$here/../ci/versions.env"
 for t in $TERMINFO_ENTRIES; do mkdir -p "$work/static/terminfo-amd64/${t:0:1}" && printf '%s\n' "$t" > "$work/static/terminfo-amd64/${t:0:1}/$t"; done
@@ -32,7 +32,7 @@ for t in $TERMINFO_ENTRIES; do mkdir -p "$work/static/terminfo-amd64/${t:0:1}" &
 source "$here/../lib/stamp.sh"
 busybox_stamp > "$work/busybox.stamp"
 openssh_stamp > "$work/openssh/openssh.stamp"
-for t in cryptsetup e2fsprogs gptfdisk procps; do static_stamp "$t" amd64 > "$work/static/$t-amd64.stamp"; done
+for t in cryptsetup e2fsprogs gptfdisk procps qemu-ga; do static_stamp "$t" amd64 > "$work/static/$t-amd64.stamp"; done
 printf '#!/bin/false\n# k0s\n' > "$work/k0s"
 cat > "$work/release.yaml" <<YAML
 apiVersion: sneakers-pam/v1alpha1

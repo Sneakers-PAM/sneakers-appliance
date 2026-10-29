@@ -53,18 +53,23 @@ has publish 'sneakers-product-index\.json\.sigstore\.json' "attach the index sig
 has publish 'SHA256SUMS\.sigstore\.json' "attach the SHA256SUMS signature"
 has publish 'check-asset-sizes\.sh' "check every asset is under 2 GiB"
 has publish '--prerelease' "make an rc tag a prerelease"
-# A new install comes from the OVA the production kit writes from the
-# signed artifact, signed with the release key and attached with its sum.
-has sign 'sneakers-kit" build "\$RUNNER_TEMP/signed/artifact" --format ova' "build the OVA with the production kit"
-has sign 'bundle "\$f\.sigstore\.json"' "sign the OVA"
-has publish '"\$ova" "\$ova\.sha256" "\$ova\.sigstore\.json"' "attach the OVA, its sum and its signature"
+# A new install comes from the OVA (VMware) or the qcow2 (Proxmox VE) the
+# production kit writes from the signed artifact, each signed with the
+# release key and attached with its sum.
+has sign 'for format in ova qcow2; do' "build both the OVA and the qcow2"
+has sign 'sneakers-kit" build "\$signed/artifact" --format "\$format"' "build them with the production kit"
+has sign 'bundle "\$f\.sigstore\.json"' "sign each image"
+has publish 'for format in ova qcow2; do' "verify both the OVA and the qcow2"
+has publish 'images\+=\("\$img" "\$img\.sha256" "\$img\.sigstore\.json"\)' "attach each image, its sum and its signature"
+has publish '"\$\{images\[@\]\}"' "attach the images"
 has lab 'sneakers-kit" build "\$lab/artifact" --format ova' "build the lab OVA the same way"
+has lab 'sneakers-kit" build "\$lab/artifact" --format qcow2' "build the lab qcow2 the same way"
 # Every file a release makes has one of the allowed names: the version on
 # production, lab-<build label> on lab, never a date, a build time or a
-# commit (docs/release.md, File names). The OVA is in SHA256SUMS too.
-has sign 'sneakers-appliance-\$VERSION-amd64\.ova' "name the OVA sneakers-appliance-<version>-<arch>.ova"
+# commit (docs/release.md, File names). The images are in SHA256SUMS too.
+has sign 'sneakers-appliance-\$VERSION-amd64\.\$format' "name each image sneakers-appliance-<version>-<arch>.<format>"
 has sign 'check-names\.sh --channel production' "check the signed files' names"
-has sign 'cat "\$f\.sha256" >> "\$units/SHA256SUMS"' "add the OVA to SHA256SUMS"
+has sign 'cat "\$f\.sha256" >> "\$units/SHA256SUMS"' "add each image to SHA256SUMS"
 has publish 'check-names\.sh --channel production "\$\{files\[@\]\}"' "check every asset's name"
 has lab 'check-names\.sh --channel lab' "check the lab files' names"
 

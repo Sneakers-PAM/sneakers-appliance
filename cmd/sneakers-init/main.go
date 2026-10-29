@@ -39,6 +39,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/services"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/vports"
 )
 
 // Paths on the box.
@@ -214,6 +215,9 @@ func run(lg log.TraceLogger, con *console.Taken, screen bootScreen) error {
 		}
 	}
 
+	// The guest agent's service waits for its port's link (spec 1
+	// Section 2.8).
+	go vports.Watch(ctx, lg)
 	tbl, err := services.Load(os.DirFS("/"), services.Dir)
 	if err != nil {
 		return err

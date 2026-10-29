@@ -53,7 +53,10 @@ type Kind string
 const (
 	KindOsadmin Kind = "osadmin"
 	KindShell   Kind = "shell"
-	KindUnknown Kind = "unknown"
+	// KindHypervisor is the QEMU guest agent's poweroff, the hypervisor
+	// asking for a clean shutdown or a reboot (spec 1 Section 2.8).
+	KindHypervisor Kind = "hypervisor"
+	KindUnknown    Kind = "unknown"
 )
 
 // Caller is who asked: the peer's credentials and the program it runs.
@@ -208,6 +211,10 @@ func powerCaller(c Caller, resetOnly bool) error {
 		return nil
 	case c.Kind == KindShell:
 		return codes.New(codes.PowerCaller, "a factory reset can't come from the closed shell; start it on :8443")
+	case c.Kind == KindHypervisor && !resetOnly:
+		return nil
+	case c.Kind == KindHypervisor:
+		return codes.New(codes.PowerCaller, "a factory reset can't come from the hypervisor")
 	default:
 		return codes.New(codes.PowerCaller, "%s isn't osadmin or the closed shell", c.Actor)
 	}
@@ -232,6 +239,9 @@ func (c *Controller) stop(_ context.Context, caller Caller, action string, force
 	e.Detail["mode"] = mode
 	if err := powerCaller(caller, false); err != nil {
 		return c.refuse(e, err)
+	}
+	if forced && caller.Kind == KindHypervisor {
+		return c.refuse(e, codes.New(codes.PowerCaller, "the hypervisor may only ask for a drained %s", action))
 	}
 	if err := c.claim(); err != nil {
 		return c.refuse(e, err)

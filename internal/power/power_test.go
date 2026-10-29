@@ -122,6 +122,7 @@ var (
 	osadmin = power.Caller{Kind: power.KindOsadmin, UID: 0, PID: 300, Actor: "osadmin"}
 	shell   = power.Caller{Kind: power.KindShell, UID: 20000, PID: 400, Actor: "alice"}
 	forged  = power.Caller{Kind: power.KindUnknown, UID: 0, PID: 500, Actor: "/tmp/x"}
+	guest   = power.Caller{Kind: power.KindHypervisor, UID: 0, PID: 600, Actor: "hypervisor"}
 )
 
 func TestGracefulRebootDrainsThenAuditsThenSyncsAndUnmounts(t *testing.T) {
@@ -209,6 +210,41 @@ func TestOnlyOsadminAndTheShellMayAskForPower(t *testing.T) {
 	}
 	if slices.Contains(f.b.log(), "reboot") {
 		t.Fatal("a forged caller rebooted the box")
+	}
+}
+
+// The hypervisor's guest agent shuts the box down or reboots it the way
+// the shell does, drained, and never forced or reset (spec 1 Section 2.8).
+func TestTheHypervisorShutsDownGracefullyOnly(t *testing.T) {
+	f := newController(t)
+	if err := f.c.PowerOff(ctx, guest, false); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.b.log(); got[len(got)-1] != "poweroff" || !slices.Contains(got, "drain keep=") {
+		t.Fatalf("%v", got)
+	}
+	if e := f.b.last(); e.Actor != "hypervisor" || e.Detail["caller"] != "hypervisor" || e.Detail["mode"] != "graceful" {
+		t.Fatalf("%+v", e)
+	}
+	f = newController(t)
+	if err := f.c.Reboot(ctx, guest, false); err != nil {
+		t.Fatal(err)
+	}
+	for _, try := range []func(*fixture) error{
+		func(f *fixture) error { return f.c.PowerOff(ctx, guest, true) },
+		func(f *fixture) error { return f.c.Reboot(ctx, guest, true) },
+		func(f *fixture) error {
+			_, err := f.c.Arm(guest, "R-ABC123", "alice", []string{"alice", "bob"})
+			return err
+		},
+	} {
+		f := newController(t)
+		if err := try(f); !codes.Is(err, codes.PowerCaller) {
+			t.Fatalf("got %v", err)
+		}
+		if got := f.b.log(); slices.Contains(got, "poweroff") || slices.Contains(got, "reboot") {
+			t.Fatalf("%v", got)
+		}
 	}
 }
 

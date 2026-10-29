@@ -25,6 +25,8 @@ sneakers-kit build sneakers-os:0.1.0 --format ova --out ./out
 ## 📚 Where to look
 
 - [docs/build-your-image.md](docs/build-your-image.md): getting the kit, verifying and building.
+- [docs/proxmox-vm.md](docs/proxmox-vm.md): running a release's qcow2 on Proxmox VE, from the download
+  to the setup page.
 - [docs/formats.md](docs/formats.md), [docs/secure-boot.md](docs/secure-boot.md),
   [docs/key-custody.md](docs/key-custody.md): what you install and how it's protected.
 - [docs/artifact.md](docs/artifact.md), [docs/boot.md](docs/boot.md), [docs/init.md](docs/init.md),

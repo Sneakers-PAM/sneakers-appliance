@@ -218,12 +218,13 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: bash build/kernel/build.sh amd64
-      - name: Build the static cryptsetup, mke2fs, sgdisk and watch
+      - name: Build the static cryptsetup, mke2fs, sgdisk, watch and qemu-ga
         run: |
           bash build/static/cryptsetup.sh amd64
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
           bash build/static/procps.sh amd64
+          bash build/static/qemu-ga.sh amd64
       - name: Build the static OpenSSH and busybox
         run: |
           bash build/busybox/build.sh out/static
@@ -515,36 +516,42 @@ jobs:
             for b in "$units"/*.bin; do echo "$(basename "$b") $(stat -c %s "$b") bytes, inputs $(cat "$b.inputs")"; done
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      # The OVA for a new install, written by the production kit from the
-      # signed artifact the units carry (the kit verifies it first), with the
-      # vApp host name and domain properties; its .sha256 and a signature by
+      # The OVA (VMware) and the qcow2 (Proxmox VE and KVM) for a new
+      # install, written by the production kit from the signed artifact the
+      # units carry (the kit verifies it first), the OVA with the vApp host
+      # name and domain properties; each one's .sha256 and a signature by
       # the release key go beside it on the Release, and its line joins
       # SHA256SUMS, which is signed again. Every file the job made then has
       # one of the allowed names (docs/release.md, File names).
-      - name: Build and sign the OVA (release key)
+      - name: Build and sign the OVA and the qcow2 (release key)
         env:
           VERSION: ${{ needs.guard.outputs.version }}
           RELEASE_COSIGN_KEY: ${{ secrets.RELEASE_COSIGN_KEY }}
           COSIGN_PASSWORD: ${{ secrets.RELEASE_COSIGN_PASSWORD }}
         run: |
-          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" ova="$RUNNER_TEMP/signed/ova"
-          "$in/sneakers-kit" build "$RUNNER_TEMP/signed/artifact" --format ova --arch amd64 --out "$ova"
-          units="$RUNNER_TEMP/signed/units"
-          f="$ova/sneakers-appliance-$VERSION-amd64.ova"
-          [ -f "$f" ] || { ls -l "$ova"; echo "the kit wrote no sneakers-appliance-$VERSION-amd64.ova" >&2; exit 1; }
-          (cd "$ova" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
-          cat "$f.sha256" >> "$units/SHA256SUMS"
+          keys="$RUNNER_TEMP/keys" in="$RUNNER_TEMP/unsigned" signed="$RUNNER_TEMP/signed"
+          units="$signed/units"
           umask 077
           printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
           trap 'rm -f "$keys/cosign.key"' EXIT
-          cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$f.sigstore.json" \
-            --tlog-upload=false --use-signing-config=false "$f" >/dev/null
-          cosign verify-blob --key keys/production/cosign.pub --bundle "$f.sigstore.json" --insecure-ignore-tlog=true "$f" >/dev/null
+          for format in ova qcow2; do
+            "$in/sneakers-kit" build "$signed/artifact" --format "$format" --arch amd64 --out "$signed/$format"
+            f="$signed/$format/sneakers-appliance-$VERSION-amd64.$format"
+            [ -f "$f" ] || { ls -l "$signed/$format"; echo "the kit wrote no $(basename "$f")" >&2; exit 1; }
+            # The kit's proxmox-vm.md is docs/proxmox-vm.md's template; the
+            # Release links the doc instead of carrying a copy.
+            rm -f "$signed/$format/proxmox-vm.md"
+            (cd "$signed/$format" && sha256sum "$(basename "$f")" > "$(basename "$f").sha256")
+            cat "$f.sha256" >> "$units/SHA256SUMS"
+            cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$f.sigstore.json" \
+              --tlog-upload=false --use-signing-config=false "$f" >/dev/null
+            cosign verify-blob --key keys/production/cosign.pub --bundle "$f.sigstore.json" --insecure-ignore-tlog=true "$f" >/dev/null
+            echo "### ${format^^}: $(basename "$f") $(stat -c %s "$f") bytes" >> "$GITHUB_STEP_SUMMARY"
+          done
           cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$units/SHA256SUMS.sigstore.json" \
             --tlog-upload=false --use-signing-config=false "$units/SHA256SUMS" >/dev/null
           cosign verify-blob --key keys/production/cosign.pub --bundle "$units/SHA256SUMS.sigstore.json" --insecure-ignore-tlog=true "$units/SHA256SUMS" >/dev/null
-          find "$units" "$ova" -maxdepth 1 -type f -print0 | xargs -0 bash build/release/check-names.sh --channel production
-          echo "### OVA: $(basename "$f") $(stat -c %s "$f") bytes" >> "$GITHUB_STEP_SUMMARY"
+          find "$units" "$signed/ova" "$signed/qcow2" -maxdepth 1 -type f -print0 | xargs -0 bash build/release/check-names.sh --channel production
       - name: Wipe the keys
         if: always()
         run: |
@@ -609,12 +616,16 @@ jobs:
           verify "$in/release.yaml" "$cs/release.yaml.sigstore.json"
           verify "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
           verify "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json"
-          ova="$(find "$signed/ova" -maxdepth 1 -name "sneakers-appliance-$VERSION-amd64.ova")"
-          [ -n "$ova" ] || { echo "the signed build has no OVA" >&2; exit 1; }
-          (cd "$signed/ova" && sha256sum -c --quiet "$(basename "$ova").sha256")
-          grep -qF "  $(basename "$ova")" "$units/SHA256SUMS" || { echo "SHA256SUMS has no line for the OVA" >&2; exit 1; }
-          (cd "$signed/ova" && grep -F "  $(basename "$ova")" "$units/SHA256SUMS" | sha256sum -c --quiet)
-          verify "$ova" "$ova.sigstore.json"
+          images=()
+          for format in ova qcow2; do
+            img="$(find "$signed/$format" -maxdepth 1 -name "sneakers-appliance-$VERSION-amd64.$format")"
+            [ -n "$img" ] || { echo "the signed build has no $format" >&2; exit 1; }
+            (cd "$signed/$format" && sha256sum -c --quiet "$(basename "$img").sha256")
+            grep -qF "  $(basename "$img")" "$units/SHA256SUMS" || { echo "SHA256SUMS has no line for the $format" >&2; exit 1; }
+            (cd "$signed/$format" && grep -F "  $(basename "$img")" "$units/SHA256SUMS" | sha256sum -c --quiet)
+            verify "$img" "$img.sigstore.json"
+            images+=("$img" "$img.sha256" "$img.sigstore.json")
+          done
           while read -r image dgst; do
             verify "$in/manifests/${dgst#sha256:}" "$cs/image-sigs/${dgst#sha256:}.sigstore.json"
           done < "$in/images.txt"
@@ -628,7 +639,7 @@ jobs:
           "$in/sneakers-kit" verify "$repo@$digest"
           cp "$in/release.yaml" "$cs/release.yaml"
           files=("$units"/*.bin "$units"/*.bin.inputs "$units/sneakers-product-index.json" "$units/sneakers-product-index.json.sigstore.json"
-            "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json" "$ova" "$ova.sha256" "$ova.sigstore.json"
+            "$units/SHA256SUMS" "$units/SHA256SUMS.sigstore.json" "${images[@]}"
             "$cs/release.yaml" "$cs/release.yaml.sigstore.json" "$cs"/image-sigs/*.sigstore.json)
           # GitHub takes no release asset of 2 GiB or more, and every asset
           # has an allowed name: refuse before anything is uploaded.
@@ -673,6 +684,15 @@ jobs:
             --web-repo "$WEB_REPO" --web-commit "$WEB_COMMIT" "${pre[@]}" --out "$RUNNER_TEMP/checklist.md"
           cat "$RUNNER_TEMP/checklist.md" >> "$GITHUB_STEP_SUMMARY"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$RUNNER_TEMP/notes.md"
+          # What the release ships untested on real hardware
+          # (build/release/notes/), once, ahead of the checklist.
+          for n in build/release/notes/*.md; do
+            [ -f "$n" ] || continue
+            first="$(head -n1 "$n")"
+            grep -qxF "$first" "$RUNNER_TEMP/notes.md" && continue
+            printf '\n' >> "$RUNNER_TEMP/notes.md"
+            cat "$n" >> "$RUNNER_TEMP/notes.md"
+          done
           printf '\n' >> "$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/checklist.md" >> "$RUNNER_TEMP/notes.md"
           gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
@@ -708,12 +728,13 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: "1700000000"
         run: bash build/kernel/build.sh amd64
-      - name: Build the static cryptsetup, mke2fs, sgdisk and watch
+      - name: Build the static cryptsetup, mke2fs, sgdisk, watch and qemu-ga
         run: |
           bash build/static/cryptsetup.sh amd64
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
           bash build/static/procps.sh amd64
+          bash build/static/qemu-ga.sh amd64
       - name: Build the static OpenSSH and busybox
         run: |
           bash build/busybox/build.sh out/static
@@ -764,10 +785,13 @@ jobs:
           "$lab/sneakers-kit" build "$lab/artifact" --format ova --arch amd64 --out "$work/ova"
           ova="$(find "$work/ova" -maxdepth 1 -name 'sneakers-appliance-lab-*-amd64.ova')"
           [ -n "$ova" ] || { ls -l "$work/ova"; echo "the lab kit wrote no OVA" >&2; exit 1; }
+          "$lab/sneakers-kit" build "$lab/artifact" --format qcow2 --arch amd64 --out "$work/qcow2"
+          qcow2="$(find "$work/qcow2" -maxdepth 1 -name 'sneakers-appliance-lab-*-amd64.qcow2')"
+          [ -n "$qcow2" ] || { ls -l "$work/qcow2"; echo "the lab kit wrote no qcow2" >&2; exit 1; }
           # The files a release would attach stay under GitHub's 2 GiB, and
           # have the lab names (docs/release.md, File names).
-          bash build/release/check-asset-sizes.sh "$bin" "$product" "$ova"
-          bash build/release/check-names.sh --channel lab "$bin" "$product" "$ova"
+          bash build/release/check-asset-sizes.sh "$bin" "$product" "$ova" "$qcow2"
+          bash build/release/check-names.sh --channel lab "$bin" "$product" "$ova" "$qcow2"
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
           fi

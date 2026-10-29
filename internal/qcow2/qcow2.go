@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package qcow2 writes the qcow2 image for Proxmox VE and other KVM hosts
-// (spec 1 Section 2.4), with the VM template the docs give.
+// (spec 1 Section 2.4), with proxmox-vm.md, the guide that sets the VM up
+// and boots it; docs/proxmox-vm.md is the same guide for a release's qcow2.
 package qcow2
 
 import (
@@ -26,13 +27,29 @@ var vmTemplate string
 
 var tmpl = template.Must(template.New("proxmox").Parse(vmTemplate))
 
-// VMDoc renders proxmox-vm.md.
-func VMDoc(name, diskFile string, sizeBytes int64) string {
+// ReleaseDisk is the published qcow2's name as the release guide gives it.
+const ReleaseDisk = "sneakers-appliance-<version>-amd64.qcow2"
+
+// VMDoc renders the proxmox-vm.md the kit writes beside diskFile.
+func VMDoc(diskFile string, sizeBytes int64) string {
+	return render(docParams{Disk: diskFile, SizeGiB: sizeBytes / disk.GiB})
+}
+
+// ReleaseDoc renders docs/proxmox-vm.md, the guide for the qcow2 a release
+// publishes: the same steps, with the download and its checks first.
+func ReleaseDoc() string {
+	return render(docParams{Disk: ReleaseDisk, SizeGiB: disk.MinDisk / disk.GiB, Release: true})
+}
+
+type docParams struct {
+	Disk    string
+	SizeGiB int64
+	Release bool
+}
+
+func render(p docParams) string {
 	var b bytes.Buffer
-	if err := tmpl.Execute(&b, struct {
-		Name, Disk string
-		SizeGiB    int64
-	}{name, diskFile, sizeBytes / disk.GiB}); err != nil {
+	if err := tmpl.Execute(&b, p); err != nil {
 		panic(err) // the template is embedded and its fields fixed
 	}
 	return b.String()
@@ -72,5 +89,5 @@ func (QCOW2) Write(ctx context.Context, s *verify.State, o kitout.Options, dir s
 	if b, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("qcow2: qemu-img convert: %w: %s", err, b)
 	}
-	return os.WriteFile(filepath.Join(dir, "proxmox-vm.md"), []byte(VMDoc(base, out, size)), 0o600)
+	return os.WriteFile(filepath.Join(dir, "proxmox-vm.md"), []byte(VMDoc(out, size)), 0o600)
 }

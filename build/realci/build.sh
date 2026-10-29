@@ -117,7 +117,9 @@ components() {
     (
       # shellcheck source=build/lib/stamp.sh
       source "$src/build/lib/stamp.sh"
-      for t in cryptsetup e2fsprogs gptfdisk procps; do
+      # A tree from before the guest agent (qemu-ga) has no script for it.
+      for t in cryptsetup e2fsprogs gptfdisk procps qemu-ga; do
+        [ -f "$src/build/static/$t.sh" ] || continue
         stamp_check "$1/$t-amd64.stamp" "$(static_stamp "$t" amd64)" "$t" >/dev/null 2>&1 || echo "$t"
       done
       stamp_check "$2/openssh.stamp" "$(openssh_stamp)" openssh >/dev/null 2>&1 || echo openssh

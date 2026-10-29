@@ -114,6 +114,13 @@ to the next boot (copied, or with `Disk.Move` renamed, for a disk too big to cop
 `CPUs` sets the virtual CPUs (2 by default). On a failure the last lines of the console go to the test log and the job
 summary.
 
+For the Proxmox VE shape, `Disk.Format` takes a qcow2, `SCSI` puts each disk on its own VirtIO SCSI
+controller (`virtio-scsi-single`), and `GuestAgent` adds the `org.qemu.guest_agent.0`
+virtio-serial port; `Agent` sends one command to the guest agent after a `guest-sync-delimited`
+and returns its reply, and `AgentNoReply` sends one that answers with nothing (`guest-shutdown`).
+`Vars` and `TPMState` hand a boot's vars store and TPM state to the next boot, so keys the box
+enrolled and state it sealed carry over a reboot.
+
 Every VM has a QMP socket. `NoSerial` boots without a serial port and `NoVGA` without a display
 adapter. `ExpectScreen` reads the display from a QMP screendump: each 8x16 cell is matched
 against fbcon's font, which the harness reads out of the kernel the image boots (`SNEAKERS_KERNEL`,
@@ -197,7 +204,7 @@ caches nothing a key signed and no key. It caches only what no key goes into:
 
 | Cache | Key | What's in it |
 |---|---|---|
-| the kernel and the static tools | the hash of their sources and `build/ci/versions.env` (shared with the image suite) | `build/out/kernel/amd64`, the static cryptsetup, e2fsprogs, gptfdisk and watch in `build/out`, OpenSSH and busybox in `out/static` |
+| the kernel and the static tools | the hash of their sources and `build/ci/versions.env` (shared with the image suite) | `build/out/kernel/amd64`, the static cryptsetup, e2fsprogs, gptfdisk, watch and qemu-ga in `build/out`, OpenSSH and busybox in `out/static` |
 | the old base's own static tools | `realci-components-<OLD_BASE_COMMIT>` | the tools its tree builds when its stamps differ |
 | `.12`'s and `.13`'s service images | `realci-images-<P12_RELEASE_COMMIT>-<P13_RELEASE_COMMIT>-<hash of build/release/images.sh>` | their OCI layouts, unsigned (the public images) |
 | the next product's service images | `realci-images-next-<sneakers-release commit>-<hash of build/release/images.sh and build/tools/bundle/>` | its OCI layouts, unsigned |
@@ -242,6 +249,7 @@ window failed with `UPGRADE_NOT_STAGED`.
 | `console.TestBothConsolesShowTheChoiceAndTheScreenCanAnswer` | serial and VGA | the choice on both; the answer typed on the screen's keyboard is taken while the serial line shows it |
 | `reset.TestAResetFinishesAtBootThenFirstBootIsFresh` | Secure Boot enforcing, swtpm; the disk laid out as after first boot, with a begun reset record on the ESP | `phase=reset` finishes the reset and reboots without starting services; the key file, state and backup are out of the GPT and the record is `done`; the next boot is first boot (the protection step again), with no reset |
 | `custody.TestKeyFileCustodyWithoutSecureBootOrTPM` | firmware without Secure Boot, no swtpm (the first lab target) | first boot keeps the key in the key file, formats and mounts the state, accessd is ready and nothing crash-loops; the next boot reads the mode back from the LUKS2 header and asks nothing; with the key file wiped, the boot stops at "State locked" with `KEYCUSTODY_LOCKED` and starts no service |
+| `proxmox.TestProxmoxShape` (item 10) | the kit's qcow2 (`SNEAKERS_QCOW2`, written by the lab kit in the workflow) on its own VirtIO SCSI controller, an empty vars store (Setup Mode, Proxmox's `pre-enrolled-keys=0`), swtpm and the guest agent port | Enter at the Secure Boot choice enrols the org keys and the box restarts by itself; with the vars and TPM state carried over, the next boot is `phase=firstboot protection=full`, Enter keeps the TPM and first boot starts; the guest agent answers `guest-ping` and `guest-network-get-interfaces`, and refuses `guest-exec`, `guest-exec-status`, `guest-file-open`, `guest-set-user-password` and `guest-ssh-add-authorized-keys` as disabled; `guest-shutdown` drains the services and powers the box off, and QEMU exits. Proxmox VE itself isn't in CI: [proxmox-vm.md](proxmox-vm.md) is untested on a real host until one runs it |
 | `network.TestFirstBootGetsADHCPAddressAndKeepsSSHClosed` | no display adapter, keys enrolled with Secure Boot off, no swtpm; host port forwarded to the guest's 22 | netd takes QEMU's DHCP lease with no setting made (its `management addresses` line on the console), SSH gives no banner before the first-boot SSH step, and nothing crash-loops |
 
 

@@ -99,6 +99,19 @@ jobs:
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
           bash build/static/procps.sh amd64
+      # The QEMU guest agent the amd64 root carries (Proxmox VE and KVM).
+      - name: Cache the static qemu-ga
+        id: qga
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/out/qemu-ga-amd64
+            build/out/qemu-ga-amd64.rpcs
+            build/out/qemu-ga-amd64.stamp
+          key: static-qga-amd64-${{ hashFiles('build/static/qemu-ga.sh', 'build/ci/versions.env', 'build/lib/**', 'os/rootfs/services.d/qemu-ga.yaml') }}
+      - name: Build the static qemu-ga
+        if: steps.qga.outputs.cache-hit != 'true'
+        run: bash build/static/qemu-ga.sh amd64
       # The same cache key as the Static tools workflow, so a run of either
       # restores what the other built.
       - name: Cache the static OpenSSH and busybox
@@ -129,6 +142,15 @@ jobs:
             echo "- product bundle: $(stat -c %s "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin) bytes (k0s, its images and the lab stacks)"
             echo "- durability bundles: $(stat -c %s "$RUNNER_TEMP"/lab/durability/*/sneakers-product-*.bin | tr '\n' ' ')bytes (the bundled PostgreSQL, without and with phases)"
           } >> "$GITHUB_STEP_SUMMARY"
+      # The qcow2 for Proxmox VE, written by the lab kit from the lab
+      # artifact as a release writes it; suite item 10 boots it.
+      - name: Write the qcow2
+        run: |
+          lab="$RUNNER_TEMP/lab"
+          "$lab/sneakers-kit" build "$lab/artifact" --format qcow2 --arch amd64 --out "$lab/qcow2"
+          q="$(find "$lab/qcow2" -maxdepth 1 -name 'sneakers-appliance-lab-*-amd64.qcow2')"
+          [ -n "$q" ] && [ -f "$lab/qcow2/proxmox-vm.md" ] || { ls -l "$lab/qcow2"; echo "the lab kit wrote no qcow2 and proxmox-vm.md" >&2; exit 1; }
+          echo "- qcow2: $(basename "$q") $(stat -c %s "$q") bytes" >> "$GITHUB_STEP_SUMMARY"
       - name: Image suite
         if: github.event_name != 'pull_request'
         env:
@@ -137,11 +159,12 @@ jobs:
           export SNEAKERS_KEYS="$RUNNER_TEMP/labkeys"
           export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage"
           SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
+          SNEAKERS_QCOW2="$(ls "$RUNNER_TEMP"/lab/qcow2/*.qcow2)"
           SNEAKERS_PRODUCT="$(ls "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin)"
           SNEAKERS_PRODUCT_UNPHASED="$(ls "$RUNNER_TEMP"/lab/product-unphased/sneakers-product-*.bin)"
           SNEAKERS_DURABILITY_PHASELESS="$(ls "$RUNNER_TEMP"/lab/durability/phaseless/sneakers-product-*.bin)"
           SNEAKERS_DURABILITY_PHASED="$(ls "$RUNNER_TEMP"/lab/durability/phased/sneakers-product-*.bin)"
-          export SNEAKERS_IMAGE SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED SNEAKERS_DURABILITY_PHASELESS SNEAKERS_DURABILITY_PHASED
+          export SNEAKERS_IMAGE SNEAKERS_QCOW2 SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED SNEAKERS_DURABILITY_PHASELESS SNEAKERS_DURABILITY_PHASED
           go test -tags image -timeout 60m -v ./test/image/...
       - name: Wipe the lab keys
         if: always()
