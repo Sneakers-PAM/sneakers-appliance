@@ -11,6 +11,7 @@ on:
       - build/kernel/**
       - build/static/**
       - build/ci/versions.env
+      - os/rootfs/services.d/qemu-ga.yaml
       - .github/workflows/job-image-build.yaml
 permissions:
   contents: read
@@ -65,14 +66,15 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: build/out
-          key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env', 'build/lib/**') }}
-      - name: Build cryptsetup, veritysetup, mke2fs, sgdisk and watch
+          key: static-amd64-${{ hashFiles('build/static/**', 'build/ci/versions.env', 'build/lib/**', 'os/rootfs/services.d/qemu-ga.yaml') }}
+      - name: Build cryptsetup, veritysetup, mke2fs, sgdisk, watch and qemu-ga
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           bash build/static/cryptsetup.sh amd64
           bash build/static/e2fsprogs.sh amd64
           bash build/static/gptfdisk.sh amd64
           bash build/static/procps.sh amd64
+          bash build/static/qemu-ga.sh amd64
       - name: Record the digests
         run: |
           {

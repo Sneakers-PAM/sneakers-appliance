@@ -2,7 +2,7 @@
 
 Everything the image is built from is pinned in `build/ci/versions.env` and checked: the kernel by
 its stable git tag and that tag's commit, cryptsetup by kernel.org's published SHA-256, the
-builder containers by tag.
+builder containers by tag, and QEMU by the SHA-256 of its signed release tarball.
 
 | Piece | Script | Output |
 |---|---|---|
@@ -11,6 +11,7 @@ builder containers by tag.
 | mke2fs (static) | `build/static/e2fsprogs.sh amd64` | `build/out/mke2fs-amd64` |
 | sgdisk (static) | `build/static/gptfdisk.sh amd64` | `build/out/sgdisk-amd64` |
 | watch (static, procps-ng) and its terminfo entries | `build/static/procps.sh amd64` | `build/out/watch-amd64`, `build/out/terminfo-amd64/` |
+| qemu-ga, the QEMU guest agent (static, musl; amd64 only) | `build/static/qemu-ga.sh amd64` | `build/out/qemu-ga-amd64`, and `qemu-ga-amd64.rpcs`, the RPCs it has ([static-tools.md](static-tools.md#the-qemu-guest-agent)) |
 | OpenSSH, busybox (static, musl) | `build/openssh/build.sh`, `build/busybox/build.sh` | `out/static/{sshd,sshd-session,sshd-auth,ssh-keygen,busybox}` |
 | Airgap bundle | `build/bundle/build.sh` | `<hex>.tar` and its signature per pinned image ([root-image.md](root-image.md)) |
 | Root image | `build/root/build.sh` | `root-<version>.img` (SquashFS with the verity tree) and `verity.json` ([root-image.md](root-image.md)) |
@@ -41,7 +42,7 @@ Docker. Each script fails if its output has a dynamic loader.
 The root build takes OpenSSH, busybox and the static tools as prebuilt inputs, and all of them are
 required (`STATIC` too: first boot can't make the state volumes without cryptsetup and
 mkfs.ext4). Each build script writes a stamp next to its output (`busybox.stamp`,
-`openssh.stamp`, `<cryptsetup|e2fsprogs|gptfdisk|procps>-<arch>.stamp`): the tool, its pinned version and
+`openssh.stamp`, `<cryptsetup|e2fsprogs|gptfdisk|procps|qemu-ga>-<arch>.stamp`): the tool, its pinned version and
 the SHA-256 of everything that decides the build, the pins, the busybox config and the build script
 itself (`build/lib/stamp.sh`). The root build works the same stamp out from the tree it runs in and
 refuses an input whose stamp is missing or different ("stale or unstamped busybox: ... build it

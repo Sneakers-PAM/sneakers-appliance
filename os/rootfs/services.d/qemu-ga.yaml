@@ -1,0 +1,19 @@
+# The QEMU guest agent (spec 1 Section 2.8), amd64 only: Proxmox VE and
+# other KVM hosts read the box's addresses and OS through it, freeze the
+# file systems for a backup, and shut the box down cleanly (its poweroff
+# asks init for a drained shutdown). It waits for the host's
+# virtio-serial port, which init links by name (internal/vports); a VM
+# without the agent port never starts it. Only the RPCs below answer:
+# nothing that reads or writes files, runs programs or sets passwords,
+# so the hypervisor's operator gets no shell the closed shell doesn't
+# give the admin.
+exec: /usr/bin/qemu-ga
+args:
+  - --method=virtio-serial
+  - --path=/dev/virtio-ports/org.qemu.guest_agent.0
+  - --statedir=/run
+  - --pidfile=/run/qemu-ga.pid
+  - --allow-rpcs=guest-sync-delimited,guest-sync,guest-ping,guest-info,guest-shutdown,guest-get-osinfo,guest-get-host-name,guest-network-get-interfaces,guest-fsfreeze-status,guest-fsfreeze-freeze,guest-fsfreeze-freeze-list,guest-fsfreeze-thaw
+phases: [firstboot, normal]
+start-when: [/dev/virtio-ports/org.qemu.guest_agent.0]
+restart: always

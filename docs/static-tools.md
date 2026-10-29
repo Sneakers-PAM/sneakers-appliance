@@ -38,6 +38,31 @@ amd64 and arm64 on native runners, caches the outputs by the hash of `build/open
 To bump a version, change it and its SHA-256 in `versions.env`. For OpenSSH, check the tarball's
 signature against the OpenSSH release key before taking its SHA-256.
 
+## The QEMU guest agent
+
+The amd64 root also carries a static `qemu-ga` (spec 1 Section 2.8), so Proxmox VE and other KVM
+hosts can read the box's addresses, freeze its file systems for a backup and shut it down cleanly.
+`build/static/qemu-ga.sh amd64` builds only the agent (`--without-default-features
+--enable-guest-agent`, no emulator or tools) from the QEMU release tarball `QEMU_VERSION` names in
+`build/ci/versions.env`, checked against `QEMU_SHA256`, in the pinned Alpine container, with meson
+from QEMU's own bundled wheels (nothing comes from PyPI). It writes `build/out/qemu-ga-amd64` and
+`qemu-ga-amd64.rpcs`, the RPCs that build has, and fails if the service table allows one it
+doesn't. To bump QEMU, check the new tarball's signature against the QEMU release key first, then
+take its SHA-256.
+
+The `qemu-ga` service (`os/rootfs/services.d/qemu-ga.yaml`) runs it as root in first boot and
+normal operation, once init has linked `/dev/virtio-ports/org.qemu.guest_agent.0`
+([init.md](init.md)), with `--allow-rpcs` naming the only RPCs that answer: `guest-sync`,
+`guest-sync-delimited`, `guest-ping`, `guest-info`, `guest-shutdown`, `guest-get-osinfo`,
+`guest-get-host-name`, `guest-network-get-interfaces` and the four `guest-fsfreeze-*`. Everything
+else is disabled, among them every command that runs programs, reads or writes files, or sets
+passwords or SSH keys (`guest-exec`, `guest-file-*`, `guest-set-user-password`,
+`guest-ssh-*`), so the hypervisor's operator gets no shell the closed shell doesn't give the
+admin. `guest-shutdown` runs `/sbin/poweroff` (or `halt` or `reboot`), which is
+`sneakers-hvpower`: it asks init over `power.sock` for the drained power-off or reboot the closed
+shell gets, and init takes it only from that program running as root
+([factory-reset.md](factory-reset.md)).
+
 ## Licences
 
 | Component | Licence |
@@ -45,3 +70,4 @@ signature against the OpenSSH release key before taking its SHA-256.
 | OpenSSH portable | BSD-style (the OpenSSH licence) |
 | OpenSSL | Apache-2.0 |
 | busybox | GPL-2.0-only; the exact pinned source tarball is the corresponding source |
+| qemu-ga (QEMU) | GPL-2.0, QEMU's licence, with Alpine's static glib (LGPL-2.1-or-later) and its permissively licensed dependencies linked in; the exact pinned QEMU tarball and the Alpine packages' sources are the corresponding source |
