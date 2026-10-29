@@ -60,8 +60,11 @@ func TestProxmoxShape(t *testing.T) {
 		}
 	}
 
+	// While first boot owns the consoles, init's "power: accepted" line goes
+	// to the console log; the drain and the power-off reach the serial line
+	// once the console program has stopped.
 	vm.AgentNoReply("guest-shutdown", time.Minute)
-	vm.Expect(`power: accepted.*hypervisor`, time.Minute)
-	vm.Expect(`power: powering off`, 15*time.Minute)
+	vm.Expect(`services: drained .*service=accessd`, 15*time.Minute)
+	vm.Expect(`power: powering off`, 5*time.Minute)
 	vm.WaitExit(2 * time.Minute)
 }
