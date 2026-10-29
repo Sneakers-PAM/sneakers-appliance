@@ -30,6 +30,11 @@ A release publishes only the OVA today; the other formats' names are reserved
 
 ## qcow2 (Proxmox VE and KVM)
 
-`qemu-img convert -O qcow2` of the installed disk, with `proxmox-vm.md`: the `qm` commands for a q35
-VM with OVMF and an EFI disk without pre-enrolled keys (so the box enrols the org keys itself), a
-v2.0 TPM state disk, VirtIO SCSI single, a VirtIO NIC and the guest agent.
+`qemu-img convert -O qcow2` of the installed disk, with `proxmox-vm.md`: the guide that imports it
+and boots it, with the `qm` commands for a q35 VM with OVMF and an EFI disk without pre-enrolled
+keys (so the box enrols the org keys itself), a v2.0 TPM state disk, VirtIO SCSI single, a VirtIO
+NIC and the guest agent. [proxmox-vm.md](proxmox-vm.md) is the same guide for a release's qcow2,
+with the download and its checks first; both come from `internal/qcow2/proxmox-vm.md.tmpl`, and a
+test keeps the doc in step with it (`UPDATE=1 go test ./internal/qcow2/` rewrites it). The image
+suite boots the qcow2 in that VM shape (item 10, [testing.md](testing.md#the-image-suite)); it
+hasn't been run on a real Proxmox VE host yet.
