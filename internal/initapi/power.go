@@ -30,12 +30,18 @@ const (
 	FirstbootPath = "/usr/bin/sneakers-firstboot"
 )
 
+// HypervisorPowerPath is the program the QEMU guest agent runs as
+// /sbin/poweroff, /sbin/reboot and /sbin/halt when the hypervisor asks for
+// a shutdown.
+const HypervisorPowerPath = "/usr/libexec/sneakers/sneakers-hvpower"
+
 // DefaultCallers are the programs PowerService answers.
 var DefaultCallers = map[string]power.Kind{
-	AccessdPath:        power.KindOsadmin,
-	accounts.ShellPath: power.KindShell,
-	ConsolePath:        power.KindShell,
-	FirstbootPath:      power.KindShell,
+	AccessdPath:         power.KindOsadmin,
+	accounts.ShellPath:  power.KindShell,
+	ConsolePath:         power.KindShell,
+	FirstbootPath:       power.KindShell,
+	HypervisorPowerPath: power.KindHypervisor,
 }
 
 func procExe(pid int32) (string, error) {
@@ -77,6 +83,10 @@ func (h *powerHandler) caller(ctx context.Context) power.Caller {
 			c.Kind, c.Actor = power.KindShell, "console"
 		} else if name, ok := h.o.AdminName(p.UID); ok {
 			c.Kind, c.Actor = power.KindShell, name
+		}
+	case power.KindHypervisor:
+		if p.UID == 0 {
+			c.Kind, c.Actor = power.KindHypervisor, "hypervisor"
 		}
 	}
 	return c
