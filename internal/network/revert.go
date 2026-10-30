@@ -38,7 +38,10 @@ type Reverter struct {
 
 	mu      sync.Mutex
 	pending *change
-	last    *Outcome
+	// applying is set while Apply runs its apply, which happens outside mu
+	// because apply takes the caller's own locks.
+	applying bool
+	last     *Outcome
 }
 
 type change struct {
@@ -87,22 +90,38 @@ func NewReverter(clk clock.Clock, o ...RevertOptions) *Reverter {
 
 // Apply validates next, applies it and starts the revert timer. It returns
 // the token Confirm takes. A second Apply while one is pending is refused
-// with NET_INVALID naming "pending". When applying next fails, prev is
-// applied again and the error returned.
+// with NET_INVALID naming "pending", and so is one while the first is still
+// being applied. When applying next fails, prev is applied again and the
+// error returned.
 func (r *Reverter) Apply(prev, next Settings, apply ApplyFunc) (string, error) {
 	if err := Validate(next); err != nil {
 		return "", err
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.pending != nil {
+	switch {
+	case r.pending != nil:
+		r.mu.Unlock()
 		return "", invalid("pending", "a network change is waiting for its confirmation; confirm it or let it revert first")
+	case r.applying:
+		r.mu.Unlock()
+		r.o.Logger.Warn("network: a second change was refused while the first applies")
+		return "", invalid("pending", "a network change is being applied; wait for it to finish")
 	}
-	if err := apply(next); err != nil {
+	r.applying = true
+	r.mu.Unlock()
+
+	err := apply(next)
+	if err != nil {
 		r.o.Logger.Error(err, "network: apply failed, restoring the previous settings")
 		if rerr := apply(prev); rerr != nil {
 			r.o.Logger.Error(rerr, "network: restoring the previous settings failed")
 		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.applying = false
+	if err != nil {
 		return "", err
 	}
 	token := newToken()
@@ -170,11 +189,12 @@ func (r *Reverter) Last() (Outcome, bool) {
 	return *r.last, true
 }
 
-// Pending reports whether a change waits for its confirmation.
+// Pending reports whether a change waits for its confirmation or is still
+// being applied.
 func (r *Reverter) Pending() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.pending != nil
+	return r.pending != nil || r.applying
 }
 
 func (r *Reverter) revert(c *change) {

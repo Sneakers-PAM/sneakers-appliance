@@ -42,7 +42,9 @@ Any other change applies at once and waits 120 seconds for a confirmation from a
 (the Network page, or the shell's `network set`, sends it). Without one, the previous settings are
 applied again and the box records `NET_REVERTED`, so a change that cuts the admin off heals itself.
 Only one change waits at a time: a second one is refused naming `pending` until the first is
-confirmed or reverted. If applying a change fails outright, the previous settings are applied again
+confirmed or reverted, and so is one sent while the first is still being applied. `Get` and `Status`
+keep answering during an apply, and `Get` already reports the change as `pending` then, without a
+token yet. If applying a change fails outright, the previous settings are applied again
 straight away and the error is returned.
 
 Each change has an id (logs and audit) and a token (what `Confirm` takes). `Get` returns the

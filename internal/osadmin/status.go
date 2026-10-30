@@ -30,6 +30,11 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 )
 
+// statusServiceTimeout bounds what GetStatus waits for each service, so one
+// that stops answering doesn't use up the caller's deadline (the console
+// gives three seconds) and leave the others looking down.
+const statusServiceTimeout = 2 * time.Second
+
 type status struct {
 	osadminv1connect.UnimplementedStatusServiceHandler
 	s *Server
@@ -57,14 +62,16 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		out.Health = append(out.Health, c)
 	}
 
-	ns, err := s.o.Network.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
+	netdCtx, cancelNetd := context.WithTimeout(ctx, statusServiceTimeout)
+	defer cancelNetd()
+	ns, err := s.o.Network.Status(netdCtx, connect.NewRequest(&netdv1.StatusRequest{}))
 	health("netd", err)
 	if err == nil {
 		out.Hostname, out.ManagementAddresses, out.NtpSynced = ns.Msg.GetHostname(), netdapi.Bare(ns.Msg.GetManagementAddresses()), ns.Msg.GetNtpSynced()
 		if !out.NtpSynced {
 			add(osadminv1.WarningKind_WARNING_KIND_NTP_UNSYNCED, "The clock isn't synchronised with an NTP server.")
 		}
-		if ng, gerr := s.o.Network.Get(ctx, connect.NewRequest(&netdv1.GetRequest{})); gerr == nil {
+		if ng, gerr := s.o.Network.Get(netdCtx, connect.NewRequest(&netdv1.GetRequest{})); gerr == nil {
 			if exposed(out.ManagementAddresses, ng.Msg.GetSettings().GetAllowList()) {
 				add(osadminv1.WarningKind_WARNING_KIND_EXPOSURE, "The management interface has a public address and the allow-list lets any source reach ports 22 and 8443.")
 			}
@@ -80,11 +87,13 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		}
 	}
 
-	prot, err := s.o.KeyCustody.Protection(ctx, connect.NewRequest(&initv1.ProtectionRequest{}))
+	initCtx, cancelInit := context.WithTimeout(ctx, statusServiceTimeout)
+	defer cancelInit()
+	prot, err := s.o.KeyCustody.Protection(initCtx, connect.NewRequest(&initv1.ProtectionRequest{}))
 	health("init", err)
 	if err == nil {
 		out.ProtectionReason = prot.Msg.GetReason()
-		if m, merr := s.o.KeyCustody.Mode(ctx, connect.NewRequest(&initv1.ModeRequest{})); merr == nil {
+		if m, merr := s.o.KeyCustody.Mode(initCtx, connect.NewRequest(&initv1.ModeRequest{})); merr == nil {
 			switch m.Msg.GetMode() {
 			case initv1.CustodyMode_CUSTODY_MODE_TPM:
 				out.CustodyMode = "tpm"
@@ -105,7 +114,9 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 			}
 		}
 	}
-	if img, ierr := s.o.Image.Status(ctx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); ierr == nil {
+	imageCtx, cancelImage := context.WithTimeout(ctx, statusServiceTimeout)
+	defer cancelImage()
+	if img, ierr := s.o.Image.Status(imageCtx, connect.NewRequest(&initv1.ImageServiceStatusRequest{})); ierr == nil {
 		out.RunningVersion, out.StagedVersion, out.FailedVersion = img.Msg.GetRunningVersion(), img.Msg.GetStagedVersion(), img.Msg.GetFailedVersion()
 		out.RevertedVersion, out.RevertedBy, out.RevertedAt = img.Msg.GetRevertedVersion(), img.Msg.GetRevertedBy(), img.Msg.GetRevertedAt()
 		out.PreviousVersion, out.PreviousSlot = s.previous(img.Msg)
@@ -113,11 +124,15 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	} else {
 		out.UpgradeProgress = s.progressToWire(nil)
 	}
-	out.Product = s.productSlots(ctx)
+	productCtx, cancelProduct := context.WithTimeout(ctx, statusServiceTimeout)
+	defer cancelProduct()
+	out.Product = s.productSlots(productCtx)
 	if cert.SelfSigned {
 		add(osadminv1.WarningKind_WARNING_KIND_SELF_SIGNED_TLS, "This page uses the box's own self-signed certificate; check its fingerprint.")
 	}
-	out.Warnings = append(out.Warnings, s.tlsWarnings(ctx)...)
+	tlsCtx, cancelTLS := context.WithTimeout(ctx, statusServiceTimeout)
+	defer cancelTLS()
+	out.Warnings = append(out.Warnings, s.tlsWarnings(tlsCtx)...)
 	if st := s.o.Access.Read(); st.LastRecoverAccess != nil && s.o.Clock.Now().Before(st.LastRecoverAccess.Add(24*time.Hour)) {
 		add(osadminv1.WarningKind_WARNING_KIND_CONSOLE_RECOVERY, "The console's Recover access was used at "+st.LastRecoverAccess.UTC().Format(time.RFC3339)+".")
 	}

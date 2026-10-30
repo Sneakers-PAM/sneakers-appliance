@@ -348,6 +348,9 @@ type fakeNetd struct {
 	servicePorts []uint32
 	// down makes Status fail, as a netd that doesn't answer.
 	down bool
+	// hang makes Status wait for its caller's deadline, as a netd that
+	// stopped answering.
+	hang bool
 	// learnt is what DHCP gave, for Status.
 	learnt *netdv1.StatusResponse
 	// keepAtOnce makes Set keep the change with no window, as netd does
@@ -396,7 +399,14 @@ func (n *fakeNetd) Confirm(_ context.Context, r *connect.Request[netdv1.ConfirmR
 	return connect.NewResponse(&netdv1.ConfirmResponse{}), nil
 }
 
-func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest]) (*connect.Response[netdv1.StatusResponse], error) {
+func (n *fakeNetd) Status(ctx context.Context, _ *connect.Request[netdv1.StatusRequest]) (*connect.Response[netdv1.StatusResponse], error) {
+	n.mu.Lock()
+	hang := n.hang
+	n.mu.Unlock()
+	if hang {
+		<-ctx.Done()
+		return nil, connect.NewError(connect.CodeDeadlineExceeded, ctx.Err())
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.down {

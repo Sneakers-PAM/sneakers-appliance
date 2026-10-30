@@ -277,11 +277,13 @@ func (d *Daemon) Interfaces() ([]Link, error) {
 }
 
 // Get returns the applied settings and whether a change waits for its
-// confirmation.
+// confirmation or is still being applied. d.mu is never held across a call
+// to the reverter: the reverter runs applies that take d.mu.
 func (d *Daemon) Get() (network.Settings, bool) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.settings, d.rev.Pending()
+	s := d.settings
+	d.mu.Unlock()
+	return s, d.rev.Pending()
 }
 
 // PendingChange returns the change that waits for its confirmation.
