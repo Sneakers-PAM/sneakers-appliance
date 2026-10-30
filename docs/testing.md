@@ -12,6 +12,7 @@
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
 | The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a merge never cancels the suite already running on main, it waits for it; a pull request only builds the lab release and reports the root image and product bundle sizes |
 | The real Sneakers product through the update paths a box takes (QEMU, the real bundles) | `build/realci/build.sh`, then `go test -tags image -run 'TestTheRealBundles' ./test/image/k0s/` | after each merge to main, nightly at 05:41 UTC (01:41 ET), by hand, on a pull request that changes the job, and in the release workflow before anything is built (`real-bundle.yml`, [the real-bundle job](#the-real-bundle-job)) |
+| The sign-off journeys in a real browser (headless Chromium against one booted box with the :8443 pages and the real product) | `build/journeys/build.sh`, then `go test -tags image -run TestTheSignOffJourneys ./test/image/journeys/` | pull requests that touch the image or the journeys, nightly at 07:17 UTC with the image suite, and on demand (`image-e2e.yml`, [the browser journeys](#the-browser-journeys)); never on a push to main |
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
 there a missing tool fails instead.
@@ -30,6 +31,10 @@ pull request's changed paths (`build/ci/changes.sh`):
   (`job-image-build.yaml`) and the real-bundle job only start on their own inputs anyway.
 - **Anything else** runs everything, as before. YamlLint runs only when a YAML file (or
   `.yamllint`) changed, and Actionlint only when a workflow or a local action changed.
+  [The browser journeys](#the-browser-journeys) run only when a path that goes into the image
+  or its build changed (`os/`, `cmd/`, `internal/`, `gen/`, `build/`, `go.mod`, `go.sum`), or
+  the journeys themselves (`test/e2e/journeys/`, `test/image/journeys/`, `test/image/harness/`,
+  `image-e2e.yml`); Markdown under those paths doesn't count.
 - **Not a pull request** (push to `main`, the nightly runs, the weekly Go Security run,
   `workflow_dispatch`, the release workflow's `workflow_call`): everything runs.
 
@@ -125,7 +130,10 @@ Every VM has a QMP socket. `NoSerial` boots without a serial port and `NoVGA` wi
 adapter. `ExpectScreen` reads the display from a QMP screendump: each 8x16 cell is matched
 against fbcon's font, which the harness reads out of the kernel the image boots (`SNEAKERS_KERNEL`,
 the bzImage; it needs the `xz` tool), and the rows are joined as they wrap. `Press` types on the
-VM's keyboard.
+VM's keyboard. For a reader on another goroutine (the browser journeys' console reader),
+`ReadScreen` reads the display without failing the test, `ScreenText` joins its rows the way
+`ExpectScreen` matches them, `Screendump` answers the raw PPM, and `Exited` is closed once QEMU
+has exited.
 
 `Stable` watches the console for a while after the banner. It fails if init stops (`init: fatal`,
 a kernel panic) or QEMU exits, and if any service restarts three times or more. A service that's
@@ -226,6 +234,72 @@ no-keys.sh and that the workflow caches no other path.
 
 **To bust a cache**, change its key's inputs, or delete it: `gh cache list --key realci-images-`
 and `gh cache delete <key>`.
+
+## The browser journeys
+
+The sign-off journeys a person otherwise clicks through by hand, walked in headless Chromium
+against one booted box on the GitHub runner (the `🧭 Browser journeys (amd64)` job in
+`image-e2e.yml`). Nothing runs a browser on a workstation.
+
+**The builds** (`build/journeys/build.sh`, LAB ONLY, one lab key set made for the run on a tmpfs):
+a lab release of the commit under test with the :8443 pages built from sneakers-web at
+`SNEAKERS_WEB_COMMIT` (`build/release/pins.env`, [the lab release](#the-lab-release)), and the real
+Sneakers product from sneakers-release at `SNEAKERS_RELEASE_COMMIT`, built the way [the real-bundle
+job](#the-real-bundle-job) builds its products (`build/realci/product.sh`) and sharing its cache of
+the service images (`realci-images-next-<commit>-...`), sealed and checked with the lab UKI. Every
+cached path is checked for keys before it's saved, as there ([the caches](#the-caches)).
+
+**The box** (`test/image/journeys`, `TestTheSignOffJourneys`): a new box from the lab raw disk with
+VGA and a serial line, the run's keys enrolled with Secure Boot off and no TPM (a VMware VM), 8 GiB
+and 4 CPUs. The driver types the boot's own choices at the console (`no secure boot`, then Enter at
+the key file); everything after that is the browser's. The browser reaches the box at the address
+the console shows, the first lease on QEMU's user network: the job puts that address on the
+runner's loopback, and QEMU forwards its 8443 and 443 to the box. The box's mail relay is a Mailpit
+container on the runner (`build/journeys/mail.sh`, pinned by digest), reached through a guest
+forward on QEMU's user network (port 2525), with STARTTLS required on a certificate from a CA made
+for the run. The driver serves the console's display to the journeys, read off QEMU, so they read
+the setup code and the certificate fingerprint where a person reads them, and it boots the box
+again when it restarts.
+
+**Certificate checks stay on.** Before the browser starts, the journeys fetch the box's :8443
+certificate, check its SHA-256 fingerprint against the one on the console, and start Chromium
+with that certificate's key pinned (`--ignore-certificate-errors-spki-list` with its SPKI hash),
+so the browser takes the box's own certificate and checks every other one as usual.
+`ignoreHTTPSErrors` is never used. The first-run journey checks the certificate again after the
+restart, and the product journey checks that 443 serves the same one.
+
+**The journeys** (`test/e2e/journeys`, Playwright at the exact version its lockfile pins, run in
+order, each on what the one before left):
+
+| Journey | What it checks |
+|---|---|
+| `01-first-run-setup` | the console shows the :8443 address, its certificate and a setup code; on :8443 the code, the first admin's name, password and authenticator (the TOTP code made from the key the page shows), a recovery key the box generates (downloaded), the network and protection steps, then one sign-in and Finish; the box restarts into normal operation (the console's status screen), keeps its certificate, and the admin signs in |
+| `02-updates` | Updates set to Manual only, the real product bundle uploaded under Install an update, Verify and stage (its signature verified against the box's release key), Apply update with the version typed and a fresh code, until the Product card shows it running |
+| `03-email` | the Email page's relay set to the mail catcher with STARTTLS, Verify the certificate on and the run's CA as the Relay CA (no unencrypted warning), saved with a step-up; Send test email, and the message arrives at the catcher |
+| `04-product-sign-in` | 443 serves the certificate the console shows; the setup token read with Show on :8443's Status page, which names this box's /admin/setup; the admin web's first admin, the built-ins, and the emailed code that verifies the address; then a sign-in to the admin web and one to the staff web, each with the second step the product asks for (an authenticator it has the admin set up, or an emailed code) |
+| `05-network` | the Network page shows the box's address, and Run checks shows its link and address OK |
+| `06-backups` | the Backups page opens; a backup run and its new set are skipped, with the reason, while the box serves BackupService as not available in this release |
+| `07-add-ons` | the add-on modules' on and off switches: stubs, skipped with the reason, until the add-ons land |
+
+Every journey keeps a Playwright trace and a screenshot after each step (the authenticator keys,
+QR codes and setup token are masked in the screenshots). They are uploaded with the HTML report
+and the box's serial consoles as the run's `browser-journeys` artifact, kept for 7 days, whether
+the job passes or fails; a failing step fails the job. The traces hold the run's throwaway
+credentials, made in the run for a box that only existed inside it; nothing built and no key is
+uploaded.
+
+To read them:
+
+1. Download the artifact: `gh run download <run id> -R Sneakers-PAM/sneakers-appliance -n browser-journeys -D journeys`.
+2. Open the report: `npx playwright show-report journeys/playwright-report`. Each journey lists its steps, with the screenshots attached in step order.
+3. Open a journey's trace, to step through every action with the page before and after it: `npx playwright show-trace journeys/test-results/<journey>/trace.zip`.
+
+The serial consoles are `journeys/logs/journeys-boot<n>.log`, `journeys/logs/go-test.log` has
+the driver's and Playwright's output, and `journeys/build/` the builds' logs.
+
+To change a journey, run `npm ci --ignore-scripts`, `npm run typecheck` and `npm run test:units`
+(the TOTP codes and the console reading, no browser) in `test/e2e/journeys`; the journeys need the box, so they run only in CI (or `go test -tags image ./test/image/journeys/`
+on a Linux host with the builds, a mail catcher and the address on its loopback).
 
 ## The image suite
 

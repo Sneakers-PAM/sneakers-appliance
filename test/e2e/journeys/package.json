@@ -1,0 +1,21 @@
+{
+  "name": "sneakers-appliance-journeys",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The sign-off browser journeys, driven headless against a booted appliance image in CI",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "test:units": "playwright test --project units",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.2",
+    "typescript": "6.0.3"
+  }
+}

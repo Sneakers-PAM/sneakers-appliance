@@ -8,6 +8,10 @@ name: Image E2E
 # development, so on a pull request this only builds the lab release and
 # reports the root image size. The suite runs on main after each merge,
 # nightly and on demand. Neither is a required check.
+# The browser journeys job (docs/testing.md#the-browser-journeys) builds its
+# own lab release with the :8443 pages and the real product, boots one box
+# and walks the sign-off journeys in headless Chromium; it uploads their
+# report, traces and screenshots, and the box's serial consoles, for 7 days.
 on:
   pull_request:
     branches: [main]
@@ -166,6 +170,225 @@ jobs:
           SNEAKERS_DURABILITY_PHASED="$(ls "$RUNNER_TEMP"/lab/durability/phased/sneakers-product-*.bin)"
           export SNEAKERS_IMAGE SNEAKERS_QCOW2 SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED SNEAKERS_DURABILITY_PHASELESS SNEAKERS_DURABILITY_PHASED
           go test -tags image -timeout 60m -v ./test/image/...
+      - name: Wipe the lab keys
+        if: always()
+        run: sudo umount "$RUNNER_TEMP/labkeys" || true
+  # The sign-off journeys in a real browser (docs/testing.md#the-browser-journeys):
+  # its own job, next to the suite, because the suite's boxes are gone when
+  # each test ends and its build carries neither the :8443 pages nor the
+  # real product. This job builds both (the lab release with the pages, and
+  # the real product as the real-bundle job does, sharing its image cache),
+  # boots one box and walks it in headless Chromium. On a pull request it
+  # runs only when the image or the journeys change (changes.yml); never on
+  # a push to main, where the pull request already ran it; nightly and on
+  # demand as well.
+  journeys:
+    name: 🧭 Browser journeys (amd64)
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'push' && (github.event_name != 'pull_request' || (github.event.pull_request.draft == false && (needs.changes.outputs.journeys == 'true' || needs.changes.result != 'success'))) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      # The real product's service images and a box's disk with them
+      # installed need more room than the runner leaves free.
+      - name: Make room on the runner
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          docker image prune -af >/dev/null
+          df -h /
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5.0.0
+        with:
+          node-version: '24'
+      # Playwright at the exact version package-lock.json pins, and the
+      # headless Chromium build that version names; the helpers' own tests
+      # run here, before anything is built.
+      - name: Install the journeys and their browser
+        working-directory: test/e2e/journeys
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm run test:units
+          npx playwright install --with-deps --only-shell chromium
+      - name: Install the build and boot tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
+            ovmf qemu-system-x86 qemu-utils swtpm python3-virt-firmware \
+            efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
+            systemd-ukify systemd-boot-efi python3-pefile mtools socat
+          bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      # The same caches as the image suite above, so a run of either
+      # restores what the other built.
+      - name: Cache the kernel
+        id: kernel
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: build/out/kernel/amd64
+          key: kernel-amd64-${{ hashFiles('os/kernel/**', 'build/kernel/**', 'build/ci/versions.env') }}
+      - name: Build the kernel
+        if: steps.kernel.outputs.cache-hit != 'true'
+        env:
+          SOURCE_DATE_EPOCH: "1700000000"
+        run: bash build/kernel/build.sh amd64
+      - name: Cache the static tools
+        id: static
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/out/cryptsetup-amd64
+            build/out/veritysetup-amd64
+            build/out/cryptsetup-amd64.stamp
+          key: static-crypt-amd64-${{ hashFiles('build/static/cryptsetup.sh', 'build/ci/versions.env', 'build/lib/**') }}
+      - name: Build the static cryptsetup
+        if: steps.static.outputs.cache-hit != 'true'
+        run: bash build/static/cryptsetup.sh amd64
+      - name: Cache the static e2fsprogs, gptfdisk and watch
+        id: fstools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/out/mke2fs-amd64
+            build/out/sgdisk-amd64
+            build/out/watch-amd64
+            build/out/terminfo-amd64
+            build/out/e2fsprogs-amd64.stamp
+            build/out/gptfdisk-amd64.stamp
+            build/out/procps-amd64.stamp
+          key: static-fs-amd64-${{ hashFiles('build/static/e2fsprogs.sh', 'build/static/gptfdisk.sh', 'build/static/procps.sh', 'build/ci/versions.env', 'build/lib/**') }}
+      - name: Build the static e2fsprogs, gptfdisk and watch
+        if: steps.fstools.outputs.cache-hit != 'true'
+        run: |
+          bash build/static/e2fsprogs.sh amd64
+          bash build/static/gptfdisk.sh amd64
+          bash build/static/procps.sh amd64
+      - name: Cache the static qemu-ga
+        id: qga
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: |
+            build/out/qemu-ga-amd64
+            build/out/qemu-ga-amd64.rpcs
+            build/out/qemu-ga-amd64.stamp
+          key: static-qga-amd64-${{ hashFiles('build/static/qemu-ga.sh', 'build/ci/versions.env', 'build/lib/**', 'os/rootfs/services.d/qemu-ga.yaml') }}
+      - name: Build the static qemu-ga
+        if: steps.qga.outputs.cache-hit != 'true'
+        run: bash build/static/qemu-ga.sh amd64
+      - name: Cache the static OpenSSH and busybox
+        id: sshtools
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: out/static
+          key: static-tools-amd64-${{ hashFiles('build/openssh/**', 'build/busybox/**', 'build/lib/**') }}
+      - name: Build the static OpenSSH and busybox
+        if: steps.sshtools.outputs.cache-hit != 'true'
+        run: |
+          bash build/busybox/build.sh out/static
+          bash build/openssh/build.sh out/static
+      - name: Read the pins
+        id: pins
+        run: |
+          # shellcheck source=build/release/pins.env
+          source build/release/pins.env
+          echo "release=$SNEAKERS_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+      # The real-bundle job's cache of the service images, keyed the same
+      # way: built from one sneakers-release commit, unsigned, no key in
+      # them (docs/testing.md#the-caches).
+      - name: Restore the product's service images
+        id: images
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.release }}
+          key: realci-images-next-${{ steps.pins.outputs.release }}-${{ hashFiles('build/release/images.sh', 'build/tools/bundle/**') }}
+      - name: Build the lab release with the pages, and the real product
+        run: |
+          keys="$RUNNER_TEMP/labkeys"
+          mkdir -p "$keys"
+          sudo mount -t tmpfs -o size=16m,mode=0700,uid="$(id -u)" tmpfs "$keys"
+          KERNEL=build/out/kernel/amd64/bzImage \
+          KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
+          VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
+          OPENSSH=out/static BUSYBOX=out/static/busybox \
+          KEYS="$keys" OUT="$RUNNER_TEMP/journeys" LAYOUTS="$RUNNER_TEMP/layouts/${{ steps.pins.outputs.release }}" \
+            bash build/journeys/build.sh 2>&1 | tee "$RUNNER_TEMP/journeys-build.log"
+          cat "$RUNNER_TEMP/journeys/journeys.env" >> "$GITHUB_ENV"
+          { echo "### Browser journeys: the builds"; echo '```'; grep -h '^journeys: ' "$RUNNER_TEMP/journeys-build.log" || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          df -h /
+      # Every path this job caches, checked for the run's keys and any
+      # private key before anything is saved, as the real-bundle job does.
+      - name: Check the cached paths hold no key
+        run: |
+          KEYS="$RUNNER_TEMP/labkeys" bash build/realci/no-keys.sh build/out out/static "$RUNNER_TEMP/layouts" 2>&1 | tee "$RUNNER_TEMP/no-keys.log"
+          { echo '### Cached paths'; echo '```'; cat "$RUNNER_TEMP/no-keys.log"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Save the product's service images
+        if: steps.images.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        with:
+          path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.release }}
+          key: ${{ steps.images.outputs.cache-primary-key }}
+      # The browser reaches the box at the address the console shows: the
+      # runner carries it on its loopback, and QEMU forwards its 8443 and
+      # 443 there to the box (test/image/journeys).
+      - name: Give the runner the box's address
+        run: |
+          sudo ip addr add 10.0.2.15/32 dev lo  # scrub:allow=private-ip -- QEMU's user network
+          sudo sysctl -q -w net.ipv4.ip_unprivileged_port_start=443
+      - name: Start the mail catcher
+        run: WORK="$RUNNER_TEMP/mail" bash build/journeys/mail.sh up >> "$GITHUB_ENV"
+      - name: Run the journeys
+        env:
+          SNEAKERS_REQUIRE_TOOLS: "1"
+        run: |
+          export SNEAKERS_KEYS="$RUNNER_TEMP/labkeys"
+          export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage"
+          export SNEAKERS_LOG_DIR="$RUNNER_TEMP/journeys-logs"
+          mkdir -p "$SNEAKERS_LOG_DIR"
+          start="$(date +%s)"
+          status=0
+          go test -tags image -timeout 140m -v -run '^TestTheSignOffJourneys$' ./test/image/journeys/ 2>&1 | tee "$SNEAKERS_LOG_DIR/go-test.log" || status=$?
+          echo "### Browser journeys: exit ${status} after $(( ($(date +%s) - start) / 60 )) minutes" >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^\s+(✓|✘|-) ' "$SNEAKERS_LOG_DIR/go-test.log" | sed 's/^ *//' >> "$GITHUB_STEP_SUMMARY" || true
+          exit "$status"
+      # The Playwright report (npx playwright show-report), a trace and a
+      # screenshot of each step for every journey, the box's serial consoles
+      # and the build logs, in one folder. The traces hold the run's
+      # throwaway credentials for a box that only existed in this run;
+      # nothing built and no key is uploaded.
+      - name: Gather the journeys' report, traces and logs
+        if: always()
+        run: |
+          dir="$RUNNER_TEMP/browser-journeys"
+          mkdir -p "$dir/build"
+          for d in playwright-report test-results; do
+            if [ -d "test/e2e/journeys/$d" ]; then cp -r "test/e2e/journeys/$d" "$dir/"; fi
+          done
+          if [ -d "$RUNNER_TEMP/journeys-logs" ]; then cp -r "$RUNNER_TEMP/journeys-logs" "$dir/logs"; fi
+          cp "$RUNNER_TEMP/journeys-build.log" "$RUNNER_TEMP"/journeys/*.log "$dir/build/" 2>/dev/null || true
+      - name: Upload the journeys' report, traces and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: browser-journeys
+          path: ${{ runner.temp }}/browser-journeys
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Stop the mail catcher
+        if: always()
+        run: WORK="$RUNNER_TEMP/mail" bash build/journeys/mail.sh down
       - name: Wipe the lab keys
         if: always()
         run: sudo umount "$RUNNER_TEMP/labkeys" || true
