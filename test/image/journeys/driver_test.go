@@ -77,16 +77,6 @@ func serve(t *testing.T, h http.Handler) string {
 	return ln.Addr().String()
 }
 
-func freePort(t *testing.T) int {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = ln.Close() }()
-	return ln.Addr().(*net.TCPAddr).Port
-}
-
 var ppmHeader = regexp.MustCompile(`^P6\s+(\d+)\s+(\d+)\s+(\d+)\s`)
 
 // decodePPM reads QEMU's binary screendump (P6, 8 bits a sample).
