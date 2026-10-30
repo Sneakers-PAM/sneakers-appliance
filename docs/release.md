@@ -10,7 +10,7 @@ with keys made for that run and publishes nothing.
 |---|---|---|
 | `sneakers-os:<version>` | GHCR (`ghcr.io/<owner>/sneakers-os`), pushed by digest, with its signature | the kit, to build install media |
 | `sneakers-appliance-<version>-amd64.ova`, with `.sha256`, its line in `SHA256SUMS` and `.sigstore.json` (a signature by the release key) | the tag's GitHub Release | a new install on VMware: the production kit writes it in the sign job from the signed artifact (it verifies the artifact first), with the vApp host name and domain properties ([kit.md](kit.md)); check it with `sha256sum -c` and `cosign verify-blob --key keys/production/cosign.pub --bundle <ova>.sigstore.json --insecure-ignore-tlog=true <ova>` |
-| `sneakers-appliance-<version>-amd64.qcow2`, with `.sha256`, its line in `SHA256SUMS` and `.sigstore.json` | the tag's GitHub Release | a new install on Proxmox VE or another KVM host: the production kit writes it in the sign job beside the OVA, the same way; [proxmox-vm.md](proxmox-vm.md) downloads, checks, imports and boots it (the kit's own `proxmox-vm.md` isn't attached: the Release links the doc). Untested on a real Proxmox VE host until one runs the guide; the release notes say so (below) |
+| `sneakers-appliance-<version>-amd64.qcow2`, with `.sha256`, its line in `SHA256SUMS` and `.sigstore.json` | the tag's GitHub Release | a new install on Proxmox VE or another KVM host: the production kit writes it in the sign job beside the OVA, the same way; [proxmox-vm.md](proxmox-vm.md) downloads, checks, imports and boots it (the kit's own `proxmox-vm.md` isn't attached: the Release links the doc). Untested on a real Proxmox VE host until one runs the guide; [proxmox-vm.md](proxmox-vm.md) says so |
 | the three units: `sneakers-appliance-baseOS-<version>-<arch>.bin`, `sneakers-appliance-baseWeb-<version>-<arch>.bin` and `sneakers-product-<version>-<arch>.bin`, each with its `.inputs` | the tag's GitHub Release | the box: downloaded, or uploaded by hand on the Updates page |
 | a Base OS patch from the previous release on the tag's channel, `sneakers-appliance-baseOS-patch-<previous>-to-<version>-<arch>.bin`, with its `.inputs` (none for the first release on a channel) | the tag's GitHub Release | a box on the previous release: a small download in place of the full Base OS |
 | `sneakers-product-index.json` (format 2) and `SHA256SUMS` over the units, the OVA and the qcow2, each with its signature by the release key (`sneakers-product-index.json.sigstore.json`, `SHA256SUMS.sigstore.json`) | the tag's GitHub Release | the box's GitHub source, which takes the index only when its signature verifies ([upgrades.md](upgrades.md#the-github-source)); a mirror, served next to the units |
@@ -658,11 +658,10 @@ de-duplicated. It reads GitHub read-only, with no write to any service repo. For
 - **Other drafts:** a repository with more than one draft lists every one beyond the first as
   stale, to delete.
 
-The **Publish** job runs it after the release and its notes exist, writes the checklist to the
-run's job summary and appends it to the release's notes under "## Service repo releases". Before
-the checklist it appends each note in `build/release/notes/` the notes don't carry yet (matched by
-its first line, so a re-run adds nothing): what the release ships that isn't proven on real
-hardware. Today that's `proxmox-untested.md`, which says the qcow2 is untested on a real Proxmox VE
-host; the PR that records that test removes it. the
+The **Publish** job runs it after the release exists and writes the checklist to the run's job
+summary. It never edits the release's notes: those are exactly what Release Drafter drafted.
+`build/release/notes/` records what a release ships that isn't proven on real hardware (today
+`proxmox-untested.md`, the qcow2 on a real Proxmox VE host) for the repo only; nothing adds it to
+the notes. The
 **Lab dry run** job runs the same tool (against its own built `release.yaml`, the production pins)
 and writes it to the job summary only, since a lab run publishes nothing.
