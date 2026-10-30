@@ -59,6 +59,11 @@ fetch "$SNEAKERS_WEB_REPO" "$SNEAKERS_WEB_COMMIT" "$out/web"
 say "the lab release with the :8443 pages from sneakers-web ${SNEAKERS_WEB_COMMIT:0:7}"
 (cd "$root" && WEB="$out/web" OUT="$out/lab" bash build/lab/build.sh) > "$out/lab.log" 2>&1 || { tail -40 "$out/lab.log" >&2; exit 1; }
 base="$(cat "$out/lab/version")"
+# The k0s and helm the lab build fetched and checked (build/ci/versions.env),
+# made executable for the product's render.
+mkdir -p "$out/bin"
+install -m 0755 "$out/lab/work/k0s" "$out/bin/k0s"
+install -m 0755 "$out/lab/work/helm" "$out/bin/helm"
 say "base $base in $(( $(date +%s) - start ))s"
 
 start="$(date +%s)"
@@ -74,7 +79,7 @@ mkdir -p "$b"
 sed "0,/^  version: .*$/s//  version: $version/" "$out/release/manifest/release.yaml" > "$b/release-src.yaml"
 grep -q "^  version: $version$" "$b/release-src.yaml"
 (cd "$root" && VERSION="$version" OUT="$b" CHARTS="$out/release" LAYOUTS="$layouts" KEYS="$KEYS" MIN_BASE="$base" \
-  K0S="$out/lab/work/k0s" HELM="$out/lab/work/helm" bash build/realci/product.sh) > "$out/product.log" 2>&1 \
+  K0S="$out/bin/k0s" HELM="$out/bin/helm" bash build/realci/product.sh) > "$out/product.log" 2>&1 \
   || { tail -40 "$out/product.log" >&2; exit 1; }
 tool="$out/sneakers-artifact"
 (cd "$root" && CGO_ENABLED=0 go build -trimpath -o "$tool" ./cmd/sneakers-artifact)
