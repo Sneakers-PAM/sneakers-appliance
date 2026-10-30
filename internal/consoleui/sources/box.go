@@ -4,8 +4,11 @@
 package sources
 
 import (
+	"time"
+
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/access/v1/accessv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/init/v1/initv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1/netdv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
@@ -17,6 +20,19 @@ const (
 	// SSHDir holds the SSH host keys (osadmin's Paths.SSHDir on the box).
 	SSHDir = "/var/lib/sneakers/ssh"
 )
+
+// netdTimeout is the most any netd call from the console takes, above the
+// deadline the network editor sets on its longest call.
+const netdTimeout = 30 * time.Second
+
+// NetdClient is the console's netd client on sock. Unlike netdapi.NewClient
+// it has a timeout: the console makes no streaming calls, and a netd that
+// stops answering must fail the call, never hang the console.
+func NetdClient(sock string, timeout time.Duration) netdv1connect.NetworkServiceClient {
+	hc := UnixClient(sock)
+	hc.Timeout = timeout
+	return netdv1connect.NewNetworkServiceClient(hc, "http://netd.sock")
+}
 
 // Box is every client the console programs use, on the box's sockets.
 type Box struct {
@@ -42,7 +58,7 @@ func Dial() Box {
 	b := Box{
 		Custody:   Custody{C: initv1connect.NewKeyCustodyServiceClient(ic, initURL)},
 		Status:    Status{Access: accessv1connect.NewAccessServiceClient(ac, accessURL), CacheFile: accessapi.StatusFile},
-		Network:   NewNetwork(ServicesDir, netdapi.NewClient(netdapi.SocketPath), SysClassNet),
+		Network:   NewNetwork(ServicesDir, NetdClient(netdapi.SocketPath, netdTimeout), SysClassNet),
 		Services:  NewServices(ServicesDir, initv1connect.NewServicesServiceClient(ic, initURL)),
 		Access:    accessv1connect.NewAccessServiceClient(ac, accessURL),
 		Setup:     accessv1connect.NewSetupServiceClient(ac, accessURL),
