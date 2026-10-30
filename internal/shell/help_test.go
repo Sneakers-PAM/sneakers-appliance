@@ -95,6 +95,73 @@ func TestNetworkSetSuggestsTheClosestKey(t *testing.T) {
 	}
 }
 
+// The ipv4= and ipv6= modes are checked in the shell: an address there is
+// sent to the key it belongs in, any other bad value gets the valid modes,
+// and nothing is sent either way.
+func TestNetworkSetChecksTheMode(t *testing.T) {
+	const (
+		v4Hint = `"ipv4" takes dhcp, static or off; put the address in ipv4-address= (for example: network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1)`
+		v6Hint = `"ipv6" takes slaac, dhcpv6, static or off; put the address in ipv6-address= (for example: network set ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1)`
+	)
+	for _, tc := range []struct{ line, want string }{
+		{"network set ipv4=192.0.2.50/16 ipv4-gateway=192.0.2.1", v4Hint},
+		{"network set ipv4=192.0.2.50", v4Hint},
+		{"network set ipv4=192.0.2.50/33", v4Hint},
+		{"network set ipv6=2001:db8::5/64", v6Hint},
+		{"network set ipv6=2001:db8::5", v6Hint},
+		{"network set ipv4=bogus", `"ipv4" takes dhcp, static or off, not "bogus"`},
+		{"network set ipv4=", `"ipv4" takes dhcp, static or off, not ""`},
+		{"network set ipv4=STATIC", `"ipv4" takes dhcp, static or off, not "STATIC"`},
+		{"network set ipv6=dhcp", `"ipv6" takes slaac, dhcpv6, static or off, not "dhcp"`},
+		// An address of the other family doesn't belong in this key's
+		// address key either, so it gets the valid modes.
+		{"network set ipv4=2001:db8::5/64", `"ipv4" takes dhcp, static or off, not "2001:db8::5/64"`},
+		{"network set ipv6=192.0.2.50/24", `"ipv6" takes slaac, dhcpv6, static or off, not "192.0.2.50/24"`},
+	} {
+		r := runShellIn(t, shell.OriginSSH, tc.line, "", nil)
+		assertCode(t, r.e, "SHELL_PARSE")
+		if !strings.Contains(r.err, tc.want) {
+			t.Errorf("%q said %q, want %q", tc.line, r.err, tc.want)
+		}
+		if len(r.b.calls) != 0 {
+			t.Fatalf("%q asked the appliance: %v", tc.line, r.b.calls)
+		}
+	}
+	for _, line := range []string{
+		"network set ipv4=static",
+		"network set ipv4=dhcp",
+		"network set ipv4=off",
+		"network set ipv6=slaac",
+		"network set ipv6=dhcpv6",
+		"network set ipv6=static",
+		"network set ipv6=off",
+	} {
+		r := runShellIn(t, shell.OriginSSH, line, "", nil)
+		if r.e != nil {
+			t.Errorf("%q: %v %s", line, r.e, r.err)
+		}
+		if len(r.b.calls) == 0 {
+			t.Errorf("%q wasn't sent to the appliance", line)
+		}
+	}
+}
+
+// help network set shows the mode and address together for both families.
+func TestNetworkSetHelpShowsTheFullForm(t *testing.T) {
+	r := runShellIn(t, shell.OriginSSH, "help network set", "", nil)
+	if r.e != nil {
+		t.Fatalf("%v %s", r.e, r.err)
+	}
+	for _, want := range []string{
+		"network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1",
+		"network set ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1",
+	} {
+		if !strings.Contains(r.out, want) {
+			t.Errorf("help lacks %q:\n%s", want, r.out)
+		}
+	}
+}
+
 // docs/cli.md is generated from the command tree; regenerate it with
 // go run ./build/tools/clidoc.
 func TestTheCLIReferenceIsCurrent(t *testing.T) {

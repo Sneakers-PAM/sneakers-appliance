@@ -197,14 +197,13 @@ func TestNetworkSetIPv4AndIPv6(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 
-	// An unrecognized mode is forwarded unspecified; netd's own validation
-	// refuses it (internal/network, "use dhcp, static or off").
+	// An unrecognized mode is refused here, before anything reaches netd.
 	_, _, err = runWith(t, s, "network set ipv4=bogus", "n\n")
-	if err != nil {
+	if !codes.Is(err, codes.ShellParse) {
 		t.Fatalf("%v", err)
 	}
-	if got := f.set[3].GetManagement().GetIpv4().GetMode(); got != netdv1.Ipv4Mode_IPV4_MODE_UNSPECIFIED {
-		t.Fatalf("%v", got)
+	if len(f.set) != 3 {
+		t.Fatalf("netd was asked: %v", f.set)
 	}
 }
 

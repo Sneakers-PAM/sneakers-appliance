@@ -5,6 +5,7 @@ package shell
 
 import (
 	"fmt"
+	"net/netip"
 	"strings"
 
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
@@ -16,6 +17,7 @@ import (
 type Key struct {
 	Name, Help, Example string
 	set                 func(st *netdv1.Settings, v string)
+	check               func(v string) error
 }
 
 // list is a comma-separated value; empty clears it.
@@ -42,13 +44,13 @@ var networkKeys = []Key{
 	{Name: "https-proxy", Help: "the proxy for outbound HTTPS, a URL; empty for none", Example: "https-proxy=http://192.0.2.8:3128",
 		set: func(st *netdv1.Settings, v string) { st.HttpsProxy = v }},
 	{Name: "ipv4", Help: "the management interface's IPv4 mode: dhcp, static or off", Example: "ipv4=static",
-		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Mode = ipv4Mode(v) }},
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Mode = ipv4Mode(v) }, check: checkIPv4Mode},
 	{Name: "ipv4-address", Help: "the IPv4 address and its prefix length, in static mode; empty clears it", Example: "ipv4-address=192.0.2.10/24",
 		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Address = v }},
 	{Name: "ipv4-gateway", Help: "the IPv4 gateway, in static mode; empty for none", Example: "ipv4-gateway=192.0.2.1",
 		set: func(st *netdv1.Settings, v string) { management(st).Ipv4.Gateway = v }},
 	{Name: "ipv6", Help: "the management interface's IPv6 mode: slaac, dhcpv6, static or off", Example: "ipv6=static",
-		set: func(st *netdv1.Settings, v string) { management(st).Ipv6.Mode = ipv6Mode(v) }},
+		set: func(st *netdv1.Settings, v string) { management(st).Ipv6.Mode = ipv6Mode(v) }, check: checkIPv6Mode},
 	{Name: "ipv6-address", Help: "the IPv6 address and its prefix length, in static mode; empty clears it", Example: "ipv6-address=2001:db8::10/64",
 		set: func(st *netdv1.Settings, v string) { management(st).Ipv6.Address = v }},
 	{Name: "ipv6-gateway", Help: "the IPv6 gateway, in static mode; empty for none", Example: "ipv6-gateway=2001:db8::1",
@@ -59,7 +61,7 @@ var networkKeys = []Key{
 // created if netd gave none yet (a box has one by the time setup finishes).
 // The mode and address keys apply in the same network set, so a half-typed
 // one (an address with no ipv4=static) is caught by netd's own validation,
-// the same way an invalid mode or address is.
+// the same way an invalid address is.
 func management(st *netdv1.Settings) *netdv1.Interface {
 	if st.Management == nil {
 		st.Management = &netdv1.Interface{}
@@ -73,9 +75,33 @@ func management(st *netdv1.Settings) *netdv1.Interface {
 	return st.Management
 }
 
-// ipv4Mode and ipv6Mode parse the key's value; anything unrecognized stays
-// unspecified, which netd's validation refuses by name (use dhcp, static
-// or off), the same way it refuses a bad address.
+func checkIPv4Mode(v string) error {
+	return checkMode("ipv4", "dhcp, static or off", v, ipv4Mode(v) != netdv1.Ipv4Mode_IPV4_MODE_UNSPECIFIED,
+		netip.Addr.Is4, "ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1")
+}
+
+func checkIPv6Mode(v string) error {
+	return checkMode("ipv6", "slaac, dhcpv6, static or off", v, ipv6Mode(v) != netdv1.Ipv6Mode_IPV6_MODE_UNSPECIFIED,
+		netip.Addr.Is6, "ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1")
+}
+
+// checkMode refuses a mode that isn't one of modes. An address of the
+// key's own family is the natural mistake, so it says where that goes.
+// Only the part before the slash decides: a bad prefix length still means
+// an address, and netd judges it once it's in the right key.
+func checkMode(key, modes, v string, valid bool, family func(netip.Addr) bool, example string) error {
+	if valid {
+		return nil
+	}
+	host, _, _ := strings.Cut(v, "/")
+	if a, err := netip.ParseAddr(host); err == nil && family(a) {
+		return codes.New(codes.ShellParse, "%q takes %s; put the address in %s-address= (for example: network set %s)", key, modes, key, example)
+	}
+	return codes.New(codes.ShellParse, "%q takes %s, not %q (help network set lists the keys)", key, modes, Printable(v))
+}
+
+// ipv4Mode and ipv6Mode parse the key's value; checkIPv4Mode and
+// checkIPv6Mode have already refused anything unrecognized.
 func ipv4Mode(v string) netdv1.Ipv4Mode {
 	switch v {
 	case "dhcp":
@@ -128,8 +154,9 @@ func keyData(keys []Key) []map[string]string {
 	return out
 }
 
-// parseKeys checks each word is key=value with a key from keys, and
-// returns them in order. cmd names the command in the errors.
+// parseKeys checks each word is key=value with a key from keys and a value
+// the key's own check accepts, and returns them in order. cmd names the
+// command in the errors.
 func parseKeys(cmd string, keys []Key, words []string) ([]keyValue, error) {
 	out := make([]keyValue, 0, len(words))
 	for _, w := range words {
@@ -142,6 +169,11 @@ func parseKeys(cmd string, keys []Key, words []string) ([]keyValue, error) {
 			return nil, codes.New(codes.ShellParse, "%q isn't key=value%s (help %s lists the keys)", Printable(w), suggest(keys, name), cmd)
 		case !found:
 			return nil, codes.New(codes.ShellParse, "%q isn't a key %s takes%s (help %s lists the keys)", Printable(name), cmd, suggest(keys, name), cmd)
+		}
+		if k.check != nil {
+			if err := k.check(v); err != nil {
+				return nil, err
+			}
 		}
 		out = append(out, keyValue{k, v})
 	}

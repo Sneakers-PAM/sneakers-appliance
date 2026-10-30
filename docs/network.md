@@ -79,7 +79,9 @@ static one by hand.
 
 `network set` takes the management interface's IPv4 and IPv6 mode and address the same way:
 `ipv4=dhcp|static|off`, `ipv4-address=<address>/<prefix>`, `ipv4-gateway=`, and `ipv6`,
-`ipv6-address`, `ipv6-gateway` for IPv6 (`help network set` lists them with examples). A change to
+`ipv6-address`, `ipv6-gateway` for IPv6 (`help network set` lists them with examples). `ipv4=` and
+`ipv6=` take the mode only: the shell refuses anything else with `SHELL_PARSE`, and an address given
+there is pointed to `ipv4-address=` or `ipv6-address=`. A change to
 the mode or address goes through the same `Set`/`Confirm` window as any other interface change,
 since it can cut the admin off; `network set dns=...` and the like still keep at once. The service
 interface's addressing has no post-setup editor yet (console, SSH or :8443): it's set at first
