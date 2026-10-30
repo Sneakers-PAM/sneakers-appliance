@@ -152,8 +152,30 @@ export const installProduct = async (
   await confirm.getByLabel("Authenticator code").first().fill(await code());
   await after("install confirmed");
   await confirm.getByRole("button", { name: "Install and restart the product" }).click();
-  await expect(product.getByText("running", { exact: true })).toBeVisible({ timeout: INSTALL_TIMEOUT_MS });
-  await expect(product.getByText(version).first()).toBeVisible();
+
+  // The install's steps show on the Product card while it runs (k0s, the images, each phase,
+  // the health check, 443) and go once it's done; a failed one stays, saying so.
+  const progress = product.getByRole("region", { name: "Update progress" });
+  const failed = product.getByText("The last update didn't finish");
+  await expect(progress).toBeVisible({ timeout: 2 * 60_000 });
+  await after("the install under way");
+  await expect
+    .poll(async () => (await progress.isVisible()) && !(await failed.isVisible()), {
+      intervals: [5000],
+      message: "the install's steps on the Product card",
+      timeout: INSTALL_TIMEOUT_MS,
+    })
+    .toBe(false);
+  await expect(failed).toBeHidden();
+  await expect(progress).toBeHidden();
+  await expect(product.getByText("running", { exact: true })).toBeVisible();
+  const applied = page
+    .getByRole("table", { name: "Update history" })
+    .getByRole("row")
+    .filter({ hasText: version })
+    .filter({ hasNotText: /\bstage\b/ })
+    .first();
+  await expect(applied).toContainText("ok");
   await after("the product running");
 };
 
@@ -194,7 +216,7 @@ export const checkNetwork = async (page: Page, address: string): Promise<void> =
   await page.getByRole("button", { name: "Run checks" }).click();
   const checks = page.getByRole("table").filter({ has: page.getByRole("columnheader", { name: "Check" }) });
   await expect(checks.getByRole("row", { name: /^link OK/ })).toBeVisible({ timeout: 60_000 });
-  await expect(checks.getByRole("row", { name: new RegExp(`^address OK ${address.replaceAll(".", "\\.")}`) })).toBeVisible();
+  await expect(checks.getByRole("row", { name: new RegExp(`^address OK .*\\b${address.replaceAll(".", "\\.")}/`) })).toBeVisible();
 };
 
 /** What a page says when the box doesn't have its service yet. */
