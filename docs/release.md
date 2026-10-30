@@ -659,6 +659,9 @@ de-duplicated. It reads GitHub read-only, with no write to any service repo. For
   stale, to delete.
 
 The **Publish** job runs it after the release exists and writes the checklist to the run's job
-summary. It never edits the release's notes: those are exactly what Release Drafter drafted. The
+summary. It never edits the release's notes: those are exactly what Release Drafter drafted.
+`build/release/notes/` records what a release ships that isn't proven on real hardware (today
+`proxmox-untested.md`, the qcow2 on a real Proxmox VE host) for the repo only; nothing adds it to
+the notes. The
 **Lab dry run** job runs the same tool (against its own built `release.yaml`, the production pins)
 and writes it to the job summary only, since a lab run publishes nothing.
