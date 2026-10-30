@@ -340,13 +340,6 @@ jobs:
         with:
           path: ${{ runner.temp }}/layouts/${{ steps.pins.outputs.release }}
           key: ${{ steps.images.outputs.cache-primary-key }}
-      # The browser reaches the box at the address the console shows: the
-      # runner carries it on its loopback, and QEMU forwards its 8443 and
-      # 443 there to the box (test/image/journeys).
-      - name: Give the runner the box's address
-        run: |
-          sudo ip addr add 10.0.2.15/32 dev lo  # scrub:allow=private-ip -- QEMU's user network
-          sudo sysctl -q -w net.ipv4.ip_unprivileged_port_start=443
       - name: Start the mail catcher
         run: WORK="$RUNNER_TEMP/mail" bash build/journeys/mail.sh up >> "$GITHUB_ENV"
       - name: Run the journeys

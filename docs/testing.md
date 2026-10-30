@@ -252,21 +252,25 @@ cached path is checked for keys before it's saved, as there ([the caches](#the-c
 **The box** (`test/image/journeys`, `TestTheSignOffJourneys`): a new box from the lab raw disk with
 VGA and a serial line, the run's keys enrolled with Secure Boot off and no TPM (a VMware VM), 8 GiB
 and 4 CPUs. The driver types the boot's own choices at the console (`no secure boot`, then Enter at
-the key file); everything after that is the browser's. The browser reaches the box at the address
-the console shows, the first lease on QEMU's user network: the job puts that address on the
-runner's loopback, and QEMU forwards its 8443 and 443 to the box. The box's mail relay is a Mailpit
-container on the runner (`build/journeys/mail.sh`, pinned by digest), reached through a guest
-forward on QEMU's user network (port 2525), with STARTTLS required on a certificate from a CA made
-for the run. The driver serves the console's display to the journeys, read off QEMU, so they read
-the setup code and the certificate fingerprint where a person reads them, and it boots the box
-again when it restarts.
+the key file); everything after that is the browser's. The browser goes to the address the console
+shows, the first lease on QEMU's user network, through a proxy the driver runs: it takes CONNECT to
+that address's 8443 and 443 only and passes each to QEMU's forward of that port on the runner's
+loopback. TLS runs end to end through it, so the browser checks the box's certificate itself. (A
+forward bound to the lease's own address on the runner doesn't work: QEMU would hand the box
+connections from its own address.) The box's mail relay is a Mailpit container on the runner
+(`build/journeys/mail.sh`, pinned by digest), reached through a guest forward on QEMU's user
+network (port 2525), with STARTTLS required on a certificate from a CA made for the run. The driver
+serves the console's display to the journeys, read off QEMU, so they read the setup code and the
+certificate fingerprint where a person reads them, and it boots the box again when it restarts.
 
 **Certificate checks stay on.** Before the browser starts, the journeys fetch the box's :8443
-certificate, check its SHA-256 fingerprint against the one on the console, and start Chromium
-with that certificate's key pinned (`--ignore-certificate-errors-spki-list` with its SPKI hash),
-so the browser takes the box's own certificate and checks every other one as usual.
-`ignoreHTTPSErrors` is never used. The first-run journey checks the certificate again after the
-restart, and the product journey checks that 443 serves the same one.
+certificate, check its SHA-256 fingerprint against the one on the console (once the two have agreed
+for 30 seconds: a new box makes its certificate again as its SLAAC address comes in after its DHCP
+one, and the console follows), and start Chromium with that certificate's key pinned
+(`--ignore-certificate-errors-spki-list` with its SPKI hash), so the browser takes the box's own
+certificate and checks every other one as usual. `ignoreHTTPSErrors` is never used. The first-run
+journey checks the certificate again after the restart, and the product journey checks that 443
+serves the same one.
 
 **The journeys** (`test/e2e/journeys`, Playwright at the exact version its lockfile pins, run in
 order, each on what the one before left):
@@ -298,8 +302,10 @@ The serial consoles are `journeys/logs/journeys-boot<n>.log`, `journeys/logs/go-
 the driver's and Playwright's output, and `journeys/build/` the builds' logs.
 
 To change a journey, run `npm ci --ignore-scripts`, `npm run typecheck` and `npm run test:units`
-(the TOTP codes and the console reading, no browser) in `test/e2e/journeys`; the journeys need the box, so they run only in CI (or `go test -tags image ./test/image/journeys/`
-on a Linux host with the builds, a mail catcher and the address on its loopback).
+(the TOTP codes and the console reading, no browser) in `test/e2e/journeys`. The driver's proxy and
+screendump reading have their own tests in `go test ./test/image/journeys/`. The journeys need the
+box, so they run only in CI (or `go test -tags image ./test/image/journeys/` on a Linux host with
+the builds and a mail catcher).
 
 ## The image suite
 

@@ -3,7 +3,7 @@
 
 import { test as base, expect, type Page } from "@playwright/test";
 
-import { checkedCertificate, spkiPinOf } from "@/certificate";
+import { settledCertificate, spkiPinOf } from "@/certificate";
 
 export { expect };
 
@@ -20,15 +20,16 @@ const secrets = (page: Page) => [page.locator("code"), page.locator("svg:has(> t
 export const test = base.extend<{ shot: Shot }, { boxPin: string }>({
   /**
    * The box's own certificate, trusted the way its admin trusts it: fetched from :8443, its
-   * fingerprint checked against the one the console shows, then its key pinned. The browser
-   * takes that one key and nothing else (Chromium's --ignore-certificate-errors-spki-list, for
-   * the pinned SPKI only); every other certificate is checked as usual.
+   * fingerprint checked against the one the console shows (once the two have settled), then
+   * its key pinned. The browser takes that one key and nothing else (Chromium's
+   * --ignore-certificate-errors-spki-list, for the pinned SPKI only); every other certificate
+   * is checked as usual.
    */
   boxPin: [
     async ({}, use) => {
-      await use(spkiPinOf(await checkedCertificate(8443)));
+      await use(spkiPinOf(await settledCertificate(8443)));
     },
-    { scope: "worker", timeout: 5 * 60_000 },
+    { scope: "worker", timeout: 8 * 60_000 },
   ],
   launchOptions: [
     async ({ boxPin, launchOptions }, use) => {

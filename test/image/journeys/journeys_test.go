@@ -10,33 +10,31 @@
 // enrolled with Secure Boot off, no TPM). The person at the console types
 // the boot's own choices; everything after that is the browser's.
 //
-// The browser reaches the box at the address the console shows, its DHCP
-// lease (box): the runner carries that address on its loopback (the
-// workflow adds it), and QEMU forwards its 8443 and 443 on the runner to
-// the box. The box's mail relay is the runner's mail catcher, through a
-// guest forward from mailRelay. The driver serves the
-// console's display to the journeys, read off QEMU, so they read the setup
-// code and the certificate fingerprint where a person reads them, and it
-// starts the box again whenever it restarts (QEMU runs with -no-reboot).
+// The browser goes to the address the console shows, the box's DHCP lease
+// (box), through a proxy the driver runs: it takes CONNECT to that address's
+// 8443 and 443 only, and passes each to QEMU's forward of that port on the
+// runner's loopback. TLS runs end to end through it, so the browser checks
+// the box's certificate itself. (A forward bound to the lease's own address
+// on the runner doesn't work: QEMU would hand the box connections from its
+// own address.) The box's mail relay is the runner's mail catcher, through
+// a guest forward from mailRelay. The driver serves the console's display
+// to the journeys, read off QEMU, so they read the setup code and the
+// certificate fingerprint where a person reads them, and it starts the box
+// again whenever it restarts (QEMU runs with -no-reboot).
 package journeys_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"image"
-	"image/color"
 	"image/png"
 	"io"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -63,6 +61,9 @@ type env struct {
 	image, keys, product, version string
 	mailSMTP, mailAPI, mailCA     string
 	journeys                      string
+	// adminPort and productPort are QEMU's forwards of the box's 8443
+	// and 443 on the runner's loopback.
+	adminPort, productPort int
 }
 
 func need(t *testing.T) env {
@@ -84,11 +85,7 @@ func need(t *testing.T) env {
 	}
 	e.journeys = abs
 	harness.Need(t, []string{"npx", "socat"}, e.image, e.keys, e.product, e.mailCA, filepath.Join(abs, "node_modules"))
-	if ln, err := net.Listen("tcp", box+":0"); err != nil {
-		t.Fatalf("the runner doesn't carry %s on its loopback, so the browser can't reach the box there: %v", box, err)
-	} else {
-		_ = ln.Close()
-	}
+	e.adminPort, e.productPort = freePort(t), freePort(t)
 	return e
 }
 
@@ -96,7 +93,7 @@ func (e env) opts(disk harness.Disk) harness.Options {
 	return harness.Options{
 		SecureBoot: harness.OffWithKeys, Keys: e.keys, MemMiB: 8192, CPUs: 4, Timeout: 4 * time.Hour,
 		Disks:    []harness.Disk{disk},
-		HostFwd:  []string{"tcp:" + box + ":8443-:8443", "tcp:" + box + ":443-:443"},
+		HostFwd:  []string{fmt.Sprintf("tcp:127.0.0.1:%d-:8443", e.adminPort), fmt.Sprintf("tcp:127.0.0.1:%d-:443", e.productPort)},
 		GuestFwd: []string{"tcp:" + mailRelay + "-cmd:socat - TCP:" + e.mailSMTP},
 	}
 }
@@ -148,30 +145,6 @@ func (d *display) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var ppmHeader = regexp.MustCompile(`^P6\s+(\d+)\s+(\d+)\s+(\d+)\s`)
-
-// decodePPM reads QEMU's binary screendump (P6, 8 bits a sample).
-func decodePPM(b []byte) (image.Image, error) {
-	m := ppmHeader.FindSubmatch(b)
-	if m == nil {
-		return nil, errors.New("the screendump isn't a binary PPM")
-	}
-	w, _ := strconv.Atoi(string(m[1]))
-	h, _ := strconv.Atoi(string(m[2]))
-	px := b[len(m[0]):]
-	if string(m[3]) != "255" || len(px) < w*h*3 {
-		return nil, fmt.Errorf("the screendump is %dx%d with max %s and %d bytes of pixels", w, h, m[3], len(px))
-	}
-	img := image.NewRGBA(image.Rect(0, 0, w, h))
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
-			i := (y*w + x) * 3
-			img.Set(x, y, color.RGBA{R: px[i], G: px[i+1], B: px[i+2], A: 255})
-		}
-	}
-	return img, nil
-}
-
 // keepConsole writes a boot's serial console where the job collects its
 // logs (SNEAKERS_LOG_DIR), when it names one.
 func keepConsole(t *testing.T, vm *harness.VM, n int) {
@@ -201,13 +174,11 @@ func TestTheSignOffJourneys(t *testing.T) {
 	vm.ExpectScreen(`Open this address in your browser: .*https://`+regexp.QuoteMeta(box)+`:8443`, 5*time.Minute)
 
 	shown := &display{vm: vm}
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := &http.Server{Handler: shown, ReadHeaderTimeout: 10 * time.Second}
-	go func() { _ = srv.Serve(ln) }()
-	defer func() { _ = srv.Close() }()
+	consoleAddr := serve(t, shown)
+	proxyAddr := serve(t, boxProxy{routes: map[string]string{
+		box + ":8443": fmt.Sprintf("127.0.0.1:%d", e.adminPort),
+		box + ":443":  fmt.Sprintf("127.0.0.1:%d", e.productPort),
+	}})
 
 	state := filepath.Join(t.TempDir(), "journeys-state.json")
 	cmd := exec.CommandContext(ctx, "npx", "playwright", "test") // #nosec G204 -- test-only, the repository's own journeys
@@ -215,7 +186,8 @@ func TestTheSignOffJourneys(t *testing.T) {
 	cmd.Env = append(os.Environ(),
 		"CI=1",
 		"JOURNEYS_BOX="+box,
-		"JOURNEYS_CONSOLE=http://"+ln.Addr().String(),
+		"JOURNEYS_CONSOLE=http://"+consoleAddr,
+		"JOURNEYS_PROXY=http://"+proxyAddr,
 		"JOURNEYS_STATE="+state,
 		"JOURNEYS_PRODUCT_BUNDLE="+e.product,
 		"JOURNEYS_PRODUCT_VERSION="+e.version,

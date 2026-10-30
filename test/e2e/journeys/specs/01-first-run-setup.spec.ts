@@ -5,7 +5,7 @@ import { checkedCertificate, spkiPinOf } from "@/certificate";
 import { attachConsole, SETUP_CODE_ON_CONSOLE, waitForConsole } from "@/console";
 import { adminUrl, boxAddress } from "@/env";
 import { expect, openWhenUp, test } from "@/fixtures";
-import { firstRunSetup, signInToAppliance } from "@/flows/appliance";
+import { answerStepUps, firstRunSetup, signInToAppliance } from "@/flows/appliance";
 import { newPassword, nextCode, saveAccount } from "@/state";
 
 const escaped = (s: string) => s.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -28,6 +28,9 @@ test("first-run setup on :8443, then the first sign-in once the box restarts", a
 
   await test.step("the six setup steps", async () => {
     await openWhenUp(page, adminUrl("/setup"), 2 * 60_000);
+    // A step-up (making the recovery key) is answered from the authenticator the admin
+    // step sets up.
+    await answerStepUps(page, () => nextCode("appliance"));
     await firstRunSetup(page, {
       admin,
       after: shot,

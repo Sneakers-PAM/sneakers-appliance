@@ -27,6 +27,8 @@ export default defineConfig({
     actionTimeout: 60_000,
     headless: true,
     navigationTimeout: 2 * 60_000,
+    // The driver's proxy to the box's address (test/image/journeys); unset, the journeys can't run.
+    proxy: process.env.JOURNEYS_PROXY ? { server: process.env.JOURNEYS_PROXY } : undefined,
     screenshot: "on",
     trace: "on",
     viewport: { height: 900, width: 1440 },
