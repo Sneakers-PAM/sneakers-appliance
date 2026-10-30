@@ -683,19 +683,6 @@ jobs:
             --release-repo "$RELEASE_REPO" --release-commit "$RELEASE_COMMIT" \
             --web-repo "$WEB_REPO" --web-commit "$WEB_COMMIT" "${pre[@]}" --out "$RUNNER_TEMP/checklist.md"
           cat "$RUNNER_TEMP/checklist.md" >> "$GITHUB_STEP_SUMMARY"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body -q .body > "$RUNNER_TEMP/notes.md"
-          # What the release ships untested on real hardware
-          # (build/release/notes/), once, ahead of the checklist.
-          for n in build/release/notes/*.md; do
-            [ -f "$n" ] || continue
-            first="$(head -n1 "$n")"
-            grep -qxF "$first" "$RUNNER_TEMP/notes.md" && continue
-            printf '\n' >> "$RUNNER_TEMP/notes.md"
-            cat "$n" >> "$RUNNER_TEMP/notes.md"
-          done
-          printf '\n' >> "$RUNNER_TEMP/notes.md"
-          cat "$RUNNER_TEMP/checklist.md" >> "$RUNNER_TEMP/notes.md"
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
   lab:
     name: 🧪 Lab dry run (never published)
     needs: guard
