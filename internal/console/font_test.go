@@ -16,14 +16,14 @@ import (
 )
 
 // The console's screens are laid out for the large font: the kernel has
-// it built in, the UKI's command line selects it, and the small font the
-// console falls back to is built in too.
+// it built in, the UKI's command line selects it, and the smaller fonts
+// the console falls back to are built in too.
 func TestTheKernelHasAndSelectsTheLargeFont(t *testing.T) {
 	cfg, err := os.ReadFile("../../os/kernel/config-base")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, opt := range []string{"CONFIG_FONTS=y", "CONFIG_FONT_TER16x32=y", "CONFIG_FONT_8x16=y", "CONFIG_FRAMEBUFFER_CONSOLE=y"} {
+	for _, opt := range []string{"CONFIG_FONTS=y", "CONFIG_FONT_TER16x32=y", "CONFIG_FONT_SUN12x22=y", "CONFIG_FONT_8x16=y", "CONFIG_FRAMEBUFFER_CONSOLE=y"} {
 		if !strings.Contains("\n"+string(cfg), "\n"+opt+"\n") {
 			t.Errorf("os/kernel/config-base lacks %s", opt)
 		}
@@ -34,6 +34,9 @@ func TestTheKernelHasAndSelectsTheLargeFont(t *testing.T) {
 	}
 	if !strings.Contains(string(uki), " fbcon=font:TER16x32 ") {
 		t.Error("the UKI command line doesn't select fbcon=font:TER16x32")
+	}
+	if console.MediumFont != "SUN12x22" {
+		t.Errorf("the first fallback is %q, not the built-in 12x22", console.MediumFont)
 	}
 	if console.SmallFont != "VGA8x16" {
 		t.Errorf("the fallback is %q, not the built-in 8x16", console.SmallFont)

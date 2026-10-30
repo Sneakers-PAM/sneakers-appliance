@@ -38,11 +38,7 @@ func main() {
 	b := sources.Dial()
 	go b.Console.Watch(ctx)
 	cmdline, _ := os.ReadFile("/proc/cmdline")
-	if switched, err := console.FitFont("/dev"); err != nil {
-		lg.Warn("firstboot: the small font couldn't be set", log.F("error", err.Error()))
-	} else if switched {
-		lg.Info("firstboot: the screen is too small for the large font; using " + console.SmallFont)
-	}
+	console.FitAndLogFont("/dev", os.Stderr, "sneakers-firstboot")
 	active, _ := os.ReadFile(console.ActivePath)
 	cols, rows := console.Size("/dev", console.Names(string(active)))
 	u := &tui.UI{

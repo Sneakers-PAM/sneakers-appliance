@@ -147,10 +147,11 @@ CONFIG_FONTS=y
 CONFIG_FONT_8x16=y
 # Large Terminus font so the console is readable on a hypervisor's screen:
 # the UKI cmdline selects it with `fbcon=font:TER16x32`, which gives
-# VMware's 1024x768 a 64x24 console. 8x16 stays as the fallback: the console
-# switches to it (KDFONTOP) when the framebuffer is too small for 64x24 at
-# the large font.
+# VMware's 1024x768 a 64x24 console. 12x22 and 8x16 are the fallbacks: the
+# console switches to the first that fits (KDFONTOP) when the framebuffer is
+# too small for 64x24 at the large font. OVMF's usual 800x600 gets 12x22, 66x27.
 CONFIG_FONT_TER16x32=y
+CONFIG_FONT_SUN12x22=y
 # virtio transport + the NIC and block device the harness attaches.
 # VIRTIO_MENU gates the whole virtio drivers menu; the tiny base leaves it off,
 # which silently drops every virtio driver below.

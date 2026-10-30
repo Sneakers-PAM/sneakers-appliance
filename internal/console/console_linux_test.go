@@ -6,6 +6,7 @@
 package console_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -115,8 +116,75 @@ func TestFitFontLeavesABigScreen(t *testing.T) {
 	screen := pty(t, dev, "tty0")
 	defer func() { _ = screen.Close() }()
 	setSize(t, screen, 64, 24)
-	if switched, err := console.FitFont(dev); err != nil || switched {
-		t.Fatalf("switched %v: %v", switched, err)
+	if font, err := console.FitFont(dev); err != nil || font != "" {
+		t.Fatalf("switched to %q: %v", font, err)
+	}
+}
+
+// fakeScreen is a framebuffer of w x h pixels, sized by the font set last.
+type fakeScreen struct {
+	w, h  int
+	cell  [2]int
+	tried []string
+}
+
+func (s *fakeScreen) size() (cols, rows int) { return s.w / s.cell[0], s.h / s.cell[1] }
+
+func (s *fakeScreen) set(name string) error {
+	cell, ok := map[string][2]int{"TER16x32": {16, 32}, "SUN12x22": {12, 22}, "VGA8x16": {8, 16}}[name]
+	if !ok {
+		return unix.ENOENT
+	}
+	s.cell = cell
+	s.tried = append(s.tried, name)
+	return nil
+}
+
+// OVMF on Proxmox starts at 800x600, too small for 16x32 (50x18): the
+// fonts are tried largest first, and the first that gives 64x24 stays.
+func TestPickFontTriesTheFontsInOrder(t *testing.T) {
+	for _, c := range []struct {
+		w, h  int
+		want  string
+		tried []string
+	}{
+		{800, 600, "SUN12x22", []string{"TER16x32", "SUN12x22"}},
+		{640, 480, "VGA8x16", []string{"TER16x32", "SUN12x22", "VGA8x16"}},
+		{320, 200, "VGA8x16", []string{"TER16x32", "SUN12x22", "VGA8x16"}},
+		{1024, 768, "", nil},
+	} {
+		s := &fakeScreen{w: c.w, h: c.h, cell: [2]int{16, 32}}
+		got, err := console.PickFont(s.size, s.set)
+		if err != nil {
+			t.Fatalf("%dx%d: %v", c.w, c.h, err)
+		}
+		if got != c.want || strings.Join(s.tried, " ") != strings.Join(c.tried, " ") {
+			t.Errorf("%dx%d: picked %q after %v, want %q after %v", c.w, c.h, got, s.tried, c.want, c.tried)
+		}
+	}
+}
+
+// The font's line reaches the log even though the console services log at
+// error level, and a font that can't be set is logged as an error.
+func TestFitAndLogFontWritesTheLog(t *testing.T) {
+	t.Setenv("LOG_LEVEL", "")
+	dev := t.TempDir()
+	screen := pty(t, dev, "tty0")
+	defer func() { _ = screen.Close() }()
+
+	setSize(t, screen, 64, 24)
+	var out bytes.Buffer
+	console.FitAndLogFont(dev, &out, "sneakers-console")
+	if !strings.Contains(out.String(), `"level":"info"`) || !strings.Contains(out.String(), `"cols":64`) {
+		t.Fatalf("big screen: %q", out.String())
+	}
+
+	// A pty has no fonts, so the ioctl fails.
+	setSize(t, screen, 50, 18)
+	out.Reset()
+	console.FitAndLogFont(dev, &out, "sneakers-console")
+	if !strings.Contains(out.String(), `"level":"error"`) {
+		t.Fatalf("small screen: %q", out.String())
 	}
 }
 

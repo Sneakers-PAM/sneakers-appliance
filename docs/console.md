@@ -32,10 +32,20 @@ The only inputs left are:
 
 The kernel has the Terminus 16x32 font built in (`CONFIG_FONT_TER16x32`), and the UKI's command
 line selects it (`fbcon=font:TER16x32`). On VMware's default 1024x768 that gives a 64x24 console,
-large enough to read the setup code and the fingerprints from across a desk. The 8x16 font
-(`CONFIG_FONT_8x16`) stays built in as the fallback: when the large font leaves the screen
-smaller than 64x24 (a framebuffer below 1024x768), the console switches the screen to `VGA8x16`
-(the `KDFONTOP` ioctl on `tty0`) before it draws.
+large enough to read the setup code and the fingerprints from across a desk. Two smaller fonts
+stay built in as fallbacks, Sun 12x22 (`CONFIG_FONT_SUN12x22`) and 8x16 (`CONFIG_FONT_8x16`): when
+the large font leaves the screen smaller than 64x24 (a framebuffer below 1024x768), the console
+tries `TER16x32`, then `SUN12x22`, then `VGA8x16` (the `KDFONTOP` ioctl on `tty0`) and keeps the
+first that gives 64x24, before it draws. OVMF's usual 800x600 gets `SUN12x22`, a 66x27 console. To
+get the large font on Proxmox VE, set the VM's display to 1024x768
+([proxmox-vm.md](proxmox-vm.md#if-something-goes-wrong)).
+
+The console logs what it did once it starts, to `/run/sneakers/console.log`: the font it picked or
+that it left the screen alone, with the screen's columns and rows. That line is written even though
+the console services otherwise log at error level only.
+
+The setup code and the Recover access code are drawn in the strong style (bold white), not the
+accent colour, because they keep letters such as Q and G that are hard to tell apart when dim.
 
 The screens are laid out for the real terminal: the console reads each active console's size
 (`TIOCGWINSZ`) and uses the smallest that reports one. A serial line reports none and doesn't

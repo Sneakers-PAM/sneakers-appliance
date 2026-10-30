@@ -6,9 +6,12 @@
 package console
 
 import (
+	"fmt"
+	"io"
 	"path/filepath"
 	"unsafe"
 
+	log "github.com/Bugs5382/go-log"
 	"golang.org/x/sys/unix"
 )
 
@@ -25,12 +28,18 @@ const (
 	defaultRows = 24
 )
 
-// SmallFont is the kernel's built-in 8x16 font, the fallback when the
-// large one leaves too few columns or rows.
-const SmallFont = "VGA8x16"
+// The kernel's built-in fonts, largest first. The UKI's command line
+// selects LargeFont; the others are the fallbacks when it leaves too few
+// columns or rows. The names are the kernel's (font_desc.name).
+const (
+	LargeFont  = "TER16x32"
+	MediumFont = "SUN12x22"
+	SmallFont  = "VGA8x16"
+)
 
-// NeedsSmallFont reports whether a screen of cols x rows under the large
-// font is too small for the console's screens.
+// NeedsSmallFont reports whether a screen of cols x rows under its
+// current font is too small for the console's screens, so it needs a
+// smaller font.
 func NeedsSmallFont(cols, rows int) bool {
 	return cols > 0 && rows > 0 && (cols < MinCols || rows < MinRows)
 }
@@ -83,23 +92,60 @@ const (
 	kdFontOpSetDeflt = 2
 )
 
-// FitFont switches the screen (tty0) to the small font when the large one
-// leaves it smaller than the console's screens need: a framebuffer below
-// 1024x768. It reports whether it switched.
-func FitFont(devDir string) (bool, error) {
+// PickFont leaves a screen that already fits alone and returns "".
+// Otherwise it sets each font in turn, largest first, and returns the
+// first that gives the console's screens the room they need, or the
+// smallest when none does.
+func PickFont(size func() (cols, rows int), set func(name string) error) (string, error) {
+	if !NeedsSmallFont(size()) {
+		return "", nil
+	}
+	for _, font := range []string{LargeFont, MediumFont, SmallFont} {
+		if err := set(font); err != nil {
+			return "", err
+		}
+		if !NeedsSmallFont(size()) {
+			return font, nil
+		}
+	}
+	return SmallFont, nil
+}
+
+// FitFont picks the screen's (tty0's) font with PickFont: a framebuffer
+// below 1024x768 is too small for the large font. It returns the font it
+// set, or "" when it left the screen alone.
+func FitFont(devDir string) (string, error) {
 	tty := filepath.Join(devDir, "tty0")
-	if !NeedsSmallFont(winsize(tty)) {
-		return false, nil
+	return PickFont(func() (int, int) { return winsize(tty) }, func(font string) error {
+		fd, err := unix.Open(tty, unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(fd) }()
+		name := append([]byte(font), 0)
+		op := consoleFontOp{op: kdFontOpSetDeflt, data: &name[0]}
+		if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), kdFontOp, uintptr(unsafe.Pointer(&op))); errno != 0 { // #nosec G103 -- the kernel's KDFONTOP takes a pointer to its struct
+			return fmt.Errorf("%s: %w", font, errno)
+		}
+		return nil
+	})
+}
+
+// FitAndLogFont runs FitFont and writes the outcome to w, with the
+// screen's size. It has its own logger because the console services log
+// at error level, and this line is how to tell which font a box's screen
+// ended up with.
+func FitAndLogFont(devDir string, w io.Writer, service string) {
+	lg := log.NewLoggerWithOptions(service, log.WithOutput(w), log.WithDefaultFormat(log.FormatJSON), log.WithDefaultLevel(log.LevelInfo))
+	font, err := FitFont(devDir)
+	cols, rows := winsize(filepath.Join(devDir, "tty0"))
+	size := []log.Field{log.F("cols", cols), log.F("rows", rows)}
+	switch {
+	case err != nil:
+		lg.Error(err, "console: the font couldn't be set", size...)
+	case font == "":
+		lg.Info("console: the screen fits its font; left alone", size...)
+	default:
+		lg.Info("console: font picked for the screen", append(size, log.F("font", font))...)
 	}
-	fd, err := unix.Open(tty, unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = unix.Close(fd) }()
-	name := append([]byte(SmallFont), 0)
-	op := consoleFontOp{op: kdFontOpSetDeflt, data: &name[0]}
-	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), kdFontOp, uintptr(unsafe.Pointer(&op))); errno != 0 { // #nosec G103 -- the kernel's KDFONTOP takes a pointer to its struct
-		return false, errno
-	}
-	return true, nil
 }
