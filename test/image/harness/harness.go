@@ -413,6 +413,10 @@ func (vm *VM) Expect(re string, timeout time.Duration) string {
 	}
 }
 
+// Exited is closed once QEMU has exited: a guest reboot (QEMU runs with
+// -no-reboot), a power-off or a kill.
+func (vm *VM) Exited() <-chan struct{} { return vm.done }
+
 func (vm *VM) exited() bool {
 	select {
 	case <-vm.done:
