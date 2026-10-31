@@ -107,6 +107,78 @@ func TestInvalidChangeNotApplied(t *testing.T) {
 	}
 }
 
+// TestGetDuringApplySeesThePendingChange asks from inside the apply, as a Get
+// landing during an address change does: the question must not wait for the
+// apply, and the change shows from then on.
+func TestGetDuringApplySeesThePendingChange(t *testing.T) {
+	r := network.NewReverter(clock.NewFake())
+	token, err := r.Apply(named("old"), named("new"), func(network.Settings) error {
+		during := make(chan bool, 1)
+		go func() { during <- r.Pending() }()
+		select {
+		case pending := <-during:
+			if !pending {
+				t.Error("Pending is false while the change applies")
+			}
+		case <-time.After(time.Second):
+			t.Error("Pending waited for the apply")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, ok := r.PendingChange(); !ok || p.Token != token || !r.Pending() {
+		t.Fatalf("pending after the apply: %v %v", p, ok)
+	}
+}
+
+func TestSecondApplyIsRefusedWhileTheFirstApplies(t *testing.T) {
+	r := network.NewReverter(clock.NewFake())
+	var rec recorder
+	_, err := r.Apply(named("old"), named("new"), func(network.Settings) error {
+		second := make(chan error, 1)
+		go func() {
+			_, err := r.Apply(named("new"), named("other"), rec.apply)
+			second <- err
+		}()
+		select {
+		case err := <-second:
+			if !codes.Is(err, codes.NetInvalid) || network.Field(err) != "pending" {
+				t.Errorf("second Apply: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Error("the second Apply waited for the first")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.applied) != 0 {
+		t.Fatalf("the second change was applied: %v", rec.applied)
+	}
+}
+
+func TestPendingClearsWhenTheApplyFails(t *testing.T) {
+	r := network.NewReverter(clock.NewFake())
+	boom := errors.New("boom")
+	if _, err := r.Apply(named("old"), named("new"), func(s network.Settings) error {
+		if s.Hostname == named("new").Hostname {
+			return boom
+		}
+		return nil
+	}); !errors.Is(err, boom) {
+		t.Fatalf("Apply: %v", err)
+	}
+	if r.Pending() {
+		t.Fatal("a failed change still counts as under way")
+	}
+	if _, err := r.Apply(named("old"), named("new"), func(network.Settings) error { return nil }); err != nil {
+		t.Fatalf("a new change after the failure: %v", err)
+	}
+}
+
 func TestFailedApplyRestoresPrevious(t *testing.T) {
 	r := network.NewReverter(clock.NewFake())
 	var got []string

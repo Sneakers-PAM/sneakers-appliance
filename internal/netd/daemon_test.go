@@ -5,6 +5,7 @@ package netd_test
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -228,6 +229,109 @@ func TestAnUnchangedInterfaceIsLeftAlone(t *testing.T) {
 	}
 	if !strings.Contains(b.read("resolv.conf"), "nameserver 192.0.2.54") {
 		t.Fatalf("resolv.conf:\n%s", b.read("resolv.conf"))
+	}
+}
+
+// gatedSet starts an address change and returns once it is held inside its
+// first LinkUp, with what Set returned on done.
+func gatedSet(t *testing.T, b *box, d *netd.Daemon) (*linkGate, <-chan error) {
+	t.Helper()
+	next := static("eth0")
+	next.Management.IPv4.Address = netip.MustParsePrefix("192.0.2.20/24")
+	gate := b.sys.gateNextLinkUp()
+	done := make(chan error, 1)
+	go func() {
+		_, err := d.Set(next)
+		done <- err
+	}()
+	select {
+	case <-gate.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Set never reached LinkUp")
+	}
+	return gate, done
+}
+
+func TestGetDuringSetDoesNotDeadlock(t *testing.T) {
+	b := newBox(t)
+	b.writeSettings("network.yaml", static("eth0"))
+	d := b.start()
+	gate, setDone := gatedSet(t, b, d)
+
+	got := make(chan bool, 1)
+	go func() {
+		_, pending := d.Get()
+		got <- pending
+	}()
+	var pending bool
+	select {
+	case pending = <-got:
+	case <-time.After(time.Second):
+		// The old lock order parks Get here for good, and releasing the
+		// apply then shows Set and Status hanging as well.
+		t.Error("Get hung during Set")
+	}
+	close(gate.release)
+	if !pending {
+		t.Error("Get during the apply says no change is under way")
+	}
+
+	select {
+	case err := <-setDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Set hung")
+	}
+	status := make(chan netd.Status, 1)
+	go func() { status <- d.Status() }()
+	select {
+	case <-status:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Status hung")
+	}
+	if _, ok := d.PendingChange(); !ok {
+		t.Fatal("the change isn't pending after Set")
+	}
+}
+
+func TestSecondSetDuringApplyIsRefusedAndKeepsTheUndoFile(t *testing.T) {
+	b := newBox(t)
+	b.writeSettings("network.yaml", static("eth0"))
+	d := b.start()
+	gate, setDone := gatedSet(t, b, d)
+
+	second := static("eth0")
+	second.Hostname = "second.sneakers.example.org"
+	refused := make(chan error, 1)
+	go func() {
+		_, err := d.Set(second)
+		refused <- err
+	}()
+	var err error
+	select {
+	case err = <-refused:
+	case <-time.After(time.Second):
+		err = errors.New("the second Set hung")
+	}
+	close(gate.release)
+	if !codes.Is(err, codes.NetInvalid) || network.Field(err) != "pending" {
+		t.Fatalf("second Set: %v", err)
+	}
+	select {
+	case err := <-setDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Set hung")
+	}
+	if _, err := os.Stat(filepath.Join(b.state, "settings", "network.prev.yaml")); err != nil {
+		t.Fatalf("undo file: %v", err)
+	}
+	if s, _ := d.Get(); s.Hostname == second.Hostname {
+		t.Fatal("the refused change was applied")
 	}
 }
 

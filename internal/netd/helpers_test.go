@@ -41,6 +41,21 @@ type fakeSys struct {
 	dnsAsked  []string
 	notices   chan struct{}
 	subscribe int
+	// linkGate, when set, holds the next LinkUp until it is released.
+	linkGate *linkGate
+}
+
+// linkGate stops one LinkUp in its tracks, inside the apply that made it.
+type linkGate struct {
+	entered, release chan struct{}
+}
+
+// gateNextLinkUp makes the next LinkUp wait for the gate's release.
+func (f *fakeSys) gateNextLinkUp() *linkGate {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.linkGate = &linkGate{entered: make(chan struct{}), release: make(chan struct{})}
+	return f.linkGate
 }
 
 func newFakeSys(links ...netd.Link) *fakeSys {
@@ -55,6 +70,14 @@ func (f *fakeSys) Links() ([]netd.Link, error) {
 }
 
 func (f *fakeSys) LinkUp(name string) error {
+	f.mu.Lock()
+	g := f.linkGate
+	f.linkGate = nil
+	f.mu.Unlock()
+	if g != nil {
+		close(g.entered)
+		<-g.release
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.up = append(f.up, name)

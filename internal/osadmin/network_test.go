@@ -218,3 +218,31 @@ func TestGetNetworkShowsWhatDHCPGave(t *testing.T) {
 		t.Fatalf("learnt %v %v %v %v", m.GetLearntDns(), m.GetLearntSearch(), m.GetLearntNtp(), m.GetNtpServers())
 	}
 }
+
+// A netd that stops answering uses up its own deadline, not the console's
+// three seconds, so init still answers and Status marks only netd as down.
+func TestAHungNetdDoesNotMarkInitDown(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.netd.mu.Lock()
+	b.netd.hang = true
+	b.netd.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	st, err := osadminv1connect.NewStatusServiceClient(alice.hc, b.ts.URL).GetStatus(ctx, connect.NewRequest(&osadminv1.GetStatusRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	health := map[string]bool{}
+	for _, c := range st.Msg.GetHealth() {
+		health[c.GetName()] = c.GetOk()
+	}
+	if ok, seen := health["netd"]; !seen || ok {
+		t.Fatalf("netd health %v", st.Msg.GetHealth())
+	}
+	if ok, seen := health["init"]; !seen || !ok {
+		t.Fatalf("init health %v", st.Msg.GetHealth())
+	}
+}
