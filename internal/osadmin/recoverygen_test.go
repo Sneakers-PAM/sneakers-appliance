@@ -55,7 +55,7 @@ func TestGenerateRecoveryKey(t *testing.T) {
 	if rk.GetFingerprint() != ssh.FingerprintSHA256(spk) || rk.GetType() != ssh.KeyAlgoED25519 || rk.GetLabel() != "offline safe" || rk.GetSetBy() != "alice" {
 		t.Fatalf("recovery key %v", rk)
 	}
-	if !strings.HasPrefix(m.GetFileName(), "sneakers-recovery-") {
+	if !strings.HasPrefix(m.GetFileName(), "sneakers-recovery-key-") {
 		t.Fatalf("file name %q", m.GetFileName())
 	}
 

@@ -160,7 +160,7 @@ func (h *setup) GenerateRecoveryKey(ctx context.Context, r *connect.Request[osad
 		RecoveryKey: recoveryToWire(rk),
 		PrivateKey:  string(pem.EncodeToMemory(block)),
 		PublicKey:   rk.PublicKey,
-		FileName:    "sneakers-recovery-" + rk.Set.Format("20060102T150405Z"),
+		FileName:    "sneakers-recovery-key-" + rk.Set.Format("20060102T150405Z"),
 	}), nil
 }
 
