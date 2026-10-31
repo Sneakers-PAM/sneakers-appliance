@@ -303,14 +303,19 @@ the product its own name.
   strips the prefix (its `oauth-prefix` middleware), and Hydra builds its URLs from
   `https://<fqdn>/oauth/`: discovery at `/oauth/.well-known/openid-configuration`, its keys at
   `/oauth/.well-known/jwks.json` and tokens at `/oauth/oauth2/token`. The gateway checks a machine
-  token's issuer against `https://<fqdn>/oauth`. The MCP's own sign-in stays at the root: the
-  gateway's `/.well-known/oauth-authorization-server` (issuer `https://<fqdn>`) and `/oauth2/`,
-  which the `/oauth/` routes never take. Nor do they take `/oauth/consent`, the staff app's MCP
-  consent page, where the gateway's `/oauth2/authorize` sends the browser. An OAuth MCP client
-  finds that sign-in from the MCP server's protected-resource metadata (RFC 9728): an
-  unauthenticated `GET https://<fqdn>/.well-known/oauth-protected-resource` answers JSON with
-  `resource` `https://<fqdn>/mcp` and `authorization_servers` `["https://<fqdn>"]`, and a 401 from
-  `/mcp` points at it. All of it runs only while the MCP switch is on.
+  token's issuer against `https://<fqdn>/oauth`. Hydra and the `/oauth/` routes run only while the
+  MCP switch is on.
+- **The sign-in for `sneakers-put login`, `sneakers-run login` and MCP clients** stays at the root:
+  the gateway's `/.well-known/oauth-authorization-server` (issuer `https://<fqdn>`) and `/oauth2/`,
+  which the `/oauth/` routes never take. Nor do they take `/oauth/consent`, the staff app's consent
+  page, where the gateway's `/oauth2/authorize` sends the browser. These routes don't use Hydra and
+  stay up with the MCP switch off, so the commands sign in on any box; with it off the gateway
+  answers MCP clients `403 MCP_DISABLED` at every step, so no agent gets a token. An OAuth MCP
+  client finds this sign-in from the MCP server's protected-resource metadata (RFC 9728), which
+  runs only while the switch is on: an unauthenticated
+  `GET https://<fqdn>/.well-known/oauth-protected-resource` answers JSON with `resource`
+  `https://<fqdn>/mcp` and `authorization_servers` `["https://<fqdn>"]`, and a 401 from `/mcp`
+  points at it.
 - **The 443 certificate** must cover the host name, not only an address: the product endpoint warns
   (`names-not-covered`, and a Status warning on every :8443 page) when its certificate doesn't,
   naming the host name and what the certificate covers. A wildcard for the host name's domain

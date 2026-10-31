@@ -75,7 +75,6 @@ gateway:
     HYDRA_ENABLED: 'true'
     HYDRA_ISSUER: https://{{ .Values.global.host }}/oauth
     MCP_ENABLED: 'true'
-    OAUTH_PUBLIC_URL: https://{{ .Values.global.host }}
 web-staff:
   env:
     MCP_URL: https://{{ .Values.global.host }}/mcp
