@@ -51,8 +51,8 @@
 
   var WORDS = {
     starting: ["Sneakers-PAM is starting", "This page reloads by itself when it's ready."],
-    rebooting: ["Sneakers-PAM is rebooting", "It comes back by itself. This page reloads when it's ready."],
-    "shutting-down": ["Sneakers-PAM is shutting down", "It powers off by itself. Power it on again to use it."],
+    rebooting: ["Sneakers-PAM is rebooting", "It comes back by itself, which can take more than 5 minutes. This page reloads when it's ready."],
+    "shutting-down": ["Sneakers-PAM is shutting down", "It powers off by itself. Power it on again to use it; it can take more than 5 minutes to come back."],
     updating: ["Sneakers-PAM is updating", "It comes back by itself when the update is done. This page reloads when it's ready."],
     maintenance: ["Sneakers-PAM is in maintenance", "It comes back when the maintenance is over. This page reloads when it's ready."],
     failed: ["Sneakers-PAM failed to start", "The box's administrator can revert or reapply the update on the admin pages. This page reloads when it's back."]

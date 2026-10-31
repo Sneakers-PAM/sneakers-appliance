@@ -293,7 +293,7 @@ audit action of every method.
   (`POWER_FORCED_CONFIRM` without it); the audit entry records `mode` as `graceful` or `forced`.
   The box can take more than 5 minutes to come back after a reboot, and after a shutdown it can take
   more than 5 minutes to come back when it starts. The `reboot` and `poweroff` commands say so before
-  the confirm.
+  the confirm, and the console and the box-state pages say so while the box goes down.
 
 ## The factory reset quorum
 

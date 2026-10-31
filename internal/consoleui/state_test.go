@@ -29,6 +29,20 @@ func TestStatePages(t *testing.T) {
 	}
 }
 
+// A reboot or a shutdown says on the screen that the box can take more
+// than 5 minutes to come back, so a slow start doesn't look broken.
+func TestStopPagesSayHowLongTheBoxCanTake(t *testing.T) {
+	c := consoleui.Chrome{Version: "0.1.0"}
+	for st, want := range map[consoleui.State]string{
+		consoleui.Rebooting:    "It can take more than 5 minutes to come back.",
+		consoleui.ShuttingDown: "Starting it again can take more than 5 minutes.",
+	} {
+		if text := consoleui.StatePage(c, st).Frame(64, 24).Text(); !strings.Contains(text, want) {
+			t.Errorf("the %s page lacks %q:\n%s", st, want, text)
+		}
+	}
+}
+
 // Render is the page as the screen gets it: cleared, drawn in full, and
 // with the cursor hidden.
 func TestRenderDrawsTheWholePage(t *testing.T) {

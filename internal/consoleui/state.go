@@ -27,14 +27,25 @@ var stateNext = map[State]string{
 	ShuttingDown: "It powers off by itself.",
 }
 
+// stateTakes is how long the box can take to come back, for the states
+// that end in it going away.
+var stateTakes = map[State]string{
+	Rebooting:    "It can take more than 5 minutes to come back.",
+	ShuttingDown: "Starting it again can take more than 5 minutes.",
+}
+
 // StatePage is the branded page for s: the mark, the wordmark and the
 // version, and what the box is doing.
 func StatePage(c Chrome, s State) tui.Page {
-	return c.BigPage([]tui.Line{
+	lines := []tui.Line{
 		tui.Styled(tui.Strong, "Sneakers-PAM is "+string(s)),
 		tui.Text(""),
 		tui.Styled(tui.Dim, stateNext[s]),
-	})
+	}
+	if t := stateTakes[s]; t != "" {
+		lines = append(lines, tui.Styled(tui.Dim, t))
+	}
+	return c.BigPage(lines)
 }
 
 // Render is p as a screen of cols x rows gets it: cleared and drawn in

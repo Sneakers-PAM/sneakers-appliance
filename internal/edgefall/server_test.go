@@ -301,3 +301,13 @@ func TestTheGateIsNotOn443(t *testing.T) {
 		t.Fatalf("443 answered the gate: %d", rec.Code)
 	}
 }
+
+// A reboot or a shutdown says on the page that the box can take more than 5
+// minutes to come back, so a slow start doesn't look broken.
+func TestStopPagesSayHowLongTheBoxCanTake(t *testing.T) {
+	for _, s := range []boxstate.State{boxstate.Rebooting, boxstate.ShuttingDown} {
+		if w := edgefall.WordsFor(s); !strings.Contains(w.Note, "more than 5 minutes") {
+			t.Errorf("%s: %q", s, w.Note)
+		}
+	}
+}
