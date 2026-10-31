@@ -182,6 +182,9 @@ const (
 	// certificate, or put an earlier one back, in the last 7 days.
 	// tls_change has the details.
 	WarningKind_WARNING_KIND_TLS_CHANGED WarningKind = 17
+	// WARNING_KIND_PRODUCT_RESET_CUT_OFF: a product reset was cut off part-way
+	// and the product stays stopped until an owner finishes it.
+	WarningKind_WARNING_KIND_PRODUCT_RESET_CUT_OFF WarningKind = 18
 )
 
 // Enum value maps for WarningKind.
@@ -205,6 +208,7 @@ var (
 		15: "WARNING_KIND_DATA_WAL",
 		16: "WARNING_KIND_AUDIT_ARCHIVE",
 		17: "WARNING_KIND_TLS_CHANGED",
+		18: "WARNING_KIND_PRODUCT_RESET_CUT_OFF",
 	}
 	WarningKind_value = map[string]int32{
 		"WARNING_KIND_UNSPECIFIED":             0,
@@ -225,6 +229,7 @@ var (
 		"WARNING_KIND_DATA_WAL":                15,
 		"WARNING_KIND_AUDIT_ARCHIVE":           16,
 		"WARNING_KIND_TLS_CHANGED":             17,
+		"WARNING_KIND_PRODUCT_RESET_CUT_OFF":   18,
 	}
 )
 
@@ -1957,7 +1962,7 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"Protection\x12\x1a\n" +
 	"\x16PROTECTION_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fPROTECTION_FULL\x10\x01\x12\x16\n" +
-	"\x12PROTECTION_REDUCED\x10\x02*\xcb\x04\n" +
+	"\x12PROTECTION_REDUCED\x10\x02*\xf3\x04\n" +
 	"\vWarningKind\x12\x1c\n" +
 	"\x18WARNING_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15WARNING_KIND_EXPOSURE\x10\x01\x12#\n" +
@@ -1977,7 +1982,8 @@ const file_sneakers_appliance_osadmin_v1_status_proto_rawDesc = "" +
 	"\x18WARNING_KIND_DISK_GROWTH\x10\x0e\x12\x19\n" +
 	"\x15WARNING_KIND_DATA_WAL\x10\x0f\x12\x1e\n" +
 	"\x1aWARNING_KIND_AUDIT_ARCHIVE\x10\x10\x12\x1c\n" +
-	"\x18WARNING_KIND_TLS_CHANGED\x10\x112\xe9\x05\n" +
+	"\x18WARNING_KIND_TLS_CHANGED\x10\x11\x12&\n" +
+	"\"WARNING_KIND_PRODUCT_RESET_CUT_OFF\x10\x122\xe9\x05\n" +
 	"\rStatusService\x12y\n" +
 	"\tGetStatus\x12/.sneakers.appliance.osadmin.v1.GetStatusRequest\x1a0.sneakers.appliance.osadmin.v1.GetStatusResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
 	"\rSetSecureBoot\x123.sneakers.appliance.osadmin.v1.SetSecureBootRequest\x1a4.sneakers.appliance.osadmin.v1.SetSecureBootResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16status.secure-boot.set\x12v\n" +

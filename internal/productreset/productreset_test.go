@@ -174,7 +174,7 @@ func newFixture(t *testing.T) *fixture {
 // own stacks and the system namespaces stay.
 func TestTheClusterStepQuiescesThenRemovesTheProductsObjects(t *testing.T) {
 	f := newFixture(t)
-	n, err := f.r.Cluster(context.Background())
+	n, err := f.r.Cluster(context.Background(), func() error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestTheClusterStepQuiescesThenRemovesTheProductsObjects(t *testing.T) {
 func TestTheClusterStepNeedsTheAPI(t *testing.T) {
 	f := newFixture(t)
 	f.k.down = true
-	_, err := f.r.Cluster(context.Background())
+	_, err := f.r.Cluster(context.Background(), func() error { return nil })
 	if !codes.Is(err, codes.ProductReset) || !strings.Contains(codes.Describe(err), "k0s") {
 		t.Fatalf("want PRODUCT_RESET naming k0s, got %v", err)
 	}
@@ -233,7 +233,7 @@ func TestTheClusterStepNeedsTheAPI(t *testing.T) {
 func TestAFailedDeleteSaysWhy(t *testing.T) {
 	f := newFixture(t)
 	f.k.failDelete = true
-	_, err := f.r.Cluster(context.Background())
+	_, err := f.r.Cluster(context.Background(), func() error { return nil })
 	if !codes.Is(err, codes.ProductReset) || !strings.Contains(codes.Describe(err), "timed out") {
 		t.Fatalf("got %v", err)
 	}
@@ -243,7 +243,7 @@ func TestAFailedDeleteSaysWhy(t *testing.T) {
 func TestAFailedQuiesceRemovesNothing(t *testing.T) {
 	f := newFixture(t)
 	f.r.Quiesce = func(context.Context) error { return errors.New("2 pods still stopping") }
-	_, err := f.r.Cluster(context.Background())
+	_, err := f.r.Cluster(context.Background(), func() error { return nil })
 	if !codes.Is(err, codes.ProductReset) || !strings.Contains(codes.Describe(err), "2 pods still stopping") {
 		t.Fatalf("got %v", err)
 	}
@@ -287,5 +287,28 @@ func TestTheDataStepRemovesTheProductsDataAndRecords(t *testing.T) {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("%s went: %v", p, err)
 		}
+	}
+}
+
+// Nothing leaves k0s until the reset has said so on the disk, and only
+// once the product has stopped: a reset cut off before that lost nothing.
+func TestClusterSaysSoBeforeItRemovesAnything(t *testing.T) {
+	f := newFixture(t)
+	refused := errors.New("the record didn't write")
+	_, err := f.r.Cluster(context.Background(), func() error {
+		if !f.k.quiesced {
+			t.Error("told before the product stopped")
+		}
+		return refused
+	})
+	if !errors.Is(err, refused) {
+		t.Fatalf("err %v", err)
+	}
+	ents, rerr := os.ReadDir(f.r.Manifests)
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if len(ents) == 0 {
+		t.Fatal("a stack went although the record didn't write")
 	}
 }

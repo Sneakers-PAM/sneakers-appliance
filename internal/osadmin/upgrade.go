@@ -218,6 +218,10 @@ func (s *Server) applyDone() {
 // still refuses. Setting maintenance before the check means none can start
 // in between. It returns the id of the session the override ended.
 func (s *Server) beginMaintenance(ctx context.Context, what, kind string, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, error) {
+	if note := s.resetCutOffNote(); note != "" && kind == edgefall.KindProductApply && what != resetWhat {
+		s.o.Logger.Info("osadmin: refused; a cut-off product reset holds the product", log.F("what", what), log.F("by", by.Actor))
+		return "", codes.New(codes.ProductReset, "%s", note)
+	}
 	s.upgrades.mu.Lock()
 	if s.upgrades.applying {
 		s.upgrades.mu.Unlock()

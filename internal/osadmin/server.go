@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
@@ -112,6 +113,10 @@ type Options struct {
 	// (boxstate.File on the box), which GetPhase's state reports; empty
 	// reads none.
 	BoxStateFile string
+	// ResetRunningFile says a product reset is running, for k0s-interim;
+	// it's in the run directory, so no boot starts with it (see
+	// productreset.RunningFile).
+	ResetRunningFile string
 	// Cert describes :8443's own certificate, for Status. When CertDir is
 	// set, the certificate there is read instead, on every Status.
 	Cert    CertInfo
@@ -204,7 +209,9 @@ type Server struct {
 	checks   checks
 	progress progress
 	ready    readiness
-	boxPush  boxPush
+	// resetting: a product reset runs in this process.
+	resetting atomic.Bool
+	boxPush   boxPush
 	// revertMu guards revertAudited, the last network change whose revert
 	// is in the audit, so a timer and a late check don't write it twice.
 	revertMu      sync.Mutex

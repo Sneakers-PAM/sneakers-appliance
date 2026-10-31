@@ -300,3 +300,24 @@ func TestTheImageLinksSurviveTwoRunsAtOnce(t *testing.T) {
 		}
 	}
 }
+
+// The product doesn't start on a product reset's record, unless a reset
+// runs right now: that one started k0s itself, to remove the product's
+// objects.
+func TestPrepareRefusesAResetThatWasCutOff(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "var/lib/sneakers/product")
+	productSlot(t, filepath.Join(dir, "slot-a"), "0.1.0", 1, false)
+	if err := os.Symlink(filepath.Join(dir, "slot-a"), filepath.Join(dir, "current")); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "var/lib/sneakers/platform/product-reset.json"), `{"step":"data"}`, 0o600)
+	out, err := prepare(t, root)
+	if err == nil || !strings.Contains(out, "a product reset was cut off") {
+		t.Fatalf("prepare: %v\n%s", err, out)
+	}
+	writeFile(t, filepath.Join(root, "run/sneakers/product-reset-running"), "", 0o600)
+	if out, err := prepare(t, root); err != nil && strings.Contains(out, "a product reset was cut off") {
+		t.Fatalf("prepare while a reset runs: %v\n%s", err, out)
+	}
+}
