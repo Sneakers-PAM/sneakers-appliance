@@ -286,13 +286,13 @@ order, each on what the one before left):
 | `07-add-ons` | the add-on modules' on and off switches: stubs, skipped with the reason, until the add-ons land |
 
 Every journey keeps a Playwright trace and a screenshot after each step (the authenticator keys,
-QR codes and setup token are masked in the screenshots). They are uploaded with the HTML report
-and the box's serial consoles as the run's `browser-journeys` artifact, kept for 7 days, whether
-the job passes or fails; a failing step fails the job. The traces hold the run's throwaway
-credentials, made in the run for a box that only existed inside it; nothing built and no key is
-uploaded.
+QR codes and setup token are masked in the screenshots). A failing step fails the job, and only
+then are they uploaded with the HTML report and the box's serial consoles as the run's
+`browser-journeys` artifact, kept for 1 day. A passing run uploads nothing; its step summary lists
+the journeys. The traces hold the run's throwaway credentials, made in the run for a box that only
+existed inside it; nothing built and no key is uploaded.
 
-To read them:
+To read a failed run's artifact, within the day:
 
 1. Download the artifact: `gh run download <run id> -R Sneakers-PAM/sneakers-appliance -n browser-journeys -D journeys`.
 2. Open the report: `npx playwright show-report journeys/playwright-report`. Each journey lists its steps, with the screenshots attached in step order.

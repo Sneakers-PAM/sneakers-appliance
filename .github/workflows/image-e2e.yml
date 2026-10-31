@@ -10,8 +10,9 @@ name: Image E2E
 # nightly and on demand. Neither is a required check.
 # The browser journeys job (docs/testing.md#the-browser-journeys) builds its
 # own lab release with the :8443 pages and the real product, boots one box
-# and walks the sign-off journeys in headless Chromium; it uploads their
-# report, traces and screenshots, and the box's serial consoles, for 7 days.
+# and walks the sign-off journeys in headless Chromium; when a journey fails
+# it uploads their report, traces and screenshots, and the box's serial
+# consoles, for 1 day.
 on:
   pull_request:
     branches: [main]
@@ -359,10 +360,11 @@ jobs:
       # The Playwright report (npx playwright show-report), a trace and a
       # screenshot of each step for every journey, the box's serial consoles
       # and the build logs, in one folder. The traces hold the run's
-      # throwaway credentials for a box that only existed in this run;
-      # nothing built and no key is uploaded.
+      # throwaway credentials for a box that only existed in this run, so
+      # they go up only when the job fails, and only for a day; nothing built
+      # and no key is uploaded.
       - name: Gather the journeys' report, traces and logs
-        if: always()
+        if: failure()
         run: |
           dir="$RUNNER_TEMP/browser-journeys"
           mkdir -p "$dir/build"
@@ -372,13 +374,13 @@ jobs:
           if [ -d "$RUNNER_TEMP/journeys-logs" ]; then cp -r "$RUNNER_TEMP/journeys-logs" "$dir/logs"; fi
           cp "$RUNNER_TEMP/journeys-build.log" "$RUNNER_TEMP"/journeys/*.log "$dir/build/" 2>/dev/null || true
       - name: Upload the journeys' report, traces and logs
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: browser-journeys
           path: ${{ runner.temp }}/browser-journeys
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
       - name: Stop the mail catcher
         if: always()
         run: WORK="$RUNNER_TEMP/mail" bash build/journeys/mail.sh down
