@@ -217,7 +217,7 @@ type Console struct {
 // NewConsole is a backend with a setup code waiting.
 func NewConsole() *Console {
 	return &Console{changed: make(chan struct{}, 1), info: sources.ConsoleInfo{
-		SetupCode: "7PQK-NMS9-XD2A-4KJW", CodeExpires: time.Date(2026, 10, 7, 15, 3, 0, 0, time.UTC), AttemptsLeft: 5,
+		SetupCode: "7PXK-NMS9-XD2A-4KJW", CodeExpires: time.Date(2026, 10, 7, 15, 3, 0, 0, time.UTC), AttemptsLeft: 5,
 		URL: "https://192.0.2.10:8443", URLs: []string{"https://192.0.2.10:8443"}, SetupSteps: 6,
 		CertFingerprint: "7C2E91AB4F06D3E8B15A6C902E7F0A4DE38B5C219FD076A4C1E90B3F8D62A7C5",
 	}}
@@ -251,7 +251,7 @@ func (c *Console) Watch(context.Context) {}
 func (c *Console) ResetSetupCode(context.Context) error {
 	c.mu.Lock()
 	c.Resets++
-	c.info.State, c.info.SetupCode, c.info.SetupSource, c.info.CodeLocked = sources.SetupNotStarted, "4KJW-XD2A-7PQK-NMS9", "", false
+	c.info.State, c.info.SetupCode, c.info.SetupSource, c.info.CodeLocked = sources.SetupNotStarted, "4KJW-XD2A-7PXK-NMS9", "", false
 	c.mu.Unlock()
 	return nil
 }
@@ -264,7 +264,7 @@ func (c *Console) BeginRecoverAccess(context.Context) (sources.RecoverCode, erro
 		return sources.RecoverCode{}, c.RecoverErr
 	}
 	c.Recovers++
-	rc := sources.RecoverCode{Code: "6HDW-2RTE-KM8Q-0VXA", Expires: time.Date(2026, 10, 7, 15, 3, 0, 0, time.UTC), AttemptsLeft: 5, URL: "https://192.0.2.10:8443/recover"}
+	rc := sources.RecoverCode{Code: "6HDW-2RTE-KM8R-3VXA", Expires: time.Date(2026, 10, 7, 15, 3, 0, 0, time.UTC), AttemptsLeft: 5, URL: "https://192.0.2.10:8443/recover"}
 	c.info.Recover = &rc
 	return rc, nil
 }

@@ -105,8 +105,8 @@ func TestDashboardScreens(t *testing.T) {
 	cached.Status.Err, cached.Status.Saved = errors.New("connection refused"), now.Add(-7*time.Minute)
 	nothing := dashboard.Data{Status: sources.StatusView{Err: errors.New("connection refused")}, Slot: "B"}
 	recovering := data(status())
-	recovering.Recover = &sources.RecoverCode{Code: "6HDW-2RTE-KM8Q-0VXA", Expires: now.Add(time.Hour)}
-	code := sources.RecoverCode{Code: "6HDW-2RTE-KM8Q-0VXA", Expires: now.Add(time.Hour), AttemptsLeft: 5, URL: "https://192.0.2.10:8443/recover"}
+	recovering.Recover = &sources.RecoverCode{Code: "6HDW-2RTE-KM8R-3VXA", Expires: now.Add(time.Hour)}
+	code := sources.RecoverCode{Code: "6HDW-2RTE-KM8R-3VXA", Expires: now.Add(time.Hour), AttemptsLeft: 5, URL: "https://192.0.2.10:8443/recover"}
 	inUse := code
 	inUse.InUse, inUse.Source = true, "192.0.2.50"
 	hello := status()
@@ -415,7 +415,7 @@ func TestRecoverAccessShowsACode(t *testing.T) {
 	d.Type(t, "r")
 	d.Expect(t, "Use this only when no admin can sign in.")
 	d.Type(t, "2")
-	d.Expect(t, "6HDW-2RTE-KM8Q-0VXA")
+	d.Expect(t, "6HDW-2RTE-KM8R-3VXA")
 	d.Expect(t, "https://192.0.2.10:8443/recover")
 	d.Type(t, "c")
 	d.Expect(t, "all services running")
@@ -505,7 +505,7 @@ func TestRecoverAccessIgnoresCursorKeysAndGoesBack(t *testing.T) {
 		t.Fatalf("a cursor key was taken for a choice:\n%s", d.Last())
 	}
 	d.Type(t, "2")
-	d.Expect(t, "6HDW-2RTE-KM8Q-0VXA")
+	d.Expect(t, "6HDW-2RTE-KM8R-3VXA")
 	d.Type(t, "")
 	d.Expect(t, "all services running")
 	for _, back := range []string{"", "\x1b", "0", "b", "back"} {
@@ -543,7 +543,7 @@ func TestRecoverSubScreensGoBack(t *testing.T) {
 	d.Type(t, "r")
 	d.Expect(t, "Use this only when no admin can sign in.")
 	d.Type(t, "2")
-	d.Expect(t, "6HDW-2RTE-KM8Q-0VXA")
+	d.Expect(t, "6HDW-2RTE-KM8R-3VXA")
 	d.Type(t, "\x1b[D")
 	d.Type(t, "\x1b")
 	d.Expect(t, "all services running")

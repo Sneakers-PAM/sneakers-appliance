@@ -175,9 +175,13 @@ No login reaches uid 0: the root shell runs under accessd through the challenge 
 ## The :8443 setup page
 
 On first boot :8443 runs from the start and the console shows its address, its certificate
-fingerprint and a one-time **setup code**: 16 Crockford base32 characters (`7PQK-NMS9-4XTB-2DWE`;
-no I, L, O or U; case, dashes and spaces don't matter; `O` reads as `0`, `I` and `L` as `1`). It
-works once, for 60 minutes (then a new one is shown), and only allow-listed sources may try. Five
+fingerprint and a one-time **setup code**: 16 characters (`7PXK-NMS9-4XTB-2DWE`). Every code the box
+makes comes from the same 28 characters, `23456789ABCDEFHJKMNPRSTVWXYZ`, which leave out `0`, `1`,
+`G`, `I`, `L`, `O`, `Q` and `U` because they read like one another on a console. That's about 76.9
+bits at 16 characters and about 38.5 at 8. Case, dashes and spaces don't matter. Codes made before
+this alphabet can still be live after an update, so a setup code, a Recover access code and an
+invitation are read the old way too: the extra characters are accepted, `O` reads as `0`, and `I`
+and `L` as `1`. Root-shell challenges and codes take only the 28. The setup code works once, for 60 minutes (then a new one is shown), and only allow-listed sources may try. Five
 wrong tries lock it: no code works until the console asks for a new one. accessd alone holds it,
 sealed through KeyCustody (`setup-code`) so a restart shows the same code; it is never written to a
 plain file or a log, and no :8443 call returns it: only the console's info stream carries it. It is

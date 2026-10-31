@@ -4,6 +4,7 @@
 package onetime_test
 
 import (
+	"encoding/json"
 	"errors"
 	"regexp"
 	"strings"
@@ -47,18 +48,15 @@ func newSealedCodes(t *testing.T) (*onetime.Codes, *clock.Fake, *int, *fakeSeale
 	return onetime.NewCodes(clk, func() { changes++ }, sealer, nil), clk, &changes, sealer
 }
 
-var setupCodeRE = regexp.MustCompile(`^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){3}$`)
+var setupCodeRE = regexp.MustCompile(`^[2-9A-FHJKMNPRSTV-Z]{4}(-[2-9A-FHJKMNPRSTV-Z]{4}){3}$`)
 
-func TestTheSetupCodeIsSixteenCrockfordCharacters(t *testing.T) {
+func TestTheSetupCodeIsSixteenCharactersOfTheAlphabet(t *testing.T) {
 	seen := map[string]bool{}
 	for range 200 {
 		c, _, _ := newCodes(t)
 		sc := c.Setup().Value
 		if !setupCodeRE.MatchString(sc) {
-			t.Fatalf("setup code %q isn't XXXX-XXXX-XXXX-XXXX in Crockford base32", sc)
-		}
-		if strings.ContainsAny(sc, "ILOU") {
-			t.Fatalf("setup code %q has I, L, O or U", sc)
+			t.Fatalf("setup code %q isn't XXXX-XXXX-XXXX-XXXX in the code alphabet", sc)
 		}
 		seen[sc] = true
 	}
@@ -67,12 +65,11 @@ func TestTheSetupCodeIsSixteenCrockfordCharacters(t *testing.T) {
 	}
 }
 
-func TestTheSetupCodeIgnoresCaseAndDashesAndReadsLookAlikes(t *testing.T) {
+func TestTheSetupCodeIgnoresCaseAndDashes(t *testing.T) {
 	for _, typed := range []func(string) string{
 		strings.ToLower,
 		func(s string) string { return strings.ReplaceAll(s, "-", "") },
-		func(s string) string { return strings.ReplaceAll(strings.ReplaceAll(s, "0", "o"), "1", "l") },
-		func(s string) string { return strings.ReplaceAll(s, "1", "I") },
+		func(s string) string { return strings.ReplaceAll(s, "-", " ") },
 	} {
 		c, _, _ := newCodes(t)
 		sc := c.Setup().Value
@@ -226,6 +223,38 @@ func TestTheRecoverAccessCodeFollowsTheSetupCodesRules(t *testing.T) {
 	}
 	if strings.Contains(string(sealer.items[onetime.SealedName]), r.Value) {
 		t.Fatal("a used Recover access code is still sealed")
+	}
+}
+
+// A code sealed by an earlier release survives the update's reboot, so it
+// must still work, O and I typed for its 0 and 1 included.
+func TestCodesSealedBeforeTheAlphabetChangedStillWork(t *testing.T) {
+	const old = "G0Q1-7PQK-G0Q1-7PQK"
+	for _, typed := range []string{old, "goq1-7pqk-g0qi-7pqk"} {
+		clk := clock.NewFake()
+		sealer := &fakeSealer{items: map[string][]byte{}}
+		b, err := json.Marshal(map[string]any{"value": old, "expires": clk.Now().Add(time.Hour), "attemptsLeft": onetime.MaxAttempts})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sealer.items[onetime.SealedName] = b
+		c := onetime.NewCodes(clk, nil, sealer, nil)
+		if got, err := c.Redeem(typed, "192.0.2.50"); err != nil || got.Kind != onetime.KindSetup {
+			t.Fatalf("the sealed setup code typed as %q: %+v %v", typed, got, err)
+		}
+
+		sealer = &fakeSealer{items: map[string][]byte{}}
+		b, err = json.Marshal(map[string]any{"destroyed": true, "recover": map[string]any{
+			"Kind": onetime.KindRecover, "Value": old, "Expires": clk.Now().Add(time.Hour), "AttemptsLeft": onetime.MaxAttempts,
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sealer.items[onetime.SealedName] = b
+		c = onetime.NewCodes(clk, nil, sealer, nil)
+		if got, err := c.Redeem(typed, "192.0.2.50"); err != nil || got.Kind != onetime.KindRecover {
+			t.Fatalf("the sealed Recover access code typed as %q: %+v %v", typed, got, err)
+		}
 	}
 }
 

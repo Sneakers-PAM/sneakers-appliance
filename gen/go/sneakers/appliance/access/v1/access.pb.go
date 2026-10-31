@@ -2387,7 +2387,7 @@ type Enrolment struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Open  bool                   `protobuf:"varint,1,opt,name=open,proto3" json:"open,omitempty"`
 	Admin string                 `protobuf:"bytes,2,opt,name=admin,proto3" json:"admin,omitempty"`
-	// code is XXXX-XXXX (Crockford base32).
+	// code is XXXX-XXXX.
 	Code   string                 `protobuf:"bytes,3,opt,name=code,proto3" json:"code,omitempty"`
 	Opened *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=opened,proto3" json:"opened,omitempty"`
 	// idle_until is when the window closes unless something happens.

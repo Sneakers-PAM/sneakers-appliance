@@ -14,7 +14,7 @@
 \e[34m|\e[0m   \e[2mCertificate fingerprint\e[0m                                    \e[34m|\e[0m
 \e[34m|\e[0m   \e[2m   shown once the setup page is up\e[0m                         \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
-\e[34m|\e[0m   \e[1;37mSetup code  \e[0m\e[1;37m7PQK-NMS9-XD2A-4KJW\e[0m\e[2m   expires in 59 min\e[0m        \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mSetup code  \e[0m\e[1;37m7PXK-NMS9-XD2A-4KJW\e[0m\e[2m   expires in 59 min\e[0m        \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m
 \e[34m|\e[0m   Protection  \e[1;32mFULL\e[0m\e[2m  Secure Boot on, key in the TPM\e[0m           \e[34m|\e[0m
 \e[34m|\e[0m                                                              \e[34m|\e[0m

@@ -348,11 +348,12 @@ it's ready.
 A root operator ([access.md](access.md#roles-the-roster-and-step-up)) opens a root shell from the
 closed shell:
 
-1. `shell` asks accessd (`ElevationService.BeginRootShell`) for a challenge: 16 Crockford characters,
+1. `shell` asks accessd (`ElevationService.BeginRootShell`) for a challenge: 16 characters of the
+   [code alphabet](access.md#the-8443-setup-page), about 76.9 bits,
    shown with the time it is good until (the policy's minutes, 10 by default).
 2. On :8443, signed in with a fresh step-up, the admin types the challenge
-   (`RootShellService.IssueRootShellCode`) and gets an 8-character code: the first 40 bits of the root
-   key's ed25519 signature over the challenge, the admin, the SSH source and the expiry. It is bound
+   (`RootShellService.IssueRootShellCode`) and gets an 8-character code, about 38.5 bits: the start of the
+   root key's ed25519 signature over the challenge, the admin, the SSH source and the expiry. It is bound
    to that login and works once.
 3. The admin types the code into the SSH session (`OpenRootShell`); it isn't echoed. Three wrong codes close the
    challenge, and they count toward the account's lockout. A right one gives a one-minute ticket.
