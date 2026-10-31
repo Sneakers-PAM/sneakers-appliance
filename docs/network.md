@@ -298,8 +298,11 @@ the product its own name.
   changes, accessd applies the product again with the new FQDN once the change is kept (confirmed,
   or a DHCP name), under the same maintenance gate as an update; the Updates history shows it as an
   apply of the same version with `host name <fqdn>`, audited as `upgrade.apply` with the surface
-  `hostname`. A change that waits for its confirm doesn't reach the product, and a reverted one
-  never does. The Sneakers sign-in (Kratos's URLs and return URLs, the WebAuthn relying party),
+  `hostname`. It takes the product down and brings it back through the phases, with no data
+  change; no workload starts until k0s has applied the new name to the ConfigMaps that carry it
+  ([upgrades.md](upgrades.md#the-phases)). A change that waits for its confirm doesn't reach the
+  product, and a reverted one never does. Clearing the host name is a change too: the FQDN goes
+  to DHCP's name, then the first management address. The Sneakers sign-in (Kratos's URLs and return URLs, the WebAuthn relying party),
   the SSH websocket, and the MCP, OAuth and Hydra addresses all follow it.
 - **The OAuth issuer** is `https://<fqdn>/oauth`, on the same name and certificate as everything
   else on 443; no `hydra.<fqdn>` name is needed. The edge routes Hydra's own paths under `/oauth/`

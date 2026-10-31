@@ -222,6 +222,30 @@ func TestAFailedStepWarnsForADay(t *testing.T) {
 	}
 }
 
+// With no platformd, the Product line comes from Status: what a cut-off
+// reset is doing, and nothing asked of an owner while the box finishes it.
+func TestTheProductLineSaysWhatACutOffResetIsDoing(t *testing.T) {
+	line := func(p *osadminv1.ProductSlots) string {
+		st := status()
+		st.Product = p
+		d := data(st)
+		d.Platform, d.PlatformErr = sources.PlatformState{}, sources.NotInstalled{What: "The platform"}
+		for _, l := range dashboard.Page(chrome(full, keycustody.ModeTPM), d, now).Body {
+			if strings.HasPrefix(strings.TrimSpace(l.String()), "Product") {
+				return l.String()
+			}
+		}
+		t.Fatal("no Product line")
+		return ""
+	}
+	if got := line(&osadminv1.ProductSlots{ResetFinishing: true, ResetNote: "finishing"}); !strings.Contains(got, "RESETTING") || !strings.Contains(got, "finishing a reset") || strings.Contains(got, "SSH") {
+		t.Fatalf("finishing: %s", got)
+	}
+	if got := line(&osadminv1.ProductSlots{ResetNote: "held"}); !strings.Contains(got, "HELD") || !strings.Contains(got, "over SSH") {
+		t.Fatalf("held: %s", got)
+	}
+}
+
 func TestSlot(t *testing.T) {
 	for in, want := range map[string]string{"sneakers-root-a": "A", "sneakers-root-b": "B", "install": "the install medium", "": "unknown"} {
 		if got := dashboard.Slot(in); got != want {

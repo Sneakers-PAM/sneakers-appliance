@@ -4,10 +4,12 @@
 package productup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 )
@@ -145,6 +150,11 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 	} else if len(missing) > 0 {
 		return Result{Step: StepCluster, Detail: "Waiting for " + strings.Join(missing, ", ")}, nil
 	}
+	if stale, err := p.staleBoxValues(ctx, always); err != nil {
+		return Result{}, err
+	} else if stale != "" {
+		return Result{Step: StepCluster, Detail: "Waiting for k0s to apply " + stale}, nil
+	}
 	// The cluster's own workloads (k0s's stacks: CoreDNS, kube-router), and
 	// what the always-on stacks declare (the edge); never a product
 	// workload, which only its phase starts.
@@ -207,6 +217,11 @@ func (p *Probe) phase(ctx context.Context, ph productspec.Phase, on []string, li
 		} else if len(missing) > 0 {
 			return at("Applying " + st), false, nil
 		}
+		if stale, err := p.staleBoxValues(ctx, []string{st}); err != nil {
+			return Result{}, false, err
+		} else if stale != "" {
+			return at("Applying " + stale), false, nil
+		}
 	}
 	want, err := p.wantedWorkloads(stacks)
 	if err != nil {
@@ -245,6 +260,108 @@ func (p *Probe) phase(ctx context.Context, ph productspec.Phase, on []string, li
 		return at(fmt.Sprintf("%d old %s still stopping", stopping, plural(stopping, "pod", "pods"))), false, nil
 	}
 	return Result{}, true, nil
+}
+
+// configValue is a ConfigMap key the box's values go into, with what it
+// holds once they're in.
+type configValue struct {
+	stack, configMap, key, want string
+}
+
+// boxConfig are the ConfigMap keys of the stacks a box value goes into. A
+// stack's workloads read their host-dependent settings from these, and the
+// bundle's checksum annotations are of the placeholder, so a changed value
+// leaves every pod template as it was.
+func (p *Probe) boxConfig(stacks []string) ([]configValue, error) {
+	kernel, _ := os.Hostname()
+	values := boxvalues.Table(p.Slot, boxvalues.Read(p.SwitchDir), kernel)
+	if len(values) == 0 {
+		return nil, nil
+	}
+	var out []configValue
+	for _, st := range stacks {
+		files, err := filepath.Glob(filepath.Join(p.Slot, "manifests", st, "*.y*ml"))
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			b, err := os.ReadFile(f) // #nosec G304 -- a stack of the installed slot
+			if err != nil {
+				return nil, err
+			}
+			dec := yaml.NewDecoder(bytes.NewReader(b))
+			for {
+				var doc struct {
+					Kind     string `yaml:"kind"`
+					Metadata struct {
+						Namespace string `yaml:"namespace"`
+						Name      string `yaml:"name"`
+					} `yaml:"metadata"`
+					Data map[string]string `yaml:"data"`
+				}
+				err := dec.Decode(&doc)
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				if err != nil {
+					return nil, fmt.Errorf("the stack %s doesn't read: %w", st, err)
+				}
+				if doc.Kind != "ConfigMap" {
+					continue
+				}
+				ns := doc.Metadata.Namespace
+				if ns == "" {
+					ns = "default"
+				}
+				for k, v := range doc.Data {
+					if w := string(boxvalues.Substitute([]byte(v), values)); w != v {
+						out = append(out, configValue{stack: st, configMap: ns + "/" + doc.Metadata.Name, key: k, want: w})
+					}
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+// staleBoxValues answers the first of the stacks whose ConfigMaps don't
+// hold the box's values yet, or "". On a restart at the same version every
+// object of a stack is still there from the run before and every template
+// matches, so neither stacks nor the template check can tell that k0s
+// hasn't applied the new values, and a workload started now would read the
+// old ones for as long as it runs. Only keys a box value goes into count:
+// k0s applies the rest, and something else writing to one holds nothing.
+func (p *Probe) staleBoxValues(ctx context.Context, stacks []string) (string, error) {
+	want, err := p.boxConfig(stacks)
+	if err != nil || len(want) == 0 {
+		return "", err
+	}
+	out, err := p.kubectl(ctx, "get", "configmaps", "--all-namespaces", "-o", "json")
+	if err != nil {
+		return "", err
+	}
+	var l struct {
+		Items []struct {
+			Metadata struct {
+				Namespace string `json:"namespace"`
+				Name      string `json:"name"`
+			} `json:"metadata"`
+			Data map[string]string `json:"data"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(out, &l); err != nil {
+		return "", fmt.Errorf("the ConfigMap list doesn't parse: %w", err)
+	}
+	live := map[string]map[string]string{}
+	for _, it := range l.Items {
+		live[it.Metadata.Namespace+"/"+it.Metadata.Name] = it.Data
+	}
+	for _, v := range want {
+		if live[v.configMap][v.key] != v.want {
+			return v.stack, nil
+		}
+	}
+	return "", nil
 }
 
 // hold keeps the phases after an open import's phase stopped: their

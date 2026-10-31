@@ -128,7 +128,7 @@ has switched:
 | `k0s` | Starting k0s | the Kubernetes API answers |
 | `images` | Importing the images | containerd lists every image in the bundle's `images/` |
 | `quiesce` | Stopping what was left running | no workload of the product runs: the box scales every one an earlier run left running to 0 and waits for its pods to go: every phased one, and every one without phase labels in any of the slot's stacks (switch-gated ones included) that the always-on stacks don't declare |
-| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's is applied, and k0s's own workloads (CoreDNS, kube-router) and the ones the always-on stacks declare (the edge) have rolled out; never a product workload, which only its phase starts |
+| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's is applied, with the box's values in its ConfigMaps, and k0s's own workloads (CoreDNS, kube-router) and the ones the always-on stacks declare (the edge) have rolled out; never a product workload, which only its phase starts |
 | `phase:data` | Starting the database and the cache | PostgreSQL and Valkey |
 | `phase:identity` | Starting sign-in, identity and the vault | Kratos (with its migration), the identity service and the vault, whose root key preflight runs in the vault itself, so it's Ready only once the preflight passed |
 | `phase:services` | Starting the services | workflow, audit, notify, connector and the SSH broker |
@@ -140,8 +140,12 @@ has switched:
   slot's `phase-stacks`, and the `phase-placed` list in `/var/lib/sneakers/platform` of what the
   loop placed), so k0s never starts the whole product at once. Once the phase before is Ready,
   the loop puts the phase's stacks in front of k0s, with the box's values, a switch's stack first
-  and each applied before the next. It waits until every workload in them runs the slot's pod
-  template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
+  and each applied before the next. Applied means k0s has written the stack's objects, and the
+  ConfigMap keys a box value goes into hold it: at the same version the objects are all still
+  there from the run before and no pod template changes (a chart's checksum annotations are of
+  the placeholder), so a new host name shows only in those keys, and a workload started sooner
+  would read the old name until it next restarts. It waits until every workload in them runs the
+  slot's pod template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
   hold it back), and waits until each has rolled out and every pod of the phase is Ready. A
   workload of the phase that another stack owns (an update from a bundle without phases finds
   them all in its one stack, and k0s's applier leaves an object another stack owns) is deleted
@@ -699,9 +703,31 @@ slot a later stage may replace. The images k0s imported into containerd stay in 
 the disk cleanup removes those neither slot needs, with k0s running again.
 
 **When a step fails** the reset stops there and answers `PRODUCT_RESET` with the reason
-(`detail.step` in the audit entry). Until the slot is taken away (step 6) the product is still
-installed, and running `sneakers reset` again goes through it from the start: the data goes before
-the slot, so a reset never leaves data behind a product that's no longer installed. The
+(`detail.step` in the audit entry). A reset that hadn't removed anything leaves the product as it was. Past that,
+the product is held, and `sneakers reset` again goes on from that step: the data goes
+before the slot, so a reset never leaves data behind a product that's no longer installed. The
 history on Updates lists each reset (`reset (product)`) with its outcome, and the OS audit log
-has it as `product.reset`, with the counts: the namespaces, the objects and the bytes removed.
+has it as `product.reset`, twice: `event=started` before anything goes, and `event=finished`
+with the counts: the namespaces, the objects and the bytes removed.
+
+**When a reset is cut off** (a reboot, a power cut or a crash; a dropped SSH session doesn't stop
+it) the box knows, because the reset writes its record, `platform/product-reset.json` on the state
+volume, before it removes anything, and moves it on before each step. `k0s-interim` refuses to
+start k0s on that record, so the product never comes back empty with a new vault key and new box
+secrets. At its next start the box settles it by how far the reset got:
+
+| Cut off | What the box does |
+| --- | --- |
+| While the product was stopping | Nothing was removed. The reset is dropped, the product starts again, and the history and the audit log (`event=abandoned`) say so. Run it again to reset. |
+| With its objects, data or slot going | The product can't come back, so the only way on is to finish. The box finishes it by itself, from the step it was cut off at, without waiting for an owner: it's in maintenance meanwhile, Status (a warning), Updates and the console say so, and `sneakers reset` answers `UPGRADE_BUSY` until it's done. The audit log has it as the actor `system`, with `detail.started_by`, `event=started` and `event=finished`. |
+| With the slot gone | Only the record was left. The box finishes it (`event=finished`). |
+
+If the box can't finish it, the product stays stopped, the box says failed, Status, Updates and the
+console say why, and a product update is refused (`PRODUCT_RESET`). The box tries again at its next
+start, and `sneakers reset`, confirmed as usual, works at any time: it goes on from the step that
+stopped.
+
+A record the box can't read doesn't say how far a reset got, so the box removes nothing on it: the
+product is held the same way, until an owner runs `sneakers reset`. The box doesn't try again by
+itself.
 

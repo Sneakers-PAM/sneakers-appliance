@@ -62,8 +62,9 @@ func (h *status) GetPhase(ctx context.Context, _ *connect.Request[osadminv1.GetP
 // holds over everything else. A product apply or revert stays updating
 // until the product is ready, and after k0s starts the box stays starting
 // until the product is ready: the edge keeps every product request on the
-// box-state page until then. A product that failed to come up says
-// failed, and one an import holds says maintenance.
+// box-state page until then. A product that failed to come up, or that a
+// cut-off reset holds, says failed, and one an import holds says
+// maintenance.
 func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 	announced := boxstate.State("")
 	if s.o.BoxStateFile != "" {
@@ -74,6 +75,8 @@ func (s *Server) boxState(phase string, productRunning bool) boxstate.State {
 		return boxstate.Updating
 	case announced != "":
 		return announced
+	case s.resetCutOffNote() != "":
+		return boxstate.Failed
 	case phase != PhaseNormal || !productRunning:
 		s.productReadyNow(productRunning)
 		return boxstate.Starting

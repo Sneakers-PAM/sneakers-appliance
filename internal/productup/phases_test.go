@@ -106,10 +106,14 @@ type fakeCluster struct {
 	// scaledWhile records, at each scale to 0, the workloads whose pods
 	// were still stopping.
 	scaledWhile map[string][]string
+	// configMaps are the ConfigMaps k0s has applied, "<namespace>/<name>",
+	// with the box's values (fqdn) in them.
+	configMaps map[string]map[string]string
+	fqdn       string
 }
 
 func newCluster() *fakeCluster {
-	return &fakeCluster{applied: map[string]bool{}, workloads: map[string]*live{}, stopping: map[string]int{}, asked: map[string]int{}, scaledWhile: map[string][]string{}}
+	return &fakeCluster{applied: map[string]bool{}, workloads: map[string]*live{}, stopping: map[string]int{}, asked: map[string]int{}, scaledWhile: map[string][]string{}, configMaps: map[string]map[string]string{}}
 }
 
 func (c *fakeCluster) add(l *live) { c.workloads[l.key()] = l }
@@ -131,6 +135,9 @@ func (c *fakeCluster) apply(t *testing.T, slot, stack string) {
 	files, _ := filepath.Glob(filepath.Join(slot, "manifests", stack, "*.yaml"))
 	for _, f := range files {
 		b, _ := os.ReadFile(f)
+		if c.fqdn != "" {
+			b = bytes.ReplaceAll(b, []byte(boxPlaceholder), []byte(c.fqdn))
+		}
 		dec := yaml.NewDecoder(bytes.NewReader(b))
 		for {
 			var d map[string]any
@@ -141,6 +148,16 @@ func (c *fakeCluster) apply(t *testing.T, slot, stack string) {
 				break
 			}
 			kind, _ := d["kind"].(string)
+			if kind == "ConfigMap" {
+				md := d["metadata"].(map[string]any)
+				data := map[string]string{}
+				if m, ok := d["data"].(map[string]any); ok {
+					for k, v := range m {
+						data[k] = fmt.Sprint(v)
+					}
+				}
+				c.configMaps[fmt.Sprint(md["namespace"])+"/"+fmt.Sprint(md["name"])] = data
+			}
 			if kind != "Deployment" && kind != "StatefulSet" {
 				took = true
 				continue
@@ -250,6 +267,8 @@ func (c *fakeCluster) run(_ context.Context, _ string, args ...string) ([]byte, 
 		}
 		delete(c.workloads, k)
 		return []byte("deleted"), nil
+	case strings.HasPrefix(line, "get configmaps "):
+		return c.configMapsJSON(), nil
 	case strings.HasPrefix(line, "get pods"):
 		return c.podsJSON(), nil
 	case strings.HasPrefix(line, "get replicasets"):
@@ -258,6 +277,16 @@ func (c *fakeCluster) run(_ context.Context, _ string, args ...string) ([]byte, 
 		return c.workloadsJSON(), nil
 	}
 	return nil, errors.New("unexpected " + line)
+}
+
+func (c *fakeCluster) configMapsJSON() []byte {
+	var items []any
+	for k, data := range c.configMaps {
+		ns, name, _ := strings.Cut(k, "/")
+		items = append(items, map[string]any{"metadata": map[string]any{"namespace": ns, "name": name}, "data": data})
+	}
+	b, _ := json.Marshal(map[string]any{"items": items})
+	return b
 }
 
 func (c *fakeCluster) workloadsJSON() []byte {
@@ -531,6 +560,144 @@ func TestAPhasesSwitchStackGoesFirst(t *testing.T) {
 	c.apply(t, p.Slot, "app-mcp")
 	if r, _ := p.Check(ctx); r.Step != "phase:front" || !slices.Contains(placed(t, manifests), "app-front") {
 		t.Fatalf("%+v placed %v", r, placed(t, manifests))
+	}
+}
+
+// boxPlaceholder stands for the box's FQDN in the slot's stacks.
+const boxPlaceholder = "app.box.invalid" // scrub:allow=fqdn -- the reserved .invalid placeholder, never resolved
+
+// hostNameSlot adds to the phased slot what a host name reaches: the
+// always-on stack's sign-in URLs and the MCP switch's stack's issuer, both
+// in ConfigMaps. The workloads' templates don't change with the name.
+func hostNameSlot(t *testing.T, slot string) {
+	t.Helper()
+	writeSlot(t, slot, map[string]string{
+		"manifests/app/app.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: app, namespace: app}\ndata:\n  OAUTH_PUBLIC_URL: https://" + boxPlaceholder + "\n  LOG_LEVEL: error\n---\n" +
+			"apiVersion: v1\nkind: ConfigMap\nmetadata: {name: kratos-config, namespace: app}\ndata:\n  kratos.yaml: |\n    serve:\n      public:\n        base_url: https://" + boxPlaceholder + "/\n---\n" +
+			"apiVersion: v1\nkind: ConfigMap\nmetadata: {name: other, namespace: app}\ndata:\n  NOTED: by something else\n",
+		"manifests/app-mcp/mcp.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata: {name: app-mcp-switch, namespace: app}\ndata:\n  HYDRA_ISSUER: https://" + boxPlaceholder + "/oauth\n  MCP_RESOURCE_URL: https://" + boxPlaceholder + "/mcp\n---\n" + workloadDoc("Deployment", "app-mcp", "front", "2"),
+		"box-values":                 boxPlaceholder + " box.fqdn\n",
+	})
+}
+
+// A host name change on a running box with the MCP on. The same version
+// comes back with only ConfigMaps changed, so the stacks' objects are all
+// there from the run before and every workload's template already matches:
+// no workload may start until k0s has applied the new values, or it reads
+// the old name for as long as it runs.
+func TestAHostNameChangeReachesTheWorkloadsThroughThePhases(t *testing.T) {
+	const was, now = "box1.sneakers.example.org", "box2.sneakers.example.org"
+	c := newCluster()
+	c.apiUp, c.keepReplicas = true, true
+	p, manifests := phasedProbe(t, c)
+	hostNameSlot(t, p.Slot)
+	if err := os.MkdirAll(p.SwitchDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "switches"), []byte("mcp on\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The run before: every stack applied with the old name, then stopped.
+	c.fqdn = was
+	for _, st := range []string{"app", "edge", "app-data", "app-mcp", "app-front"} {
+		c.apply(t, p.Slot, st)
+	}
+	c.setReady("Deployment edge/edge", true, "")
+	for _, k := range []string{"StatefulSet app/app-db", "Deployment app/app-mcp", "Deployment app/app-web"} {
+		c.workloads[k].replicas = 0
+	}
+	c.configMaps["app/other"]["NOTED"] = "changed in the cluster"
+	// The box recorded the new name; k0s-interim placed the always-on stack,
+	// and k0s hasn't got to it.
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "box-values"), []byte("box.fqdn "+now+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	check := func() productup.Result {
+		t.Helper()
+		r, err := p.Check(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	for range 3 {
+		if r := check(); r.Step != productup.StepCluster || !strings.Contains(r.Detail, "app") {
+			t.Fatalf("the product went on with the old name in the always-on stack: %+v", r)
+		}
+	}
+	if got := c.callsMatching("scale --namespace app statefulset"); len(got) != 0 {
+		t.Fatalf("scaled %v", got)
+	}
+	c.fqdn = now
+	c.apply(t, p.Slot, "app")
+	// The data phase comes up as ever.
+	check()
+	c.apply(t, p.Slot, "app-data")
+	check()
+	c.setReady("StatefulSet app/app-db", true, "")
+	// The switch's stack is placed; k0s hasn't applied it.
+	if r := check(); r.Step != "phase:front" || !slices.Contains(placed(t, manifests), "app-mcp") {
+		t.Fatalf("%+v placed %v", r, placed(t, manifests))
+	}
+	for range 3 {
+		if r := check(); r.Step != "phase:front" || !strings.Contains(r.Detail, "app-mcp") || slices.Contains(placed(t, manifests), "app-front") {
+			t.Fatalf("the phase went on with the old issuer: %+v placed %v", r, placed(t, manifests))
+		}
+	}
+	if got := c.callsMatching("scale --namespace app deployment"); len(got) != 0 {
+		t.Fatalf("a front workload started with the old name: %v", got)
+	}
+	c.apply(t, p.Slot, "app-mcp")
+	check()
+	c.apply(t, p.Slot, "app-front")
+	for range 6 {
+		check()
+	}
+	for _, k := range []string{"Deployment app/app-mcp", "Deployment app/app-web"} {
+		if c.workloads[k].replicas != 1 {
+			t.Fatalf("%s at %d", k, c.workloads[k].replicas)
+		}
+		c.setReady(k, true, "")
+	}
+	if r := check(); r.Step != "" {
+		t.Fatalf("up: %+v", r)
+	}
+	for cm, want := range map[string]map[string]string{
+		"app/app":            {"OAUTH_PUBLIC_URL": "https://" + now},
+		"app/app-mcp-switch": {"HYDRA_ISSUER": "https://" + now + "/oauth", "MCP_RESOURCE_URL": "https://" + now + "/mcp"},
+	} {
+		for k, v := range want {
+			if got := c.configMaps[cm][k]; got != v {
+				t.Fatalf("%s %s = %q", cm, k, got)
+			}
+		}
+	}
+	if got := c.configMaps["app/kratos-config"]["kratos.yaml"]; !strings.Contains(got, "https://"+now+"/") || strings.Contains(got, was) {
+		t.Fatalf("the Kratos URLs %q", got)
+	}
+}
+
+// A ConfigMap of the stack that carries no box value is k0s's business
+// alone: something else writing to it never holds the product.
+func TestAConfigMapWithNoBoxValueNeverHoldsThePhases(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	p, _ := phasedProbe(t, c)
+	hostNameSlot(t, p.Slot)
+	if err := os.MkdirAll(p.SwitchDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(p.SwitchDir, "box-values"), []byte("box.fqdn box1.sneakers.example.org\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c.fqdn = "box1.sneakers.example.org"
+	c.apply(t, p.Slot, "app")
+	c.apply(t, p.Slot, "edge")
+	c.setReady("Deployment edge/edge", true, "")
+	c.configMaps["app/other"]["NOTED"] = "changed in the cluster"
+	if r, err := p.Check(context.Background()); err != nil || r.Step != "phase:data" {
+		t.Fatalf("%+v %v", r, err)
 	}
 }
 

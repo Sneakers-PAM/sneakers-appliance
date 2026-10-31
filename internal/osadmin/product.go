@@ -131,6 +131,7 @@ func (s *Server) productSlots(ctx context.Context) *osadminv1.ProductSlots {
 			out.Running = r.Msg.GetRunning()
 		}
 	}
+	out.ResetNote, out.ResetFinishing = s.resetNote(), s.resetFinishing.Load()
 	return out
 }
 

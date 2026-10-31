@@ -280,15 +280,17 @@ func (s Slots) Uninstall() (string, int64, error) {
 	if v == "" || cur == "" {
 		return "", 0, codes.New(codes.ProductNotInstalled, "no product is installed")
 	}
-	if err := s.unlink(linkCurrent); err != nil {
-		return "", 0, err
-	}
+	// The bundle is staged before it stops being current, so a reset cut
+	// off in between keeps it one way or the other.
 	for _, l := range []string{linkPrevious, linkStaged} {
 		if err := s.unlink(l); err != nil {
 			return "", 0, err
 		}
 	}
 	if err := s.link(linkStaged, filepath.Base(cur)); err != nil {
+		return "", 0, err
+	}
+	if err := s.unlink(linkCurrent); err != nil {
 		return "", 0, err
 	}
 	var removed int64

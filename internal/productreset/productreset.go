@@ -35,6 +35,15 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 )
 
+// RecordFile is the record of a reset under way, on the state volume, in
+// the platform settings directory; RunningFile, in the box's run directory
+// and so gone at every boot, says one really runs. k0s-interim refuses to
+// start the product on a record with no RunningFile: a reset was cut off.
+const (
+	RecordFile  = "product-reset.json"
+	RunningFile = "product-reset-running"
+)
+
 // Reset removes the installed product.
 type Reset struct {
 	// Slot is the installed product slot, whose k0s answers as kubectl and
@@ -262,8 +271,9 @@ func (r *Reset) resources(ctx context.Context, namespaced bool) ([]string, error
 // stacks leave k0s's manifests (and the phase loop's list of them), so
 // nothing applies them again, then its namespaces go with everything in
 // them, then its stacks' cluster-wide objects and the volumes its claims
-// had. k0s must be running. Nothing is removed until the quiesce is done.
-func (r *Reset) Cluster(ctx context.Context) (Counts, error) {
+// had. k0s must be running. Nothing is removed until the quiesce is done
+// and removing, called just before the first removal, has answered.
+func (r *Reset) Cluster(ctx context.Context, removing func() error) (Counts, error) {
 	lg := r.logger()
 	stacks, err := r.Stacks()
 	if err != nil {
@@ -297,6 +307,9 @@ func (r *Reset) Cluster(ctx context.Context) (Counts, error) {
 	n, cluster, pvs, err := r.count(ctx, namespaces, selector)
 	if err != nil {
 		return Counts{}, err
+	}
+	if err := removing(); err != nil {
+		return n, codes.Wrap(codes.ProductReset, err)
 	}
 	for _, st := range stacks {
 		if err := os.RemoveAll(filepath.Join(r.Manifests, st)); err != nil {
