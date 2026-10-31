@@ -222,6 +222,8 @@ type Server struct {
 		mu     sync.Mutex
 		reason string
 	}
+	// mcpApply runs the MCP switch's changes one at a time.
+	mcpApply mcpApply
 	// bundleMu is held while a support bundle runs: one at a time.
 	bundleMu sync.Mutex
 }
