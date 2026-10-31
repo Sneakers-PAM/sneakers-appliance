@@ -36,7 +36,7 @@ type RecoverCode struct {
 // check, and a live Recover access code.
 type ConsoleInfo struct {
 	State SetupState
-	// SetupCode is XXXX-XXXX-XXXX-XXXX (Crockford base32) while setup
+	// SetupCode is XXXX-XXXX-XXXX-XXXX (onetime.Alphabet) while setup
 	// hasn't started.
 	SetupCode    string
 	CodeExpires  time.Time

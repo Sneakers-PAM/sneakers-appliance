@@ -477,7 +477,7 @@ message Enrolment {
   option deprecated = true;
   bool open = 1;
   string admin = 2;
-  // code is XXXX-XXXX (Crockford base32).
+  // code is XXXX-XXXX.
   string code = 3;
   google.protobuf.Timestamp opened = 4;
   // idle_until is when the window closes unless something happens.

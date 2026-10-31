@@ -19,6 +19,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/clock"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevation"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/onetime"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 )
@@ -224,8 +225,27 @@ func TestSomeoneElsesChallengeGetsNoCode(t *testing.T) {
 	wantCode(t, err, codes.RootChallenge)
 	_, _, err = f.svc.IssueCode(f.st, "alice", "NOT-A-CHALLENGE")
 	wantCode(t, err, codes.RootChallenge)
+	_, _, err = f.svc.IssueCode(f.st, "alice", "2222-2222-2222-2222")
+	wantCode(t, err, codes.RootChallenge)
 	_, _, err = f.svc.IssueCode(f.st, "alice", "0000-0000-0000-0000")
 	wantCode(t, err, codes.RootChallenge)
+}
+
+func TestRootShellIDsAndChallengesUseTheCodeAlphabet(t *testing.T) {
+	f := newFixture(t)
+	for range 200 {
+		r := f.challenge("alice")
+		id, ok := strings.CutPrefix(r.ID, "R-")
+		if !ok || len(id) != 4 {
+			t.Fatalf("id %q isn't R- and four characters", r.ID)
+		}
+		if got, ok := onetime.Normalize(id, 4); !ok || got != id {
+			t.Fatalf("id %q isn't in the code alphabet", r.ID)
+		}
+		if got, ok := onetime.Normalize(r.Challenge, elevation.ChallengeLength); !ok || got != r.Challenge {
+			t.Fatalf("challenge %q isn't in the code alphabet", r.Challenge)
+		}
+	}
 }
 
 func TestACodeTypedFromAnotherAddressIsRefused(t *testing.T) {

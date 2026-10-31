@@ -36,7 +36,7 @@ func main() {
 	defer stop()
 	b := sources.Dial()
 	go b.Console.Watch(ctx)
-	u := newUI(lg)
+	u := newUI()
 	d := dashboard.Deps{
 		Chrome:    consoleui.Chrome{Version: release.Version},
 		Custody:   b.Custody.Read,
@@ -68,13 +68,9 @@ func main() {
 // newUI is the console on standard input and output, laid out for the
 // smallest active console (the large font gives the screen 64x24), in
 // colour unless the kernel command line asks for plain.
-func newUI(lg log.Logger) *tui.UI {
+func newUI() *tui.UI {
 	cmdline, _ := os.ReadFile("/proc/cmdline")
-	if switched, err := console.FitFont("/dev"); err != nil {
-		lg.Warn("console: the small font couldn't be set", log.F("error", err.Error()))
-	} else if switched {
-		lg.Info("console: the screen is too small for the large font; using " + console.SmallFont)
-	}
+	console.FitAndLogFont("/dev", os.Stderr, "sneakers-console")
 	active, _ := os.ReadFile(console.ActivePath)
 	cols, rows := console.Size("/dev", console.Names(string(active)))
 	return &tui.UI{

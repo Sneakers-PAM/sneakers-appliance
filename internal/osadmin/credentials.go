@@ -183,7 +183,7 @@ func codeHash(code string) string {
 
 // redeemInvite finds the admin whose open invitation code is typed.
 func redeemInvite(st access.State, typed string, now time.Time) (string, bool) {
-	norm, ok := onetime.Normalize(typed, onetime.Length)
+	norm, ok := onetime.NormalizeOld(typed, onetime.Length)
 	if !ok {
 		return "", false
 	}

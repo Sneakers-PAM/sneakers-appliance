@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/onetime"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 )
 
@@ -147,6 +149,12 @@ func TestCodesAreDeterministicAndTiedToTheMessage(t *testing.T) {
 	}
 	if len(a) != 9 || a[4] != '-' {
 		t.Fatalf("code %q isn't XXXX-XXXX", a)
+	}
+	for i := range 2000 {
+		c := k.Code(fmt.Appendf(nil, "challenge %d", i))
+		if got, ok := onetime.Normalize(c, 8); !ok || got != c {
+			t.Fatalf("code %q isn't in the code alphabet", c)
+		}
 	}
 	other, _ := rootkey.Load(newSealer(), t.TempDir(), nil)
 	if other.Code([]byte("challenge A")) == a {

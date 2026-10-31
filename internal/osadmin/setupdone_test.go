@@ -5,6 +5,8 @@ package osadmin_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 )
 
@@ -112,6 +115,36 @@ func TestInvitationsAndRecoverAccessWorkAfterSetup(t *testing.T) {
 	for _, n := range []string{"carol", "dave"} {
 		if a, ok := st.Admin(n); !ok || !a.HasCredentials() {
 			t.Fatalf("%s: %+v", n, a)
+		}
+	}
+}
+
+// An invitation lasts 24 hours and its hash stays in the store across an
+// update, so a code from before the alphabet changed must still work.
+func TestAnInvitationFromBeforeTheAlphabetChangedStillWorks(t *testing.T) {
+	const old = "G0Q1-7PQK-G0Q1-7PQK"
+	for _, typed := range []string{old, "goq1-7pqk-g0qi-7pqk"} {
+		b := newBox(t, false)
+		alice := b.browser()
+		alice.signIn("alice")
+		if _, err := alice.access().AddAdmin(context.Background(), connect.NewRequest(&osadminv1.AddAdminRequest{Name: "carol", Role: osadminv1.Role_ROLE_ADMIN})); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256([]byte("sneakers-appliance invite v1\x00" + old))
+		if err := b.store.Update(func(st *access.State) error {
+			for i := range st.Admins {
+				if st.Admins[i].Name == "carol" {
+					st.Admins[i].Invite.CodeHash = hex.EncodeToString(sum[:])
+				}
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+		b.browser().enrol(t, typed, "carol", "a long enough passphrase")
+		st := b.store.Read()
+		if a, ok := st.Admin("carol"); !ok || !a.HasCredentials() {
+			t.Fatalf("carol, typing %q: %+v", typed, a)
 		}
 	}
 }

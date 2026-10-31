@@ -627,20 +627,12 @@ func (s *Service) writeKRL() error {
 	return nil
 }
 
-// idAlphabet leaves out 0, 1, I and O, which read alike.
-const idAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
-
 // newID is R- and four characters no root shell has. Caller holds mu.
 func (s *Service) newID() string {
 	for {
-		b := make([]byte, 4)
-		_, _ = rand.Read(b)
-		id := []byte("R-")
-		for _, v := range b {
-			id = append(id, idAlphabet[int(v)%len(idAlphabet)])
-		}
-		if !slices.ContainsFunc(s.cur.Requests, func(r Request) bool { return r.ID == string(id) }) {
-			return string(id)
+		id := "R-" + onetime.New(4)
+		if !slices.ContainsFunc(s.cur.Requests, func(r Request) bool { return r.ID == id }) {
+			return id
 		}
 	}
 }

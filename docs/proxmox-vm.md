@@ -153,3 +153,14 @@ Proxmox host gets no way into the appliance that its admins don't have.
 - **`qm agent "$VMID" ping` says the agent isn't running:** the appliance starts the agent once it's
   past the Secure Boot screen; wait for the second boot. Check `--agent enabled=1` with
   `qm config "$VMID"`.
+- **The console's text is small, or a code is hard to read:** OVMF usually starts the screen at
+  800x600, so the appliance uses a smaller font (66x27). At 1024x768 it uses its large font (64x24).
+  The setting stays on the VM's EFI disk, so you only do this once, and it doesn't affect the disk
+  keys sealed to the TPM:
+
+  1. Stop the VM with `qm shutdown "$VMID"`, open its **Console** and click **Start Now**.
+  2. When the Proxmox logo shows, press Esc until the firmware menu opens.
+  3. Open **Device Manager**, then **OVMF Platform Configuration**.
+  4. Set **Change Preferred Resolution for Next Boot** to **1024x768**, then pick **Commit Changes
+     and Exit**.
+  5. Press Esc until you're back at the main menu, then pick **Reset**.

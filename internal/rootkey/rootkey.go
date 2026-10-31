@@ -222,8 +222,9 @@ func (k *Key) SignHostCert(pub ssh.PublicKey, principals []string, validAfter, v
 	return c, nil
 }
 
-// Code is the root-shell code for msg: the first 40 bits of the root key's
-// ed25519 signature over it, as XXXX-XXXX. ed25519 signatures are
+// Code is the root-shell code for msg: the first bytes of the root key's
+// ed25519 signature over it, as XXXX-XXXX in the code alphabet (about 38.5
+// bits, and only accessd checks it, with three tries). ed25519 signatures are
 // deterministic, so the same message always gives the same code and only
 // this box's root key can make it.
 func (k *Key) Code(msg []byte) string {

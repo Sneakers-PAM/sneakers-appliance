@@ -225,7 +225,7 @@ func (c *Codes) redeem(typed, source string) (Redeemed, error) {
 	if c.recover != nil && !now.Before(c.recover.Expires) {
 		c.recover = nil
 	}
-	norm, ok := Normalize(typed, Length)
+	norm, ok := NormalizeOld(typed, Length)
 	live := !c.consumed && !c.setup.InUse && !c.setup.Locked && c.setup.Value != ""
 	if ok && live && equal(norm, c.setup.Value) {
 		c.setup.InUse, c.setup.Source, c.setup.Started = true, source, now

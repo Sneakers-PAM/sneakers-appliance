@@ -32,10 +32,20 @@ The only inputs left are:
 
 The kernel has the Terminus 16x32 font built in (`CONFIG_FONT_TER16x32`), and the UKI's command
 line selects it (`fbcon=font:TER16x32`). On VMware's default 1024x768 that gives a 64x24 console,
-large enough to read the setup code and the fingerprints from across a desk. The 8x16 font
-(`CONFIG_FONT_8x16`) stays built in as the fallback: when the large font leaves the screen
-smaller than 64x24 (a framebuffer below 1024x768), the console switches the screen to `VGA8x16`
-(the `KDFONTOP` ioctl on `tty0`) before it draws.
+large enough to read the setup code and the fingerprints from across a desk. Two smaller fonts
+stay built in as fallbacks, Sun 12x22 (`CONFIG_FONT_SUN12x22`) and 8x16 (`CONFIG_FONT_8x16`): when
+the large font leaves the screen smaller than 64x24 (a framebuffer below 1024x768), the console
+tries `TER16x32`, then `SUN12x22`, then `VGA8x16` (the `KDFONTOP` ioctl on `tty0`) and keeps the
+first that gives 64x24, before it draws. OVMF's usual 800x600 gets `SUN12x22`, a 66x27 console. To
+get the large font on Proxmox VE, set the VM's display to 1024x768
+([proxmox-vm.md](proxmox-vm.md#if-something-goes-wrong)).
+
+The console logs what it did once it starts, to `/run/sneakers/console.log`: the font it picked or
+that it left the screen alone, with the screen's columns and rows. That line is written even though
+the console services otherwise log at error level only.
+
+The setup code and the Recover access code are drawn in the strong style (bold white), not the
+accent colour, because they keep letters such as Q and G that are hard to tell apart when dim.
 
 The screens are laid out for the real terminal: the console reads each active console's size
 (`TIOCGWINSZ`) and uses the smallest that reports one. A serial line reports none and doesn't
@@ -77,7 +87,7 @@ an arrow and Enter never pick a default, at init's own screens too. Back is Ente
 |      7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D                 |
 |      E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5                 |
 |                                                              |
-|   Setup code  7PQK-NMS9-XD2A-4KJW   expires in 59 min        |
+|   Setup code  7PXK-NMS9-XD2A-4KJW   expires in 59 min        |
 |                                                              |
 |   Protection  REDUCED  no TPM, no Secure Boot                |
 |                                                              |
@@ -92,7 +102,7 @@ reverse video):
 |---|---|---|---|
 | The frame and the mark | `34` | 4 | the primary blue `#2F5BD3` |
 | The keyhole | `1;34` | 12 | the bright blue `#7FA3F0` |
-| The setup code and the mark's sole (the one accent) | `33` | 3 | the approved orange `#E8742A` |
+| The mark's sole (the one accent) | `33` | 3 | the approved orange `#E8742A` |
 | OK, a warning, danger | `1;32`, `1;33`, `1;31` | 10, 11, 9 | green `#6FD39B`, yellow `#F2C04B`, red `#F06B5F` |
 | Secondary text | `2` | 8 (half-bright) | dim grey `#8B94A6` |
 | What is read aloud or typed | `1;37` | 15 | bold white `#FFFFFF` |
@@ -127,8 +137,8 @@ off. Fingerprints are written in groups of four, eight groups to a line, so they
 4. **Ready to set up.** netd opens port 8443 (not 22) and osadmin starts. The screen shows the
    :8443 address on each management address (and, directly under it, on the box's FQDN once a
    hostname or domain is set), the certificate's SHA-256 fingerprint to check on the first visit,
-   the one-time setup code (`XXXX-XXXX-XXXX-XXXX`, 16 Crockford base32 characters, the sole
-   orange; [access.md](access.md#the-8443-setup-page)) with the minutes it has left of its 60, and
+   the one-time setup code (`XXXX-XXXX-XXXX-XXXX`, 16 characters with no look-alikes, in
+   the strong style; [access.md](access.md#the-8443-setup-page)) with the minutes it has left of its 60, and
    the protection. A new code replaces it
    when it lapses, and the screen redraws at once.
 5. **Setting up.** Once a browser has typed the code, the screen shows where it's from, when it

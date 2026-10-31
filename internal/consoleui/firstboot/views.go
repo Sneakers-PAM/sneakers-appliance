@@ -85,7 +85,7 @@ func InfoPage(c consoleui.Chrome, info sources.ConsoleInfo, now time.Time, errLi
 	case info.SetupCode == "":
 		code = append(code, tui.Span{Text: "not ready yet", Style: tui.Dim})
 	default:
-		code = append(code, tui.Span{Text: strings.ToUpper(info.SetupCode), Style: tui.Accent})
+		code = append(code, tui.Span{Text: strings.ToUpper(info.SetupCode), Style: tui.Strong})
 		if !info.CodeExpires.IsZero() {
 			code = append(code, tui.Span{Text: "   " + consoleui.Expires(info.CodeExpires.Sub(now)), Style: tui.Dim})
 		}

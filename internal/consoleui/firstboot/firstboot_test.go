@@ -102,7 +102,7 @@ func TestTheFQDNFollowsTheIPAddress(t *testing.T) {
 func TestTheInfoScreenHasEverythingAndAsksNothing(t *testing.T) {
 	p := firstboot.InfoPage(reduced(), info(), at(), "")
 	text := p.Frame(64, 24).Text()
-	for _, want := range []string{"https://192.0.2.10:8443", "7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D", "E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5", "7PQK-NMS9-XD2A-4KJW", "expires in 59 min", "REDUCED", "no TPM, no Secure Boot"} {
+	for _, want := range []string{"https://192.0.2.10:8443", "7C2E 91AB 4F06 D3E8 B15A 6C90 2E7F 0A4D", "E38B 5C21 9FD0 76A4 C1E9 0B3F 8D62 A7C5", "7PXK-NMS9-XD2A-4KJW", "expires in 59 min", "REDUCED", "no TPM, no Secure Boot"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("the info screen lacks %q:\n%s", want, text)
 		}
@@ -223,7 +223,7 @@ func TestFirstBootWithDHCPAsksNothing(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	res := tuitest.Run(ctx, func(ctx context.Context) error { return firstboot.Run(ctx, d.UI, b.deps) })
-	d.Expect(t, "7PQK-NMS9-XD2A-4KJW")
+	d.Expect(t, "7PXK-NMS9-XD2A-4KJW")
 	if !b.m.Done(setup.StepNetwork) || !b.m.Done(setup.StepProtection) || b.m.Done(setup.StepAdmin) {
 		t.Fatalf("steps: network %v protection %v admin %v", b.m.Done(setup.StepNetwork), b.m.Done(setup.StepProtection), b.m.Done(setup.StepAdmin))
 	}
@@ -300,7 +300,7 @@ func TestXStopsABrowserSetup(t *testing.T) {
 	res := tuitest.Run(ctx, func(ctx context.Context) error { return firstboot.Run(ctx, d.UI, b.deps) })
 	d.Expect(t, "Stop this setup")
 	d.Type(t, "x")
-	d.Expect(t, "4KJW-XD2A-7PQK-NMS9")
+	d.Expect(t, "4KJW-XD2A-7PXK-NMS9")
 	if resets, _, _ := b.console.Counts(); resets != 1 {
 		t.Fatalf("%d resets", resets)
 	}
@@ -319,7 +319,7 @@ func TestNAsksForANewCodeWhenLocked(t *testing.T) {
 	res := tuitest.Run(ctx, func(ctx context.Context) error { return firstboot.Run(ctx, d.UI, b.deps) })
 	d.Expect(t, "Show a new setup code")
 	d.Type(t, "n")
-	d.Expect(t, "4KJW-XD2A-7PQK-NMS9")
+	d.Expect(t, "4KJW-XD2A-7PXK-NMS9")
 	if resets, _, _ := b.console.Counts(); resets != 1 {
 		t.Fatalf("%d resets", resets)
 	}
@@ -352,7 +352,7 @@ func TestNoDHCPOffersTheEditor(t *testing.T) {
 	d.Expect(t, "Use these settings")
 	b.net.SetAddrs("192.0.2.10/24")
 	d.Type(t, "")
-	d.Expect(t, "7PQK-NMS9-XD2A-4KJW")
+	d.Expect(t, "7PXK-NMS9-XD2A-4KJW")
 	s := b.net.Settings()
 	if len(s) != 1 || s[0].Management.Name != "ens192" || s[0].Management.IPv4.Mode != network.V4Static ||
 		s[0].Management.IPv4.Address.String() != "192.0.2.10/24" || s[0].Management.IPv4.Gateway.String() != "192.0.2.1" || len(s[0].DNS) != 1 {
@@ -376,7 +376,7 @@ func TestTryDHCPAgain(t *testing.T) {
 	d.Type(t, "r")
 	d.Expect(t, "Starting up.")
 	b.net.SetAddrs("192.0.2.10/24")
-	d.Expect(t, "7PQK-NMS9-XD2A-4KJW")
+	d.Expect(t, "7PXK-NMS9-XD2A-4KJW")
 	cancel()
 	<-res
 }

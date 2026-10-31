@@ -505,7 +505,7 @@ func RecoverCodePage(c consoleui.Chrome, r sources.RecoverCode, fp string, now t
 		}
 		b = append(b, tui.Text(""))
 	}
-	code := tui.Line{{Text: "Code  ", Style: tui.Strong}, {Text: strings.ToUpper(r.Code), Style: tui.Accent}}
+	code := tui.Line{{Text: "Code  ", Style: tui.Strong}, {Text: strings.ToUpper(r.Code), Style: tui.Strong}}
 	if !r.Expires.IsZero() {
 		code = append(code, tui.Span{Text: "   " + consoleui.Expires(r.Expires.Sub(now)), Style: tui.Dim})
 	}
