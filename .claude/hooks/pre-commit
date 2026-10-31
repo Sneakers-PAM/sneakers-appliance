@@ -25,6 +25,7 @@ tells_exempt() {
     governance/*|*/governance/*) return 0 ;;
     .github/workflows/*|*workflows/*.yml|*workflows/*.yaml) return 0 ;;
     *forbidden-text.txt) return 0 ;;
+    gen/*) return 0 ;;
     *) return 1 ;;
   esac
 }
