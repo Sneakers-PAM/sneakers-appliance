@@ -3,11 +3,12 @@
 
 // The GitHub source (docs/upgrades.md#the-github-source): the release
 // source of the built-in list. The box lists the repository's releases
-// through the API (internal/ghrelease), picks the newest of its channel,
-// and fetches the index and the files from that release. The index must
-// carry a signature by the box's release key; every .bin is verified as
-// from any source. When the API can't be read the latest stable release's
-// files are fetched, which needs no API call.
+// through the API (internal/ghrelease), picks the newest of its channel
+// that's finished, and fetches the index and the files from that release.
+// The index and SHA256SUMS must carry a signature by the box's release
+// key; every .bin is verified as from any source. When the API can't be
+// read the latest stable release's files are fetched, which needs no API
+// call.
 package osadmin
 
 import (
@@ -16,6 +17,7 @@ import (
 	"crypto/sha256"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,6 +37,16 @@ const indexSigSuffix = ".sigstore.json"
 
 // maxIndexSig caps the index signature's size.
 const maxIndexSig = 64 << 10
+
+// sumsName is the release's signed checksums, beside the index.
+const sumsName = "SHA256SUMS"
+
+// maxSums caps SHA256SUMS's size.
+const maxSums = 1 << 20
+
+// beingPublished is the Updates page's reason for skipping a release that
+// isn't finished, after its tag.
+const beingPublished = " is being published"
 
 // githubState is the GitHub source's lister and the release last picked.
 // tagSet is false until a release is resolved for url; false also picks a
@@ -120,13 +132,13 @@ func (s *Server) forgetGitHub() {
 	s.github.lister, s.github.url, s.github.tag, s.github.tagSet = nil, "", "", false
 }
 
-// resolveDirectIndex finds the newest release on the box's channel whose
-// product index is there and verifies: a release with no files yet, or
-// whose index doesn't verify, is skipped and the next older one tried,
-// with no error (docs/upgrades.md#the-github-source). idx is read from
-// the release it resolves to; note names a newer release it skipped, for
-// the Updates page. The pick is cached (githubState.tag) so a later fetch
-// of one of idx's files takes the same release.
+// resolveDirectIndex finds the newest release on the box's channel that's
+// finished and verifies (readRelease): any other is skipped and the next
+// older one tried, with no error (docs/upgrades.md#the-github-source). idx
+// is read from the release it resolves to; note names each newer release
+// it skipped and why, for the Updates page. The pick is cached
+// (githubState.tag) so a later fetch of one of idx's files takes the same
+// release.
 func (s *Server) resolveDirectIndex(ctx context.Context, idxSrc source, force bool) (idx updatepkg.Index, note string, err error) {
 	p := s.policy()
 	repo, _, api := s.releaseURLs(p)
@@ -153,39 +165,65 @@ func (s *Server) resolveDirectIndex(ctx context.Context, idxSrc source, force bo
 	if lerr != nil {
 		s.o.Logger.Warn("osadmin: the GitHub releases list wasn't read again; using the last one", append(fields, log.F("error", lerr.Error()))...)
 	}
-	newest := candidates[0].TagName
-	var lastErr, newestErr error
-	for i, r := range candidates {
-		idx, ferr := s.fetchIndexAt(ctx, idxSrc, r.TagName)
+	var (
+		lastErr error
+		skipped []string
+	)
+	for _, r := range candidates {
+		idx, why, ferr := s.readRelease(ctx, idxSrc, r)
 		if ferr != nil {
-			s.o.Logger.Info("osadmin: the GitHub release's index isn't ready; trying the next one on the channel", log.F("tag", r.TagName), log.F("error", ferr.Error()))
+			s.o.Logger.Info("osadmin: the GitHub release isn't usable; trying the next one on the channel", log.F("tag", r.TagName), log.F("why", why), log.F("error", ferr.Error()))
 			lastErr = ferr
-			if i == 0 {
-				newestErr = ferr
-			}
+			skipped = append(skipped, r.TagName+why)
 			continue
 		}
 		s.github.mu.Lock()
 		s.github.tag, s.github.tagSet = r.TagName, true
 		s.github.mu.Unlock()
 		s.o.Logger.Info("osadmin: GitHub release picked", append(fields, log.F("tag", r.TagName))...)
-		if r.TagName != newest {
-			note = newest + publishingReason(newestErr) + "; showing " + r.TagName
-			s.o.Logger.Info("osadmin: a newer GitHub release was skipped", log.F("newest", newest), log.F("showing", r.TagName), log.F("why", describe(newestErr)))
+		if len(skipped) > 0 {
+			note = strings.Join(skipped, "; ") + "; showing " + r.TagName
+			s.o.Logger.Info("osadmin: newer GitHub releases were skipped", log.F("skipped", strings.Join(skipped, "; ")), log.F("showing", r.TagName))
 		}
 		return idx, note, nil
 	}
 	return updatepkg.Index{}, "", lastErr
 }
 
-// publishingReason is the Updates page's reason for skipping the newest
-// release on the channel, from the error its index fetch gave: not there
-// yet (still being signed and uploaded), or there but not verifying.
-func publishingReason(err error) string {
-	if symbolOf(err) == "UPGRADE_SIGNATURE" {
-		return "'s index doesn't verify"
+// readRelease reads r's index when r is finished: its four signed files
+// are there, the index and SHA256SUMS verify, and every file the index
+// names is there. Files upload one at a time, so a release can have a
+// signed index and none of its .bins; the list settles that without asking
+// for a file that isn't there. why is the Updates page's reason when r
+// can't be used, after its tag.
+func (s *Server) readRelease(ctx context.Context, src source, r ghrelease.Release) (idx updatepkg.Index, why string, err error) {
+	if m := r.Missing(src.file, src.file+indexSigSuffix, sumsName, sumsName+indexSigSuffix); len(m) > 0 {
+		return updatepkg.Index{}, beingPublished, unfinished(r, m)
 	}
-	return " is being published"
+	if idx, err = s.fetchIndexAt(ctx, src, r.TagName); err != nil {
+		return updatepkg.Index{}, skipReason("index", err), err
+	}
+	if err = s.verifySums(ctx, src, r.TagName); err != nil {
+		return updatepkg.Index{}, skipReason(sumsName, err), err
+	}
+	if m := r.Missing(idx.Files()...); len(m) > 0 {
+		return updatepkg.Index{}, beingPublished, unfinished(r, m)
+	}
+	return idx, "", nil
+}
+
+func unfinished(r ghrelease.Release, missing []string) error {
+	return codes.New(codes.UpgradeUpload, "%s is still being published: %s isn't there yet", r.TagName, strings.Join(missing, ", "))
+}
+
+// skipReason is the Updates page's reason for skipping a finished release
+// whose file what failed: it's there and doesn't verify, or it can't be
+// downloaded.
+func skipReason(what string, err error) string {
+	if symbolOf(err) == "UPGRADE_SIGNATURE" {
+		return "'s " + what + " doesn't verify"
+	}
+	return "'s " + what + " can't be read"
 }
 
 // resolveDirectLatest reads the latest stable release's index, which needs
@@ -248,6 +286,27 @@ func (s *Server) pickRelease(ctx context.Context, force bool) (string, error) {
 	return tag, nil
 }
 
+// verifySums reads SHA256SUMS from the release tagged tag and verifies its
+// signature with the release key.
+func (s *Server) verifySums(ctx context.Context, src source, tag string) error {
+	started := time.Now()
+	src.url = src.base + "/download/" + tag + "/" + sumsName
+	var b []byte
+	resp, peer, err := s.open(ctx, src, sumsName)
+	if err == nil {
+		b, err = io.ReadAll(io.LimitReader(resp.Body, maxSums))
+		_ = resp.Body.Close()
+		if err != nil {
+			err = codes.New(codes.UpgradeUpload, "%s can't be read: %v", sumsName, err)
+		}
+	}
+	if err == nil {
+		err = s.verifySigned(ctx, src, sumsName, b)
+	}
+	s.fetched(ctx, src, sumsName, peer, started, int64(len(b)), err)
+	return err
+}
+
 // resolve fills in a GitHub source's URL from the release picked.
 func (s *Server) resolve(ctx context.Context, src source, force bool) (source, error) {
 	if !src.direct {
@@ -273,31 +332,40 @@ func (s *Server) readSignedIndex(ctx context.Context, src source, body io.Reader
 	if err != nil {
 		return updatepkg.Index{}, codes.New(codes.UpgradeUpload, "the product index can't be read: %v", err)
 	}
+	if err := s.verifySigned(ctx, src, "index", b); err != nil {
+		return updatepkg.Index{}, err
+	}
+	return updatepkg.ReadIndex(bytes.NewReader(b))
+}
+
+// verifySigned verifies b, the file what read from src, with the signature
+// beside it on the same release.
+func (s *Server) verifySigned(ctx context.Context, src source, what string, b []byte) error {
 	sigSrc := src
 	sigSrc.url += indexSigSuffix
-	resp, _, err := s.open(ctx, sigSrc, "index signature")
+	resp, _, err := s.open(ctx, sigSrc, what+" signature")
 	if err != nil {
-		return updatepkg.Index{}, codes.New(codes.UpgradeSignature, "the index on %s has no signature (%s); the box takes a signed index only", src.base, describe(err))
+		return codes.New(codes.UpgradeSignature, "the %s on %s has no signature (%s); the box takes a signed %s only", what, src.base, describe(err), what)
 	}
 	sig, err := io.ReadAll(io.LimitReader(resp.Body, maxIndexSig))
 	_ = resp.Body.Close()
 	if err != nil {
-		return updatepkg.Index{}, codes.New(codes.UpgradeUpload, "the index signature can't be read: %v", err)
+		return codes.New(codes.UpgradeUpload, "the %s signature can't be read: %v", what, err)
 	}
 	key, err := sigbundle.ParsePublicKey(s.o.Upgrade.ReleaseKeyPEM)
 	if err != nil {
-		return updatepkg.Index{}, codes.Wrap(codes.KitPinMissing, err)
+		return codes.Wrap(codes.KitPinMissing, err)
 	}
 	bd, err := sigbundle.Parse(sig)
 	if err == nil {
 		err = bd.Verify(key, sha256.Sum256(b))
 	}
 	if err != nil {
-		s.o.Logger.Warn("osadmin: the GitHub index isn't signed by this box's release key; refused", log.F("url", src.url), log.F("error", err.Error()))
-		return updatepkg.Index{}, codes.New(codes.UpgradeSignature, "the index on %s isn't signed by this box's release key: %v", src.base, err)
+		s.o.Logger.Warn("osadmin: a GitHub file isn't signed by this box's release key; refused", log.F("url", src.url), log.F("what", what), log.F("error", err.Error()))
+		return codes.New(codes.UpgradeSignature, "the %s on %s isn't signed by this box's release key: %v", what, src.base, err)
 	}
-	s.o.Logger.Info("osadmin: the GitHub index's signature verified", log.F("url", src.url), log.F("bytes", len(b)))
-	return updatepkg.ReadIndex(bytes.NewReader(b))
+	s.o.Logger.Info("osadmin: the GitHub file's signature verified", log.F("url", src.url), log.F("what", what), log.F("bytes", len(b)))
+	return nil
 }
 
 // githubClient is c for the GitHub source: redirects only to the asset

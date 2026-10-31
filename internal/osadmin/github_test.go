@@ -36,7 +36,9 @@ type fakeGitHub struct {
 	apiHits  int
 	notMod   int
 	limited  bool
-	redirect string // the asset host's URL
+	redirect string          // the asset host's URL
+	failing  map[string]bool // tags whose downloads answer 500
+	gets     []string        // the downloads asked for, "<tag>/<file>"
 	api      *httptest.Server
 	asset    *httptest.Server
 }
@@ -74,11 +76,17 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 				return
 			}
 			w.Header().Set("ETag", g.etag)
-			_ = json.NewEncoder(w).Encode(g.releases)
+			_ = json.NewEncoder(w).Encode(g.listed())
 		case strings.HasPrefix(r.URL.Path, "/o/r/releases/latest/download/"):
 			http.Redirect(w, r, g.redirect+"/latest/"+strings.TrimPrefix(r.URL.Path, "/o/r/releases/latest/download/"), http.StatusFound)
 		case strings.HasPrefix(r.URL.Path, "/o/r/releases/download/"):
-			http.Redirect(w, r, g.redirect+"/"+strings.TrimPrefix(r.URL.Path, "/o/r/releases/download/"), http.StatusFound)
+			file := strings.TrimPrefix(r.URL.Path, "/o/r/releases/download/")
+			g.gets = append(g.gets, file)
+			if g.failing[strings.SplitN(file, "/", 2)[0]] {
+				http.Error(w, "unavailable", http.StatusInternalServerError)
+				return
+			}
+			http.Redirect(w, r, g.redirect+"/"+file, http.StatusFound)
 		default:
 			http.NotFound(w, r)
 		}
@@ -94,7 +102,51 @@ func (g *fakeGitHub) release(tag string, draft, pre bool) {
 	g.etag = `"` + tag + `"`
 }
 
-// publish puts an index of bins, signed by sign, and the bins on tag.
+// listed is the releases list with each release's uploaded assets, as the
+// API answers it: a release with none has an empty list.
+func (g *fakeGitHub) listed() []map[string]any {
+	out := make([]map[string]any, 0, len(g.releases))
+	for _, r := range g.releases {
+		assets := []map[string]any{}
+		for name := range g.assets {
+			if file, ok := strings.CutPrefix(name, r["tag_name"].(string)+"/"); ok {
+				assets = append(assets, map[string]any{"name": file, "state": "uploaded"})
+			}
+		}
+		e := map[string]any{"assets": assets}
+		for k, v := range r {
+			e[k] = v
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// remove takes files off tag, as a run still uploading hasn't put them
+// there yet.
+func (g *fakeGitHub) remove(tag string, files ...string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, f := range files {
+		delete(g.assets, tag+"/"+f)
+	}
+	g.etag = `"` + tag + `-` + strings.Join(files, ",") + `"`
+}
+
+func (g *fakeGitHub) asked(tag string) []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	var out []string
+	for _, f := range g.gets {
+		if strings.HasPrefix(f, tag+"/") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// publish puts an index of bins and SHA256SUMS, both signed by sign, and
+// the bins on tag.
 func (g *fakeGitHub) publish(t *testing.T, tag string, sign testpki.ECKey, bins ...[]byte) {
 	t.Helper()
 	idx := index(t, bins...)
@@ -102,6 +154,10 @@ func (g *fakeGitHub) publish(t *testing.T, tag string, sign testpki.ECKey, bins 
 	defer g.mu.Unlock()
 	g.assets[tag+"/"+updatepkg.IndexName] = idx
 	g.assets[tag+"/"+updatepkg.IndexName+".sigstore.json"] = sign.BlobBundle(t, idx)
+	sums := []byte("sums of " + tag + "\n")
+	g.assets[tag+"/SHA256SUMS"] = sums
+	g.assets[tag+"/SHA256SUMS.sigstore.json"] = sign.BlobBundle(t, sums)
+	g.etag = `"` + tag + `-published"`
 	for _, b := range bins {
 		p, err := updatepkg.Read(strings.NewReader(string(b)), int64(len(b)))
 		if err != nil {
@@ -442,5 +498,228 @@ func TestUpdateCheckFailsWhenNoReleaseVerifies(t *testing.T) {
 	builtin(t, alice, nil)
 	if _, err := checkNow(alice); err == nil {
 		t.Fatal("no release on the channel verifies; the check should fail")
+	}
+}
+
+// The index and its signature can land before the .bins do, since a
+// release's files upload one by one: an index naming a file that isn't
+// there yet is the same as no index, or the offer's download would fail.
+func TestUpdateCheckSkipsAReleaseStillUploadingItsFiles(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	newest := productBin(t, b.sign, b.enc, "0.2.0", "0.1.0")
+	g.release("v0.2.0", false, false)
+	g.publish(t, "v0.2.0", b.sign, newest)
+	g.remove("v0.2.0", "sneakers-product-0.2.0-amd64.bin")
+	builtin(t, alice, nil)
+
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" {
+		t.Fatalf("an index naming a file not there yet: %v %v", c, err)
+	}
+	if c.GetPublishingNote() != "v0.2.0 is being published; showing v0.1.1" {
+		t.Fatalf("publishing note: %q", c.GetPublishingNote())
+	}
+	if _, err := alice.upgrade().FetchUpdate(context.Background(), connect.NewRequest(&osadminv1.FetchUpdateRequest{FileName: "sneakers-product-0.1.1-amd64.bin"})); err != nil {
+		t.Fatalf("the offer's fetch: %v", err)
+	}
+
+	g.publish(t, "v0.2.0", b.sign, newest)
+	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0" || c.GetPublishingNote() != "" {
+		t.Fatalf("once it's all there: %v %v", c, err)
+	}
+}
+
+// Any of the four signed files not there yet means the release isn't
+// finished, not that something is wrong with it, and nothing is downloaded
+// from it to find that out.
+func TestUpdateCheckSkipsAReleaseMissingASignedFile(t *testing.T) {
+	for _, file := range []string{updatepkg.IndexName, updatepkg.IndexName + ".sigstore.json", "SHA256SUMS", "SHA256SUMS.sigstore.json"} {
+		t.Run(file, func(t *testing.T) {
+			g := newFakeGitHub(t)
+			b := ghBox(t, g)
+			alice := b.browser()
+			alice.signIn("alice")
+			g.release("v0.1.1", false, false)
+			g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+			g.release("v0.2.0", false, false)
+			g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+			g.remove("v0.2.0", file)
+			builtin(t, alice, nil)
+			c, err := checkNow(alice)
+			if err != nil || strings.Join(productNames(c), ",") != "0.1.1" || c.GetPublishingNote() != "v0.2.0 is being published; showing v0.1.1" {
+				t.Fatalf("no %s: %v %v", file, c, err)
+			}
+			if got := g.asked("v0.2.0"); len(got) != 0 {
+				t.Fatalf("an unfinished release was downloaded from: %v", got)
+			}
+		})
+	}
+}
+
+// SHA256SUMS is signed like the index, and a release whose signature on
+// it doesn't verify is never offered, however good its index is.
+func TestUpdateCheckSkipsAReleaseWhoseSumsDontVerify(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	g.assets["v0.2.0/SHA256SUMS.sigstore.json"] = testpki.ECDSA(t).BlobBundle(t, g.assets["v0.2.0/SHA256SUMS"])
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" {
+		t.Fatalf("sums another key signed: %v %v", c, err)
+	}
+	if c.GetPublishingNote() != "v0.2.0's SHA256SUMS doesn't verify; showing v0.1.1" {
+		t.Fatalf("publishing note: %q", c.GetPublishingNote())
+	}
+}
+
+// The Updates page names every release skipped and why, not only the
+// newest.
+func TestUpdateCheckNamesEveryReleaseItSkipped(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	g.publish(t, "v0.2.0", testpki.ECDSA(t), productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	g.release("v0.3.0", false, false)
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" {
+		t.Fatalf("two skipped: %v %v", c, err)
+	}
+	if c.GetPublishingNote() != "v0.3.0 is being published; v0.2.0's index doesn't verify; showing v0.1.1" {
+		t.Fatalf("publishing note: %q", c.GetPublishingNote())
+	}
+}
+
+// A finished release whose download fails isn't "being published": the
+// check still falls back, and says what really happened.
+func TestUpdateCheckDoesntCallAFailedDownloadPublishing(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	g.failing = map[string]bool{"v0.2.0": true}
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || strings.Join(productNames(c), ",") != "0.1.1" {
+		t.Fatalf("a failed download: %v %v", c, err)
+	}
+	if c.GetPublishingNote() != "v0.2.0's index can't be read; showing v0.1.1" {
+		t.Fatalf("publishing note: %q", c.GetPublishingNote())
+	}
+}
+
+// A box with no finished release to fall back to gets a failure naming
+// the one it's waiting on, not an empty offer.
+func TestUpdateCheckFailsWhenTheOnlyReleaseIsStillPublishing(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.2.0", false, false)
+	builtin(t, alice, nil)
+	if _, err := checkNow(alice); err == nil || !strings.Contains(err.Error(), "v0.2.0") {
+		t.Fatalf("nothing to fall back to: %v", err)
+	}
+}
+
+// Falling back never offers a step down: the older release's index is
+// read, and what it lists at or below the installed version isn't offered.
+func TestFallingBackNeverOffersADowngrade(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := ghBox(t, g)
+	alice := b.browser()
+	alice.signIn("alice")
+	alice.installProduct(t, "0.1.1")
+	g.release("v0.1.0", false, false)
+	g.publish(t, "v0.1.0", b.sign, productBin(t, b.sign, b.enc, "0.1.0", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || len(c.GetProduct()) != 0 || c.GetPublishingNote() != "v0.2.0 is being published; showing v0.1.0" {
+		t.Fatalf("a fallback below the installed version: %v %v", c, err)
+	}
+}
+
+// mirrorThenGitHub is a box whose built-in list is a mirror, then g.
+func mirrorThenGitHub(t *testing.T, g *fakeGitHub, m *files) *box {
+	t.Helper()
+	srv := httptest.NewServer(m)
+	t.Cleanup(srv.Close)
+	return ghBox(t, g, func(_ *box, o *osadmin.Options) { o.Upgrade.BuiltinMirrors = []string{srv.URL} })
+}
+
+// A mirror that hasn't got the release yet is the next source's turn,
+// with the GitHub source's own fallback and note still working behind it.
+func TestAMirrorWithNoIndexYetFallsToTheGitHubSource(t *testing.T) {
+	g := newFakeGitHub(t)
+	b := mirrorThenGitHub(t, g, &files{m: map[string][]byte{}})
+	alice := b.browser()
+	alice.signIn("alice")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	g.release("v0.2.0", false, false)
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || c.GetSource() != "direct" || strings.Join(productNames(c), ",") != "0.1.1" || c.GetPublishingNote() != "v0.2.0 is being published; showing v0.1.1" {
+		t.Fatalf("an empty mirror: %v %v", c, err)
+	}
+}
+
+// A mirror's index is a menu: it has no release list to check against, so
+// a file it hasn't got yet is found when it's fetched, from the next
+// source, and nothing fetched is trusted until it's verified.
+func TestAPartlySyncedMirrorsFetchFallsToTheGitHubSource(t *testing.T) {
+	g := newFakeGitHub(t)
+	m := &files{m: map[string][]byte{}}
+	b := mirrorThenGitHub(t, g, m)
+	alice := b.browser()
+	alice.signIn("alice")
+	bin := productBin(t, b.sign, b.enc, "0.1.1", "0.1.0")
+	g.release("v0.1.1", false, false)
+	g.publish(t, "v0.1.1", b.sign, bin)
+	m.put(updatepkg.IndexName, index(t, bin))
+	builtin(t, alice, nil)
+	c, err := checkNow(alice)
+	if err != nil || c.GetSource() != osadmin.SourceBuiltIn || strings.Join(productNames(c), ",") != "0.1.1" || c.GetPublishingNote() != "" {
+		t.Fatalf("a mirror's index: %v %v", c, err)
+	}
+	f, err := alice.upgrade().FetchUpdate(context.Background(), connect.NewRequest(&osadminv1.FetchUpdateRequest{FileName: "sneakers-product-0.1.1-amd64.bin"}))
+	if err != nil || f.Msg.GetSource() != "direct" {
+		t.Fatalf("the fetch: %v %v", f, err)
+	}
+}
+
+// A mirror lagging behind the box offers nothing older than what's
+// installed.
+func TestAStaleMirrorNeverOffersADowngrade(t *testing.T) {
+	g := newFakeGitHub(t)
+	m := &files{m: map[string][]byte{}}
+	b := mirrorThenGitHub(t, g, m)
+	alice := b.browser()
+	alice.signIn("alice")
+	alice.installProduct(t, "0.1.1")
+	m.put(updatepkg.IndexName, index(t, productBin(t, b.sign, b.enc, "0.1.0", "0.1.0")))
+	builtin(t, alice, nil)
+	if c, err := checkNow(alice); err != nil || len(c.GetProduct()) != 0 {
+		t.Fatalf("a stale mirror: %v %v", c, err)
 	}
 }

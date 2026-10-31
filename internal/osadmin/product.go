@@ -201,9 +201,9 @@ func (h *upgradeSvc) ListBaseVersions(ctx context.Context, _ *connect.Request[os
 
 // fetchIndex reads src's index; force asks the GitHub API again for the
 // release to read it from (Check now). The GitHub source's index must be
-// signed by the release key, and a release still being published (no
-// index yet, or one that doesn't verify) is skipped for an older one:
-// note then names the newer release skipped, for the Updates page.
+// signed by the release key, and a release that isn't finished or doesn't
+// verify is skipped for an older one: note then names the newer releases
+// skipped, for the Updates page.
 func (s *Server) fetchIndex(ctx context.Context, src source, force bool) (idx updatepkg.Index, note string, err error) {
 	if src.direct {
 		return s.resolveDirectIndex(ctx, src, force)

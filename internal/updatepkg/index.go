@@ -206,6 +206,18 @@ func (idx *Index) AddBridge(h Header, size int64) {
 	idx.Base = append(idx.Base, e)
 }
 
+// Files is every file idx names, the ones a release must have before
+// anything can be fetched from it.
+func (idx Index) Files() []string {
+	var out []string
+	for _, list := range [][]IndexEntry{idx.Products, idx.BaseOS, idx.BaseWeb, idx.Base} {
+		for _, e := range list {
+			out = append(out, e.File)
+		}
+	}
+	return out
+}
+
 // Box is what a box runs, for the units' offers. BaseWeb is the Base Web
 // it serves (its built-in pages' version when none is installed);
 // RootSHA256 is its running root image's, when it's known. Prerelease
