@@ -414,9 +414,10 @@ Flags: `--state` (`/var/lib/sneakers`), `--run` (`/run/sneakers`), `--socket`, `
 ## Running sneakers-osadmin
 
 `sneakers-osadmin` runs as `osadmin` and refuses to run as root. It asks accessd for the management
-addresses and host name (`BindingService.GetBinding`, from netd), makes or reuses its certificate in
-`/var/lib/sneakers/osadmin/`, and listens on each address's port 8443; when the addresses or the host
-name change it rebinds with a matching certificate. A rebind opens and closes only the addresses
+addresses and host name (`BindingService.GetBinding`, from netd), serves the certificate in
+`/var/lib/sneakers/osadmin/` (making one only when none loads), and listens on each address's port
+8443; when the addresses change it rebinds, and accessd follows with the certificate
+([certificates.md](certificates.md#following-the-box)). A rebind opens and closes only the addresses
 that changed: a listener on an address that stays keeps running and its connections stay up, and a
 new certificate reaches new handshakes only, so the Network page that made the change can still
 confirm it. Port 8443 speaks TLS only: a browser that asks

@@ -170,7 +170,7 @@ var specs = []spec{
 		example: "  network discard"},
 	{path: "network confirm", owner: true, use: "confirm <token>", short: "Keep an allow-list reset", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
 		long:    "Keeps the allow-list reset the token names, so it doesn't revert. network allow-list reset prints the token.",
-		example: "  network confirm 7K2Q-MX4D"},
+		example: "  network confirm 7K2R-MX4D"},
 	{path: "network allow-list reset", owner: true, short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset",
 		long:    "Sets the management allow-list back to the subnets the box is on, for when a wrong list locks SSH and :8443 out. Console only; type reset to confirm. It reverts in 120 seconds unless kept with network confirm.",
 		example: "  network allow-list reset"},

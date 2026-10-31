@@ -247,8 +247,12 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// The Product (443) endpoint: the box-tls Secret k0s applies, which
 		// the edge reloads live.
 		Product: &productedge.Edge{Slot: elevated.DefaultProduct, Dir: filepath.Join(c.state, "platform", "tls"), AdminDir: paths.OwnDir(), Manifests: "/var/lib/k0s/manifests"},
-		Own:     func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
-		Logger:  lg,
+		// edgefall answers 443 while k0s is down, from its own copy.
+		Fallback: func() error {
+			return edgefall.Prepare(paths.OwnDir(), edgefall.TLSDir, accounts.EdgefallUID, accounts.EdgefallUID)
+		},
+		Own:    func(f *os.File) error { return f.Chown(accounts.OsadminUID, accounts.OsadminUID) },
+		Logger: lg,
 	})
 	if err != nil {
 		return err
@@ -361,11 +365,14 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	// The host certificates name the box's host name and addresses: a
 	// change re-renders sshd's files, which signs them again.
 	// The product follows a changed host name too, once the change is
-	// kept (osadmin.HostNameChanged); it looks once at start as well.
+	// kept (osadmin.HostNameChanged), and the box's own certificate follows
+	// the names (osadmin.FollowCerts); both look once at start as well.
 	go api.HostNameChanged(ctx)
+	go api.FollowCerts(ctx)
 	go watchNames(ctx, netdapi.NewClient(c.netdSock), lg, func() {
 		d.Rerender()
 		go api.HostNameChanged(ctx)
+		go api.FollowCerts(ctx)
 	})
 	defer api.Close()
 
@@ -411,6 +418,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			d.Tick()
 			api.UpgradeWindowTick(ctx)
 			api.RebootWatchdog()
+			go api.FollowCerts(ctx)
 			if !portsOpen {
 				portsOpen = api.OpenProductPorts(ctx) == nil
 			}

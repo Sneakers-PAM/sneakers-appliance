@@ -9,10 +9,12 @@
 // the kubelet updates the volume, with no restart. A certificate the
 // Certificates page assigns to the Product (443) endpoint is kept on the
 // state volume and wins over the box's own (the :8443 one), which
-// k0s-interim hands in at every k0s start otherwise.
+// k0s-interim hands in at every k0s start otherwise, and Follow keeps
+// current in between.
 package productedge
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -107,6 +109,50 @@ func (e *Edge) Reset() error {
 		return fmt.Errorf("productedge: the box's own certificate: %w", err)
 	}
 	return e.writeStack(crt, key)
+}
+
+// Follow writes the box-tls stack with crt and key, the box's own
+// certificate, unless a certificate is assigned or the stack has them
+// already. k0s-interim only copies the box's certificate at k0s start, so
+// without this 443 keeps the one it started with. crt and key come from the
+// caller rather than AdminDir: osadmin can write there, and Follow runs on
+// its own as root. It says what the stack held before.
+func (e *Edge) Follow(crt, key []byte) ([]byte, bool, error) {
+	if _, err := os.Stat(filepath.Join(e.Dir, certFile)); err == nil {
+		return nil, false, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return nil, false, fmt.Errorf("productedge: %w", err)
+	}
+	old := e.stackCert()
+	if bytes.Equal(bytes.TrimSpace(old), bytes.TrimSpace(crt)) {
+		return nil, false, nil
+	}
+	if err := e.writeStack(crt, key); err != nil {
+		return nil, false, err
+	}
+	return old, true, nil
+}
+
+// stackCert is the certificate in the box-tls stack, whichever of the two
+// writers wrote it; nil when there's none to read, which Follow replaces.
+func (e *Edge) stackCert() []byte {
+	b, err := os.ReadFile(filepath.Join(e.Manifests, Stack, Stack+".yaml")) // #nosec G304 -- the stack this package writes, on a root-only path
+	if err != nil {
+		return nil
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var doc struct {
+			Kind       string            `yaml:"kind"`
+			StringData map[string]string `yaml:"stringData"`
+		}
+		if err := dec.Decode(&doc); err != nil {
+			return nil
+		}
+		if doc.Kind == "Secret" {
+			return []byte(doc.StringData["tls.crt"])
+		}
+	}
 }
 
 func (e *Edge) writeStack(crt, key []byte) error {

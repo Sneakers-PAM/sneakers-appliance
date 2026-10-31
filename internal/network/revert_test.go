@@ -72,6 +72,31 @@ func TestConfirmKeeps(t *testing.T) {
 
 // A kept change has no timer and nothing to confirm, and it ends the story
 // of the last change, so an old revert stops being reported.
+// The addresses are still the change's until the undo has applied: a
+// reader that saw nothing pending then would take them for kept.
+func TestARevertCountsAsPendingUntilItHasApplied(t *testing.T) {
+	clk := clock.NewFake()
+	r := network.NewReverter(clk)
+	var during []bool
+	apply := func(s network.Settings) error {
+		during = append(during, r.Pending())
+		return nil
+	}
+	if _, err := r.Apply(named("old"), named("new"), apply); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(network.RevertAfter)
+	if !slices.Equal(during, []bool{true, true}) {
+		t.Fatalf("pending during the applies: %v", during)
+	}
+	if r.Pending() {
+		t.Fatal("still pending once the undo applied")
+	}
+	if l, ok := r.Last(); !ok || !l.Reverted {
+		t.Fatalf("last %+v", l)
+	}
+}
+
 func TestKeepAppliesWithNoWindow(t *testing.T) {
 	clk := clock.NewFake()
 	r := network.NewReverter(clk)

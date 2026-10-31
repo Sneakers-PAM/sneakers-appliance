@@ -251,6 +251,7 @@ func (r *Reverter) revert(c *change) {
 		return
 	}
 	r.pending = nil
+	r.applying = true
 	r.last = &Outcome{ID: c.id, Reverted: true, At: r.clk.Now()}
 	r.mu.Unlock()
 	err := codes.New(codes.NetReverted, "the network change wasn't confirmed within %d seconds and was undone", int(RevertAfter.Seconds()))
@@ -258,6 +259,9 @@ func (r *Reverter) revert(c *change) {
 		r.o.Logger.Error(aerr, "network: revert failed")
 		err = codes.Wrap(codes.NetReverted, aerr)
 	}
+	r.mu.Lock()
+	r.applying = false
+	r.mu.Unlock()
 	r.o.Logger.Error(err, "network: the change wasn't confirmed and was reverted", log.F("change", c.id))
 	if r.o.OnRevert != nil {
 		r.o.OnRevert(c.prev, err)

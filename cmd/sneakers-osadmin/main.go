@@ -103,8 +103,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	})
 
 	// Bind only the management addresses accessd reports (from netd), and
-	// rebind (with a matching certificate) whenever they or the host name
-	// change. Listeners on addresses that stay keep running.
+	// rebind whenever they change. Listeners on addresses that stay keep
+	// running. The certificate is accessd's to follow, since only it knows
+	// a change is kept (osadmin.Server.FollowCerts): this serves the files
+	// it leaves, and makes one only when there's nothing to serve.
 	var src *osadmin.CertSource
 	var ls *listeners
 	defer func() {
@@ -117,15 +119,15 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		if err != nil {
 			return nil
 		}
-		cert, info, err := osadmin.EnsureCert(paths.OwnDir(), host, addrs, time.Now())
-		if err != nil {
-			return err
-		}
-		lg.Info("osadmin: certificate ready", log.F("fingerprint", info.Fingerprint), log.F("expires", info.Expires), log.F("selfSigned", info.SelfSigned))
-		// accessd swaps the files when an owner assigns a certificate, and
-		// EnsureCert rewrites them for a new name; the source re-reads them,
-		// so the listeners keep running.
+		// accessd swaps the files when an owner assigns a certificate or
+		// the box's names change; the source re-reads them, so the
+		// listeners keep running.
 		if src == nil {
+			cert, info, err := osadmin.ServeCert(paths.OwnDir(), host, addrs, time.Now())
+			if err != nil {
+				return err
+			}
+			lg.Info("osadmin: certificate ready", log.F("fingerprint", info.Fingerprint), log.F("expires", info.Expires), log.F("selfSigned", info.SelfSigned))
 			src = osadmin.NewCertSource(paths.OwnDir(), cert, lg)
 			ls = newListeners(f.Handler(), src.GetCertificate, Port, lg)
 		}

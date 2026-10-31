@@ -53,7 +53,7 @@ func main() {
 	var c config
 	fs := flag.NewFlagSet("sneakers-edgefall", flag.ExitOnError)
 	fs.StringVar(&c.osadminDir, "osadmin-dir", "/var/lib/sneakers/osadmin", "osadmin's directory, where the box's :8443 certificate is")
-	fs.StringVar(&c.tlsDir, "tls-dir", "/run/sneakers/edgefall", "edgefall's own copy of the certificate")
+	fs.StringVar(&c.tlsDir, "tls-dir", edgefall.TLSDir, "edgefall's own copy of the certificate")
 	fs.StringVar(&c.accessSock, "access-socket", accessapi.SocketPath, "accessd's socket")
 	fs.StringVar(&c.boxState, "box-state", boxstate.File, "init's announcement of a reboot or a shutdown")
 	fs.StringVar(&c.brandDir, "brand-dir", filepath.Join(product.Dir, "current", brand.Dir), "the installed product bundle's brand, read-only")

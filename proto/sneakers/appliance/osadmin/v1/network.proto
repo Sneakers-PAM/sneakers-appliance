@@ -121,8 +121,9 @@ message StagedReview {
   string new_address = 2;
   // new_url is the admin page at new_address.
   string new_url = 3;
-  // new_certificate is true when the box makes a new self-signed :8443
-  // certificate for the change.
+  // new_certificate is true when the change can replace the box's own
+  // self-signed certificate, which happens once it's kept and only when
+  // the certificate doesn't already name the result.
   bool new_certificate = 4;
   // changes_allow_list is true when the change touches the allow-list,
   // which can shut out the session that commits it.
@@ -149,8 +150,10 @@ message SetNetworkResponse {
   // the change sets one.
   string new_url = 4;
   // new_certificate is true when the host name or management address
-  // changes, so the box makes a new self-signed :8443 certificate (unless an
-  // owner assigned one). A browser that trusted the old one asks again.
+  // changes, so the box may replace its own self-signed certificate (never
+  // an assigned one). It does that only once the change is confirmed, and
+  // a change that reverts keeps the old certificate. A browser that
+  // trusted the old one then asks again.
   bool new_certificate = 5;
 }
 

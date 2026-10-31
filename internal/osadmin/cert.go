@@ -10,10 +10,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -40,14 +38,22 @@ type CertInfo struct {
 	SelfSigned bool
 }
 
+// ServeCert is what sneakers-osadmin serves at start: the certificate in
+// dir, whatever it names, and a new one only when nothing there loads.
+// Whether it still fits the box is accessd's call (Server.FollowCerts),
+// because only accessd knows that a change of address is kept.
+func ServeCert(dir, hostname string, addrs []string, now time.Time) (tls.Certificate, CertInfo, error) {
+	if c, info, err := loadCert(dir); err == nil {
+		return c, info, nil
+	}
+	return EnsureCert(dir, hostname, addrs, now)
+}
+
 // EnsureCert loads :8443's certificate from dir. While a store certificate
 // is assigned (certstore.AssignedMarker) it is served as it is. Otherwise
 // the box's own self-signed ECDSA P-256 one is kept, or made new when
-// there is none, it expires within 30 days, it names another host, or it
-// doesn't name one of addrs. A certificate that names more addresses than
-// addrs is kept: after a boot the addresses come back one at a time, and
-// the fingerprint an admin checked on the console must not change with
-// each. The key never leaves dir.
+// there is none, or certstore.WhyReplace says it can't stay. A certificate
+// that names more addresses than addrs is kept. The key never leaves dir.
 func EnsureCert(dir, hostname string, addrs []string, now time.Time) (tls.Certificate, CertInfo, error) {
 	if certstore.AssignedID(dir) != "" {
 		if c, info, err := loadCert(dir); err == nil {
@@ -60,8 +66,7 @@ func EnsureCert(dir, hostname string, addrs []string, now time.Time) (tls.Certif
 		}
 	}
 	if c, info, err := loadCert(dir); err == nil {
-		leaf := c.Leaf
-		if covers(leaf, hostname, addrs) && now.Add(certstore.RenewBefore).Before(leaf.NotAfter) {
+		if certstore.WhyReplace(c.Leaf, hostname, addrs, now) == "" {
 			return c, info, nil
 		}
 	}
@@ -176,45 +181,4 @@ func (c *CertSource) stat() string {
 		fmt.Fprintf(&b, "%d:%d:%d;", ino, fi.Size(), fi.ModTime().UnixNano())
 	}
 	return b.String()
-}
-
-// covers reports whether leaf names hostname as its host and every one of
-// addrs.
-func covers(leaf *x509.Certificate, hostname string, addrs []string) bool {
-	if firstOr(leaf.DNSNames) != hostname {
-		return false
-	}
-	have := ipStrings(leaf.IPAddresses)
-	for _, a := range sanList(hostname, addrs)[1:] {
-		if !slices.Contains(have, a) {
-			return false
-		}
-	}
-	return true
-}
-
-func sanList(hostname string, addrs []string) []string {
-	out := []string{hostname}
-	for _, a := range addrs {
-		if ip := net.ParseIP(a); ip != nil {
-			out = append(out, ip.String())
-		}
-	}
-	slices.Sort(out[1:])
-	return out
-}
-
-func firstOr(names []string) string {
-	if len(names) == 0 {
-		return ""
-	}
-	return names[0]
-}
-
-func ipStrings(ips []net.IP) []string {
-	var out []string
-	for _, ip := range ips {
-		out = append(out, ip.String())
-	}
-	return out
 }

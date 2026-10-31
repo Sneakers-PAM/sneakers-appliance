@@ -26,6 +26,10 @@ type ProductEdge interface {
 	Set(crt, key []byte) error
 	// Reset puts the box's own certificate (the :8443 one) back, live.
 	Reset() error
+	// Follow gives the edge crt and key, the box's own certificate, unless
+	// it serves an assigned one or has them already. changed says whether
+	// it took them, and old is the certificate it had.
+	Follow(crt, key []byte) (old []byte, changed bool, err error)
 }
 
 // productEndpoint is the Product (443) endpoint as the page shows it.

@@ -105,6 +105,74 @@ func TestTheEdgeTakesASetCertificateLive(t *testing.T) {
 	}
 }
 
+// followEdge is an installed-looking edge whose stack holds what
+// k0s-interim wrote at k0s start, in its own YAML layout.
+func followEdge(t *testing.T, crt string) (*productedge.Edge, string) {
+	t.Helper()
+	dir := t.TempDir()
+	e := &productedge.Edge{Slot: filepath.Join(dir, "slot"), Dir: filepath.Join(dir, "platform", "tls"), AdminDir: filepath.Join(dir, "osadmin"), Manifests: filepath.Join(dir, "k0s", "manifests")}
+	stack := filepath.Join(e.Manifests, productedge.Stack, productedge.Stack+".yaml")
+	if err := os.MkdirAll(filepath.Dir(stack), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	interim := "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: sneakers-edge\n---\n" +
+		"apiVersion: v1\nkind: Secret\nmetadata:\n  name: box-tls\n  namespace: sneakers-edge\ntype: kubernetes.io/tls\nstringData:\n" +
+		"  tls.crt: |\n    " + crt + "\n  tls.key: |\n    OWN-KEY\n  traefik-tls.yaml: |\n    tls: {}\n"
+	if err := os.WriteFile(stack, []byte(interim), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return e, stack
+}
+
+// k0s-interim hands 443 a copy of the box's certificate at k0s start;
+// Follow keeps that copy current between starts.
+func TestFollowGivesTheEdgeTheBoxsNewCertificate(t *testing.T) {
+	e, stack := followEdge(t, "OLD-CRT")
+	before, err := os.ReadFile(stack) // #nosec G304 -- a test file
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old, changed, err := e.Follow([]byte("OLD-CRT\n"), []byte("OWN-KEY\n")); err != nil || changed || old != nil {
+		t.Fatalf("the certificate it has: %q %v %v", old, changed, err)
+	}
+	if after, _ := os.ReadFile(stack); string(after) != string(before) { // #nosec G304 -- a test file
+		t.Fatal("a stack with the right certificate was written again")
+	}
+	old, changed, err := e.Follow([]byte("NEW-CRT\n"), []byte("NEW-KEY\n"))
+	if err != nil || !changed || string(old) != "OLD-CRT\n" {
+		t.Fatalf("%q %v %v", old, changed, err)
+	}
+	if s := readSecret(t, stack); s.StringData["tls.crt"] != "NEW-CRT\n" || s.StringData["tls.key"] != "NEW-KEY\n" {
+		t.Fatalf("%+v", s.StringData)
+	}
+}
+
+func TestFollowLeavesAnAssignedCertificateAlone(t *testing.T) {
+	e, stack := followEdge(t, "OLD-CRT")
+	if err := e.Set([]byte("ASSIGNED\n"), []byte("ASSIGNED-KEY\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, changed, err := e.Follow([]byte("NEW-CRT\n"), []byte("NEW-KEY\n")); err != nil || changed {
+		t.Fatalf("%v %v", changed, err)
+	}
+	if s := readSecret(t, stack); s.StringData["tls.crt"] != "ASSIGNED\n" {
+		t.Fatalf("%+v", s.StringData)
+	}
+}
+
+func TestFollowWritesAStackThatIsntThere(t *testing.T) {
+	e, stack := followEdge(t, "OLD-CRT")
+	if err := os.Remove(stack); err != nil {
+		t.Fatal(err)
+	}
+	if old, changed, err := e.Follow([]byte("NEW-CRT\n"), []byte("NEW-KEY\n")); err != nil || !changed || old != nil {
+		t.Fatalf("%q %v %v", old, changed, err)
+	}
+	if s := readSecret(t, stack); s.StringData["tls.crt"] != "NEW-CRT\n" {
+		t.Fatalf("%+v", s.StringData)
+	}
+}
+
 // Reset drops the assigned certificate: the edge serves the box's own again.
 func TestResetGoesBackToTheBoxsOwnCertificate(t *testing.T) {
 	dir := t.TempDir()

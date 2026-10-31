@@ -348,6 +348,8 @@ type fakeNetd struct {
 	servicePorts []uint32
 	// down makes Status fail, as a netd that doesn't answer.
 	down bool
+	// getDown makes Get fail, as a netd that doesn't answer.
+	getDown bool
 	// hang makes Status wait for its caller's deadline, as a netd that
 	// stopped answering.
 	hang bool
@@ -427,6 +429,9 @@ func (n *fakeNetd) Commit(ctx context.Context, r *connect.Request[netdv1.CommitR
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	if n.getDown {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("netd is down"))
+	}
 	out := &netdv1.GetResponse{Settings: n.settings, Pending: n.pending != "", Last: n.last}
 	if n.pending != "" {
 		out.Token, out.ChangeId, out.SecondsLeft = n.pending, n.changeID, 95
