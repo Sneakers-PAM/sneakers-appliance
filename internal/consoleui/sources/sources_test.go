@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -335,5 +336,43 @@ func TestURLHosts(t *testing.T) {
 	}
 	if h := sources.Hosts([]string{"2001:db8::10/64"}); len(h) != 1 || h[0] != "2001:db8::10" {
 		t.Fatalf("%q", h)
+	}
+}
+
+// A netd that takes the connection and never answers fails the console's
+// call instead of hanging it, even with no deadline on the context.
+func TestNetdClientGivesUpOnASilentNetd(t *testing.T) {
+	dir, err := os.MkdirTemp("", "netd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	l, err := net.Listen("unix", filepath.Join(dir, "s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			t.Cleanup(func() { _ = c.Close() })
+		}
+	}()
+	done := make(chan error, 1)
+	go func() {
+		c := sources.NetdClient(filepath.Join(dir, "s"), 50*time.Millisecond)
+		_, err := c.Checks(context.Background(), connect.NewRequest(&netdv1.ChecksRequest{}))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("a silent netd answered")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the client hung")
 	}
 }

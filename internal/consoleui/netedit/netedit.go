@@ -13,6 +13,7 @@ import (
 	"net/netip"
 	"strconv"
 	"strings"
+	"time"
 
 	log "github.com/Bugs5382/go-log"
 
@@ -24,11 +25,47 @@ import (
 
 const width = consoleui.Width
 
+// How long the editor waits for netd. A Set or Confirm is a live change on
+// the box, and the checks wait on the gateway, DNS and NTP.
+const (
+	DefaultSetTimeout    = 15 * time.Second
+	DefaultChecksTimeout = 20 * time.Second
+	DefaultReadTimeout   = 5 * time.Second
+)
+
+// What the error page says when netd runs out of time. netd finishes or
+// undoes a change whether the console is still waiting or not.
+const (
+	setTimedOut = "The box didn't answer in time, so the address may not be set. A change nobody keeps goes back on its own."
+	// checksTimedOut has the same promise: the token was never confirmed.
+	checksTimedOut = "The network checks didn't finish in time. The address wasn't kept, so it goes back on its own."
+	noPorts        = "The box didn't answer, so the ports can't be listed right now."
+)
+
 // Deps are what the editor reads and drives.
 type Deps struct {
 	Chrome  consoleui.Chrome
 	Network sources.Network
 	Logger  log.Logger
+	// SetTimeout, ChecksTimeout and ReadTimeout bound one Set or Confirm,
+	// one Checks and the first reads; zero is the Default for each.
+	SetTimeout, ChecksTimeout, ReadTimeout time.Duration
+}
+
+func (d Deps) withDefaults() Deps {
+	if d.Logger == nil {
+		d.Logger = log.Nop()
+	}
+	if d.SetTimeout == 0 {
+		d.SetTimeout = DefaultSetTimeout
+	}
+	if d.ChecksTimeout == 0 {
+		d.ChecksTimeout = DefaultChecksTimeout
+	}
+	if d.ReadTimeout == 0 {
+		d.ReadTimeout = DefaultReadTimeout
+	}
+	return d
 }
 
 // NoAddressPage says the box has no address and lists its ports: N sets
@@ -151,6 +188,9 @@ func FieldPage(c consoleui.Chrome, f form, field, n, of int, errLine string) tui
 // ChecksPage shows the checks of the address set by hand.
 func ChecksPage(c consoleui.Chrome, checks []sources.Check, errLine string, settled bool) tui.Page {
 	b := []tui.Line{tui.Styled(tui.Strong, "Checking the network"), tui.Text("")}
+	if len(checks) == 0 && errLine == "" && !settled {
+		b = append(b, tui.Styled(tui.Dim, "Starting the checks."))
+	}
 	for _, ch := range checks {
 		mark, st := "[..]", tui.Dim
 		switch ch.State {
@@ -174,24 +214,38 @@ func ChecksPage(c consoleui.Chrome, checks []sources.Check, errLine string, sett
 		}
 	}
 	b = appendErr(b, errLine)
+	leave := consoleui.Key("Q", "Leave")
 	if !settled {
-		return c.Page(b, consoleui.Key("E", "Edit"), "")
+		return c.Page(b, consoleui.Keys(consoleui.Key("E", "Edit"), leave), "")
 	}
-	return c.Page(b, consoleui.Keys(consoleui.Key("Enter", "Use these settings"), consoleui.Key("E", "Edit")), "")
+	return c.Page(b, consoleui.Keys(consoleui.Key("Enter", "Use these settings"), consoleui.Key("E", "Edit"), leave), "")
+}
+
+// ApplyingPage is up while netd sets the address.
+func ApplyingPage(c consoleui.Chrome) tui.Page {
+	return c.Page([]tui.Line{tui.Styled(tui.Strong, "Setting the address"), tui.Text(""), tui.Text("This takes a few seconds.")}, nil, "")
+}
+
+// ErrorPage says why the editor is closing; Enter leaves it.
+func ErrorPage(c consoleui.Chrome, errLine string) tui.Page {
+	b := append([]tui.Line{tui.Styled(tui.Strong, "The network editor stopped"), tui.Text("")}, tui.WrapStyled(tui.Alert, errLine, width, "")...)
+	return c.Page(b, consoleui.Key("Enter", "Leave"), "")
 }
 
 // Edit sets an address by hand and checks it. kept reports the address
-// is in use; false is back to the no-address screen.
+// is in use; false is back to the screen it was opened from.
 func Edit(ctx context.Context, u *tui.UI, d Deps) (bool, error) {
-	if d.Logger == nil {
-		d.Logger = log.Nop()
-	}
-	nics, err := d.Network.Interfaces(ctx)
+	d = d.withDefaults()
+	rc, cancel := context.WithTimeout(ctx, d.ReadTimeout)
+	defer cancel()
+	nics, err := d.Network.Interfaces(rc)
 	if err != nil {
+		d.Logger.Warn("netedit: the ports can't be listed", log.F("error", err.Error()))
+		_, _, err := u.Ask(ctx, tui.Static(ErrorPage(d.Chrome, noPorts)))
 		return false, err
 	}
 	f := form{nics: nics}
-	if cur, err := d.Network.Get(ctx); err == nil {
+	if cur, err := d.Network.Get(rc); err == nil {
 		f.base = cur
 	} else {
 		d.Logger.Warn("netedit: the current settings can't be read; the address goes on the defaults", log.F("error", err.Error()))
@@ -208,15 +262,11 @@ func Edit(ctx context.Context, u *tui.UI, d Deps) (bool, error) {
 	fields := f.fields()
 	for i := 0; i >= 0 && i <= len(fields); {
 		if i == len(fields) {
-			kept, back, err := apply(ctx, u, d, f)
-			if err != nil || kept {
-				return kept, err
+			end, err := apply(ctx, u, d, f)
+			if err != nil || end != endEdit {
+				return end == endKept, err
 			}
-			if back {
-				i = 0
-				continue
-			}
-			i--
+			i = 0
 			continue
 		}
 		moved, err := ask(ctx, u, d.Chrome, &f, fields[i], i+1, len(fields))
@@ -313,51 +363,110 @@ func (f form) settings() network.Settings {
 	return s
 }
 
-// apply sets the address live, shows the checks, and keeps it on Enter.
-// back is E (edit from the first field).
-func apply(ctx context.Context, u *tui.UI, d Deps, f form) (kept, back bool, err error) {
+// How apply ended.
+const (
+	endKept = iota
+	endEdit
+	endLeave
+)
+
+// checkRun is one Checks call's result.
+type checkRun struct {
+	checks  []sources.Check
+	err     error
+	expired bool
+}
+
+// runChecks makes one Checks call off the console's loop, so the page keeps
+// drawing and reading keys, and sends its result to done.
+func runChecks(ctx context.Context, d Deps, done chan<- checkRun) {
+	c, cancel := context.WithTimeout(ctx, d.ChecksTimeout)
+	defer cancel()
+	cs, err := d.Network.Checks(c)
+	done <- checkRun{checks: cs, err: err, expired: err != nil && errors.Is(c.Err(), context.DeadlineExceeded)}
+}
+
+// failed shows errLine on the checks page: Q leaves, anything else edits.
+func failed(ctx context.Context, u *tui.UI, d Deps, errLine string) (int, error) {
+	line, _, err := u.Ask(ctx, tui.Static(ChecksPage(d.Chrome, nil, errLine, true)))
+	if strings.EqualFold(strings.TrimSpace(line), "q") {
+		return endLeave, err
+	}
+	return endEdit, err
+}
+
+// apply sets the address live, shows the checks, and keeps it on Enter. The
+// checks run in the background; E edits from the first field and Q leaves,
+// and an address left unconfirmed goes back on its own. A call that runs
+// out of time ends on the error page.
+func apply(ctx context.Context, u *tui.UI, d Deps, f form) (int, error) {
 	s := f.settings()
 	if verr := network.Validate(s); verr != nil {
-		_, _, err := u.Ask(ctx, tui.Static(ChecksPage(d.Chrome, nil, consoleui.Describe(verr), true)))
-		return false, true, err
+		return failed(ctx, u, d, consoleui.Describe(verr))
 	}
-	token, revert, serr := d.Network.Set(ctx, s)
+	u.Show(ApplyingPage(d.Chrome))
+	sc, cancelSet := context.WithTimeout(ctx, d.SetTimeout)
+	token, revert, serr := d.Network.Set(sc, s)
+	expired := errors.Is(sc.Err(), context.DeadlineExceeded)
+	cancelSet()
 	if serr != nil {
-		d.Logger.Warn("netedit: the address wasn't applied", log.F("error", serr.Error()))
-		_, _, err := u.Ask(ctx, tui.Static(ChecksPage(d.Chrome, nil, "The address wasn't applied: "+consoleui.Describe(serr), true)))
-		return false, true, err
+		d.Logger.Warn("netedit: the address wasn't applied", log.F("error", serr.Error()), log.F("timed_out", expired))
+		if expired {
+			_, _, err := u.Ask(ctx, tui.Static(ErrorPage(d.Chrome, setTimedOut)))
+			return endLeave, err
+		}
+		return failed(ctx, u, d, "The address wasn't applied: "+consoleui.Describe(serr))
 	}
 	d.Logger.Info("netedit: address applied; checking", log.F("port", f.port), log.F("revert_after", revert))
+	runs, stop := context.WithCancel(ctx)
+	defer stop()
+	done := make(chan checkRun, 1)
+	running := false
 	var checks []sources.Check
 	errLine := ""
 	settled := false
-	for {
-		line, typed, err := u.Ask(ctx, func() (tui.Page, bool) {
-			if !settled {
-				cs, cerr := d.Network.Checks(ctx)
-				if cerr != nil {
-					errLine = consoleui.Describe(cerr)
-				} else {
-					checks, errLine = cs, ""
-					settled = len(cs) > 0
-					for _, c := range cs {
-						if c.State == sources.CheckRunning {
-							settled = false
-						}
+	view := func() (tui.Page, bool) {
+		select {
+		case r := <-done:
+			running = false
+			switch {
+			case r.expired:
+				return tui.Page{}, true
+			case r.err != nil:
+				errLine = consoleui.Describe(r.err)
+			default:
+				checks, errLine = r.checks, ""
+				settled = len(r.checks) > 0
+				for _, c := range r.checks {
+					if c.State == sources.CheckRunning {
+						settled = false
 					}
 				}
 			}
-			return ChecksPage(d.Chrome, checks, errLine, settled), false
-		})
+		default:
+		}
+		if !settled && !running {
+			running = true
+			go runChecks(runs, d, done)
+		}
+		return ChecksPage(d.Chrome, checks, errLine, settled), false
+	}
+	for {
+		line, typed, err := u.Ask(ctx, view)
 		if err != nil {
-			return false, false, err
+			return endLeave, err
 		}
 		if !typed {
-			continue
+			d.Logger.Warn("netedit: the checks ran out of time", log.F("port", f.port))
+			_, _, err := u.Ask(ctx, tui.Static(ErrorPage(d.Chrome, checksTimedOut)))
+			return endLeave, err
 		}
 		switch strings.ToLower(strings.TrimSpace(line)) {
 		case "e":
-			return false, true, nil
+			return endEdit, nil
+		case "q":
+			d.Logger.Info("netedit: left without keeping the address", log.F("port", f.port))
+			return endLeave, nil
 		case "":
 			if !settled {
 				continue
@@ -372,12 +481,15 @@ func apply(ctx context.Context, u *tui.UI, d Deps, f form) (kept, back bool, err
 				settled = true
 				continue
 			}
-			if err := d.Network.Confirm(ctx, token); err != nil {
+			cc, cancel := context.WithTimeout(ctx, d.SetTimeout)
+			err := d.Network.Confirm(cc, token)
+			cancel()
+			if err != nil {
 				errLine = "The address couldn't be kept: " + consoleui.Describe(err)
 				continue
 			}
 			d.Logger.Info("netedit: address kept", log.F("port", f.port))
-			return true, false, nil
+			return endKept, nil
 		}
 	}
 }
