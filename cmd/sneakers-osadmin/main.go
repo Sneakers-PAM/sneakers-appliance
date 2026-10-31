@@ -123,6 +123,11 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// the box's names change; the source re-reads them, so the
 		// listeners keep running.
 		if src == nil {
+			if _, err := osadmin.ReadCertInfo(paths.OwnDir()); err != nil {
+				if host, addrs, err = settleAddresses(ctx, binding, lg, osadmin.CertSettle, 2*time.Second); err != nil {
+					return nil
+				}
+			}
 			cert, info, err := osadmin.ServeCert(paths.OwnDir(), host, addrs, time.Now())
 			if err != nil {
 				return err
@@ -188,6 +193,35 @@ func waitForAddresses(ctx context.Context, binding accessv1connect.BindingServic
 		case <-time.After(5 * time.Second):
 		}
 	}
+}
+
+// settleAddresses returns the host name and addresses once they've held
+// still for quiet, looking every poll. The first certificate waits for
+// this: its fingerprint goes on the console for a person to check, and the
+// addresses arrive one at a time, so one made for the first would soon be
+// replaced under them. Only a box with no certificate pays the wait.
+func settleAddresses(ctx context.Context, binding accessv1connect.BindingServiceClient, lg log.Logger, quiet, poll time.Duration) (string, []string, error) {
+	host, addrs, err := waitForAddresses(ctx, binding, lg)
+	if err != nil {
+		return "", nil, err
+	}
+	since := time.Now()
+	for time.Since(since) < quiet {
+		select {
+		case <-ctx.Done():
+			return "", nil, ctx.Err()
+		case <-time.After(poll):
+		}
+		h, a, err := waitForAddresses(ctx, binding, lg)
+		if err != nil {
+			return "", nil, err
+		}
+		if h != host || !slices.Equal(a, addrs) {
+			lg.Info("osadmin: the addresses are still arriving; the first certificate waits", log.F("addresses", len(a)))
+			host, addrs, since = h, a, time.Now()
+		}
+	}
+	return host, addrs, nil
 }
 
 // watch returns true when the host name or addresses change, false when

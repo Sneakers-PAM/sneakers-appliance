@@ -103,6 +103,7 @@ confirm, and every minute.
 
 | What happened | What the certificate does |
 |---|---|
+| First boot, no certificate yet | `sneakers-osadmin` waits for the addresses to hold still for 30 seconds, then makes the first one, so the fingerprint on the console isn't replaced seconds later when IPv6 arrives after the lease. The console shows the fingerprint, and :8443 answers, from then on |
 | Static change or host name, committed | Replaced once the names have held still for 30 seconds |
 | DHCP lease moves, nobody watching | The same: there's no pending change to wait for |
 | A change waits for its confirm, or is being applied or undone | Stays. Replaced 30 seconds after it's kept; never touched if it reverts, so there's nothing to put back |
