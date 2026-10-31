@@ -1,0 +1,3 @@
+apiVersion: sneakers-pam/v1alpha1
+kind: Brand
+logo: logo.svg
