@@ -32,6 +32,10 @@ import (
 // needed 1.6 GiB.
 const importRecords = 727000
 
+// importSourceName is the source's name, which the box's "imported from"
+// audit record names.
+const importSourceName = "source.example.org"
+
 // importMemMiB is the import leg's VM: the product, held while the import
 // is open, and a step's 4 GiB limit, with room for the box's own check
 // that a step fits (internal/productimport).
@@ -78,7 +82,7 @@ func startSource(t *testing.T, e importEnv, records int) *source {
 	t.Helper()
 	work := filepath.Join(t.TempDir(), "source")
 	s := &source{env: append(os.Environ(), "RELEASE_SRC="+e.releaseSrc, "MIGRATE="+e.migrate, "SYNTH="+e.synth, "WORK="+work,
-		"AUDIT_RECORDS="+strconv.Itoa(records), "PREFIX=realci-source"), out: &bytes.Buffer{}}
+		"AUDIT_RECORDS="+strconv.Itoa(records), "PREFIX=realci-source", "SOURCE_NAME="+importSourceName), out: &bytes.Buffer{}}
 	s.up = exec.Command("bash", filepath.Join("..", "..", "..", "build", "realci", "source.sh"), "up") // #nosec G204 -- as above
 	s.up.Env, s.up.Stdout, s.up.Stderr = s.env, s.out, s.out
 	if err := s.up.Start(); err != nil {
@@ -305,13 +309,114 @@ func (b *realBox) memoryLines() string {
 	return strings.Join(all, "\n")
 }
 
+// takesSourceName says whether this sneakers-migrate writes bundle format
+// 2.0, which leaves the audit trail on the source.
+func takesSourceName(t *testing.T, migrate string) bool {
+	t.Helper()
+	out, err := exec.Command(migrate, "export", "--help").CombinedOutput() // #nosec G204 -- test-only, the run's own build
+	if err != nil {
+		t.Fatalf("sneakers-migrate export --help: %v: %s", err, out)
+	}
+	return strings.Contains(string(out), "--source-name")
+}
+
+var notCarriedAudit = regexp.MustCompile(`not carried: audit\.audit_records \((\d+) rows\)`)
+
+// trailStays checks a format 2.0 import from the export's output and the
+// review's, import's and verify's reports: the audit trail stayed on the
+// source (records long), the box took none of it, and the box's chain
+// starts with the one record of the import, naming the source.
+func trailStays(name string, records int, export, review, imp, verify string) error {
+	m := notCarriedAudit.FindStringSubmatch(export)
+	if m == nil {
+		return fmt.Errorf("the export doesn't list the audit trail as not carried:\n%s", export)
+	}
+	if n, _ := strconv.Atoi(m[1]); n < records {
+		return fmt.Errorf("the export left %d audit records on the source, not %d", n, records)
+	}
+	var rv struct {
+		AuditTrail string `json:"audit_trail"`
+	}
+	if err := json.Unmarshal([]byte(review), &rv); err != nil {
+		return fmt.Errorf("the review report: %w", err)
+	}
+	if !strings.Contains(rv.AuditTrail, "stays on the source") {
+		return fmt.Errorf("the review's audit trail note says %q", rv.AuditTrail)
+	}
+	type counted struct {
+		Table string `json:"table"`
+	}
+	var ir struct {
+		ImportedFrom string    `json:"imported_from"`
+		Entries      int       `json:"migration_audit_entries"`
+		Tables       []counted `json:"tables"`
+		NotCarried   []struct {
+			Name string `json:"name"`
+		} `json:"not_carried"`
+	}
+	if err := json.Unmarshal([]byte(imp), &ir); err != nil {
+		return fmt.Errorf("the import report: %w", err)
+	}
+	if ir.ImportedFrom != name {
+		return fmt.Errorf("the import is from %q, not %q", ir.ImportedFrom, name)
+	}
+	if ir.Entries != 1 {
+		return fmt.Errorf("the import wrote %d audit records, not 1", ir.Entries)
+	}
+	for _, c := range ir.Tables {
+		if strings.HasPrefix(c.Table, "audit.") {
+			return fmt.Errorf("the import took %s", c.Table)
+		}
+	}
+	listed := false
+	for _, n := range ir.NotCarried {
+		listed = listed || n.Name == "audit.audit_records"
+	}
+	if !listed {
+		return fmt.Errorf("the import report doesn't list the audit trail as not carried")
+	}
+	var vr struct {
+		OK     bool `json:"ok"`
+		Checks []struct {
+			Name   string `json:"name"`
+			OK     bool   `json:"ok"`
+			Detail string `json:"detail"`
+		} `json:"checks"`
+		Counts []counted `json:"counts"`
+	}
+	if err := json.Unmarshal([]byte(verify), &vr); err != nil {
+		return fmt.Errorf("the verify report: %w", err)
+	}
+	if !vr.OK {
+		return fmt.Errorf("the verify report isn't ok: %s", verify)
+	}
+	for _, c := range vr.Counts {
+		if strings.HasPrefix(c.Table, "audit.") {
+			return fmt.Errorf("the verify counted %s", c.Table)
+		}
+	}
+	head := "starting with the import record (imported from " + name + ")"
+	for _, c := range vr.Checks {
+		if c.Name == "audit chain" {
+			if !c.OK || !strings.Contains(c.Detail, head) {
+				return fmt.Errorf("the audit chain check: ok=%t %q", c.OK, c.Detail)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("the verify report has no audit chain check")
+}
+
 // TestTheRealBundleImportsALargeAuditChain moves an earlier install with
 // a 727,000-record audit chain onto a new box running the product under
 // test, through the Import page's API: open, the export encrypted to the
 // box's key, then review, convert (a proposal sheet that renames one
 // secret), check, import with the first admin's email and verify, each a
-// Job that must pass. The box's memory is read from the lab hook with the
-// product running, with the import open, and at each step's peak.
+// Job that must pass. Bundle format 2.0 leaves the chain on the source, and
+// the box's chain starts with one record of the import. Until the release
+// pins a migrate image that writes 2.0, the leg moves the chain as format 1
+// does. The box's memory is read from the lab hook with the product
+// running, with the import open, and at each step's peak.
 func TestTheRealBundleImportsALargeAuditChain(t *testing.T) {
 	e := needReal(t)
 	ie := needImport(t)
@@ -334,7 +439,8 @@ func TestTheRealBundleImportsALargeAuditChain(t *testing.T) {
 	}
 	src.ready(t)
 	bundle := filepath.Join(t.TempDir(), "bundle.age")
-	t.Logf("%s", strings.TrimSpace(src.run(t, "export", open.Recipient, bundle)))
+	exported := src.run(t, "export", open.Recipient, bundle)
+	t.Logf("%s", strings.TrimSpace(exported))
 	// The import holds the product after its services phase: the memory
 	// with the import open is what the steps run next to.
 	held := b.lastMemory()
@@ -395,8 +501,16 @@ func TestTheRealBundleImportsALargeAuditChain(t *testing.T) {
 	if pw.Password == "" {
 		t.Fatal("the import made no one-time password for the first admin")
 	}
-	_, d = b.importStep("verify", nil, time.Hour)
+	ver, d := b.importStep("verify", nil, time.Hour)
 	timed("verify", d)
+	if takesSourceName(t, ie.migrate) {
+		if err := trailStays(importSourceName, importRecords, exported, review.Report, imp.Report, ver.Report); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("the audit trail stayed on the source, and the box's chain starts with the import of %s", importSourceName)
+	} else {
+		t.Logf("the release's migrate image writes bundle format 1: the audit chain moved with the bundle")
+	}
 
 	adm = signIn(t, b.adminPort, b.alice)
 	var page importPage
