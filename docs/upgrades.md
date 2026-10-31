@@ -699,9 +699,24 @@ slot a later stage may replace. The images k0s imported into containerd stay in 
 the disk cleanup removes those neither slot needs, with k0s running again.
 
 **When a step fails** the reset stops there and answers `PRODUCT_RESET` with the reason
-(`detail.step` in the audit entry). Until the slot is taken away (step 6) the product is still
-installed, and running `sneakers reset` again goes through it from the start: the data goes before
-the slot, so a reset never leaves data behind a product that's no longer installed. The
+(`detail.step` in the audit entry). A reset that hadn't removed anything leaves the product as it was. Past that,
+the product is held as below, and `sneakers reset` again goes on from that step: the data goes
+before the slot, so a reset never leaves data behind a product that's no longer installed. The
 history on Updates lists each reset (`reset (product)`) with its outcome, and the OS audit log
-has it as `product.reset`, with the counts: the namespaces, the objects and the bytes removed.
+has it as `product.reset`, twice: `event=started` before anything goes, and `event=finished`
+with the counts: the namespaces, the objects and the bytes removed.
+
+**When a reset is cut off** (a reboot, a power cut or a crash; a dropped SSH session doesn't stop
+it) the box knows, because the reset writes its record, `platform/product-reset.json` on the state
+volume, before it removes anything, and moves it on before each step. `k0s-interim` refuses to
+start k0s on that record, so the product never comes back empty with a new vault key and new box
+secrets. At its next start the box settles it by how far the reset got:
+
+| Cut off | What the box does |
+| --- | --- |
+| While the product was stopping | Nothing was removed. The reset is dropped, the product starts again, and the history and the audit log (`event=abandoned`) say so. Run it again to reset. |
+| With its objects, data or slot going | The product can't come back, so the only way on is to finish. It stays stopped, the box says failed, Status (a warning), Updates and the console say why, and a product update is refused (`PRODUCT_RESET`). `sneakers reset`, confirmed as usual, goes on from the step it was cut off at. |
+| With the slot gone | Only the record was left. The box finishes it (`event=finished`). |
+
+An unreadable record counts as cut off part-way.
 

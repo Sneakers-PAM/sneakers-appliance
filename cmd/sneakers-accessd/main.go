@@ -68,6 +68,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productedge"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productimport"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productinfo"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productreset"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
@@ -310,17 +311,18 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig,
 			stack: filepath.Join("/var/lib/k0s/manifests", productspec.BoxSecretsStack, productspec.BoxSecretsStack+".yaml"),
 		},
-		Paths:           paths,
-		BoxStateFile:    boxstate.File,
-		CertDir:         paths.OwnDir(),
-		Certs:           certs,
-		Elevation:       elev,
-		RootKey:         root,
-		CodeSealer:      accessd.CustodySealer{Client: custody},
-		Lockout:         book,
-		OnFirstAdmin:    func() { go startSSHD() },
-		OnConsoleChange: d.ConsoleChanged,
-		Shells:          &sshsession.Proc{},
+		Paths:            paths,
+		BoxStateFile:     boxstate.File,
+		ResetRunningFile: filepath.Join(c.run, productreset.RunningFile),
+		CertDir:          paths.OwnDir(),
+		Certs:            certs,
+		Elevation:        elev,
+		RootKey:          root,
+		CodeSealer:       accessd.CustodySealer{Client: custody},
+		Lockout:          book,
+		OnFirstAdmin:     func() { go startSSHD() },
+		OnConsoleChange:  d.ConsoleChanged,
+		Shells:           &sshsession.Proc{},
 		// The installed product's exposed values, read as the appliance's
 		// own service account (the admin kubeconfig only mints its token).
 		Exposed: &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount},
@@ -401,6 +403,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	go runDiskGuard(ctx, guard)
 	d.RefreshStatus(ctx)
 	api.ResumeProductUp()
+	api.ResumeProductReset(ctx)
 	// netd keeps the product's ports only while it runs: open them again
 	// at start, and each minute until that works.
 	portsOpen := api.OpenProductPorts(ctx) == nil

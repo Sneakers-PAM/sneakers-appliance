@@ -225,6 +225,10 @@ message ProductSlots {
   // OS is in it.
   string requires_base_os = 6;
   bool fits = 7;
+  // reset_note says a product reset was cut off part-way and how to finish
+  // it, while the product can't start for it; empty otherwise
+  // (docs/upgrades.md#removing-the-product).
+  string reset_note = 8;
 }
 
 // ProductVersion is one product bundle a source offers.

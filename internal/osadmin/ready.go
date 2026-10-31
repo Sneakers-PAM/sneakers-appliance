@@ -205,6 +205,9 @@ func (s *Server) productFailed(step, why string) {
 
 // productFailure is the failed step and why, or "" when nothing failed.
 func (s *Server) productFailure() (step, why string) {
+	if note := s.resetCutOffNote(); note != "" {
+		return "reset", note
+	}
 	s.ready.mu.Lock()
 	defer s.ready.mu.Unlock()
 	return s.ready.failedStep, s.ready.failed

@@ -127,6 +127,9 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 	productCtx, cancelProduct := context.WithTimeout(ctx, statusServiceTimeout)
 	defer cancelProduct()
 	out.Product = s.productSlots(productCtx)
+	if note := out.Product.GetResetNote(); note != "" {
+		out.Warnings = append(out.Warnings, &osadminv1.Warning{Kind: osadminv1.WarningKind_WARNING_KIND_PRODUCT_RESET_CUT_OFF, Detail: note, Critical: true})
+	}
 	if cert.SelfSigned {
 		add(osadminv1.WarningKind_WARNING_KIND_SELF_SIGNED_TLS, "This page uses the box's own self-signed certificate; check its fingerprint.")
 	}

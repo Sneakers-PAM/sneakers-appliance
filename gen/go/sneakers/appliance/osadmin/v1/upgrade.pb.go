@@ -450,8 +450,12 @@ type ProductSlots struct {
 	// OS is in it.
 	RequiresBaseOs string `protobuf:"bytes,6,opt,name=requires_base_os,json=requiresBaseOs,proto3" json:"requires_base_os,omitempty"`
 	Fits           bool   `protobuf:"varint,7,opt,name=fits,proto3" json:"fits,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// reset_note says a product reset was cut off part-way and how to finish
+	// it, while the product can't start for it; empty otherwise
+	// (docs/upgrades.md#removing-the-product).
+	ResetNote     string `protobuf:"bytes,8,opt,name=reset_note,json=resetNote,proto3" json:"reset_note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ProductSlots) Reset() {
@@ -531,6 +535,13 @@ func (x *ProductSlots) GetFits() bool {
 		return x.Fits
 	}
 	return false
+}
+
+func (x *ProductSlots) GetResetNote() string {
+	if x != nil {
+		return x.ResetNote
+	}
+	return ""
 }
 
 // ProductVersion is one product bundle a source offers.
@@ -3229,7 +3240,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x0fbuiltin_version\x18\t \x01(\tR\x0ebuiltinVersion\x12(\n" +
 	"\x10requires_base_os\x18\n" +
 	" \x01(\tR\x0erequiresBaseOs\x12\x12\n" +
-	"\x04fits\x18\v \x01(\bR\x04fits\"\xf9\x01\n" +
+	"\x04fits\x18\v \x01(\bR\x04fits\"\x98\x02\n" +
 	"\fProductSlots\x12+\n" +
 	"\x11installed_version\x18\x01 \x01(\tR\x10installedVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12)\n" +
@@ -3237,7 +3248,9 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\arunning\x18\x04 \x01(\bR\arunning\x12\x12\n" +
 	"\x04name\x18\x05 \x01(\tR\x04name\x12(\n" +
 	"\x10requires_base_os\x18\x06 \x01(\tR\x0erequiresBaseOs\x12\x12\n" +
-	"\x04fits\x18\a \x01(\bR\x04fits\"\xed\x01\n" +
+	"\x04fits\x18\a \x01(\bR\x04fits\x12\x1d\n" +
+	"\n" +
+	"reset_note\x18\b \x01(\tR\tresetNote\"\xed\x01\n" +
 	"\x0eProductVersion\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x18\n" +
