@@ -182,8 +182,8 @@ const (
 	// certificate, or put an earlier one back, in the last 7 days.
 	// tls_change has the details.
 	WarningKind_WARNING_KIND_TLS_CHANGED WarningKind = 17
-	// WARNING_KIND_PRODUCT_RESET_CUT_OFF: a product reset was cut off part-way
-	// and the product stays stopped until an owner finishes it.
+	// WARNING_KIND_PRODUCT_RESET_CUT_OFF: a product reset was cut off part-way:
+	// the box is finishing it, or the product stays stopped until it's finished.
 	WarningKind_WARNING_KIND_PRODUCT_RESET_CUT_OFF WarningKind = 18
 )
 

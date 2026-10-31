@@ -240,7 +240,7 @@ prepare() {
   # would make new ones (docs/upgrades.md#removing-the-product).
   step="a product reset that was cut off"
   if [ -e /var/lib/sneakers/platform/product-reset.json ] && [ ! -e /run/sneakers/product-reset-running ]; then
-    say "a product reset was cut off; the product stays stopped until an owner finishes it"
+    say "a product reset was cut off; the product stays stopped, and the box finishes the reset"
     exit 1
   fi
   step="the installed product bundle"

@@ -24,6 +24,7 @@ import (
 type fakeReset struct {
 	b          *box
 	clusterErr error
+	dataErr    error
 	removed    []string
 	// seen is the reset's record as each step found it.
 	seen map[string]string
@@ -59,6 +60,9 @@ func (f *fakeReset) Cluster(_ context.Context, removing func() error) (productre
 func (f *fakeReset) Data(remove ...string) (int64, error) {
 	f.note("data")
 	f.saw("data")
+	if f.dataErr != nil {
+		return 0, f.dataErr
+	}
 	f.removed = remove
 	return 5000, nil
 }
