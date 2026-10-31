@@ -128,7 +128,7 @@ has switched:
 | `k0s` | Starting k0s | the Kubernetes API answers |
 | `images` | Importing the images | containerd lists every image in the bundle's `images/` |
 | `quiesce` | Stopping what was left running | no workload of the product runs: the box scales every one an earlier run left running to 0 and waits for its pods to go: every phased one, and every one without phase labels in any of the slot's stacks (switch-gated ones included) that the always-on stacks don't declare |
-| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's is applied, and k0s's own workloads (CoreDNS, kube-router) and the ones the always-on stacks declare (the edge) have rolled out; never a product workload, which only its phase starts |
+| `cluster` | Starting the cluster's network, DNS and edge | every stack that isn't a phase's is applied, with the box's values in its ConfigMaps, and k0s's own workloads (CoreDNS, kube-router) and the ones the always-on stacks declare (the edge) have rolled out; never a product workload, which only its phase starts |
 | `phase:data` | Starting the database and the cache | PostgreSQL and Valkey |
 | `phase:identity` | Starting sign-in, identity and the vault | Kratos (with its migration), the identity service and the vault, whose root key preflight runs in the vault itself, so it's Ready only once the preflight passed |
 | `phase:services` | Starting the services | workflow, audit, notify, connector and the SSH broker |
@@ -140,8 +140,12 @@ has switched:
   slot's `phase-stacks`, and the `phase-placed` list in `/var/lib/sneakers/platform` of what the
   loop placed), so k0s never starts the whole product at once. Once the phase before is Ready,
   the loop puts the phase's stacks in front of k0s, with the box's values, a switch's stack first
-  and each applied before the next. It waits until every workload in them runs the slot's pod
-  template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
+  and each applied before the next. Applied means k0s has written the stack's objects, and the
+  ConfigMap keys a box value goes into hold it: at the same version the objects are all still
+  there from the run before and no pod template changes (a chart's checksum annotations are of
+  the placeholder), so a new host name shows only in those keys, and a workload started sooner
+  would read the old name until it next restarts. It waits until every workload in them runs the
+  slot's pod template, sets each to the slot's replicas (an applier that kept a stopped workload's 0 doesn't
   hold it back), and waits until each has rolled out and every pod of the phase is Ready. A
   workload of the phase that another stack owns (an update from a bundle without phases finds
   them all in its one stack, and k0s's applier leaves an object another stack owns) is deleted
