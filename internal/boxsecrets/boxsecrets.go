@@ -391,12 +391,40 @@ func (s *Store) save(values map[string]string) error {
 	return writeAtomic(filepath.Join(s.Dir, ValuesFile), append(b, '\n'))
 }
 
+// syncFile flushes f to the disk; tests watch the order.
+var syncFile = func(f *os.File) error { return f.Sync() }
+
+// writeAtomic replaces p with b so that a power cut leaves the old file or
+// the new one, whole: the data is synced before the rename, and the directory
+// after it. Without the first sync the rename can reach the disk ahead of the
+// data, which leaves the box's only copy of its secrets empty.
 func writeAtomic(p string, b []byte) error {
 	tmp := p + ".new"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	defer func() { _ = os.Remove(tmp) }()
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- the box's own settings and stack files
+	if err != nil {
+		return fmt.Errorf("boxsecrets: %w", err)
+	}
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("boxsecrets: %w", err)
+	}
+	if err := syncFile(f); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("boxsecrets: %w", err)
+	}
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("boxsecrets: %w", err)
 	}
 	if err := os.Rename(tmp, p); err != nil {
+		return fmt.Errorf("boxsecrets: %w", err)
+	}
+	d, err := os.Open(filepath.Dir(p)) // #nosec G304 -- the directory of the file just written
+	if err != nil {
+		return fmt.Errorf("boxsecrets: %w", err)
+	}
+	defer func() { _ = d.Close() }()
+	if err := syncFile(d); err != nil {
 		return fmt.Errorf("boxsecrets: %w", err)
 	}
 	return nil
