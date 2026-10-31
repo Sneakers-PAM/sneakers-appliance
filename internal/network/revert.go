@@ -132,6 +132,53 @@ func (r *Reverter) Apply(prev, next Settings, apply ApplyFunc) (string, error) {
 	return token, nil
 }
 
+// Keep validates next, applies it and keeps it at once, with no timer and
+// nothing to confirm: the caller has already shown the change and been told
+// to go ahead. check, when given, runs first and can refuse the change with
+// nothing touched. It is refused like Apply while a change is pending or
+// applying, so no two changes ever overlap. When applying next fails, prev is
+// applied again and the error returned.
+func (r *Reverter) Keep(prev, next Settings, check func() error, apply ApplyFunc) error {
+	if err := Validate(next); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	switch {
+	case r.pending != nil:
+		r.mu.Unlock()
+		return invalid("pending", "a network change is waiting for its confirmation; confirm it or let it revert first")
+	case r.applying:
+		r.mu.Unlock()
+		r.o.Logger.Warn("network: a second change was refused while the first applies")
+		return invalid("pending", "a network change is being applied; wait for it to finish")
+	}
+	r.applying = true
+	r.mu.Unlock()
+
+	var err error
+	if check != nil {
+		err = check()
+	}
+	if err == nil {
+		if err = apply(next); err != nil {
+			r.o.Logger.Error(err, "network: apply failed, restoring the previous settings")
+			if rerr := apply(prev); rerr != nil {
+				r.o.Logger.Error(rerr, "network: restoring the previous settings failed")
+			}
+		}
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.applying = false
+	if err != nil {
+		return err
+	}
+	r.last = &Outcome{ID: newToken()[:12], At: r.clk.Now()}
+	r.o.Logger.Info("network: change applied and kept", log.F("change", r.last.ID))
+	return nil
+}
+
 // Confirm keeps the pending change. A token that isn't the pending one is
 // NET_INVALID naming "token"; NET_REVERTED when the change was already
 // undone.

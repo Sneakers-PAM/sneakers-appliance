@@ -7,6 +7,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
@@ -29,6 +30,10 @@ const adminPort = "8443"
 // revertGrace is how long after a change's window osadmin asks netd how it
 // ended, to audit a revert.
 const revertGrace = 5 * time.Second
+
+// commitWait bounds a commit: netd's gateway tests take seconds each, and the
+// apply is quick.
+const commitWait = time.Minute
 
 // network passes the page's calls to netd, which validates, applies and
 // auto-reverts.
@@ -56,6 +61,9 @@ func (h *networkSvc) GetNetwork(ctx context.Context, _ *connect.Request[osadminv
 	}
 	if l := g.Msg.GetLast(); l.GetReverted() {
 		out.LastChangeReverted, out.LastChangeRevertedAtStart, out.LastChangeId = true, l.GetAtStart(), l.GetChangeId()
+	}
+	if s := g.Msg.GetStaged(); s != nil {
+		out.Staged, out.StagedId, out.StagedReview = s, g.Msg.GetStagedId(), review(g.Msg.GetSettings(), s)
 	}
 	// The token lets the page confirm after a reload or from the change's
 	// new address; only an owner may confirm, so only an owner gets it.
@@ -96,6 +104,84 @@ func (h *networkSvc) SetNetwork(ctx context.Context, r *connect.Request[osadminv
 	return connect.NewResponse(out), nil
 }
 
+// StageNetwork passes settings to netd to hold for a commit, and says what
+// that commit will do.
+func (h *networkSvc) StageNetwork(ctx context.Context, r *connect.Request[osadminv1.StageNetworkRequest]) (*connect.Response[osadminv1.StageNetworkResponse], error) {
+	c := callFrom(ctx)
+	c.note("network")
+	if _, err := netmodel.FromWire(r.Msg.GetSettings()); err != nil {
+		return nil, err
+	}
+	cur, err := h.s.o.Network.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	res, err := h.s.o.Network.Stage(ctx, connect.NewRequest(&netdv1.StageRequest{Settings: r.Msg.GetSettings()}))
+	if err != nil {
+		return nil, err
+	}
+	id := res.Msg.GetStagedId()
+	c.note("network", "staged", id)
+	h.s.o.Logger.Info("osadmin: network change staged", log.F("by", c.session.Admin), log.F("staged", id))
+	return connect.NewResponse(&osadminv1.StageNetworkResponse{StagedId: id, Review: review(cur.Msg.GetSettings(), r.Msg.GetSettings())}), nil
+}
+
+// DiscardStagedNetwork drops what's staged.
+func (h *networkSvc) DiscardStagedNetwork(ctx context.Context, _ *connect.Request[osadminv1.DiscardStagedNetworkRequest]) (*connect.Response[osadminv1.DiscardStagedNetworkResponse], error) {
+	c := callFrom(ctx)
+	c.note("network")
+	if _, err := h.s.o.Network.DiscardStaged(ctx, connect.NewRequest(&netdv1.DiscardStagedRequest{})); err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("osadmin: staged network change dropped", log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.DiscardStagedNetworkResponse{}), nil
+}
+
+// CommitNetwork asks netd to test and apply the staged change. It doesn't
+// follow its caller's context: the new address drops the session that asked,
+// and netd has to finish and the audit has to say how it ended all the same.
+func (h *networkSvc) CommitNetwork(ctx context.Context, r *connect.Request[osadminv1.CommitNetworkRequest]) (*connect.Response[osadminv1.CommitNetworkResponse], error) {
+	c := callFrom(ctx)
+	id := r.Msg.GetStagedId()
+	c.note("network", "staged", id)
+	g, err := h.s.o.Network.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	rev := review(g.Msg.GetSettings(), g.Msg.GetStaged())
+	h.s.o.Logger.Info("osadmin: network commit asked for", log.F("by", c.session.Admin), log.F("staged", id), log.F("movesManagement", rev.GetMovesManagement()))
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commitWait)
+	defer cancel()
+	res, err := h.s.o.Network.Commit(cctx, connect.NewRequest(&netdv1.CommitRequest{StagedId: id}))
+	if err != nil {
+		h.s.o.Logger.Warn("osadmin: network commit refused", log.F("by", c.session.Admin), log.F("staged", id), log.F("error", err.Error()))
+		return nil, err
+	}
+	h.s.o.Logger.Info("osadmin: network change committed and kept", log.F("by", c.session.Admin), log.F("staged", id), log.F("gateways", len(res.Msg.GetTestedGateways())))
+	return connect.NewResponse(&osadminv1.CommitNetworkResponse{TestedGateways: res.Msg.GetTestedGateways(), Review: rev}), nil
+}
+
+// review says what committing next over prev does.
+func review(prev, next *netdv1.Settings) *osadminv1.StagedReview {
+	mv, url, cert := moves(prev, next)
+	r := &osadminv1.StagedReview{MovesManagement: mv, NewUrl: url, NewCertificate: cert, ChangesAllowList: !slices.Equal(prev.GetAllowList(), next.GetAllowList())}
+	if mv {
+		r.NewAddress = staticAddress(next.GetManagement())
+	}
+	return r
+}
+
+// staticAddress is i's static address, IPv4 first; empty when DHCP or SLAAC
+// gives it.
+func staticAddress(i *netdv1.Interface) string {
+	for _, a := range []string{i.GetIpv4().GetAddress(), i.GetIpv6().GetAddress()} {
+		if p, err := netip.ParsePrefix(a); err == nil {
+			return p.Addr().String()
+		}
+	}
+	return ""
+}
+
 // moves says whether next changes the management address the browser
 // uses (and the admin page's URL at its new static address), and whether
 // the box will make a new self-signed certificate for it.
@@ -103,13 +189,8 @@ func moves(prev, next *netdv1.Settings) (bool, string, bool) {
 	pm, nm := prev.GetManagement(), next.GetManagement()
 	addr := pm.GetName() != nm.GetName() || !proto.Equal(pm.GetIpv4(), nm.GetIpv4()) || !proto.Equal(pm.GetIpv6(), nm.GetIpv6())
 	url := ""
-	if addr {
-		for _, a := range []string{nm.GetIpv4().GetAddress(), nm.GetIpv6().GetAddress()} {
-			if p, err := netip.ParsePrefix(a); err == nil && a != "" {
-				url = "https://" + net.JoinHostPort(p.Addr().String(), adminPort) + "/"
-				break
-			}
-		}
+	if a := staticAddress(nm); addr && a != "" {
+		url = "https://" + net.JoinHostPort(a, adminPort) + "/"
 	}
 	return addr, url, addr || prev.GetHostname() != next.GetHostname()
 }

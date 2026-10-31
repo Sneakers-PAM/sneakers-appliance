@@ -1,0 +1,24 @@
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[34m/\e[0m\e[1;34mo\e[0m\e[34m\__\e[0m\e[1;37m  \e[0m\e[1;37mSneakers-PAM Appliance\e[0m\e[2m   0.1.0\e[0m                       \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   \e[1;37mCheck this change\e[0m                                          \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m      Now          dhcp                                       \e[34m|\e[0m
+\e[34m|\e[0m      Port         \e[1;37mens192\e[0m                                     \e[34m|\e[0m
+\e[34m|\e[0m      Address      \e[1;37m192.0.2.10/24\e[0m                              \e[34m|\e[0m
+\e[34m|\e[0m      Gateway      \e[1;37m192.0.2.1\e[0m                                  \e[34m|\e[0m
+\e[34m|\e[0m      DNS server   \e[1;37mnone\e[0m                                       \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m   Nothing has changed yet. Enter applies this and keeps      \e[34m|\e[0m
+\e[34m|\e[0m   it; it doesn't go back on its own.                         \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m|\e[0m                                                              \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m
+\e[34m|\e[0m  \e[2mEnter  Apply and keep\e[0m\e[2m     \e[0m\e[2mE  Edit\e[0m                           \e[34m|\e[0m
+\e[34m+--------------------------------------------------------------+\e[0m

@@ -287,16 +287,89 @@ func TestTheRootShellNeedsATerminal(t *testing.T) {
 	}
 }
 
-func TestNetworkSetConfirms(t *testing.T) {
-	b := &recordingBackend{reply: map[string]shell.Result{"network.set": {Text: "Applied.", Data: map[string]string{"token": "t1"}}}}
-	r := runShellIn(t, shell.OriginSSH, "network set hostname=appliance.example.org", "y\n", b)
-	if r.e != nil || strings.Join(b.actions(), ",") != "network.set,network.confirm" || b.calls[1].Args[0] != "t1" {
-		t.Fatalf("%v %v", r.e, b.calls)
-	}
-	b.calls = nil
-	r = runShellIn(t, shell.OriginSSH, "network set hostname=appliance.example.org", "", b)
-	if r.e != nil || strings.Join(b.actions(), ",") != "network.set" || !strings.Contains(r.out, "network confirm t1") {
+// network set stages and asks nothing: no keep prompt, nothing confirmed.
+func TestNetworkSetOnlyStages(t *testing.T) {
+	b := &recordingBackend{reply: map[string]shell.Result{"network.set": {Text: "Staged."}}}
+	r := runShellIn(t, shell.OriginSSH, "network set hostname=appliance.example.org", "", b)
+	if r.e != nil || strings.Join(b.actions(), ",") != "network.set" {
 		t.Fatalf("%v %v %q", r.e, b.actions(), r.out)
+	}
+}
+
+// warnBackend records what the session had been told when the commit ran.
+type warnBackend struct {
+	recordingBackend
+	errb *bytes.Buffer
+	seen string
+}
+
+func (b *warnBackend) Call(ctx context.Context, r shell.Request) (shell.Result, error) {
+	if r.Action == "network.commit" {
+		b.seen = b.errb.String()
+	}
+	return b.recordingBackend.Call(ctx, r)
+}
+
+func runCommit(t *testing.T, o shell.Origin, review map[string]string) (*warnBackend, string, error) {
+	t.Helper()
+	var out, errb bytes.Buffer
+	b := &warnBackend{errb: &errb}
+	b.reply = map[string]shell.Result{"network.review": {Data: review}, "network.commit": {Text: "Applied and saved."}}
+	err := shell.Run(context.Background(), &shell.Env{Origin: o, Backend: b, In: strings.NewReader(""), Out: &out, Err: &errb}, "network commit")
+	return b, out.String(), err
+}
+
+// The warning comes before the commit, because the commit can drop the
+// session; it says so, says it's expected, and names where to go.
+func TestNetworkCommitWarnsBeforeItRuns(t *testing.T) {
+	b, out, err := runCommit(t, shell.OriginSSH, map[string]string{"staged": "stg-1", "moves": "yes", "address": "192.0.2.50"})
+	if err != nil || strings.Join(b.actions(), ",") != "network.review,network.commit" || b.calls[1].Args[0] != "stg-1" {
+		t.Fatalf("%v %v", err, b.calls)
+	}
+	for _, want := range []string{"this SSH session will drop", "expected, not an error", "Reconnect to 192.0.2.50", "nothing changes if it doesn't answer"} {
+		if !strings.Contains(b.seen, want) {
+			t.Errorf("before the commit it said %q, want %q", b.seen, want)
+		}
+	}
+	if !strings.Contains(out, "Applied and saved.") {
+		t.Fatal(out)
+	}
+}
+
+func TestNetworkCommitWarningFollowsTheChange(t *testing.T) {
+	b, _, err := runCommit(t, shell.OriginSSH, map[string]string{"staged": "s", "moves": "yes"})
+	if err != nil || !strings.Contains(b.seen, "DHCP or SLAAC") || strings.Contains(b.seen, "Reconnect to") {
+		t.Fatalf("%v %q", err, b.seen)
+	}
+	b, _, err = runCommit(t, shell.OriginConsole, map[string]string{"staged": "s", "moves": "yes", "address": "192.0.2.50"})
+	if err != nil || strings.Contains(b.seen, "this SSH session") || !strings.Contains(b.seen, "SSH sessions on the old one") {
+		t.Fatalf("%v %q", err, b.seen)
+	}
+	b, _, err = runCommit(t, shell.OriginSSH, map[string]string{"staged": "s"})
+	if err != nil || strings.Contains(b.seen, "drop") {
+		t.Fatalf("%v %q", err, b.seen)
+	}
+	b, _, err = runCommit(t, shell.OriginSSH, map[string]string{"staged": "s", "allow-list": "yes"})
+	if err != nil || !strings.Contains(b.seen, "allow-list") || !strings.Contains(b.seen, "Recover access") {
+		t.Fatalf("%v %q", err, b.seen)
+	}
+}
+
+// With nothing staged there's nothing to warn about or commit.
+func TestNetworkCommitWithNothingStaged(t *testing.T) {
+	b := &recordingBackend{err: map[string]error{"network.review": codes.New(codes.NetInvalid, "nothing is staged")}}
+	r := runShellIn(t, shell.OriginSSH, "network commit", "", b)
+	assertCode(t, r.e, "NET_INVALID")
+	if strings.Join(b.actions(), ",") != "network.review" {
+		t.Fatalf("%v", b.actions())
+	}
+}
+
+func TestNetworkDiscard(t *testing.T) {
+	b := &recordingBackend{}
+	r := runShellIn(t, shell.OriginSSH, "network discard", "", b)
+	if r.e != nil || strings.Join(b.actions(), ",") != "network.discard" {
+		t.Fatalf("%v %v", r.e, b.actions())
 	}
 }
 

@@ -341,7 +341,7 @@ Example:
 
 Network settings.
 
-The network settings: show them, change them (with an automatic revert) and keep a change.
+The network settings: show them, stage a change, then commit it or discard it.
 
 Offered over: SSH and console.
 
@@ -352,15 +352,19 @@ network <command>
 Its commands:
 
 - `network allow-list`: The management allow-list
-- `network confirm`: Keep a pending network change
-- `network set`: Change network settings (reverts in 120 s unless confirmed)
+- `network commit`: Test and apply the staged network change
+- `network confirm`: Keep an allow-list reset
+- `network discard`: Drop the staged network change
+- `network set`: Stage a network change (network commit applies it)
 - `network show`: Show the network settings
 
 Example:
 
 ```text
   network allow-list reset
+  network commit
   network confirm 7K2Q-MX4D
+  network discard
   network set ?
   network show
 ```
@@ -405,11 +409,29 @@ Example:
   network allow-list reset
 ```
 
+## `network commit`
+
+Test and apply the staged network change.
+
+Applies and saves what network set staged, for good: there is no revert afterwards. It says first whether this SSH session will drop and which address to reconnect to; a dropped session is expected, not an error. Before anything changes it tests a new gateway from the new address, with the current address still up, and refuses with NET_GATEWAY if the gateway doesn't answer, leaving the box and the staged change as they were. An address from DHCP or SLAAC has no gateway to test. Owners only.
+
+Offered over: SSH and console.
+
+```text
+network commit
+```
+
+Example:
+
+```text
+  network commit
+```
+
 ## `network confirm`
 
-Keep a pending network change.
+Keep an allow-list reset.
 
-Keeps the network change the token names, so it doesn't revert. network set and network allow-list reset print the token.
+Keeps the allow-list reset the token names, so it doesn't revert. network allow-list reset prints the token.
 
 Offered over: SSH and console.
 
@@ -423,11 +445,29 @@ Example:
   network confirm 7K2Q-MX4D
 ```
 
+## `network discard`
+
+Drop the staged network change.
+
+Drops what network set staged. Nothing on the box changes. Owners only.
+
+Offered over: SSH and console.
+
+```text
+network discard
+```
+
+Example:
+
+```text
+  network discard
+```
+
 ## `network set`
 
-Change network settings (reverts in 120 s unless confirmed).
+Stage a network change (network commit applies it).
 
-Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm; a change to the management interface's IPv4 or IPv6 mode or address can, so it always gets the 120-second window. Owners only. With no arguments, or ?, it lists the keys. The same settings are also on :8443 or the console's network screen.
+Stages a change to the settings the keys name, on top of the current ones (or of what's already staged); the others stay as they are. Nothing changes on the box until network commit. network show shows what's staged, network discard drops it, and a restart drops it too. Owners only. With no arguments, or ?, it lists the keys. The same settings are also on :8443 or the console's network screen.
 
 Offered over: SSH and console.
 
@@ -466,7 +506,7 @@ Example:
 
 Show the network settings.
 
-Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.
+Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy. A change network set staged is listed after them, with what it would change.
 
 Offered over: SSH and console.
 

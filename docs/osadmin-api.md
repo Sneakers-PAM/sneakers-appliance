@@ -147,6 +147,9 @@ same.
 | `NetworkService.GetNetwork` | admin | no | |
 | `NetworkService.SetNetwork` | owner | yes | `network.set` |
 | `NetworkService.ConfirmNetwork` | owner | no | `network.confirm` |
+| `NetworkService.StageNetwork` | owner | no | `network.stage` |
+| `NetworkService.DiscardStagedNetwork` | owner | no | `network.discard` |
+| `NetworkService.CommitNetwork` | owner | yes | `network.commit` |
 | `NetworkService.RunChecks` | admin | no | |
 | `AuditService.ListEvents` | admin | no | |
 | `PowerService.GetPower` | admin | no | |

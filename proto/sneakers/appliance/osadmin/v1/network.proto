@@ -1,8 +1,10 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The Network page. Changes go to netd, which undoes them unless they are
-// confirmed within 120 seconds from a session that still works.
+// The Network page. A change is staged, reviewed and committed: netd tests
+// the staged gateway from the staged address, then applies and keeps it.
+// SetNetwork and ConfirmNetwork are the 120-second window the page used
+// before staging, and ConfirmNetwork keeps an allow-list reset.
 syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
@@ -31,6 +33,31 @@ service NetworkService {
     option (rule) = {
       role: ROLE_OWNER
       audit: "network.confirm"
+    };
+  }
+  // StageNetwork records settings for CommitNetwork and changes nothing
+  // live. A stage replaces the one before it.
+  rpc StageNetwork(StageNetworkRequest) returns (StageNetworkResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "network.stage"
+    };
+  }
+  // DiscardStagedNetwork drops what's staged.
+  rpc DiscardStagedNetwork(DiscardStagedNetworkRequest) returns (DiscardStagedNetworkResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "network.discard"
+    };
+  }
+  // CommitNetwork tests the staged gateway from the staged address, then
+  // applies and saves the change, with no window. NET_GATEWAY refuses it
+  // with nothing changed.
+  rpc CommitNetwork(CommitNetworkRequest) returns (CommitNetworkResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "network.commit"
     };
   }
   // RunChecks runs the link, address, gateway, DNS and NTP checks.
@@ -75,6 +102,31 @@ message GetNetworkResponse {
   // ntp_servers are the servers the clock asks now: the settings', else
   // DHCP's, else the image's default pool.
   repeated string ntp_servers = 16;
+  // staged is what StageNetwork recorded, absent when nothing is staged.
+  sneakers.appliance.netd.v1.Settings staged = 17;
+  // staged_id is what CommitNetwork takes for it.
+  string staged_id = 18;
+  // staged_review says what committing it does.
+  StagedReview staged_review = 19;
+}
+
+// StagedReview is what a commit of the staged settings does, shown before
+// it runs: the page or shell that commits may lose the box.
+message StagedReview {
+  // moves_management is true when the change moves the management address,
+  // so a session on the old one drops. That's expected, not an error.
+  bool moves_management = 1;
+  // new_address is the static management address to reconnect to; empty
+  // when the address comes from DHCP or SLAAC.
+  string new_address = 2;
+  // new_url is the admin page at new_address.
+  string new_url = 3;
+  // new_certificate is true when the box makes a new self-signed :8443
+  // certificate for the change.
+  bool new_certificate = 4;
+  // changes_allow_list is true when the change touches the allow-list,
+  // which can shut out the session that commits it.
+  bool changes_allow_list = 5;
 }
 
 message SetNetworkRequest {
@@ -107,6 +159,33 @@ message ConfirmNetworkRequest {
 }
 
 message ConfirmNetworkResponse {}
+
+message StageNetworkRequest {
+  sneakers.appliance.netd.v1.Settings settings = 1;
+}
+
+message StageNetworkResponse {
+  // staged_id is what CommitNetwork takes.
+  string staged_id = 1;
+  StagedReview review = 2;
+}
+
+message DiscardStagedNetworkRequest {}
+
+message DiscardStagedNetworkResponse {}
+
+message CommitNetworkRequest {
+  // staged_id is the id GetNetwork or StageNetwork gave for the change the
+  // admin reviewed.
+  string staged_id = 1;
+}
+
+message CommitNetworkResponse {
+  // tested_gateways are the gateways that answered; empty when the change
+  // set no new gateway to test.
+  repeated string tested_gateways = 1;
+  StagedReview review = 2;
+}
 
 message RunChecksRequest {}
 

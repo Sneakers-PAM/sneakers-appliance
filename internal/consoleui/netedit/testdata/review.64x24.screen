@@ -1,0 +1,24 @@
++--------------------------------------------------------------+
+|  /o\__  Sneakers-PAM Appliance   0.1.0                       |
++--------------------------------------------------------------+
+|                                                              |
+|   Check this change                                          |
+|                                                              |
+|      Now          dhcp                                       |
+|      Port         ens192                                     |
+|      Address      192.0.2.10/24                              |
+|      Gateway      192.0.2.1                                  |
+|      DNS server   none                                       |
+|                                                              |
+|   Nothing has changed yet. Enter applies this and keeps      |
+|   it; it doesn't go back on its own.                         |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
+|                                                              |
++--------------------------------------------------------------+
+|  Enter  Apply and keep     E  Edit                           |
++--------------------------------------------------------------+

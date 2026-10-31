@@ -53,6 +53,7 @@ var withCode = []string{
 	"PowerService.Reboot",
 	"PowerService.Shutdown",
 	"NetworkService.SetNetwork",
+	"NetworkService.CommitNetwork",
 	"BackupService.Restore",
 	"SetupService.AddRecoveryKey",
 	"SetupService.RemoveRecoveryKey",

@@ -156,7 +156,7 @@ word fits, a second Tab keeps the typed line, lists them under it one per line w
 does, and draws the prompt again; the value in effect is marked, as in `on   turn the MCP on
 (current)` for `<product> mcp`. A long list of bare words (the time zones) goes in columns. Only what the login
 may run is offered: the other origin's commands never, and an admin who isn't an owner isn't
-offered the owner-only commands (`network set`, `network confirm`, `setup recovery-key`), which
+offered the owner-only commands (`network set`, `network commit`, `network discard`, `network confirm`, `setup recovery-key`), which
 `help` doesn't list for them either; accessd still checks the role of every call. It's plain Tab
 (0x09), so it works the same from OpenSSH, PuTTY and MobaXterm.
 With no terminal, the code is one line of standard input, ended by Enter as LF, CRLF or a bare CR.
@@ -185,7 +185,7 @@ back with Up.
 |---|---|---|---|
 | `status` | yes | yes | accessd |
 | `disk cleanup` | yes | yes | accessd; runs the disk cleanup now and prints what each step freed ([disk-layout.md](disk-layout.md#the-cleanup)) |
-| `network show`, `network set key=value...`, `network confirm <token>` | yes | yes | accessd; `set` reverts in 120 s unless kept |
+| `network show`, `network set key=value...`, `network commit`, `network discard`, `network confirm <token>` | yes | yes | accessd; `set` only stages, `commit` tests the gateway and applies for good ([network.md](network.md#stage-and-commit)); `confirm` keeps an allow-list reset |
 | `network allow-list reset` | yes | no | accessd; typed `reset` |
 | `keys list` | yes | yes | accessd; keys are issued on :8443 |
 | `admins list` | yes | yes | accessd; admins are managed on :8443 |

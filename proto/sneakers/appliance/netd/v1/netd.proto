@@ -16,10 +16,22 @@ service NetworkService {
   // Get returns the applied settings.
   rpc Get(GetRequest) returns (GetResponse);
   // Set validates and applies settings, then undoes them unless Confirm
-  // comes within 120 seconds (NET_REVERTED).
+  // comes within 120 seconds (NET_REVERTED). With keep the change is kept at
+  // once, with no window: the console, which shows the change and asks
+  // before it calls this.
   rpc Set(SetRequest) returns (SetResponse);
   // Confirm keeps the pending change.
   rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
+  // Stage records settings for a later Commit and changes nothing live.
+  // They stay in netd's memory only, so a box that restarts drops them.
+  rpc Stage(StageRequest) returns (StageResponse);
+  // DiscardStaged drops what's staged.
+  rpc DiscardStaged(DiscardStagedRequest) returns (DiscardStagedResponse);
+  // Commit tests the staged gateway from the staged address, without
+  // touching the addresses in use, and then applies and saves the staged
+  // settings for good. A gateway that doesn't answer refuses it
+  // (NET_GATEWAY) with nothing changed.
+  rpc Commit(CommitRequest) returns (CommitResponse);
   // Checks runs the connectivity checks: link, address, gateway, DNS, NTP.
   rpc Checks(ChecksRequest) returns (ChecksResponse);
   // SetServicePorts sets the product's port rules on the service
@@ -112,6 +124,10 @@ message GetResponse {
   int32 seconds_left = 5;
   // last is how the most recent change ended, absent before the first.
   ChangeOutcome last = 6;
+  // staged is what Stage recorded, absent when nothing is staged.
+  Settings staged = 7;
+  // staged_id is what Commit takes for it.
+  string staged_id = 8;
 }
 
 // ChangeOutcome is how a change ended: confirmed or reverted.
@@ -127,6 +143,8 @@ message ChangeOutcome {
 
 message SetRequest {
   Settings settings = 1;
+  // keep keeps the change at once, with no window and nothing to confirm.
+  bool keep = 2;
 }
 
 message SetResponse {
@@ -147,6 +165,31 @@ message ConfirmRequest {
 }
 
 message ConfirmResponse {}
+
+message StageRequest {
+  Settings settings = 1;
+}
+
+message StageResponse {
+  // staged_id is what Commit takes.
+  string staged_id = 1;
+}
+
+message DiscardStagedRequest {}
+
+message DiscardStagedResponse {}
+
+message CommitRequest {
+  // staged_id names the staged settings the caller reviewed; anything else
+  // is refused, so a commit never applies a change nobody looked at.
+  string staged_id = 1;
+}
+
+message CommitResponse {
+  // tested_gateways are the gateways that answered; empty when the change
+  // set no new gateway to test.
+  repeated string tested_gateways = 1;
+}
 
 // CheckState is a check's result.
 enum CheckState {

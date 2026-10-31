@@ -63,10 +63,11 @@ func (s *Services) Starts() []string {
 // Results says.
 type Network struct {
 	// Current is what Get answers.
-	Current  network.Settings
-	mu       sync.Mutex
-	Applied  []network.Settings
-	Kept     []string
+	Current network.Settings
+	mu      sync.Mutex
+	Applied []network.Settings
+	// KeepErr refuses a Keep.
+	KeepErr  error
 	Results  []sources.Check
 	Addrs    []string
 	NoNetd   bool
@@ -98,26 +99,18 @@ func (n *Network) Get(context.Context) (network.Settings, error) {
 	return n.Current, nil
 }
 
-// Set records s.
-func (n *Network) Set(_ context.Context, s network.Settings) (string, int, error) {
-	if n.NoNetd {
-		return "", 0, errNoNetd
-	}
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.Applied = append(n.Applied, s)
-	n.checkRun = 0
-	return "T1", 120, nil
-}
-
-// Confirm records the kept token.
-func (n *Network) Confirm(_ context.Context, token string) error {
+// Keep records s.
+func (n *Network) Keep(_ context.Context, s network.Settings) error {
 	if n.NoNetd {
 		return errNoNetd
 	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	n.Kept = append(n.Kept, token)
+	if n.KeepErr != nil {
+		return n.KeepErr
+	}
+	n.Applied = append(n.Applied, s)
+	n.checkRun = 0
 	return nil
 }
 
@@ -185,13 +178,6 @@ func (n *Network) Settings() []network.Settings {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	return append([]network.Settings(nil), n.Applied...)
-}
-
-// Tokens are the tokens kept so far.
-func (n *Network) Tokens() []string {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	return append([]string(nil), n.Kept...)
 }
 
 // SetResults changes what the checks report.

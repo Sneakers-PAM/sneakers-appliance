@@ -70,6 +70,79 @@ func TestConfirmKeeps(t *testing.T) {
 	}
 }
 
+// A kept change has no timer and nothing to confirm, and it ends the story
+// of the last change, so an old revert stops being reported.
+func TestKeepAppliesWithNoWindow(t *testing.T) {
+	clk := clock.NewFake()
+	r := network.NewReverter(clk)
+	var rec recorder
+	if _, err := r.Apply(named("old"), named("new"), rec.apply); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(network.RevertAfter)
+	if l, ok := r.Last(); !ok || !l.Reverted {
+		t.Fatalf("last %+v", l)
+	}
+	rec.applied = nil
+	if err := r.Keep(named("old"), named("new"), nil, rec.apply); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(time.Hour)
+	if !slices.Equal(rec.applied, []string{"new"}) || r.Pending() {
+		t.Fatalf("applied %v pending %v", rec.applied, r.Pending())
+	}
+	if l, ok := r.Last(); !ok || l.Reverted {
+		t.Fatalf("last %+v", l)
+	}
+}
+
+func TestKeepRefusedByItsCheckChangesNothing(t *testing.T) {
+	r := network.NewReverter(clock.NewFake())
+	var rec recorder
+	refused := errors.New("no")
+	if err := r.Keep(named("old"), named("new"), func() error { return refused }, rec.apply); !errors.Is(err, refused) {
+		t.Fatal(err)
+	}
+	if len(rec.applied) != 0 || r.Pending() {
+		t.Fatalf("applied %v pending %v", rec.applied, r.Pending())
+	}
+}
+
+func TestKeepRestoresThePreviousSettingsWhenTheApplyFails(t *testing.T) {
+	r := network.NewReverter(clock.NewFake())
+	var rec recorder
+	failed := errors.New("no")
+	err := r.Keep(named("old"), named("new"), nil, func(s network.Settings) error {
+		_ = rec.apply(s)
+		if s.Hostname == "new.example.org" {
+			return failed
+		}
+		return nil
+	})
+	if !errors.Is(err, failed) || !slices.Equal(rec.applied, []string{"new", "old"}) || r.Pending() {
+		t.Fatalf("%v %v", err, rec.applied)
+	}
+}
+
+func TestKeepWaitsItsTurn(t *testing.T) {
+	r := network.NewReverter(clock.NewFake())
+	var rec recorder
+	if _, err := r.Apply(named("old"), named("new"), rec.apply); err != nil {
+		t.Fatal(err)
+	}
+	assertFieldErr(t, r.Keep(named("new"), named("newer"), nil, rec.apply), "NET_INVALID", "pending")
+
+	r = network.NewReverter(clock.NewFake())
+	err := r.Keep(named("old"), named("new"), func() error {
+		_, aerr := r.Apply(named("old"), named("other"), rec.apply)
+		assertFieldErr(t, aerr, "NET_INVALID", "pending")
+		return nil
+	}, rec.apply)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestConfirmAfterRevert(t *testing.T) {
 	clk := clock.NewFake()
 	r := network.NewReverter(clk)

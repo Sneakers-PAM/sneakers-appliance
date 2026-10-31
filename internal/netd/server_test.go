@@ -7,6 +7,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,5 +119,63 @@ func TestGetCarriesThePendingChange(t *testing.T) {
 	got, err = c.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
 	if err != nil || got.Msg.GetPending() || got.Msg.GetToken() != "" || got.Msg.GetLast().GetChangeId() != set.Msg.GetChangeId() || !got.Msg.GetLast().GetReverted() {
 		t.Fatalf("get after the revert %v %v", got, err)
+	}
+}
+
+func TestSetAndKeepOverConnect(t *testing.T) {
+	b := newBox(t)
+	b.writeSettings("network.yaml", static("eth0"))
+	b.start()
+	c := serve(t, b)
+	ctx := context.Background()
+	res, err := c.Set(ctx, connect.NewRequest(&netdv1.SetRequest{Settings: network.ToWire(moved("eth0")), Keep: true}))
+	if err != nil || res.Msg.GetToken() != "" || res.Msg.GetRevertAfterSeconds() != 0 {
+		t.Fatalf("%v %v", res, err)
+	}
+	if b.saved().Management.IPv4.Address.String() != newAddr {
+		t.Fatal("not saved")
+	}
+}
+
+func TestStageAndCommitOverConnect(t *testing.T) {
+	b := newBox(t)
+	b.writeSettings("network.yaml", static("eth0"))
+	b.start()
+	c := serve(t, b)
+	ctx := context.Background()
+	st, err := c.Stage(ctx, connect.NewRequest(&netdv1.StageRequest{Settings: network.ToWire(moved("eth0"))}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
+	if err != nil || got.Msg.GetStagedId() != st.Msg.GetStagedId() || got.Msg.GetStaged().GetManagement().GetIpv4().GetAddress() != newAddr || got.Msg.GetPending() {
+		t.Fatalf("%v %v", got, err)
+	}
+	b.sys.reachErr = errDown
+	_, err = c.Commit(ctx, connect.NewRequest(&netdv1.CommitRequest{StagedId: st.Msg.GetStagedId()}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "NET_GATEWAY") {
+		t.Fatal(err)
+	}
+	b.sys.mu.Lock()
+	b.sys.reachErr = nil
+	b.sys.mu.Unlock()
+	com, err := c.Commit(ctx, connect.NewRequest(&netdv1.CommitRequest{StagedId: st.Msg.GetStagedId()}))
+	if err != nil || !slices.Equal(com.Msg.GetTestedGateways(), []string{"192.0.2.1"}) {
+		t.Fatalf("%v %v", com, err)
+	}
+	got, err = c.Get(ctx, connect.NewRequest(&netdv1.GetRequest{}))
+	if err != nil || got.Msg.GetStagedId() != "" || got.Msg.GetStaged() != nil || got.Msg.GetLast().GetReverted() {
+		t.Fatalf("%v %v", got, err)
+	}
+
+	st, err = c.Stage(ctx, connect.NewRequest(&netdv1.StageRequest{Settings: network.ToWire(static("eth0"))}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.DiscardStaged(ctx, connect.NewRequest(&netdv1.DiscardStagedRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Commit(ctx, connect.NewRequest(&netdv1.CommitRequest{StagedId: st.Msg.GetStagedId()})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatal(err)
 	}
 }

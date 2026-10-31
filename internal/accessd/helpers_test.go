@@ -62,6 +62,7 @@ type fakeNetd struct {
 	netdv1connect.UnimplementedNetworkServiceHandler
 	mu       sync.Mutex
 	settings *netdv1.Settings
+	staged   *netdv1.Settings
 	mgmt     []string
 	// down makes Status fail, so sshd's files can't be rendered.
 	down bool
@@ -70,7 +71,11 @@ type fakeNetd struct {
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return connect.NewResponse(&netdv1.GetResponse{Settings: n.settings}), nil
+	out := &netdv1.GetResponse{Settings: n.settings, Staged: n.staged}
+	if n.staged != nil {
+		out.StagedId = "stg-1"
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (n *fakeNetd) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) (*connect.Response[netdv1.SetResponse], error) {
@@ -78,6 +83,27 @@ func (n *fakeNetd) Set(_ context.Context, r *connect.Request[netdv1.SetRequest])
 	defer n.mu.Unlock()
 	n.settings = r.Msg.GetSettings()
 	return connect.NewResponse(&netdv1.SetResponse{Token: "tok-1", RevertAfterSeconds: 120}), nil
+}
+
+func (n *fakeNetd) Stage(_ context.Context, r *connect.Request[netdv1.StageRequest]) (*connect.Response[netdv1.StageResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.staged = r.Msg.GetSettings()
+	return connect.NewResponse(&netdv1.StageResponse{StagedId: "stg-1"}), nil
+}
+
+func (n *fakeNetd) DiscardStaged(context.Context, *connect.Request[netdv1.DiscardStagedRequest]) (*connect.Response[netdv1.DiscardStagedResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.staged = nil
+	return connect.NewResponse(&netdv1.DiscardStagedResponse{}), nil
+}
+
+func (n *fakeNetd) Commit(context.Context, *connect.Request[netdv1.CommitRequest]) (*connect.Response[netdv1.CommitResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.settings, n.staged = n.staged, nil
+	return connect.NewResponse(&netdv1.CommitResponse{TestedGateways: []string{"192.0.2.1"}}), nil
 }
 
 func (n *fakeNetd) Status(context.Context, *connect.Request[netdv1.StatusRequest]) (*connect.Response[netdv1.StatusResponse], error) {

@@ -43,6 +43,13 @@ type fakeSys struct {
 	subscribe int
 	// linkGate, when set, holds the next LinkUp until it is released.
 	linkGate *linkGate
+	// reachedFrom records each ReachFrom; onReachFrom runs inside it, while
+	// the address it tests is on the interface.
+	reachedFrom []string
+	onReachFrom func(src netip.Addr)
+	// addrFlags, when set, gives an added address its flags, as the
+	// kernel's DAD does.
+	addrFlags func(p netip.Prefix) uint32
 }
 
 // linkGate stops one LinkUp in its tracks, inside the apply that made it.
@@ -97,6 +104,9 @@ func (f *fakeSys) AddAddr(name string, p netip.Prefix, valid, preferred uint32) 
 	flags := uint32(0)
 	if valid == netlink.Forever {
 		flags = netlink.FlagPermanent
+	}
+	if f.addrFlags != nil {
+		flags |= f.addrFlags(p)
 	}
 	f.addrs[name] = append(f.addrs[name], netlink.Addr{Prefix: p, Valid: valid, Preferred: preferred, Flags: flags})
 	return nil
@@ -163,6 +173,18 @@ func (f *fakeSys) Reach(context.Context, string, netip.Addr) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.reachErr
+}
+
+func (f *fakeSys) ReachFrom(_ context.Context, name string, src, gw netip.Addr) error {
+	f.mu.Lock()
+	on := f.onReachFrom
+	f.reachedFrom = append(f.reachedFrom, gw.String()+" from "+src.String()+" on "+name)
+	err := f.reachErr
+	f.mu.Unlock()
+	if on != nil {
+		on(src)
+	}
+	return err
 }
 
 func (f *fakeSys) QueryDNS(_ context.Context, server netip.Addr, name string) error {

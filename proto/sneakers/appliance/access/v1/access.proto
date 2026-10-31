@@ -26,6 +26,7 @@ import "sneakers/appliance/netd/v1/netd.proto";
 import "sneakers/appliance/osadmin/v1/access.proto";
 import "sneakers/appliance/osadmin/v1/elevation.proto";
 import "sneakers/appliance/osadmin/v1/mcp.proto";
+import "sneakers/appliance/osadmin/v1/network.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/product.proto";
 import "sneakers/appliance/osadmin/v1/setup.proto";
@@ -104,7 +105,14 @@ service NetworkService {
   rpc GetNetwork(GetNetworkRequest) returns (GetNetworkResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // SetNetwork applies settings with the 120-second window. The shell stages
+  // instead; it stays until nothing older calls it.
   rpc SetNetwork(SetNetworkRequest) returns (SetNetworkResponse);
+  rpc StageNetwork(StageNetworkRequest) returns (StageNetworkResponse);
+  rpc DiscardStagedNetwork(DiscardStagedNetworkRequest) returns (DiscardStagedNetworkResponse);
+  rpc CommitNetwork(CommitNetworkRequest) returns (CommitNetworkResponse);
+  // ConfirmNetwork keeps an allow-list reset, the one change that still has
+  // a window here.
   rpc ConfirmNetwork(ConfirmNetworkRequest) returns (ConfirmNetworkResponse);
   // ResetAllowList is the console's (root only).
   rpc ResetAllowList(ResetAllowListRequest) returns (ResetAllowListResponse);
@@ -330,6 +338,9 @@ message GetNetworkResponse {
   sneakers.appliance.netd.v1.Settings settings = 1;
   repeated string management_addresses = 2;
   bool ntp_synced = 3;
+  sneakers.appliance.netd.v1.Settings staged = 4;
+  string staged_id = 5;
+  sneakers.appliance.osadmin.v1.StagedReview staged_review = 6;
 }
 
 message SetNetworkRequest {
@@ -339,6 +350,28 @@ message SetNetworkRequest {
 message SetNetworkResponse {
   string token = 1;
   int32 revert_after_seconds = 2;
+}
+
+message StageNetworkRequest {
+  sneakers.appliance.netd.v1.Settings settings = 1;
+}
+
+message StageNetworkResponse {
+  string staged_id = 1;
+  sneakers.appliance.osadmin.v1.StagedReview review = 2;
+}
+
+message DiscardStagedNetworkRequest {}
+
+message DiscardStagedNetworkResponse {}
+
+message CommitNetworkRequest {
+  string staged_id = 1;
+}
+
+message CommitNetworkResponse {
+  repeated string tested_gateways = 1;
+  sneakers.appliance.osadmin.v1.StagedReview review = 2;
 }
 
 message ConfirmNetworkRequest {

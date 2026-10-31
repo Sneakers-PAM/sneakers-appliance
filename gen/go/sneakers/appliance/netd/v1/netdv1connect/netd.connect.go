@@ -46,6 +46,13 @@ const (
 	NetworkServiceSetProcedure = "/sneakers.appliance.netd.v1.NetworkService/Set"
 	// NetworkServiceConfirmProcedure is the fully-qualified name of the NetworkService's Confirm RPC.
 	NetworkServiceConfirmProcedure = "/sneakers.appliance.netd.v1.NetworkService/Confirm"
+	// NetworkServiceStageProcedure is the fully-qualified name of the NetworkService's Stage RPC.
+	NetworkServiceStageProcedure = "/sneakers.appliance.netd.v1.NetworkService/Stage"
+	// NetworkServiceDiscardStagedProcedure is the fully-qualified name of the NetworkService's
+	// DiscardStaged RPC.
+	NetworkServiceDiscardStagedProcedure = "/sneakers.appliance.netd.v1.NetworkService/DiscardStaged"
+	// NetworkServiceCommitProcedure is the fully-qualified name of the NetworkService's Commit RPC.
+	NetworkServiceCommitProcedure = "/sneakers.appliance.netd.v1.NetworkService/Commit"
 	// NetworkServiceChecksProcedure is the fully-qualified name of the NetworkService's Checks RPC.
 	NetworkServiceChecksProcedure = "/sneakers.appliance.netd.v1.NetworkService/Checks"
 	// NetworkServiceSetServicePortsProcedure is the fully-qualified name of the NetworkService's
@@ -68,10 +75,22 @@ type NetworkServiceClient interface {
 	// Get returns the applied settings.
 	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
 	// Set validates and applies settings, then undoes them unless Confirm
-	// comes within 120 seconds (NET_REVERTED).
+	// comes within 120 seconds (NET_REVERTED). With keep the change is kept at
+	// once, with no window: the console, which shows the change and asks
+	// before it calls this.
 	Set(context.Context, *connect.Request[v1.SetRequest]) (*connect.Response[v1.SetResponse], error)
 	// Confirm keeps the pending change.
 	Confirm(context.Context, *connect.Request[v1.ConfirmRequest]) (*connect.Response[v1.ConfirmResponse], error)
+	// Stage records settings for a later Commit and changes nothing live.
+	// They stay in netd's memory only, so a box that restarts drops them.
+	Stage(context.Context, *connect.Request[v1.StageRequest]) (*connect.Response[v1.StageResponse], error)
+	// DiscardStaged drops what's staged.
+	DiscardStaged(context.Context, *connect.Request[v1.DiscardStagedRequest]) (*connect.Response[v1.DiscardStagedResponse], error)
+	// Commit tests the staged gateway from the staged address, without
+	// touching the addresses in use, and then applies and saves the staged
+	// settings for good. A gateway that doesn't answer refuses it
+	// (NET_GATEWAY) with nothing changed.
+	Commit(context.Context, *connect.Request[v1.CommitRequest]) (*connect.Response[v1.CommitResponse], error)
 	// Checks runs the connectivity checks: link, address, gateway, DNS, NTP.
 	Checks(context.Context, *connect.Request[v1.ChecksRequest]) (*connect.Response[v1.ChecksResponse], error)
 	// SetServicePorts sets the product's port rules on the service
@@ -119,6 +138,24 @@ func NewNetworkServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(networkServiceMethods.ByName("Confirm")),
 			connect.WithClientOptions(opts...),
 		),
+		stage: connect.NewClient[v1.StageRequest, v1.StageResponse](
+			httpClient,
+			baseURL+NetworkServiceStageProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("Stage")),
+			connect.WithClientOptions(opts...),
+		),
+		discardStaged: connect.NewClient[v1.DiscardStagedRequest, v1.DiscardStagedResponse](
+			httpClient,
+			baseURL+NetworkServiceDiscardStagedProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("DiscardStaged")),
+			connect.WithClientOptions(opts...),
+		),
+		commit: connect.NewClient[v1.CommitRequest, v1.CommitResponse](
+			httpClient,
+			baseURL+NetworkServiceCommitProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("Commit")),
+			connect.WithClientOptions(opts...),
+		),
 		checks: connect.NewClient[v1.ChecksRequest, v1.ChecksResponse](
 			httpClient,
 			baseURL+NetworkServiceChecksProcedure,
@@ -163,6 +200,9 @@ type networkServiceClient struct {
 	get                *connect.Client[v1.GetRequest, v1.GetResponse]
 	set                *connect.Client[v1.SetRequest, v1.SetResponse]
 	confirm            *connect.Client[v1.ConfirmRequest, v1.ConfirmResponse]
+	stage              *connect.Client[v1.StageRequest, v1.StageResponse]
+	discardStaged      *connect.Client[v1.DiscardStagedRequest, v1.DiscardStagedResponse]
+	commit             *connect.Client[v1.CommitRequest, v1.CommitResponse]
 	checks             *connect.Client[v1.ChecksRequest, v1.ChecksResponse]
 	setServicePorts    *connect.Client[v1.SetServicePortsRequest, v1.SetServicePortsResponse]
 	status             *connect.Client[v1.StatusRequest, v1.StatusResponse]
@@ -184,6 +224,21 @@ func (c *networkServiceClient) Set(ctx context.Context, req *connect.Request[v1.
 // Confirm calls sneakers.appliance.netd.v1.NetworkService.Confirm.
 func (c *networkServiceClient) Confirm(ctx context.Context, req *connect.Request[v1.ConfirmRequest]) (*connect.Response[v1.ConfirmResponse], error) {
 	return c.confirm.CallUnary(ctx, req)
+}
+
+// Stage calls sneakers.appliance.netd.v1.NetworkService.Stage.
+func (c *networkServiceClient) Stage(ctx context.Context, req *connect.Request[v1.StageRequest]) (*connect.Response[v1.StageResponse], error) {
+	return c.stage.CallUnary(ctx, req)
+}
+
+// DiscardStaged calls sneakers.appliance.netd.v1.NetworkService.DiscardStaged.
+func (c *networkServiceClient) DiscardStaged(ctx context.Context, req *connect.Request[v1.DiscardStagedRequest]) (*connect.Response[v1.DiscardStagedResponse], error) {
+	return c.discardStaged.CallUnary(ctx, req)
+}
+
+// Commit calls sneakers.appliance.netd.v1.NetworkService.Commit.
+func (c *networkServiceClient) Commit(ctx context.Context, req *connect.Request[v1.CommitRequest]) (*connect.Response[v1.CommitResponse], error) {
+	return c.commit.CallUnary(ctx, req)
 }
 
 // Checks calls sneakers.appliance.netd.v1.NetworkService.Checks.
@@ -222,10 +277,22 @@ type NetworkServiceHandler interface {
 	// Get returns the applied settings.
 	Get(context.Context, *connect.Request[v1.GetRequest]) (*connect.Response[v1.GetResponse], error)
 	// Set validates and applies settings, then undoes them unless Confirm
-	// comes within 120 seconds (NET_REVERTED).
+	// comes within 120 seconds (NET_REVERTED). With keep the change is kept at
+	// once, with no window: the console, which shows the change and asks
+	// before it calls this.
 	Set(context.Context, *connect.Request[v1.SetRequest]) (*connect.Response[v1.SetResponse], error)
 	// Confirm keeps the pending change.
 	Confirm(context.Context, *connect.Request[v1.ConfirmRequest]) (*connect.Response[v1.ConfirmResponse], error)
+	// Stage records settings for a later Commit and changes nothing live.
+	// They stay in netd's memory only, so a box that restarts drops them.
+	Stage(context.Context, *connect.Request[v1.StageRequest]) (*connect.Response[v1.StageResponse], error)
+	// DiscardStaged drops what's staged.
+	DiscardStaged(context.Context, *connect.Request[v1.DiscardStagedRequest]) (*connect.Response[v1.DiscardStagedResponse], error)
+	// Commit tests the staged gateway from the staged address, without
+	// touching the addresses in use, and then applies and saves the staged
+	// settings for good. A gateway that doesn't answer refuses it
+	// (NET_GATEWAY) with nothing changed.
+	Commit(context.Context, *connect.Request[v1.CommitRequest]) (*connect.Response[v1.CommitResponse], error)
 	// Checks runs the connectivity checks: link, address, gateway, DNS, NTP.
 	Checks(context.Context, *connect.Request[v1.ChecksRequest]) (*connect.Response[v1.ChecksResponse], error)
 	// SetServicePorts sets the product's port rules on the service
@@ -267,6 +334,24 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 		NetworkServiceConfirmProcedure,
 		svc.Confirm,
 		connect.WithSchema(networkServiceMethods.ByName("Confirm")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceStageHandler := connect.NewUnaryHandler(
+		NetworkServiceStageProcedure,
+		svc.Stage,
+		connect.WithSchema(networkServiceMethods.ByName("Stage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceDiscardStagedHandler := connect.NewUnaryHandler(
+		NetworkServiceDiscardStagedProcedure,
+		svc.DiscardStaged,
+		connect.WithSchema(networkServiceMethods.ByName("DiscardStaged")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceCommitHandler := connect.NewUnaryHandler(
+		NetworkServiceCommitProcedure,
+		svc.Commit,
+		connect.WithSchema(networkServiceMethods.ByName("Commit")),
 		connect.WithHandlerOptions(opts...),
 	)
 	networkServiceChecksHandler := connect.NewUnaryHandler(
@@ -313,6 +398,12 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 			networkServiceSetHandler.ServeHTTP(w, r)
 		case NetworkServiceConfirmProcedure:
 			networkServiceConfirmHandler.ServeHTTP(w, r)
+		case NetworkServiceStageProcedure:
+			networkServiceStageHandler.ServeHTTP(w, r)
+		case NetworkServiceDiscardStagedProcedure:
+			networkServiceDiscardStagedHandler.ServeHTTP(w, r)
+		case NetworkServiceCommitProcedure:
+			networkServiceCommitHandler.ServeHTTP(w, r)
 		case NetworkServiceChecksProcedure:
 			networkServiceChecksHandler.ServeHTTP(w, r)
 		case NetworkServiceSetServicePortsProcedure:
@@ -344,6 +435,18 @@ func (UnimplementedNetworkServiceHandler) Set(context.Context, *connect.Request[
 
 func (UnimplementedNetworkServiceHandler) Confirm(context.Context, *connect.Request[v1.ConfirmRequest]) (*connect.Response[v1.ConfirmResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Confirm is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) Stage(context.Context, *connect.Request[v1.StageRequest]) (*connect.Response[v1.StageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Stage is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) DiscardStaged(context.Context, *connect.Request[v1.DiscardStagedRequest]) (*connect.Response[v1.DiscardStagedResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.DiscardStaged is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) Commit(context.Context, *connect.Request[v1.CommitRequest]) (*connect.Response[v1.CommitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Commit is not implemented"))
 }
 
 func (UnimplementedNetworkServiceHandler) Checks(context.Context, *connect.Request[v1.ChecksRequest]) (*connect.Response[v1.ChecksResponse], error) {

@@ -112,6 +112,15 @@ const (
 	// NetworkServiceSetNetworkProcedure is the fully-qualified name of the NetworkService's SetNetwork
 	// RPC.
 	NetworkServiceSetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/SetNetwork"
+	// NetworkServiceStageNetworkProcedure is the fully-qualified name of the NetworkService's
+	// StageNetwork RPC.
+	NetworkServiceStageNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/StageNetwork"
+	// NetworkServiceDiscardStagedNetworkProcedure is the fully-qualified name of the NetworkService's
+	// DiscardStagedNetwork RPC.
+	NetworkServiceDiscardStagedNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/DiscardStagedNetwork"
+	// NetworkServiceCommitNetworkProcedure is the fully-qualified name of the NetworkService's
+	// CommitNetwork RPC.
+	NetworkServiceCommitNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/CommitNetwork"
 	// NetworkServiceConfirmNetworkProcedure is the fully-qualified name of the NetworkService's
 	// ConfirmNetwork RPC.
 	NetworkServiceConfirmNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/ConfirmNetwork"
@@ -753,7 +762,14 @@ func (UnimplementedAccessServiceHandler) ReinstallProduct(context.Context, *conn
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.
 type NetworkServiceClient interface {
 	GetNetwork(context.Context, *connect.Request[v1.GetNetworkRequest]) (*connect.Response[v1.GetNetworkResponse], error)
+	// SetNetwork applies settings with the 120-second window. The shell stages
+	// instead; it stays until nothing older calls it.
 	SetNetwork(context.Context, *connect.Request[v1.SetNetworkRequest]) (*connect.Response[v1.SetNetworkResponse], error)
+	StageNetwork(context.Context, *connect.Request[v1.StageNetworkRequest]) (*connect.Response[v1.StageNetworkResponse], error)
+	DiscardStagedNetwork(context.Context, *connect.Request[v1.DiscardStagedNetworkRequest]) (*connect.Response[v1.DiscardStagedNetworkResponse], error)
+	CommitNetwork(context.Context, *connect.Request[v1.CommitNetworkRequest]) (*connect.Response[v1.CommitNetworkResponse], error)
+	// ConfirmNetwork keeps an allow-list reset, the one change that still has
+	// a window here.
 	ConfirmNetwork(context.Context, *connect.Request[v1.ConfirmNetworkRequest]) (*connect.Response[v1.ConfirmNetworkResponse], error)
 	// ResetAllowList is the console's (root only).
 	ResetAllowList(context.Context, *connect.Request[v1.ResetAllowListRequest]) (*connect.Response[v1.ResetAllowListResponse], error)
@@ -783,6 +799,24 @@ func NewNetworkServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(networkServiceMethods.ByName("SetNetwork")),
 			connect.WithClientOptions(opts...),
 		),
+		stageNetwork: connect.NewClient[v1.StageNetworkRequest, v1.StageNetworkResponse](
+			httpClient,
+			baseURL+NetworkServiceStageNetworkProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("StageNetwork")),
+			connect.WithClientOptions(opts...),
+		),
+		discardStagedNetwork: connect.NewClient[v1.DiscardStagedNetworkRequest, v1.DiscardStagedNetworkResponse](
+			httpClient,
+			baseURL+NetworkServiceDiscardStagedNetworkProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("DiscardStagedNetwork")),
+			connect.WithClientOptions(opts...),
+		),
+		commitNetwork: connect.NewClient[v1.CommitNetworkRequest, v1.CommitNetworkResponse](
+			httpClient,
+			baseURL+NetworkServiceCommitNetworkProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("CommitNetwork")),
+			connect.WithClientOptions(opts...),
+		),
 		confirmNetwork: connect.NewClient[v1.ConfirmNetworkRequest, v1.ConfirmNetworkResponse](
 			httpClient,
 			baseURL+NetworkServiceConfirmNetworkProcedure,
@@ -800,10 +834,13 @@ func NewNetworkServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // networkServiceClient implements NetworkServiceClient.
 type networkServiceClient struct {
-	getNetwork     *connect.Client[v1.GetNetworkRequest, v1.GetNetworkResponse]
-	setNetwork     *connect.Client[v1.SetNetworkRequest, v1.SetNetworkResponse]
-	confirmNetwork *connect.Client[v1.ConfirmNetworkRequest, v1.ConfirmNetworkResponse]
-	resetAllowList *connect.Client[v1.ResetAllowListRequest, v1.ResetAllowListResponse]
+	getNetwork           *connect.Client[v1.GetNetworkRequest, v1.GetNetworkResponse]
+	setNetwork           *connect.Client[v1.SetNetworkRequest, v1.SetNetworkResponse]
+	stageNetwork         *connect.Client[v1.StageNetworkRequest, v1.StageNetworkResponse]
+	discardStagedNetwork *connect.Client[v1.DiscardStagedNetworkRequest, v1.DiscardStagedNetworkResponse]
+	commitNetwork        *connect.Client[v1.CommitNetworkRequest, v1.CommitNetworkResponse]
+	confirmNetwork       *connect.Client[v1.ConfirmNetworkRequest, v1.ConfirmNetworkResponse]
+	resetAllowList       *connect.Client[v1.ResetAllowListRequest, v1.ResetAllowListResponse]
 }
 
 // GetNetwork calls sneakers.appliance.access.v1.NetworkService.GetNetwork.
@@ -814,6 +851,21 @@ func (c *networkServiceClient) GetNetwork(ctx context.Context, req *connect.Requ
 // SetNetwork calls sneakers.appliance.access.v1.NetworkService.SetNetwork.
 func (c *networkServiceClient) SetNetwork(ctx context.Context, req *connect.Request[v1.SetNetworkRequest]) (*connect.Response[v1.SetNetworkResponse], error) {
 	return c.setNetwork.CallUnary(ctx, req)
+}
+
+// StageNetwork calls sneakers.appliance.access.v1.NetworkService.StageNetwork.
+func (c *networkServiceClient) StageNetwork(ctx context.Context, req *connect.Request[v1.StageNetworkRequest]) (*connect.Response[v1.StageNetworkResponse], error) {
+	return c.stageNetwork.CallUnary(ctx, req)
+}
+
+// DiscardStagedNetwork calls sneakers.appliance.access.v1.NetworkService.DiscardStagedNetwork.
+func (c *networkServiceClient) DiscardStagedNetwork(ctx context.Context, req *connect.Request[v1.DiscardStagedNetworkRequest]) (*connect.Response[v1.DiscardStagedNetworkResponse], error) {
+	return c.discardStagedNetwork.CallUnary(ctx, req)
+}
+
+// CommitNetwork calls sneakers.appliance.access.v1.NetworkService.CommitNetwork.
+func (c *networkServiceClient) CommitNetwork(ctx context.Context, req *connect.Request[v1.CommitNetworkRequest]) (*connect.Response[v1.CommitNetworkResponse], error) {
+	return c.commitNetwork.CallUnary(ctx, req)
 }
 
 // ConfirmNetwork calls sneakers.appliance.access.v1.NetworkService.ConfirmNetwork.
@@ -830,7 +882,14 @@ func (c *networkServiceClient) ResetAllowList(ctx context.Context, req *connect.
 // service.
 type NetworkServiceHandler interface {
 	GetNetwork(context.Context, *connect.Request[v1.GetNetworkRequest]) (*connect.Response[v1.GetNetworkResponse], error)
+	// SetNetwork applies settings with the 120-second window. The shell stages
+	// instead; it stays until nothing older calls it.
 	SetNetwork(context.Context, *connect.Request[v1.SetNetworkRequest]) (*connect.Response[v1.SetNetworkResponse], error)
+	StageNetwork(context.Context, *connect.Request[v1.StageNetworkRequest]) (*connect.Response[v1.StageNetworkResponse], error)
+	DiscardStagedNetwork(context.Context, *connect.Request[v1.DiscardStagedNetworkRequest]) (*connect.Response[v1.DiscardStagedNetworkResponse], error)
+	CommitNetwork(context.Context, *connect.Request[v1.CommitNetworkRequest]) (*connect.Response[v1.CommitNetworkResponse], error)
+	// ConfirmNetwork keeps an allow-list reset, the one change that still has
+	// a window here.
 	ConfirmNetwork(context.Context, *connect.Request[v1.ConfirmNetworkRequest]) (*connect.Response[v1.ConfirmNetworkResponse], error)
 	// ResetAllowList is the console's (root only).
 	ResetAllowList(context.Context, *connect.Request[v1.ResetAllowListRequest]) (*connect.Response[v1.ResetAllowListResponse], error)
@@ -856,6 +915,24 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 		connect.WithSchema(networkServiceMethods.ByName("SetNetwork")),
 		connect.WithHandlerOptions(opts...),
 	)
+	networkServiceStageNetworkHandler := connect.NewUnaryHandler(
+		NetworkServiceStageNetworkProcedure,
+		svc.StageNetwork,
+		connect.WithSchema(networkServiceMethods.ByName("StageNetwork")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceDiscardStagedNetworkHandler := connect.NewUnaryHandler(
+		NetworkServiceDiscardStagedNetworkProcedure,
+		svc.DiscardStagedNetwork,
+		connect.WithSchema(networkServiceMethods.ByName("DiscardStagedNetwork")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceCommitNetworkHandler := connect.NewUnaryHandler(
+		NetworkServiceCommitNetworkProcedure,
+		svc.CommitNetwork,
+		connect.WithSchema(networkServiceMethods.ByName("CommitNetwork")),
+		connect.WithHandlerOptions(opts...),
+	)
 	networkServiceConfirmNetworkHandler := connect.NewUnaryHandler(
 		NetworkServiceConfirmNetworkProcedure,
 		svc.ConfirmNetwork,
@@ -874,6 +951,12 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 			networkServiceGetNetworkHandler.ServeHTTP(w, r)
 		case NetworkServiceSetNetworkProcedure:
 			networkServiceSetNetworkHandler.ServeHTTP(w, r)
+		case NetworkServiceStageNetworkProcedure:
+			networkServiceStageNetworkHandler.ServeHTTP(w, r)
+		case NetworkServiceDiscardStagedNetworkProcedure:
+			networkServiceDiscardStagedNetworkHandler.ServeHTTP(w, r)
+		case NetworkServiceCommitNetworkProcedure:
+			networkServiceCommitNetworkHandler.ServeHTTP(w, r)
 		case NetworkServiceConfirmNetworkProcedure:
 			networkServiceConfirmNetworkHandler.ServeHTTP(w, r)
 		case NetworkServiceResetAllowListProcedure:
@@ -893,6 +976,18 @@ func (UnimplementedNetworkServiceHandler) GetNetwork(context.Context, *connect.R
 
 func (UnimplementedNetworkServiceHandler) SetNetwork(context.Context, *connect.Request[v1.SetNetworkRequest]) (*connect.Response[v1.SetNetworkResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.NetworkService.SetNetwork is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) StageNetwork(context.Context, *connect.Request[v1.StageNetworkRequest]) (*connect.Response[v1.StageNetworkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.NetworkService.StageNetwork is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) DiscardStagedNetwork(context.Context, *connect.Request[v1.DiscardStagedNetworkRequest]) (*connect.Response[v1.DiscardStagedNetworkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.NetworkService.DiscardStagedNetwork is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) CommitNetwork(context.Context, *connect.Request[v1.CommitNetworkRequest]) (*connect.Response[v1.CommitNetworkResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.NetworkService.CommitNetwork is not implemented"))
 }
 
 func (UnimplementedNetworkServiceHandler) ConfirmNetwork(context.Context, *connect.Request[v1.ConfirmNetworkRequest]) (*connect.Response[v1.ConfirmNetworkResponse], error) {

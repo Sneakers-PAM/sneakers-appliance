@@ -152,13 +152,19 @@ var specs = []spec{
 		long:    "Runs the disk cleanup at once, the one the box runs every hour and whenever a volume passes 80%: rotated pod logs over their cap, closed OS audit files (compressed, never deleted), images neither product release needs, update files left behind and stale temporary files. It never touches product data, secrets, backups, either release or key custody. It prints what each step freed, and the run is audited.",
 		example: "  disk cleanup\n  disk cleanup -o json"},
 	{path: "network show", short: "Show the network settings", action: "network.show", origins: both,
-		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy.",
+		long:    "Shows the host name, the management addresses, DNS servers and search domains, NTP servers, the management allow-list, the time zone and the HTTPS proxy. A change network set staged is listed after them, with what it would change.",
 		example: "  network show\n  network show -o json"},
-	{path: "network set", owner: true, use: "set key=value...", short: "Change network settings (reverts in 120 s unless confirmed)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet, question: true, complete: completeKeys(networkKeys),
-		long:    "Changes the settings the keys name, on top of the current ones; the others stay as they are. The change is applied at once and reverts after 120 seconds unless it's kept: the command asks, or run network confirm with the token it prints. A change to DNS, search domains, NTP, the time zone or the proxy alone can't cut anyone off, so it's kept at once with nothing to confirm; a change to the management interface's IPv4 or IPv6 mode or address can, so it always gets the 120-second window. Owners only. With no arguments, or ?, it lists the keys. The same settings are also on :8443 or the console's network screen.",
+	{path: "network set", owner: true, use: "set key=value...", short: "Stage a network change (network commit applies it)", action: "network.set", origins: both, nargs: [2]int{0, -1}, keys: networkKeys, run: runNetworkSet, question: true, complete: completeKeys(networkKeys),
+		long:    "Stages a change to the settings the keys name, on top of the current ones (or of what's already staged); the others stay as they are. Nothing changes on the box until network commit. network show shows what's staged, network discard drops it, and a restart drops it too. Owners only. With no arguments, or ?, it lists the keys. The same settings are also on :8443 or the console's network screen.",
 		example: "  network set ?\n  network set dns=192.0.2.53,192.0.2.54 search=sneakers.example.org\n  network set time-zone=America/New_York\n  network set https-proxy=\n  network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1\n  network set ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1"},
-	{path: "network confirm", owner: true, use: "confirm <token>", short: "Keep a pending network change", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
-		long:    "Keeps the network change the token names, so it doesn't revert. network set and network allow-list reset print the token.",
+	{path: "network commit", owner: true, short: "Test and apply the staged network change", action: "network.commit", origins: both, run: runNetworkCommit,
+		long:    "Applies and saves what network set staged, for good: there is no revert afterwards. It says first whether this SSH session will drop and which address to reconnect to; a dropped session is expected, not an error. Before anything changes it tests a new gateway from the new address, with the current address still up, and refuses with NET_GATEWAY if the gateway doesn't answer, leaving the box and the staged change as they were. An address from DHCP or SLAAC has no gateway to test. Owners only.",
+		example: "  network commit"},
+	{path: "network discard", owner: true, short: "Drop the staged network change", action: "network.discard", origins: both,
+		long:    "Drops what network set staged. Nothing on the box changes. Owners only.",
+		example: "  network discard"},
+	{path: "network confirm", owner: true, use: "confirm <token>", short: "Keep an allow-list reset", action: "network.confirm", origins: both, nargs: [2]int{1, 1},
+		long:    "Keeps the allow-list reset the token names, so it doesn't revert. network allow-list reset prints the token.",
 		example: "  network confirm 7K2Q-MX4D"},
 	{path: "network allow-list reset", owner: true, short: "Reset the management allow-list to the on-link default", action: "network.allowlist.reset", origins: []Origin{OriginConsole}, confirm: "reset",
 		long:    "Sets the management allow-list back to the subnets the box is on, for when a wrong list locks SSH and :8443 out. Console only; type reset to confirm. It reverts in 120 seconds unless kept with network confirm.",
@@ -316,7 +322,7 @@ func Resolve(words []string) *Command {
 // Actions are every backend call a command line can make. Nothing else
 // leaves the shell.
 func Actions() []string {
-	out := []string{"rootshell.open", "network.confirm", "product.value", "mcp.show", "updates.show"}
+	out := []string{"rootshell.open", "network.confirm", "network.review", "product.value", "mcp.show", "updates.show"}
 	for _, s := range specs {
 		if !slices.Contains(out, s.action) {
 			out = append(out, s.action)
@@ -574,7 +580,7 @@ func newRoot(ctx context.Context, e *Env) *cobra.Command {
 // groupDoc is each command group's short and long description; a
 // group's example is its commands' first examples.
 var groupDoc = map[string][2]string{
-	"network":            {"Network settings", "The network settings: show them, change them (with an automatic revert) and keep a change."},
+	"network":            {"Network settings", "The network settings: show them, stage a change, then commit it or discard it."},
 	"network allow-list": {"The management allow-list", "The management allow-list, the networks that may reach SSH and :8443."},
 	"keys":               {"Login keys", "The admins' SSH login keys. Keys are issued on :8443."},
 	"admins":             {"Admins", "The admins of this box. They're added and removed on :8443."},
@@ -767,11 +773,6 @@ func typedConfirm(e *Env, word string) bool {
 	return ask(e, fmt.Sprintf("Type %s to confirm: ", word)) == word
 }
 
-func yes(e *Env, prompt string) bool {
-	a := strings.ToLower(ask(e, prompt+" [y/N] "))
-	return a == "y" || a == "yes"
-}
-
 func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags map[string]string) (Result, error) {
 	if len(args) == 0 || len(args) == 1 && args[0] == "?" {
 		return Result{Text: "network set takes key=value pairs, applied on top of the current settings:\n\n" + keyList(networkKeys) + "\nThe same settings are also on :8443 or the console's network screen.", Data: keyData(networkKeys)}, nil
@@ -779,20 +780,42 @@ func runNetworkSet(ctx context.Context, e *Env, _ *Command, args []string, flags
 	if _, err := parseKeys("network set", networkKeys, args); err != nil {
 		return Result{}, err
 	}
-	res, err := e.Backend.Call(ctx, Request{Action: "network.set", Args: args, Flags: flags})
+	return e.Backend.Call(ctx, Request{Action: "network.set", Args: args, Flags: flags})
+}
+
+// runNetworkCommit says what the commit does before it runs, because the
+// commit can drop the session that would have read it afterwards. It goes to
+// standard error so -o json stays clean.
+func runNetworkCommit(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]string) (Result, error) {
+	res, err := e.Backend.Call(ctx, Request{Action: "network.review"})
 	if err != nil {
 		return Result{}, err
 	}
-	data, _ := res.Data.(map[string]string)
-	token := data["token"]
-	if token == "" {
-		return res, nil
+	review, _ := res.Data.(map[string]string)
+	_, _ = fmt.Fprint(e.Err, commitWarning(e.Origin, review))
+	return e.Backend.Call(ctx, Request{Action: "network.commit", Args: []string{review["staged"]}})
+}
+
+// commitWarning is what's said before a commit.
+func commitWarning(o Origin, review map[string]string) string {
+	var b strings.Builder
+	if review["moves"] != "" {
+		who := "SSH sessions on the old one"
+		if o == OriginSSH {
+			who = "this SSH session"
+		}
+		fmt.Fprintf(&b, "This moves the management address, so %s will drop. That's expected, not an error.\n", who)
+		if addr := review["address"]; addr != "" {
+			fmt.Fprintf(&b, "Reconnect to %s.\n", addr)
+		} else {
+			b.WriteString("The new address comes from DHCP or SLAAC; the console shows it.\n")
+		}
 	}
-	_, _ = fmt.Fprintln(e.Out, res.Text)
-	if !yes(e, "Keep the new settings? They revert in 120 seconds otherwise.") {
-		return Result{Text: fmt.Sprintf("Not kept; the change reverts on its own. To keep it, run: network confirm %s", token)}, nil
+	if review["allow-list"] != "" {
+		b.WriteString("This changes the allow-list, with no automatic revert. A session from outside the new list is cut off; Recover access on the console puts it back.\n")
 	}
-	return e.Backend.Call(ctx, Request{Action: "network.confirm", Args: []string{token}})
+	b.WriteString("Testing any new gateway first; nothing changes if it doesn't answer.\n")
+	return b.String()
 }
 
 // runMcp shows the product's MCP switch, or sets it. The machine API

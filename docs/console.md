@@ -127,11 +127,12 @@ off. Fingerprints are written in groups of four, eight groups to a line, so they
    seconds, the console shows the ports (name, cable, hardware address) with **N** (set an address
    by hand) and **R** (try DHCP again). The editor takes one field at a time: the port (with more
    than one), the address with its prefix, the gateway and the DNS server (both optional), with
-   **B** to go back. Enter applies it live and shows netd's checks; Enter again keeps it (confirming
-   netd's auto-revert), **E** edits and **Q** leaves the editor. An address that isn't kept goes back
-   on its own. A failed check that can't be skipped holds it back. The checks run in the background,
-   so these keys work while they run. The editor gives netd 15 seconds to set the address and 20
-   seconds for a round of checks; when one runs out it shows an error page and Enter leaves.
+   **B** to go back. Then it shows the change and asks: Enter applies it and keeps it, with no window
+   and nothing to confirm later, and **E** goes back with nothing applied. netd's checks follow; Enter
+   again carries on, **E** edits (a new change, with its own confirm) and **Q** leaves the editor. A
+   failed check that can't be skipped holds Enter back. The checks run in the background, so these
+   keys work while they run. The editor gives netd 15 seconds to set the address and 20 seconds for a
+   round of checks; when one runs out it shows an error page and Enter leaves.
 3. **Protection** was chosen at boot from the hardware; the step completes by itself and the info
    screen shows the level in one line.
 4. **Ready to set up.** netd opens port 8443 (not 22) and osadmin starts. The screen shows the

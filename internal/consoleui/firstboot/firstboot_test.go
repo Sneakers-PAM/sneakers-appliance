@@ -5,6 +5,7 @@ package firstboot_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -349,7 +350,12 @@ func TestNoDHCPOffersTheEditor(t *testing.T) {
 	d.Type(t, "192.0.2.1")
 	d.Expect(t, "field 4 of 4")
 	d.Type(t, "192.0.2.53")
-	d.Expect(t, "Use these settings")
+	d.Expect(t, "Check this change")
+	if s := b.net.Settings(); len(s) != 0 {
+		t.Fatalf("applied before the confirm: %+v", s)
+	}
+	d.Type(t, "")
+	d.Expect(t, "Done")
 	b.net.SetAddrs("192.0.2.10/24")
 	d.Type(t, "")
 	d.Expect(t, "7PXK-NMS9-XD2A-4KJW")
@@ -358,9 +364,107 @@ func TestNoDHCPOffersTheEditor(t *testing.T) {
 		s[0].Management.IPv4.Address.String() != "192.0.2.10/24" || s[0].Management.IPv4.Gateway.String() != "192.0.2.1" || len(s[0].DNS) != 1 {
 		t.Fatalf("settings %+v", s)
 	}
-	if got := b.net.Tokens(); len(got) != 1 || got[0] != "T1" {
-		t.Fatalf("kept %q", got)
+	cancel()
+	<-res
+}
+
+// E on the confirm goes back to the fields with nothing applied; a typed
+// change is applied only from its own confirm.
+func TestTheConsoleNeverAppliesWithoutTheConfirm(t *testing.T) {
+	b := newBox(t)
+	b.net.Current = network.Defaults("ens192")
+	d := tuitest.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	b.net.SetResults([]sources.Check{{Name: "address", State: sources.CheckOK}})
+	res := tuitest.Run(ctx, func(ctx context.Context) error { return firstboot.Run(ctx, d.UI, b.deps) })
+	d.Expect(t, "This box has no network address yet.")
+	d.Type(t, "n")
+	d.Expect(t, "field 1 of 4")
+	d.Type(t, "")
+	d.Expect(t, "field 2 of 4")
+	d.Type(t, "192.0.2.10/24")
+	d.Expect(t, "field 3 of 4")
+	d.Type(t, "192.0.2.1")
+	d.Expect(t, "field 4 of 4")
+	d.Type(t, "")
+	d.Expect(t, "Check this change")
+	d.Expect(t, "dhcp")
+	d.Type(t, "e")
+	d.Expect(t, "field 1 of 4")
+	if s := b.net.Settings(); len(s) != 0 {
+		t.Fatalf("applied %+v", s)
 	}
+	d.Type(t, "")
+	d.Expect(t, "field 2 of 4")
+	d.Type(t, "192.0.2.20/24")
+	d.Expect(t, "field 3 of 4")
+	d.Type(t, "")
+	d.Expect(t, "field 4 of 4")
+	d.Type(t, "")
+	d.Expect(t, "192.0.2.20/24")
+	d.Type(t, "")
+	d.Expect(t, "Done")
+	s := b.net.Settings()
+	if len(s) != 1 || s[0].Management.IPv4.Address.String() != "192.0.2.20/24" {
+		t.Fatalf("settings %+v", s)
+	}
+	cancel()
+	<-res
+}
+
+// A change netd refuses goes back to the fields, and nothing is kept.
+func TestTheConsoleShowsARefusedChange(t *testing.T) {
+	b := newBox(t)
+	b.net.KeepErr = errors.New("no")
+	d := tuitest.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	res := tuitest.Run(ctx, func(ctx context.Context) error { return firstboot.Run(ctx, d.UI, b.deps) })
+	d.Expect(t, "This box has no network address yet.")
+	d.Type(t, "n")
+	d.Expect(t, "field 1 of 4")
+	d.Type(t, "")
+	d.Expect(t, "field 2 of 4")
+	d.Type(t, "192.0.2.10/24")
+	d.Expect(t, "field 3 of 4")
+	d.Type(t, "")
+	d.Expect(t, "field 4 of 4")
+	d.Type(t, "")
+	d.Expect(t, "Check this change")
+	d.Type(t, "")
+	d.Expect(t, "The address wasn't applied")
+	cancel()
+	<-res
+}
+
+// Once a change is applied it's kept: editing again and backing out still
+// leaves the box on it, so the no-address screen doesn't come back.
+func TestBackingOutAfterAKeptChangeStaysOnIt(t *testing.T) {
+	b := newBox(t)
+	d := tuitest.New(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	b.net.SetResults([]sources.Check{{Name: "address", State: sources.CheckOK}})
+	res := tuitest.Run(ctx, func(ctx context.Context) error { return firstboot.Run(ctx, d.UI, b.deps) })
+	d.Expect(t, "This box has no network address yet.")
+	d.Type(t, "n")
+	d.Expect(t, "field 1 of 4")
+	d.Type(t, "")
+	d.Expect(t, "field 2 of 4")
+	d.Type(t, "192.0.2.10/24")
+	d.Expect(t, "field 3 of 4")
+	d.Type(t, "")
+	d.Expect(t, "field 4 of 4")
+	d.Type(t, "")
+	d.Expect(t, "Check this change")
+	d.Type(t, "")
+	d.Expect(t, "Done")
+	b.net.SetAddrs("192.0.2.10/24")
+	d.Type(t, "e")
+	d.Expect(t, "field 1 of 4")
+	d.Type(t, "b")
+	d.Expect(t, "7PXK-NMS9-XD2A-4KJW")
 	cancel()
 	<-res
 }

@@ -55,10 +55,9 @@ type Network interface {
 	Installed() bool
 	Interfaces(ctx context.Context) ([]NIC, error)
 	Get(ctx context.Context) (network.Settings, error)
-	// Set applies s live; it reverts after revertAfter seconds unless
-	// confirmed with token.
-	Set(ctx context.Context, s network.Settings) (token string, revertAfter int, err error)
-	Confirm(ctx context.Context, token string) error
+	// Keep applies s live and keeps it, with no window. The console shows
+	// the change and asks before it calls this.
+	Keep(ctx context.Context, s network.Settings) error
 	Checks(ctx context.Context) ([]Check, error)
 	Status(ctx context.Context) (Addresses, error)
 	// SetManagementPorts opens or closes 22 and 8443 in the management
@@ -85,14 +84,13 @@ func NewNetwork(dir string, c netdv1connect.NetworkServiceClient, sys string) Ne
 // is real (sysfs), and nothing can be set or checked.
 type netStub struct{ sys string }
 
-func (n netStub) Installed() bool                                          { return false }
-func (n netStub) Interfaces(context.Context) ([]NIC, error)                { return readNICs(n.sys) }
-func (netStub) Get(context.Context) (network.Settings, error)              { return network.Settings{}, errNoNetd }
-func (netStub) Confirm(context.Context, string) error                      { return errNoNetd }
-func (netStub) Checks(context.Context) ([]Check, error)                    { return nil, errNoNetd }
-func (netStub) Status(context.Context) (Addresses, error)                  { return Addresses{}, errNoNetd }
-func (netStub) Set(context.Context, network.Settings) (string, int, error) { return "", 0, errNoNetd }
-func (netStub) SetManagementPorts(context.Context, bool, bool) error       { return errNoNetd }
+func (n netStub) Installed() bool                                    { return false }
+func (n netStub) Interfaces(context.Context) ([]NIC, error)          { return readNICs(n.sys) }
+func (netStub) Get(context.Context) (network.Settings, error)        { return network.Settings{}, errNoNetd }
+func (netStub) Keep(context.Context, network.Settings) error         { return errNoNetd }
+func (netStub) Checks(context.Context) ([]Check, error)              { return nil, errNoNetd }
+func (netStub) Status(context.Context) (Addresses, error)            { return Addresses{}, errNoNetd }
+func (netStub) SetManagementPorts(context.Context, bool, bool) error { return errNoNetd }
 
 // netd is the real network service.
 type netd struct {
@@ -128,16 +126,8 @@ func (n netd) Get(ctx context.Context) (network.Settings, error) {
 	return network.FromWire(r.Msg.GetSettings())
 }
 
-func (n netd) Set(ctx context.Context, s network.Settings) (string, int, error) {
-	r, err := n.c.Set(ctx, connect.NewRequest(&netdv1.SetRequest{Settings: network.ToWire(s)}))
-	if err != nil {
-		return "", 0, err
-	}
-	return r.Msg.GetToken(), int(r.Msg.GetRevertAfterSeconds()), nil
-}
-
-func (n netd) Confirm(ctx context.Context, token string) error {
-	_, err := n.c.Confirm(ctx, connect.NewRequest(&netdv1.ConfirmRequest{Token: token}))
+func (n netd) Keep(ctx context.Context, s network.Settings) error {
+	_, err := n.c.Set(ctx, connect.NewRequest(&netdv1.SetRequest{Settings: network.ToWire(s), Keep: true}))
 	return err
 }
 

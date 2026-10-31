@@ -5,6 +5,10 @@ package osadmin_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +17,7 @@ import (
 	netdv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1"
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 )
 
 func TestAReloadedPageCanStillConfirm(t *testing.T) {
@@ -47,6 +52,122 @@ func TestAReloadedPageCanStillConfirm(t *testing.T) {
 	}
 	if e := lastEntry(t, b.log, "network.set"); e.Detail["change"] != "chg-1" {
 		t.Fatalf("set entry %+v, want the change id", e)
+	}
+}
+
+// Stage, review, commit: staging changes nothing, GetNetwork says what the
+// commit will do, and every step lands in the audit.
+func TestStageReviewAndCommit(t *testing.T) {
+	b := newBox(t, true)
+	ctx := context.Background()
+	alice := b.browser()
+	alice.signIn("alice")
+	nc := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL)
+	next := defaultSettings()
+	next.Management.Ipv4 = &netdv1.Ipv4{Mode: netdv1.Ipv4Mode_IPV4_MODE_STATIC, Address: "192.0.2.50/24", Gateway: "192.0.2.1"}
+	st, err := nc.StageNetwork(ctx, connect.NewRequest(&osadminv1.StageNetworkRequest{Settings: next}))
+	if err != nil || st.Msg.GetStagedId() != "stg-1" || !st.Msg.GetReview().GetMovesManagement() {
+		t.Fatalf("stage %v %v", st, err)
+	}
+	if e := lastEntry(t, b.log, "network.stage"); e.Outcome != "ok" || e.Detail["staged"] != "stg-1" {
+		t.Fatalf("stage entry %+v", e)
+	}
+	g, err := nc.GetNetwork(ctx, connect.NewRequest(&osadminv1.GetNetworkRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := g.Msg.GetStagedReview()
+	if g.Msg.GetStagedId() != "stg-1" || g.Msg.GetStaged().GetManagement().GetIpv4().GetAddress() != "192.0.2.50/24" ||
+		!r.GetMovesManagement() || r.GetNewAddress() != "192.0.2.50" || r.GetNewUrl() != "https://192.0.2.50:8443/" || !r.GetNewCertificate() || r.GetChangesAllowList() {
+		t.Fatalf("review %v", g.Msg)
+	}
+	if g.Msg.GetSettings().GetManagement().GetIpv4().GetAddress() == "192.0.2.50/24" || g.Msg.GetPending() {
+		t.Fatalf("staging changed the settings: %v", g.Msg)
+	}
+	com, err := nc.CommitNetwork(ctx, connect.NewRequest(&osadminv1.CommitNetworkRequest{StagedId: "stg-1"}))
+	if err != nil || len(com.Msg.GetTestedGateways()) != 1 || com.Msg.GetReview().GetNewAddress() != "192.0.2.50" {
+		t.Fatalf("commit %v %v", com, err)
+	}
+	if e := lastEntry(t, b.log, "network.commit"); e.Outcome != "ok" || e.Detail["staged"] != "stg-1" {
+		t.Fatalf("commit entry %+v", e)
+	}
+	g, err = nc.GetNetwork(ctx, connect.NewRequest(&osadminv1.GetNetworkRequest{}))
+	if err != nil || g.Msg.GetStagedId() != "" || g.Msg.GetStagedReview() != nil {
+		t.Fatalf("after the commit %v %v", g, err)
+	}
+}
+
+// A refused commit is a refused audit entry with the code netd gave.
+func TestACommitRefusedByNetdIsAudited(t *testing.T) {
+	b := newBox(t, true)
+	ctx := context.Background()
+	alice := b.browser()
+	alice.signIn("alice")
+	nc := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL)
+	if _, err := nc.StageNetwork(ctx, connect.NewRequest(&osadminv1.StageNetworkRequest{Settings: defaultSettings()})); err != nil {
+		t.Fatal(err)
+	}
+	b.netd.mu.Lock()
+	b.netd.commitErr = connect.NewError(connect.CodeFailedPrecondition, errors.New("NET_GATEWAY (3404): the gateway 192.0.2.1 doesn't answer"))
+	b.netd.mu.Unlock()
+	_, err := nc.CommitNetwork(ctx, connect.NewRequest(&osadminv1.CommitNetworkRequest{StagedId: "stg-1"}))
+	if !strings.Contains(fmt.Sprint(err), "NET_GATEWAY") {
+		t.Fatal(err)
+	}
+	if e := lastEntry(t, b.log, "network.commit"); e.Outcome == "ok" {
+		t.Fatalf("entry %+v", e)
+	}
+}
+
+// The commit outlives the session that asked for it: the new address drops
+// that session, and netd must still finish and the audit still say so.
+func TestACommitDoesntDieWithItsSession(t *testing.T) {
+	b := newBox(t, true)
+	alice := b.browser()
+	alice.signIn("alice")
+	nc := osadminv1connect.NewNetworkServiceClient(alice.hc, b.ts.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+	if _, err := nc.StageNetwork(ctx, connect.NewRequest(&osadminv1.StageNetworkRequest{Settings: defaultSettings()})); err != nil {
+		t.Fatal(err)
+	}
+	b.netd.mu.Lock()
+	gate := make(chan struct{})
+	b.netd.commitGate = gate
+	b.netd.mu.Unlock()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = nc.CommitNetwork(ctx, connect.NewRequest(&osadminv1.CommitNetworkRequest{StagedId: "stg-1"}))
+	}()
+	b.netd.waitCommitting(t)
+	cancel()
+	<-done
+	close(gate)
+	waitFor(t, func() bool {
+		es, err := b.log.Entries()
+		return err == nil && slices.ContainsFunc(es, func(e osaudit.Entry) bool { return e.Action == "network.commit" && e.Outcome == "ok" })
+	})
+	b.netd.mu.Lock()
+	defer b.netd.mu.Unlock()
+	if b.netd.commitCtxErr != nil || b.netd.stagedID != "" {
+		t.Fatalf("commit saw %v, staged %q", b.netd.commitCtxErr, b.netd.stagedID)
+	}
+}
+
+func TestAnAdminCantStageOrCommit(t *testing.T) {
+	b := newBox(t, true)
+	ctx := context.Background()
+	bob := b.browser()
+	bob.signIn("bob")
+	nc := osadminv1connect.NewNetworkServiceClient(bob.hc, b.ts.URL)
+	if _, err := nc.StageNetwork(ctx, connect.NewRequest(&osadminv1.StageNetworkRequest{Settings: defaultSettings()})); err == nil {
+		t.Fatal("bob staged")
+	}
+	if _, err := nc.DiscardStagedNetwork(ctx, connect.NewRequest(&osadminv1.DiscardStagedNetworkRequest{})); err == nil {
+		t.Fatal("bob discarded")
+	}
+	if _, err := nc.CommitNetwork(ctx, connect.NewRequest(&osadminv1.CommitNetworkRequest{StagedId: "stg-1"})); err == nil {
+		t.Fatal("bob committed")
 	}
 }
 

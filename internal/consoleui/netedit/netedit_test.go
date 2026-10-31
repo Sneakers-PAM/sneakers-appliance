@@ -31,6 +31,9 @@ func TestEditorScreens(t *testing.T) {
 	tuitest.Golden(t, "field-address-error", FieldPage(chrome(), f, fieldAddress, 2, 4, `"192.0.2.10" isn't an address with its prefix, such as 192.0.2.10/24`))
 	f.address = netip.MustParsePrefix("192.0.2.10/24")
 	tuitest.Golden(t, "field-gateway", FieldPage(chrome(), f, fieldGateway, 3, 4, ""))
+	f.gateway = netip.MustParseAddr("192.0.2.1")
+	f.base = network.Defaults("ens192")
+	tuitest.Golden(t, "review", ReviewPage(chrome(), f, ""))
 	tuitest.Golden(t, "checks-running", ChecksPage(chrome(), []sources.Check{{Name: "link", State: sources.CheckOK}, {Name: "gateway", State: sources.CheckRunning}}, "", false))
 	tuitest.Golden(t, "checks-done", ChecksPage(chrome(), []sources.Check{
 		{Name: "cable on ens192", State: sources.CheckOK}, {Name: "address 192.0.2.10/24", State: sources.CheckOK},
@@ -140,11 +143,11 @@ func (n *slowNet) Interfaces(ctx context.Context) ([]sources.NIC, error) {
 	return n.Network.Interfaces(ctx)
 }
 
-func (n *slowNet) Set(ctx context.Context, s network.Settings) (string, int, error) {
+func (n *slowNet) Keep(ctx context.Context, s network.Settings) error {
 	if n.set {
-		return "", 0, n.block(ctx)
+		return n.block(ctx)
 	}
-	return n.Network.Set(ctx, s)
+	return n.Network.Keep(ctx, s)
 }
 
 func (n *slowNet) Checks(ctx context.Context) ([]sources.Check, error) {
@@ -175,7 +178,8 @@ func edit(t *testing.T, n sources.Network, set, checks time.Duration) (*tuitest.
 	return d, out
 }
 
-// fill types the whole form: the port, the address, no gateway, no DNS.
+// fill types the whole form, the port, the address, no gateway, no DNS, and
+// confirms the change.
 func fill(t *testing.T, d *tuitest.Driver) {
 	t.Helper()
 	d.Expect(t, "Port: ")
@@ -185,6 +189,8 @@ func fill(t *testing.T, d *tuitest.Driver) {
 	d.Expect(t, "Gateway: ")
 	d.Type(t, "")
 	d.Expect(t, "DNS server: ")
+	d.Type(t, "")
+	d.Expect(t, "Check this change")
 	d.Type(t, "")
 }
 
@@ -199,7 +205,7 @@ func ended(t *testing.T, out <-chan editResult) editResult {
 	return editResult{}
 }
 
-// A Set that never answers runs out of time: the console says so and
+// A Keep that never answers runs out of time: the console says so and
 // leaves the editor, where the dashboard takes over.
 func TestASetThatNeverAnswersLeavesTheEditor(t *testing.T) {
 	d, out := edit(t, stuck(func(n *slowNet) { n.set = true }), 20*time.Millisecond, time.Minute)
@@ -225,16 +231,15 @@ func TestTheChecksPageTakesKeysWhileChecksRun(t *testing.T) {
 	fill(t, d)
 	d.Expect(t, "Checking the network")
 	d.Type(t, "q")
-	if r := ended(t, out); r.kept || r.err != nil {
-		t.Fatalf("%+v, want back to the console", r)
+	if r := ended(t, out); !r.kept || r.err != nil {
+		t.Fatalf("%+v, want it kept: it was confirmed before the checks", r)
 	}
-	if len(n.Tokens()) != 0 {
-		t.Fatalf("leaving kept the address: %v", n.Tokens())
+	if got := n.Settings(); len(got) != 2 {
+		t.Fatalf("applied %d changes, want one per confirm", len(got))
 	}
 }
 
-// Checks that finish in the background reach the page, and Enter keeps the
-// address.
+// Checks that finish in the background reach the page, and Enter is done.
 func TestChecksFinishingInTheBackgroundShowAndTheAddressIsKept(t *testing.T) {
 	n := stuck(func(n *slowNet) { n.checks = true })
 	n.SetResults([]sources.Check{{Name: "gateway", State: sources.CheckOK}})
@@ -242,21 +247,22 @@ func TestChecksFinishingInTheBackgroundShowAndTheAddressIsKept(t *testing.T) {
 	fill(t, d)
 	d.Expect(t, "Checking the network")
 	close(n.release)
-	d.Expect(t, "Use these settings")
+	d.Expect(t, "Done")
 	d.Type(t, "")
 	if r := ended(t, out); !r.kept || r.err != nil {
 		t.Fatalf("%+v, want it kept", r)
 	}
 }
 
-// A Checks that never answers runs out of time and leaves the editor too.
+// A Checks that never answers runs out of time and leaves the editor too,
+// with the address kept.
 func TestChecksThatNeverAnswerLeaveTheEditor(t *testing.T) {
 	d, out := edit(t, stuck(func(n *slowNet) { n.checks = true }), time.Minute, 20*time.Millisecond)
 	fill(t, d)
 	d.Expect(t, "didn't finish in time")
 	d.Type(t, "")
-	if r := ended(t, out); r.kept || r.err != nil {
-		t.Fatalf("%+v, want back to the console", r)
+	if r := ended(t, out); !r.kept || r.err != nil {
+		t.Fatalf("%+v, want it kept", r)
 	}
 }
 
