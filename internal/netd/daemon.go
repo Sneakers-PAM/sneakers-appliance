@@ -807,7 +807,7 @@ func (d *Daemon) refresh() error {
 			lg.Info("netd: host name set", log.F("hostname", kname), log.F("own_name", host == ""))
 		}
 	}
-	if host != "" && host == d.kernel {
+	if host == "" || host == d.kernel {
 		d.hostname = host
 	}
 	key := fmt.Sprint(src, ntp)

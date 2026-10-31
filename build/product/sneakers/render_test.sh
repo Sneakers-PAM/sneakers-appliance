@@ -21,6 +21,7 @@
 #     answer (the DNS-only waits too);
 #   - the gateway's OAuth routes have OAUTH_PUBLIC_URL with the MCP off and
 #     on, and the MCP server, Hydra and their routes stay behind the switch;
+#   - an rc bundle gives the gateway the rc's version, with no v;
 #   - render.sh refuses a non-empty OUT, and a values overlay that brings
 #     a Secret no box makes.
 #
@@ -212,6 +213,16 @@ for ph in $(sed -n 's/^ *placeholder: \([a-z0-9.-]*\).*/\1/p' "$here/product.yam
   grep -qF "$ph" "$out/sneakers/sneakers.yaml" || fail "no stack carries the placeholder $ph"
 done
 echo "ok: the gateway gets the product version $release_version and the box's placeholders"
+
+# A release candidate's bundle says the tag's version, bare, whatever the
+# manifest's final version is (build/release/build.sh's bundle fill --version).
+mkdir "$work/no-layouts"
+go run "$root/build/tools/bundle" fill --release "$work/release.yaml" --layouts "$work/no-layouts" \
+  --version v9.8.7-rc.6 > "$work/release-rc.yaml"
+CHARTS="$charts" RELEASE="$work/release-rc.yaml" HELM="$helm" OUT="$work/stacks-rc" bash "$here/render.sh" > "$work/render-rc.log"
+got="$(sed -n 's/^ *SNEAKERS_PRODUCT_VERSION: //p' "$work/stacks-rc/sneakers/sneakers.yaml" | tr -d "\"'" | head -1)"
+[ "$got" = "9.8.7-rc.6" ] || fail "an rc bundle's gateway says \"$got\", want 9.8.7-rc.6"
+echo "ok: an rc bundle gives the gateway the rc's version"
 
 # Pinned by digest and never pulled.
 if grep -h '^ *image: ' "$out"/*/*.yaml | grep -v '@sha256:[0-9a-f]\{64\}$' | grep -q .; then

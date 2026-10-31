@@ -235,6 +235,14 @@ box_tls() {
 
 prepare() {
   prepare_log
+  # A product reset's record with no reset running is a reset that was cut
+  # off: the product may have no data or secrets left, and starting it
+  # would make new ones (docs/upgrades.md#removing-the-product).
+  step="a product reset that was cut off"
+  if [ -e /var/lib/sneakers/platform/product-reset.json ] && [ ! -e /run/sneakers/product-reset-running ]; then
+    say "a product reset was cut off; the product stays stopped, and the box finishes the reset"
+    exit 1
+  fi
   step="the installed product bundle"
   if [ ! -s "$product/bundle.json" ] || [ ! -x "$product/k0s" ]; then
     say "no product bundle is installed; k0s comes with it (Updates)"

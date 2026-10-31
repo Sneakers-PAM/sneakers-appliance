@@ -255,6 +255,12 @@ product's `product.yaml` declares (`mcp` and `machine-api`), the same ones the M
 sets: accessd runs `McpService.GetMcp` and `McpService.SetMcp` as the login's admin, so the role
 is the same (admin) and a change writes the same `mcp.set` audit entry, with the `ssh` surface.
 
+The card and the command share one queue. One change runs at a time, and a request made during one
+replaces any that was waiting, so on, off and on in quick succession end on, with one `mcp.set`
+entry per request. A replaced request answers at once, and one whose wait a later request ended
+answers when that wait ends. While a change is applied, both show the last state asked for, and
+`starting` until it's in place and the product is ready with it.
+
 ```text
 > sneakers mcp
 MCP          off

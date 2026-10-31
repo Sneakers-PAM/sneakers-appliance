@@ -450,6 +450,13 @@ type ProductSlots struct {
 	// OS is in it.
 	RequiresBaseOs string `protobuf:"bytes,6,opt,name=requires_base_os,json=requiresBaseOs,proto3" json:"requires_base_os,omitempty"`
 	Fits           bool   `protobuf:"varint,7,opt,name=fits,proto3" json:"fits,omitempty"`
+	// reset_note says a product reset was cut off part-way: that the box is
+	// finishing it, or why the product can't start and how to finish it;
+	// empty otherwise (docs/upgrades.md#removing-the-product).
+	ResetNote string `protobuf:"bytes,8,opt,name=reset_note,json=resetNote,proto3" json:"reset_note,omitempty"`
+	// reset_finishing: the box is finishing the cut-off reset by itself, and
+	// nothing is asked of an owner.
+	ResetFinishing bool `protobuf:"varint,9,opt,name=reset_finishing,json=resetFinishing,proto3" json:"reset_finishing,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -529,6 +536,20 @@ func (x *ProductSlots) GetRequiresBaseOs() string {
 func (x *ProductSlots) GetFits() bool {
 	if x != nil {
 		return x.Fits
+	}
+	return false
+}
+
+func (x *ProductSlots) GetResetNote() string {
+	if x != nil {
+		return x.ResetNote
+	}
+	return ""
+}
+
+func (x *ProductSlots) GetResetFinishing() bool {
+	if x != nil {
+		return x.ResetFinishing
 	}
 	return false
 }
@@ -3229,7 +3250,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x0fbuiltin_version\x18\t \x01(\tR\x0ebuiltinVersion\x12(\n" +
 	"\x10requires_base_os\x18\n" +
 	" \x01(\tR\x0erequiresBaseOs\x12\x12\n" +
-	"\x04fits\x18\v \x01(\bR\x04fits\"\xf9\x01\n" +
+	"\x04fits\x18\v \x01(\bR\x04fits\"\xc1\x02\n" +
 	"\fProductSlots\x12+\n" +
 	"\x11installed_version\x18\x01 \x01(\tR\x10installedVersion\x12%\n" +
 	"\x0estaged_version\x18\x02 \x01(\tR\rstagedVersion\x12)\n" +
@@ -3237,7 +3258,10 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\arunning\x18\x04 \x01(\bR\arunning\x12\x12\n" +
 	"\x04name\x18\x05 \x01(\tR\x04name\x12(\n" +
 	"\x10requires_base_os\x18\x06 \x01(\tR\x0erequiresBaseOs\x12\x12\n" +
-	"\x04fits\x18\a \x01(\bR\x04fits\"\xed\x01\n" +
+	"\x04fits\x18\a \x01(\bR\x04fits\x12\x1d\n" +
+	"\n" +
+	"reset_note\x18\b \x01(\tR\tresetNote\x12'\n" +
+	"\x0freset_finishing\x18\t \x01(\bR\x0eresetFinishing\"\xed\x01\n" +
 	"\x0eProductVersion\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x12\n" +
 	"\x04arch\x18\x02 \x01(\tR\x04arch\x12\x18\n" +

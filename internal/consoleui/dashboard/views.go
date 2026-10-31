@@ -142,6 +142,12 @@ func productSlots(st *osadminv1.GetStatusResponse, now time.Time) tui.Line {
 	if u := st.GetUpgradeProgress(); u.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT && u.GetFailed() && touchedProduct(u) && now.Sub(u.GetUpdatedAt().AsTime()) < failedStepShown {
 		return status("Product", "FAILED", tui.Alert, "the update to "+u.GetVersion()+" failed")
 	}
+	if p.GetResetFinishing() {
+		return status("Product", "RESETTING", tui.Warn, "finishing a reset that was cut off")
+	}
+	if p.GetResetNote() != "" {
+		return status("Product", "HELD", tui.Alert, "reset cut off; finish it over SSH")
+	}
 	v := p.GetInstalledVersion()
 	if v == "" {
 		if s := p.GetStagedVersion(); s != "" {

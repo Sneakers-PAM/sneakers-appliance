@@ -24,7 +24,18 @@ import (
 type fakeReset struct {
 	b          *box
 	clusterErr error
+	dataErr    error
 	removed    []string
+	// seen is the reset's record as each step found it.
+	seen map[string]string
+}
+
+// saw notes the step the record names as what starts.
+func (f *fakeReset) saw(what string) {
+	if f.seen == nil {
+		f.seen = map[string]string{}
+	}
+	f.seen[what] = recordStep(f.b)
 }
 
 func (f *fakeReset) note(what string) {
@@ -33,16 +44,25 @@ func (f *fakeReset) note(what string) {
 	f.b.services.calls = append(f.b.services.calls, what)
 }
 
-func (f *fakeReset) Cluster(context.Context) (productreset.Counts, error) {
+func (f *fakeReset) Cluster(_ context.Context, removing func() error) (productreset.Counts, error) {
 	f.note("cluster")
+	f.saw("quiesce")
 	if f.clusterErr != nil {
 		return productreset.Counts{}, f.clusterErr
 	}
+	if err := removing(); err != nil {
+		return productreset.Counts{}, err
+	}
+	f.saw("cluster")
 	return productreset.Counts{Namespaces: 3, Objects: 41}, nil
 }
 
 func (f *fakeReset) Data(remove ...string) (int64, error) {
 	f.note("data")
+	f.saw("data")
+	if f.dataErr != nil {
+		return 0, f.dataErr
+	}
 	f.removed = remove
 	return 5000, nil
 }
