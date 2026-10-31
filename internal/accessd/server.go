@@ -148,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 	local.Handle(accessv1connect.NewElevationServiceHandler(&elevationH{s: s}))
 	local.Handle(accessv1connect.NewSshLoginServiceHandler(&sshLoginH{s: s}))
 	local.Handle("/"+osadminv1connect.LocalServiceName+"/", s.api.LocalHandler())
+	local.HandleFunc("GET "+accessapi.SupportBundlePath, s.serveSupportBundle)
 
 	front := http.NewServeMux()
 	front.Handle(accessv1connect.NewBindingServiceHandler(&bindingH{s: s}))
@@ -196,6 +197,7 @@ var shellMethods = map[string]bool{
 	accessv1connect.AccessServiceGetUpdateChannelProcedure:      true,
 	accessv1connect.AccessServiceSetUpdateChannelProcedure:      true,
 	accessv1connect.AccessServiceCleanUpDiskProcedure:           true,
+	accessapi.SupportBundlePath:                                 true,
 	accessv1connect.AccessServiceResetProductProcedure:          true,
 	accessv1connect.AccessServiceReinstallProductProcedure:      true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:           true,

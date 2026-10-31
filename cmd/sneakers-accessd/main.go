@@ -75,6 +75,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshconfig"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sshsession"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/supportbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/switchroot"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ukikey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/webslots"
@@ -256,6 +257,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	// The disk guard: the volumes' alerts and the cleanup that runs every
 	// hour and when a volume passes 80% (docs/disk-layout.md).
 	guard := diskGuard(c.state, paths, audit, func() bool { return api != nil && api.UpdateBusy() }, lg)
+	secrets := &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Settings: settings, Logger: lg, Restore: escrowRestore(custody)}
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{}, Disk: guard,
 		RootSource: os.Getenv(switchroot.SourceEnv),
@@ -291,8 +293,15 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// once and kept on the state volume (docs/release.md#productyaml).
 		// They carry the product's email settings too (the Email page),
 		// kept 0600 next to them (docs/product-email.md).
-		BoxSecrets: &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Settings: settings, Logger: lg, Restore: escrowRestore(custody)},
-		Email:      settings,
+		BoxSecrets: secrets,
+		// The support bundle (docs/support-bundle.md) runs here, as root,
+		// and masks the values above wherever they turn up.
+		Support: &supportbundle.Config{
+			K0s: filepath.Join(product.Dir, "current", "k0s"), Kubeconfig: elevated.DefaultKubeconfig,
+			State: c.state, RunDir: c.run, Manifests: "/var/lib/k0s/manifests", Exec: supportbundle.Run,
+		},
+		SupportSecrets: secrets.Known,
+		Email:          settings,
 		EmailWorkloads: emailWorkloads{
 			k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig,
 			stack: filepath.Join("/var/lib/k0s/manifests", productspec.BoxSecretsStack, productspec.BoxSecretsStack+".yaml"),

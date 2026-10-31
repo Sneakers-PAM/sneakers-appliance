@@ -334,6 +334,31 @@ func generate(kind string) (string, error) {
 	return "", fmt.Errorf("boxsecrets: no generator %q", kind)
 }
 
+// Known are the secret values the box holds: every value it made or was
+// given for the product, and the settings that are passwords. The support
+// bundle masks them wherever they turn up, so a value with nothing around
+// it that says it's secret still doesn't get out.
+func (s *Store) Known() ([]string, error) {
+	values, err := s.load()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, v)
+	}
+	settings, err := s.settings()
+	if err != nil {
+		return out, err
+	}
+	for k, v := range settings {
+		if strings.Contains(k, "password") && v != "" {
+			out = append(out, v)
+		}
+	}
+	return out, nil
+}
+
 func (s *Store) load() (map[string]string, error) {
 	b, err := os.ReadFile(filepath.Join(s.Dir, ValuesFile)) // #nosec G304 -- the box's own settings file
 	if errors.Is(err, fs.ErrNotExist) {

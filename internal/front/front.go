@@ -125,7 +125,7 @@ func (f *Front) Handler() http.Handler {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/"+osadminv1connect.LocalServiceName+"/"):
 			http.NotFound(w, r)
-		case strings.HasPrefix(r.URL.Path, apiPrefix), r.URL.Path == "/upload", r.URL.Path == "/import/upload", r.URL.Path == "/export/audit-log":
+		case strings.HasPrefix(r.URL.Path, apiPrefix), r.URL.Path == "/upload", r.URL.Path == "/import/upload", r.URL.Path == "/export/audit-log", r.URL.Path == "/export/support-bundle":
 			f.proxy.ServeHTTP(w, r)
 		default:
 			pages.ServeHTTP(w, r)

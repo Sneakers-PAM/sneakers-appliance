@@ -422,7 +422,7 @@ new certificate reaches new handshakes only, so the Network page that made the c
 confirm it. Port 8443 speaks TLS only: a browser that asks
 for `http://<box>:8443/` gets a `301` to the same host, port and path over `https://`, with a short
 "Redirecting you to https…" page and the link, and nothing else is served over plain HTTP. It serves the static pages and forwards the API,
-`POST /upload` and `GET /export/audit-log` to accessd; `LocalService` is never forwarded. Until
+`POST /upload`, `GET /export/audit-log` and `GET /export/support-bundle` to accessd; `LocalService` is never forwarded. Until
 setup is done every page path but `/setup` answers `302` to `/setup`, so `http://<box>:8443/` ends
 on the setup stepper, never on sign-in: before a page it asks accessd for the phase
 (`StatusService.GetPhase`, public) until accessd says `normal`, and then stops asking. If accessd

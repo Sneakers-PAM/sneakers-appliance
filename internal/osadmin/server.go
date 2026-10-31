@@ -36,6 +36,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productimport"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/supportbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/weblogin"
 )
 
@@ -156,6 +157,12 @@ type Options struct {
 	// ImportStopJob deletes an import step's Job and its pod, for a close
 	// while a step runs; nil leaves it to the stack's removal.
 	ImportStopJob func(ctx context.Context, namespace, job string) error
+	// Support says where the box's commands and files are for the support
+	// bundle; nil answers Not available.
+	Support *supportbundle.Config
+	// SupportSecrets are the values the box made for the product, which
+	// the bundle masks wherever they appear.
+	SupportSecrets func() ([]string, error)
 	// BoxSecrets makes the Secrets the current product slot declares
 	// (boxsecrets.Store on the box) at each product apply and revert,
 	// before the product restarts; nil makes none.
@@ -214,6 +221,8 @@ type Server struct {
 		mu     sync.Mutex
 		reason string
 	}
+	// bundleMu is held while a support bundle runs: one at a time.
+	bundleMu sync.Mutex
 }
 
 // New returns a server.
@@ -272,6 +281,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewProductServiceHandler(&productSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewModulesServiceHandler(osadminv1connect.UnimplementedModulesServiceHandler{}, opts))
 	mux.HandleFunc("GET /export/audit-log", s.exportAudit)
+	mux.HandleFunc("GET /export/support-bundle", s.exportSupportBundle)
 	mux.HandleFunc("POST /upload", s.handleUpload)
 	mux.HandleFunc("POST /import/upload", s.handleImportUpload)
 }

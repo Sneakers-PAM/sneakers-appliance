@@ -114,6 +114,9 @@ type Spec struct {
 	// Phases, when set, are the order the product comes up in, each
 	// gated on Ready before the next (phases.go, docs/upgrades.md).
 	Phases []Phase `yaml:"phases"`
+	// Support are the sections the product adds to the box's support
+	// bundle (support.go, docs/support-bundle.md).
+	Support []Support `yaml:"support"`
 }
 
 // Ready is product.yaml's ready section.
@@ -583,6 +586,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkPhases(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkSupport(); err != nil {
 		return Spec{}, err
 	}
 	return s, nil

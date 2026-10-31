@@ -67,7 +67,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.review", "network.commit", "network.discard", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall", "support.bundle":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -130,6 +130,8 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.updatesSet(ctx, r.Flags)
 	case "disk.cleanup":
 		res, err = s.diskCleanup(ctx)
+	case "support.bundle":
+		res, err = s.supportBundle(ctx, r.Args)
 	case "product.reset":
 		res, err = s.productReset(ctx, r.Args[0], r.Args[1])
 	case "product.reinstall":

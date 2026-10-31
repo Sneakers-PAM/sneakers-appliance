@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"unicode"
 
@@ -44,6 +45,10 @@ type Services struct {
 	// Reset is the access service for the product reset, on a client
 	// whose timeout lets it finish (UseResetClient); nil uses Access.
 	Reset accessv1connect.AccessServiceClient
+	// bundleClient and bundleURL fetch the support bundle, on a client
+	// that gives it its minutes (UseBundleClient).
+	bundleClient *http.Client
+	bundleURL    string
 	// StatusFile is accessd's status cache (accessapi.StatusFile).
 	StatusFile string
 	// Role is the login's role once VerifyTotp passed: owner or admin.

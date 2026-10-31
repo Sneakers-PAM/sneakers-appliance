@@ -187,6 +187,40 @@ data:
     wal: pgdata/pg_wal
     wal_warn: 1GiB
 
+# What the box's support bundle adds for Sneakers, under "Product: Sneakers"
+# (docs/support-bundle.md): the base collects the OS, k0s and every pod's
+# log, so these are the things only Sneakers knows to ask. Each section is
+# read-only and bounded; productspec refuses anything else. short: true puts
+# a section in the short form too.
+support:
+  - title: The Sneakers workloads
+    kubectl: {verb: get, resource: deployments, namespace: sneakers}
+    short: true
+  - title: The Sneakers stateful workloads
+    kubectl: {verb: get, resource: statefulsets, namespace: sneakers}
+    short: true
+  - title: The Sneakers volumes
+    kubectl: {verb: get, resource: persistentvolumeclaims, namespace: sneakers}
+  - title: The Sneakers routes
+    kubectl: {verb: get, resource: ingressroutes.traefik.io, namespace: sneakers}  # scrub:allow=fqdn -- a Kubernetes API group
+  - title: The Sneakers certificates
+    kubectl: {verb: get, resource: certificates.cert-manager.io, namespace: sneakers}  # scrub:allow=fqdn -- a Kubernetes API group
+  - title: The Sneakers network policies
+    kubectl: {verb: get, resource: networkpolicies, namespace: sneakers}
+  - title: The gateway's log
+    kubectl: {verb: logs, namespace: sneakers, selector: app.kubernetes.io/component=gateway}
+    timeout: 30s
+    short: true
+  - title: The vault's log
+    kubectl: {verb: logs, namespace: sneakers, selector: app.kubernetes.io/component=vault}
+    timeout: 30s
+    short: true
+  - title: The size of the database
+    command: du -s -h /var/lib/sneakers-data/postgres
+    timeout: 30s
+  - title: The size of the data volumes
+    command: df -h /var/lib/sneakers-data
+
 # When an install, update or revert counts as done (docs/upgrades.md): once
 # every workload in the stacks runs this bundle's version and has rolled
 # out, the gateway's readiness must answer, and it fails only while a

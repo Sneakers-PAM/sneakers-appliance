@@ -83,6 +83,9 @@ type Env struct {
 	// owner. help and Tab offer an admin no owner-only command; accessd
 	// still checks the role of every call.
 	Role string
+	// Terminal is true when standard output is a terminal, the only place
+	// the support bundle is in colour.
+	Terminal bool
 	// History is this session's command lines, for history; nil outside
 	// an interactive session.
 	History *History
@@ -113,7 +116,9 @@ type spec struct {
 	origins []Origin
 	nargs   [2]int // min, max positional args; max -1 means any
 	flags   []flagSpec
-	stdin   bool
+	// bools are flags that take no value; each reads "true" when set.
+	bools []flagSpec
+	stdin bool
 	// confirm is the word the admin types to confirm (reboot).
 	confirm string
 	// notice is printed before the confirm, and closes the command's help.
@@ -215,9 +220,9 @@ var specs = []spec{
 	{path: "logs export", short: "Stream the logs as an archive to standard output", action: "logs.export", origins: []Origin{OriginSSH}, later: true,
 		long:    "Streams the box's logs as an archive to standard output, to save on your side. Over SSH only. Not available in this release.",
 		example: "  ssh admin@box1.sneakers.example.org logs export > logs.tar"},
-	{path: "support-bundle", short: "Stream a support bundle to standard output", action: "support.bundle", origins: []Origin{OriginSSH}, later: true,
-		long:    "Streams a support bundle (status, logs and settings, with no secrets) to standard output. Over SSH only. Not available in this release.",
-		example: "  ssh admin@box1.sneakers.example.org support-bundle > support.tar"},
+	{path: "support-bundle", use: "support-bundle [full]", short: "Print everything needed to diagnose the box, as one run of plain text", action: "support.bundle", origins: []Origin{OriginSSH}, nargs: [2]int{0, 1}, bools: []flagSpec{{"no-color", "no colour, even on a terminal", ""}}, run: runSupportBundle,
+		long:    "Runs the box's fixed set of read-only commands (the status, k0s, the cluster, the logs, the mounts and the update records, then the installed product's own sections) and prints them as one run of labelled plain text, with every log's time in UTC and one merged timeline at the end. Secrets, tokens and keys are removed before anything is written, and Secrets and env vars show as names only. Alone it prints the key sections with tails of about 50 lines, to copy out of the terminal; full prints every section, the same file as Download support bundle on :8443. On a terminal the headings, errors and warnings are in colour, which copying leaves behind; --no-color turns it off, and anything but a terminal gets no colour. One bundle runs at a time, and each one is audited. Over SSH only.",
+		example: "  support-bundle\n  support-bundle full\n  ssh admin@box1.sneakers.example.org support-bundle full > support-bundle.txt"},
 	{path: "history", short: "List this session's commands", action: "history", origins: []Origin{OriginSSH}, run: runHistory,
 		long:    "Lists the command lines typed since you signed in, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list is cleared when you sign out.",
 		example: "  history"},
@@ -667,6 +672,11 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 					flags[f.name] = v
 				}
 			}
+			for _, f := range s.bools {
+				if on, _ := cmd.Flags().GetBool(f.name); on {
+					flags[f.name] = "true"
+				}
+			}
 			if s.notice != "" {
 				_, _ = fmt.Fprintln(e.Out, s.notice)
 			}
@@ -694,6 +704,9 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 			out, _ := cmd.Flags().GetString("output")
 			return emit(e, out == "json", res)
 		},
+	}
+	for _, f := range s.bools {
+		cmd.Flags().Bool(f.name, false, f.usage)
 	}
 	for _, f := range s.flags {
 		cmd.Flags().String(f.name, f.def, f.usage)

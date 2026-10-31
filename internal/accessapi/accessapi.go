@@ -28,6 +28,11 @@ const ReadyFile = "/run/sneakers/access.ready"
 // StatusFile is where accessd keeps the last status.
 const StatusFile = "/run/sneakers/access/status.json"
 
+// SupportBundlePath is accessd's route for the closed shell's support
+// bundle, plain text as it's written (docs/support-bundle.md); ?form=full
+// asks for every section.
+const SupportBundlePath = "/support-bundle"
+
 // The headers a closed-shell login sends with each call. Both are only
 // for the audit entry: the identity is the peer uid, and a fingerprint
 // that isn't one of that admin's keys is refused.
