@@ -116,6 +116,8 @@ type spec struct {
 	stdin   bool
 	// confirm is the word the admin types to confirm (reboot).
 	confirm string
+	// notice is printed before the confirm, and closes the command's help.
+	notice string
 	// later marks the commands of specs 3 to 5, whose backends aren't on
 	// the box yet.
 	later bool
@@ -213,10 +215,10 @@ var specs = []spec{
 	{path: "history", short: "List this session's commands", action: "history", origins: []Origin{OriginSSH}, run: runHistory,
 		long:    "Lists the command lines typed since you signed in, numbered, oldest first. A password in a URL (an HTTPS proxy's) is shown as ***. The list is cleared when you sign out.",
 		example: "  history"},
-	{path: "reboot", short: "Reboot the appliance", action: "power.reboot", origins: both, confirm: "reboot",
+	{path: "reboot", short: "Reboot the appliance", action: "power.reboot", origins: both, confirm: "reboot", notice: "The box can take more than 5 minutes to come back.",
 		long:    "Reboots the box gracefully: the services stop first. Type reboot to confirm.",
 		example: "  reboot"},
-	{path: "poweroff", short: "Shut the appliance down", action: "power.off", origins: both, confirm: "poweroff",
+	{path: "poweroff", short: "Shut the appliance down", action: "power.off", origins: both, confirm: "poweroff", notice: "After a shutdown, the box can take more than 5 minutes to come back when it starts.",
 		long:    "Shuts the box down gracefully: the services stop first. Type poweroff to confirm.",
 		example: "  poweroff"},
 }
@@ -628,6 +630,9 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 		use = name
 	}
 	long := s.long
+	if s.notice != "" {
+		long += " " + s.notice
+	}
 	if len(s.keys) > 0 {
 		long += "\n\nKeys:\n" + strings.TrimRight(keyList(s.keys), "\n")
 	}
@@ -655,6 +660,9 @@ func leaf(ctx context.Context, e *Env, s *spec, name string) *cobra.Command {
 				if v != "" {
 					flags[f.name] = v
 				}
+			}
+			if s.notice != "" {
+				_, _ = fmt.Fprintln(e.Out, s.notice)
 			}
 			if s.confirm != "" && !typedConfirm(e, s.confirm) {
 				return codes.New(codes.AccessForbidden, "not confirmed; type %s to confirm", s.confirm)

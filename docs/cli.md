@@ -485,7 +485,7 @@ Example:
 
 Shut the appliance down.
 
-Shuts the box down gracefully: the services stop first. Type poweroff to confirm.
+Shuts the box down gracefully: the services stop first. Type poweroff to confirm. After a shutdown, the box can take more than 5 minutes to come back when it starts.
 
 Offered over: SSH and console.
 
@@ -503,7 +503,7 @@ Example:
 
 Reboot the appliance.
 
-Reboots the box gracefully: the services stop first. Type reboot to confirm.
+Reboots the box gracefully: the services stop first. Type reboot to confirm. The box can take more than 5 minutes to come back.
 
 Offered over: SSH and console.
 

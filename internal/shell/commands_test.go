@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -157,6 +159,71 @@ func TestRebootNeedsTypedConfirmation(t *testing.T) {
 	r = runShellIn(t, shell.OriginConsole, "poweroff", "poweroff\n", nil)
 	if r.e != nil || strings.Join(r.b.actions(), ",") != "power.off" {
 		t.Fatalf("%v %v", r.e, r.b.actions())
+	}
+}
+
+const (
+	rebootNotice   = "The box can take more than 5 minutes to come back."
+	poweroffNotice = "After a shutdown, the box can take more than 5 minutes to come back when it starts."
+)
+
+// promptTerm answers a question the way the interactive terminal does,
+// and keeps what had been printed by the time the question was asked.
+type promptTerm struct {
+	out    *bytes.Buffer
+	answer string
+	shown  string
+}
+
+func (p *promptTerm) Read([]byte) (int, error) { return 0, io.EOF }
+
+func (p *promptTerm) AskLine(string) (string, error) {
+	p.shown = p.out.String()
+	return p.answer, nil
+}
+
+func (p *promptTerm) AskSecret(string) (string, error) { return "", io.EOF }
+
+// These are the shell's whole power surface: it has no forced form,
+// which only the Power page on :8443 offers.
+func TestPowerCommandsSayHowLongTheBoxTakesBeforeTheConfirm(t *testing.T) {
+	for _, tc := range []struct{ line, notice, action string }{
+		{"reboot", rebootNotice, "power.reboot"},
+		{"poweroff", poweroffNotice, "power.off"},
+	} {
+		for _, o := range []shell.Origin{shell.OriginSSH, shell.OriginConsole} {
+			for _, answer := range []string{tc.line, "no"} {
+				r := runShellIn(t, o, tc.line, answer+"\n", nil)
+				prompt := fmt.Sprintf("Type %s to confirm: ", tc.line)
+				n, c := strings.Index(r.out, tc.notice), strings.Index(r.out, prompt)
+				if n < 0 || c < 0 || n > c {
+					t.Errorf("%s over %s answered %q: the notice isn't before the confirm:\n%q", tc.line, o, answer, r.out)
+				}
+			}
+
+			var out bytes.Buffer
+			b := &recordingBackend{}
+			in := &promptTerm{out: &out, answer: tc.line}
+			e := &shell.Env{Origin: o, Backend: b, In: in, Out: &out, Err: &out}
+			if err := shell.Run(context.Background(), e, tc.line); err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(in.shown, tc.notice) {
+				t.Errorf("%s over %s at a terminal: nothing before the prompt said so:\n%q", tc.line, o, in.shown)
+			}
+			if strings.Join(b.actions(), ",") != tc.action {
+				t.Errorf("%s over %s ran %v", tc.line, o, b.actions())
+			}
+		}
+
+		var help bytes.Buffer
+		e := &shell.Env{Origin: shell.OriginSSH, Backend: &recordingBackend{}, In: strings.NewReader(""), Out: &help, Err: &help}
+		if err := shell.Run(context.Background(), e, "help "+tc.line); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(help.String(), tc.notice) {
+			t.Errorf("help %s doesn't say so:\n%s", tc.line, help.String())
+		}
 	}
 }
 
