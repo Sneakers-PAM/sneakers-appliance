@@ -403,7 +403,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	go runDiskGuard(ctx, guard)
 	d.RefreshStatus(ctx)
 	api.ResumeProductUp()
-	api.ResumeProductReset(ctx)
+	// A cut-off reset can take minutes to finish; this loop keeps its beat.
+	if finish := api.ResumeProductReset(ctx); finish != nil {
+		go finish()
+	}
 	// netd keeps the product's ports only while it runs: open them again
 	// at start, and each minute until that works.
 	portsOpen := api.OpenProductPorts(ctx) == nil

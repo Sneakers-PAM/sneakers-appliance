@@ -225,10 +225,13 @@ message ProductSlots {
   // OS is in it.
   string requires_base_os = 6;
   bool fits = 7;
-  // reset_note says a product reset was cut off part-way and how to finish
-  // it, while the product can't start for it; empty otherwise
-  // (docs/upgrades.md#removing-the-product).
+  // reset_note says a product reset was cut off part-way: that the box is
+  // finishing it, or why the product can't start and how to finish it;
+  // empty otherwise (docs/upgrades.md#removing-the-product).
   string reset_note = 8;
+  // reset_finishing: the box is finishing the cut-off reset by itself, and
+  // nothing is asked of an owner.
+  bool reset_finishing = 9;
 }
 
 // ProductVersion is one product bundle a source offers.

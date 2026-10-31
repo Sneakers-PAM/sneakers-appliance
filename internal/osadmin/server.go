@@ -209,9 +209,11 @@ type Server struct {
 	checks   checks
 	progress progress
 	ready    readiness
-	// resetting: a product reset runs in this process.
-	resetting atomic.Bool
-	boxPush   boxPush
+	// resetting: a product reset runs in this process; resetFinishing: the
+	// box is finishing a cut-off one by itself, from before it starts.
+	resetting      atomic.Bool
+	resetFinishing atomic.Bool
+	boxPush        boxPush
 	// revertMu guards revertAudited, the last network change whose revert
 	// is in the audit, so a timer and a late check don't write it twice.
 	revertMu      sync.Mutex
