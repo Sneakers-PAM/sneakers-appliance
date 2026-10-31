@@ -459,6 +459,7 @@ Example:
   network set time-zone=America/New_York
   network set https-proxy=
   network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1
+  network set ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1
 ```
 
 ## `network show`
