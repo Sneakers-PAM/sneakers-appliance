@@ -160,6 +160,40 @@ func TestVersionPrintsTheReleasesVersion(t *testing.T) {
 	}
 }
 
+// fill --version makes the tag the release's version, bare, for bundle
+// version and the stacks.
+func TestFillSetsTheReleasesVersion(t *testing.T) {
+	body := strings.Replace(pinned, "kind: Release\n", "kind: Release\nmetadata:\n  version: 0.1.0\n", 1)
+	for _, tag := range []string{"0.1.0-rc.6", "v0.1.0-rc.6"} {
+		var filled bytes.Buffer
+		if err := fill([]string{"--release", writeRelease(t, body), "--layouts", t.TempDir(), "--version", tag}, &filled); err != nil {
+			t.Fatalf("%s: %v", tag, err)
+		}
+		var out bytes.Buffer
+		if err := version([]string{"--release", writeRelease(t, filled.String())}, &out); err != nil {
+			t.Fatalf("%s: %v", tag, err)
+		}
+		if out.String() != "0.1.0-rc.6\n" {
+			t.Fatalf("%s: got %q", tag, out.String())
+		}
+	}
+	var kept bytes.Buffer
+	if err := fill([]string{"--release", writeRelease(t, body), "--layouts", t.TempDir()}, &kept); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(kept.String(), "version: 0.1.0\n") {
+		t.Fatalf("no --version changed the release's version:\n%s", kept.String())
+	}
+	for name, v := range map[string]string{"not a version": "0.1.0 lab", "a path": "../0.1.0"} {
+		if err := fill([]string{"--release", writeRelease(t, body), "--layouts", t.TempDir(), "--version", v}, &bytes.Buffer{}); err == nil {
+			t.Errorf("%s: filled with the version %q", name, v)
+		}
+	}
+	if err := fill([]string{"--release", writeRelease(t, pinned), "--layouts", t.TempDir(), "--version", "0.1.0-rc.6"}, &bytes.Buffer{}); err == nil {
+		t.Error("filled a release.yaml with no metadata.version")
+	}
+}
+
 func TestIndexNeedsAnOutAndTwoArchitectures(t *testing.T) {
 	if err := run([]string{"index", t.TempDir(), t.TempDir()}); err == nil || !strings.Contains(err.Error(), "--out") {
 		t.Fatalf("no --out: %v", err)

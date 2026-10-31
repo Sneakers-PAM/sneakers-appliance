@@ -28,15 +28,16 @@
 #   KEYS           the public key directory (default keys/production)
 #
 # release.yaml isn't trusted here and nothing is signed: the digest of each
-# service image built is put in place of its placeholder (bundle fill), and
-# the sign job countersigns that release.yaml and the manifest of every
+# service image built is put in place of its placeholder and VERSION becomes
+# its metadata.version, so an rc's stacks give the product the rc's version
+# (bundle fill), and the sign job countersigns that release.yaml and the manifest of every
 # image it pins with the release key, then builds the product bundle from
 # them. A placeholder with no image built, or any other image not pinned by
 # a digest, is refused before anything is fetched.
 #
 # Output in $OUT: sneakers-<version>.efi (unsigned UKI), systemd-bootx64.efi
 # (unsigned), root-<version>.img, verity.json, release.yaml (with the built
-# digests), stacks/ (the product's k0s stacks), product.yaml (the product
+# digests and VERSION), stacks/ (the product's k0s stacks), product.yaml (the product
 # bundle's), import-job.yaml and migrate-image (the import's Job template and
 # the sneakers-migrate image@digest it runs),
 # systemd-version, k0s and helm (checked against release.yaml's pins),
@@ -63,7 +64,7 @@ export SOURCE_DATE_EPOCH
 tools="$(mktemp -d)"
 trap 'rm -rf "$tools"' EXIT
 CGO_ENABLED=0 go build -trimpath -o "$tools/bundle" "$root/build/tools/bundle"
-"$tools/bundle" fill --release "$RELEASE" --layouts "$SERVICE_IMAGES" > "$tools/release.yaml"
+"$tools/bundle" fill --release "$RELEASE" --layouts "$SERVICE_IMAGES" --version "$VERSION" > "$tools/release.yaml"
 "$tools/bundle" images --release "$tools/release.yaml" > "$tools/images.txt"
 mkdir -p "$OUT"
 work="$(mktemp -d)"
