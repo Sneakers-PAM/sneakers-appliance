@@ -226,12 +226,15 @@ func TestTheBaseMarkIsTheRealMarkAndTheReleaseBundleCarriesIt(t *testing.T) {
 		t.Fatalf("the shipped brand: %v %v %v", b, warn, err)
 	}
 
-	for _, f := range []string{"../../.github/workflows/release.yml", "../../build/realci/product.sh"} {
+	for f, arg := range map[string]string{
+		"../../.github/workflows/release.yml": "BRAND=build/product/sneakers/brand",
+		"../../build/realci/product.sh":       `BRAND="$brand"`,
+	} {
 		src, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if n := strings.Count(string(src), "BRAND=build/product/sneakers/brand"); n != 2 {
+		if n := strings.Count(string(src), arg); n != 2 {
 			t.Fatalf("%s names the brand %d times; its input digest and its build both need it", f, n)
 		}
 	}
