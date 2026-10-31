@@ -131,6 +131,23 @@ func TestTheKernelHostNameFallsBackToTheBoxName(t *testing.T) {
 	waitFor(t, func() bool { return b.sys.host() == "sneakers-0a1b2c3d" })
 }
 
+// A host name that's taken away stops being the box's host name, so what
+// follows it (the product's FQDN, the certificates) doesn't keep the old
+// one.
+func TestAHostNameTakenAwayIsNoLongerReported(t *testing.T) {
+	b := newBox(t)
+	b.fallback = "sneakers-0a1b2c3d"
+	b.start()
+	b.workers.report4(t, "eth0", &netd.Lease4{
+		Addr: netip.MustParsePrefix("192.0.2.100/24"), Router: netip.MustParseAddr("192.0.2.1"), Lease: time.Hour,
+		Hostname: "box1", Domain: "sneakers.example.org",
+	})
+	waitFor(t, func() bool { return b.d.Status().Hostname == "box1.sneakers.example.org" })
+	b.workers.report4(t, "eth0", nil)
+	waitFor(t, func() bool { return b.sys.host() == "sneakers-0a1b2c3d" })
+	waitFor(t, func() bool { return b.d.Status().Hostname == "" })
+}
+
 func TestTheSettingWinsOverTheBoxName(t *testing.T) {
 	b := newBox(t)
 	b.fallback = "sneakers-0a1b2c3d"
