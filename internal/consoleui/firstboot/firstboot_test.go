@@ -464,7 +464,7 @@ func TestBackingOutAfterAKeptChangeStaysOnIt(t *testing.T) {
 	d.Type(t, "e")
 	d.Expect(t, "field 1 of 4")
 	d.Type(t, "b")
-	d.Expect(t, "7PQK-NMS9-XD2A-4KJW")
+	d.Expect(t, "7PXK-NMS9-XD2A-4KJW")
 	cancel()
 	<-res
 }
