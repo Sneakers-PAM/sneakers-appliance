@@ -139,7 +139,7 @@ jobs:
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
-          KEYS="$keys" OUT="$RUNNER_TEMP/lab" DURABILITY=1 bash build/lab/build.sh
+          NO_PAGES=1 KEYS="$keys" OUT="$RUNNER_TEMP/lab" DURABILITY=1 bash build/lab/build.sh
           {
             echo "### Lab release"
             echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes (SquashFS zstd with the verity tree)"
