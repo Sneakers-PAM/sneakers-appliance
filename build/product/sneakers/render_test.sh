@@ -19,6 +19,8 @@
 #   - every wait-phase init container runs with arguments the release's own
 #     sneakers-migrate wait takes, and exits 0 once its DNS and targets
 #     answer (the DNS-only waits too);
+#   - the gateway's OAuth routes have OAUTH_PUBLIC_URL with the MCP off and
+#     on, and the MCP server, Hydra and their routes stay behind the switch;
 #   - render.sh refuses a non-empty OUT, and a values overlay that brings
 #     a Secret no box makes.
 #
@@ -265,7 +267,6 @@ grep -q "issuer: https://$host/oauth\$" "$hcm" || fail "Hydra's issuer isn't htt
 grep -q "public: https://$host/oauth/\$" "$hcm" || fail "Hydra's public URL isn't https://<fqdn>/oauth/"
 [ -n "$sw" ] || fail "no sneakers-mcp-switch ConfigMap"
 grep -q "HYDRA_ISSUER: https://$host/oauth\$" "$sw" || fail "the gateway doesn't check https://<fqdn>/oauth: $(grep HYDRA_ISSUER "$sw")"
-grep -q "OAUTH_PUBLIC_URL: https://$host\$" "$sw" || fail "the root authorization server moved: $(grep OAUTH_PUBLIC_URL "$sw")"
 awk -v RS='---\n' '/kind: NetworkPolicy/ && /\n    name: sneakers-hydra\n/' "$mcp" | grep -q 'cidr: 198.18.0.1/32' || fail "Hydra's public port doesn't take the edge"
 grep -A3 'oauth-prefix:' "$out/edge/edge.yaml" | grep -q 'prefixes: \["/oauth"\]' || fail "the edge has no oauth-prefix middleware"
 # The MCP server's protected-resource metadata (RFC 9728) names the
@@ -282,6 +283,30 @@ grep -q "MCP_AUTHORIZATION_SERVER: https://$host\$" "$mcm" || fail "the MCP serv
 awk -v RS='---\n' '/kind: Ingress/ && /\n    name: sneakers-mcp\n/' "$mcp" | grep -q 'path: /.well-known/oauth-protected-resource$' || fail "the edge doesn't route /.well-known/oauth-protected-resource to the MCP server"
 echo "ok: the OAuth issuer is https://<fqdn>/oauth, behind the edge's /oauth/ routes, and /oauth/consent stays the staff app's"
 echo "ok: the MCP server's protected-resource metadata names https://<fqdn>/mcp and https://<fqdn>"
+
+# The command-line sign-in (sneakers-put login, sneakers-run login) is the
+# gateway's own authorization server, which mounts only with OAUTH_PUBLIC_URL
+# set, so it's in the base values: the same with the MCP off and on, and never
+# one of the settings the switch's ConfigMap changes.
+got="$(env_value OAUTH_PUBLIC_URL)"
+[ "$got" = "https://$host" ] || fail "with the MCP off, the gateway's OAUTH_PUBLIC_URL is \"$got\", want https://$host"
+if grep -q 'OAUTH_PUBLIC_URL' "$sw"; then fail "the MCP switch changes the gateway's OAUTH_PUBLIC_URL: $(grep OAUTH_PUBLIC_URL "$sw")"; fi
+# With the MCP off the product routes those paths and none of the MCP's: the
+# MCP server and Hydra's issuer stay in the switch's stack. HYDRA_ENABLED stays
+# there too, since the gateway's readiness needs Hydra once it's true.
+always="$(for f in "$out"/sneakers*/*.yaml; do [ "$f" = "$mcp" ] || cat "$f"; done)"
+for p in /oauth2 /.well-known/oauth-authorization-server; do
+  grep -q "path: $p\$" <<<"$always" || fail "with the MCP off, no route takes $p"
+done
+if grep -E 'path: (/mcp|/oauth/|/\.well-known/oauth-protected-resource)' <<<"$always"; then fail "an MCP or Hydra route runs with the MCP off"; fi
+for kv in "MCP_ENABLED false" "HYDRA_ENABLED false" "HYDRA_ISSUER" "MCP_HEALTH_URL"; do
+  read -r name value <<<"$kv"
+  got="$(env_value "$name")"
+  [ "$got" = "${value:-}" ] || fail "with the MCP off, the gateway's $name is \"$got\", want \"${value:-}\""
+done
+grep -qE "HYDRA_ENABLED: [\"']?true" "$sw" || fail "the MCP switch doesn't turn Hydra on: $(grep HYDRA_ENABLED "$sw" || echo unset)"
+grep -qE "MCP_ENABLED: [\"']?true" "$sw" || fail "the MCP switch doesn't turn the MCP on: $(grep MCP_ENABLED "$sw" || echo unset)"
+echo "ok: the gateway's OAuth routes have their public address with the MCP off and on, and the rest stays behind the switch"
 
 # The mail relay comes only from the box (the Email page): the identity
 # service, which sends the product's mail, loads the sneakers-email

@@ -50,7 +50,10 @@ vault:
 gateway:
   env:
     MCP_HEALTH_URL: ''
-    OAUTH_PUBLIC_URL: ''
+    # The gateway's own OAuth routes, the box's name at the root. They stay up
+    # with the MCP off for sneakers-put and sneakers-run login; the gateway
+    # refuses MCP clients there. They don't use Hydra.
+    OAUTH_PUBLIC_URL: https://{{ .Values.global.host }}
     MCP_ENABLED: 'false'
     # The box for the product's About and diagnostics: the placeholders
     # product.yaml's box_values declare, which the box replaces with its
