@@ -46,9 +46,28 @@ var AssetHosts = []string{"objects.githubusercontent.com", "release-assets.githu
 
 // Release is one entry of the releases list, as far as the box reads it.
 type Release struct {
-	TagName    string `json:"tag_name"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
+	TagName    string  `json:"tag_name"`
+	Draft      bool    `json:"draft"`
+	Prerelease bool    `json:"prerelease"`
+	Assets     []Asset `json:"assets"`
+}
+
+// Asset is one file on a release. State is uploaded once it's all there.
+type Asset struct {
+	Name  string `json:"name"`
+	State string `json:"state"`
+}
+
+// Missing is those of names that aren't on r yet: an asset still uploading
+// counts as missing, since it can't be downloaded.
+func (r Release) Missing(names ...string) []string {
+	var out []string
+	for _, n := range names {
+		if !slices.ContainsFunc(r.Assets, func(a Asset) bool { return a.Name == n && a.State == "uploaded" }) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 var rcRE = regexp.MustCompile(`^-rc\.[0-9]+$`)
@@ -69,8 +88,8 @@ func ChannelFor(version string) string {
 // first: never a draft; for stable, a release not flagged prerelease whose
 // tag has no pre-release part; for rc, those plus releases flagged
 // prerelease whose tag ends in -rc.<n>. A box that checks while the newest
-// is still being published tries the next one down (Pick takes only the
-// first).
+// is still being published tries the next one down (Release.Missing says
+// which; Pick takes only the first).
 func Candidates(rels []Release, channel string) []Release {
 	var out []Release
 	for _, r := range rels {

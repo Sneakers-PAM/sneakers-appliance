@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -269,5 +270,17 @@ func TestPreviousOnTheSameChannel(t *testing.T) {
 	}
 	if _, ok := ghrelease.Previous(rels, "v0.1.0"); ok {
 		t.Error("the first release has a previous one")
+	}
+}
+
+// Only an asset whose upload finished counts: GitHub lists one that's
+// still uploading too.
+func TestMissingNamesWhatHasntFinishedUploading(t *testing.T) {
+	r := ghrelease.Release{Assets: []ghrelease.Asset{{Name: "a", State: "uploaded"}, {Name: "b", State: "starter"}}}
+	if got := r.Missing("a", "b", "c"); !slices.Equal(got, []string{"b", "c"}) {
+		t.Fatalf("missing: %v", got)
+	}
+	if got := r.Missing("a"); len(got) != 0 {
+		t.Fatalf("missing: %v", got)
 	}
 }

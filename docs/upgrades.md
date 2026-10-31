@@ -467,22 +467,37 @@ unchanged.
   no list is kept, the box takes the latest stable release's files instead
   (`releases/latest/download/<file>`), which need no API call; an rc box then misses a newer rc
   until the API answers again.
-- **A release still being published.** A tag can exist on the channel before its files are signed
-  and uploaded (the Release is made first, then the Publish job writes the index and the `.bin`s to
-  it), and an index can fail to verify (a run that uploaded a corrupt file, or signed with the wrong
-  key). Either way the box skips it and tries the next release down on the channel, with no error:
-  the check offered as if it were the only one there. `CheckUpdatesResponse.publishing_note` says so
-  when it happens, such as "v0.1.0-rc.3 is being published; showing v0.1.0-rc.2" or "v0.1.0-rc.3's
-  index doesn't verify; showing v0.1.0-rc.2"; it's empty once the newest release on the channel
-  verifies. The pick is kept for the rest of the session, so a later fetch of one of the offered
-  files takes the same release the offer came from. The next check (on its own, or Check now) picks
-  the newer release up once its files are there and verify. When nothing on the channel has a usable
-  index the check fails, the same as an unreachable source.
+- **A release still being published.** A tag can be on the channel before its files are all there:
+  the Release is made first, then the Publish job uploads the files one at a time, so for a while a
+  release can have none, or a signed index and no `.bin`s. The box takes the newest release on the
+  channel that's finished and verifies, and skips any other with no error:
+  - **Finished** is read from the `assets` the releases list gives, so nothing is downloaded from a
+    release that isn't. `sneakers-product-index.json`, `SHA256SUMS` and their two `.sigstore.json`
+    signatures must be there (fully uploaded), and then every file the index names.
+  - **Verifies** means the index and `SHA256SUMS` are both signed by the box's release key. A file
+    that's there and doesn't verify (a corrupt upload, or the wrong key) is never used.
+  - `CheckUpdatesResponse.publishing_note` names every release skipped and why: "v0.1.0-rc.3 is
+    being published; showing v0.1.0-rc.2", "v0.1.0-rc.3's index doesn't verify; showing
+    v0.1.0-rc.2", "v0.1.0-rc.3's SHA256SUMS doesn't verify; showing v0.1.0-rc.2", or, for a finished
+    release whose download failed, "v0.1.0-rc.3's index can't be read; showing v0.1.0-rc.2". Several
+    are joined with "; ". It's empty once the newest release on the channel is used.
+  - Falling back never steps down: the older index is only read, and the usual offer rules apply, so
+    nothing at or below what the box runs is offered (the note still shows).
+  - The pick is kept for the rest of the session, so a later fetch of one of the offered files takes
+    the same release the offer came from. The next check (on its own, or Check now) picks the newer
+    release up once it's finished.
+  - When nothing on the channel is usable the check fails, the same as an unreachable source, and
+    the error names the release it stopped at. A box taking the latest stable release because the
+    API can't be read has no list to check, so it gets the index-signature check only.
+  - A mirror has no release list. Its index is read as ever; an index it hasn't got yet is the next
+    source's turn, and a `.bin` it hasn't got yet is found when it's fetched, from the next source
+    in the list when there is one. An air-gapped box (upload only) is unchanged.
 - **Trust.** HTTPS is checked against the system roots (Go's embedded Mozilla roots; the update
   trust's private CAs are for internal mirrors only). The index must come with
-  `sneakers-product-index.json.sigstore.json`, a signature by the box's release key over it: an
-  unsigned index, or one another key signed (a lab key on a production box), is refused
-  (`UPGRADE_SIGNATURE`) and nothing is offered from it. Every `.bin` is verified as from any
+  `sneakers-product-index.json.sigstore.json`, a signature by the box's release key over it, and
+  `SHA256SUMS` with `SHA256SUMS.sigstore.json` the same way: an unsigned one, or one another key
+  signed (a lab key on a production box), is refused (`UPGRADE_SIGNATURE`) and nothing is offered
+  from that release. Every `.bin` is verified as from any
   source. GitHub answers a download with a redirect to its asset host; the box follows a redirect
   only to `objects.githubusercontent.com` or `release-assets.githubusercontent.com` (over HTTPS,
   on the default port), and refuses any other.
