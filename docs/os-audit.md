@@ -98,6 +98,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 | `disk.cleanup` | accessd | an admin asks for the cleanup (Clean up now on :8443, or `disk cleanup`): `detail.freed` |
 | `support.bundle` | accessd | an admin takes a support bundle (`support-bundle` over SSH, or `GET /export/support-bundle` on :8443): `detail.form` `short` or `full`, `detail.bytes`, `detail.sections`, `detail.failed` and `detail.truncated`; refused when one is already running, for a download with no session, or when the reader went away part way ([support-bundle.md](support-bundle.md)) |
 | `os-audit.rotate`, `os-audit.archive.export`, `os-audit.prune` | the log itself | a file rolls over, archived files move to the backup volume ([Rotation and the archive](#rotation-and-the-archive)), or a file past retention is removed once archived ([Retention](#retention)) |
+| `tls.selfsigned.replace` | accessd | the box replaced its own self-signed certificate, put an earlier one back, or 443 caught up with it (actor `box`): `detail.old`, `detail.new`, `detail.reason`, `detail.restored`, `detail.names`, `detail.endpoints` ([certificates.md](certificates.md#following-the-box)) |
 | `clock.step` | netd | SNTP stepped the clock (`detail.server`, `detail.offsetMs`, `detail.at`: `boot` or `running`); small offsets are slewed and not audited ([network.md](network.md#dns-ntp-and-the-host-name)) |
 
 ## Reboot and shutdown

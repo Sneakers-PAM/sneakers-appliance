@@ -363,7 +363,7 @@ Example:
 ```text
   network allow-list reset
   network commit
-  network confirm 7K2Q-MX4D
+  network confirm 7K2R-MX4D
   network discard
   network set ?
   network show
@@ -442,7 +442,7 @@ network confirm <token>
 Example:
 
 ```text
-  network confirm 7K2Q-MX4D
+  network confirm 7K2R-MX4D
 ```
 
 ## `network discard`

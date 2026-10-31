@@ -35,11 +35,16 @@ var addrs = []string{"192.0.2.10"}
 type memSealer struct {
 	mu    sync.Mutex
 	items map[string][]byte
+	// err makes Seal fail, as key custody that doesn't answer.
+	err error
 }
 
 func (m *memSealer) Seal(name string, secret []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
 	m.items[name] = slices.Clone(secret)
 	return nil
 }

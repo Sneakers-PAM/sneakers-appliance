@@ -232,6 +232,10 @@ enum WarningKind {
   // WARNING_KIND_AUDIT_ARCHIVE: the OS audit archive is over its cap and
   // its oldest files move to the backup volume after a day.
   WARNING_KIND_AUDIT_ARCHIVE = 16;
+  // WARNING_KIND_TLS_CHANGED: the box replaced its own self-signed
+  // certificate, or put an earlier one back, in the last 7 days.
+  // tls_change has the details.
+  WARNING_KIND_TLS_CHANGED = 17;
 }
 
 message Warning {
@@ -321,6 +325,23 @@ message GetStatusResponse {
   // hidden for the level and reason the box has now; Status then leaves
   // WARNING_KIND_REDUCED_PROTECTION out of warnings.
   ProtectionNotice protection_notice = 32;
+  // tls_change is the box's last change to its own certificate, set while
+  // WARNING_KIND_TLS_CHANGED shows, so a page can explain the browser
+  // warning an admin just saw.
+  TlsChange tls_change = 33;
+}
+
+// TlsChange is a change to the box's own self-signed certificate.
+message TlsChange {
+  google.protobuf.Timestamp at = 1;
+  // old_fingerprint and new_fingerprint are SHA-256, as tls_fingerprint.
+  string old_fingerprint = 2;
+  string new_fingerprint = 3;
+  // reason is addresses, hostname or expiring.
+  string reason = 4;
+  // restored is true when new_fingerprint is the certificate the box had
+  // before, put back because it names the box again.
+  bool restored = 5;
 }
 
 // NetworkChange is the state of the network change window.

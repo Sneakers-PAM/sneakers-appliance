@@ -654,6 +654,20 @@ func TestTheBaseAndProductLines(t *testing.T) {
 // The disk guard's warnings show on the status view; a critical one (a
 // volume 90% full) in the alert colour, a plain one in the warning
 // colour.
+// A lease can move with nobody watching: the console says the fingerprint
+// on it is a new one, so an admin who remembers the old one isn't misled.
+func TestAChangedCertificateShowsOnTheStatusView(t *testing.T) {
+	st := status()
+	st.Warnings = append(st.Warnings, &osadminv1.Warning{Kind: osadminv1.WarningKind_WARNING_KIND_TLS_CHANGED, Detail: "The box replaced its own certificate at 2026-10-31 03:12 UTC because its addresses changed. Browsers that trusted the old one ask again; check the new fingerprint against the console."})
+	var got strings.Builder
+	for _, l := range dashboard.Warnings(chrome(full, keycustody.ModeTPM), data(st), now) {
+		got.WriteString(l.String() + "\n")
+	}
+	if !strings.Contains(got.String(), "replaced its own certificate") {
+		t.Fatalf("no note on the console:\n%s", got.String())
+	}
+}
+
 func TestDiskWarningsShowOnTheStatusView(t *testing.T) {
 	st := status()
 	st.Warnings = append(st.Warnings,

@@ -237,6 +237,8 @@ func (h *networkSvc) ConfirmNetwork(ctx context.Context, r *connect.Request[osad
 	if _, err := h.s.o.Network.Confirm(ctx, connect.NewRequest(&netdv1.ConfirmRequest{Token: r.Msg.GetToken()})); err != nil {
 		return nil, err
 	}
+	// The certificate held for this confirm; no event says it came.
+	h.s.lookAtCerts(0)
 	return connect.NewResponse(&osadminv1.ConfirmNetworkResponse{}), nil
 }
 

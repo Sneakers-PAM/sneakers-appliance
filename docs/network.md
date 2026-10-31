@@ -43,7 +43,7 @@ with no window.
   staged and what it would change, a second `network set` builds on it, and `network discard` drops
   it. `network commit` then says whether the session will drop and which address to reconnect to,
   tests the gateway, and applies and saves. The dropped session is expected, not an error.
-- **:8443:** the Network page keeps the 120-second window below until it moves to the same RPCs.
+- **:8443:** the Network page stages and commits with the same RPCs.
 
 `Stage` records a whole set of settings in netd's memory, with an id. It's never written to disk:
 every surface sees the one stage and an SSH reconnect doesn't touch it, while a restart of netd or
@@ -88,17 +88,17 @@ the console, with Recover access, and `network commit` says so when the change t
 
 ## Auto-revert
 
-The window applies to `Set` without `keep`: the :8443 Network page for now, and an allow-list reset
-(`network allow-list reset` and the console's Recover access), which waits for `network confirm`
-or the K key so a reset that makes things worse heals itself.
+The window applies to `Set` without `keep`: an allow-list reset (`network allow-list reset` and the
+console's Recover access), which waits for `network confirm` or the K key so a reset that makes
+things worse heals itself, and a direct `SetNetwork` call, which the Network page no longer makes.
 
 A change that leaves the interfaces, their addresses, the host name, the allow-list and the cluster
 ranges alone (DNS servers, search domains, NTP servers, the time zone, the proxy) can't cut anyone
 off, so it is applied and kept at once: no window, nothing to confirm, and `SetNetwork` returns an
 empty token with `revert_after_seconds` 0 (the audit's `network.set` has `detail.kept: at-once`).
 
-Any other change applies at once and waits 120 seconds for a confirmation from a session that still works
-(the Network page sends it). Without one, the previous settings are
+Any other change applies at once and waits 120 seconds for a confirmation from a session that still works.
+Without one, the previous settings are
 applied again and the box records `NET_REVERTED`, so a change that cuts the admin off heals itself.
 Only one change waits at a time: a second one is refused naming `pending` until the first is
 confirmed or reverted, and so is one sent while the first is still being applied. `Get` and `Status`
@@ -112,10 +112,12 @@ reverted), so a page that was reloaded, or opened at the change's new address, c
 osadmin's `GetNetwork` passes the seconds left to every admin and the token to owners only.
 `SetNetwork` says what the change moves: `moves_management` when the management interface or its
 addressing changes, with `new_url` (`https://<address>:8443/`) when the change sets a static
-address, and `new_certificate` when the host name or the address changes, so the box makes a new
-self-signed :8443 certificate (unless an owner assigned one) and a browser that trusted the old one
-asks again. The page then has to be opened at the new address, signed in again and the change
-confirmed there within the window.
+address, and `new_certificate` when the host name or the address changes, so the box may replace
+its own certificate (never one an owner assigned) and a browser that trusted the old one then asks
+again. It does that only once the change is kept, so while the window runs the box still serves the
+old certificate, the fingerprint on the console stays right, and a change that reverts leaves it
+alone ([certificates.md](certificates.md#following-the-box)). The page then has to be opened at the
+new address, signed in again and the change confirmed there within the window.
 
 The audit has `network.set` and `network.confirm` with the change id in `detail.change`. A change
 that reverts is recorded as `network.revert` (actor `netd`, code `NET_REVERTED`): osadmin asks
@@ -144,6 +146,9 @@ there is pointed to `ipv4-address=` or `ipv6-address=`. A change to the mode or 
 like any other change, and `network commit` tests its gateway. The service interface's addressing
 has no post-setup editor yet (console, SSH or :8443): it's set at first
 boot and stays until that's added.
+
+`Get` and `Status` report a change as pending until its undo has finished applying, not just until
+its window ends, so nothing takes the addresses of a change being undone for kept ones.
 
 The window survives a restart: while a change waits, netd keeps the previous settings in
 `network.prev.yaml` next to `network.yaml`. If netd stops or the box loses power inside the
@@ -283,8 +288,7 @@ the product its own name.
   client and other hypervisors have no vApp properties: the box then names itself
   `sneakers-<8 hex>` until the host name is set.
 - **Later.** The console shows the host name, and the :8443 Network page's Hostname field edits it.
-  A host name change on that page waits 120 s for its confirm like an address change, and reverts
-  without one. `network set hostname=` stages it for `network commit`, which keeps it for good.
+  That page and `network set hostname=` stage it for a commit, which keeps it for good.
 - **The product.** The box's FQDN for the product (`box.fqdn`, `internal/boxvalues`) is the host name
   above, else the first management address, else the box's own name. A product bundle's stacks
   carry a placeholder where the host goes (product.yaml `box_values`,
@@ -381,7 +385,10 @@ change:
 
 netd watches the kernel's address, link and route notices. Whenever the usable addresses change
 (no link-local address, none still in DAD or failed it), `Watch` sends the new list, so sshd and
-osadmin rebind (a DHCP renewal to a new address, an IPv6 privacy address rotation).
+osadmin rebind (a DHCP renewal to a new address, an IPv6 privacy address rotation) and accessd
+checks the box's own certificate still names the box
+([certificates.md](certificates.md#following-the-box)). A lease that moves with nobody watching
+needs no admin: there's no `SetNetwork` and no pending change, so the certificate follows on its own.
 
 ### Tests
 

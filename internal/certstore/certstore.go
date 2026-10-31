@@ -146,8 +146,11 @@ type Options struct {
 	// ProductProbe checks 443 serves the certificate with this
 	// fingerprint, within ProductProbeTimeout; nil dials 127.0.0.1:443.
 	ProductProbe func(ctx context.Context, fingerprint string) error
-	Now          func() time.Time
-	Logger       log.Logger
+	// Fallback hands edgefall, which answers 443 while k0s is down, the
+	// box's own certificate after it changes; nil skips it.
+	Fallback func() error
+	Now      func() time.Time
+	Logger   log.Logger
 }
 
 // Certificate is a store certificate.
@@ -230,6 +233,9 @@ type Store struct {
 	// checking is true while swap waits: :8443's files then hold a
 	// certificate that isn't assigned yet.
 	checking bool
+	// fallbackBehind is true while edgefall hasn't taken the certificate
+	// FollowOwn last changed.
+	fallbackBehind bool
 }
 
 // change takes the store for a change; the returned func lets it go.
@@ -262,6 +268,10 @@ type state struct {
 	Certificates []storedCert          `json:"certificates"`
 	CSRs         []storedCSR           `json:"csrs"`
 	Endpoints    map[string]assignment `json:"endpoints"`
+	// Previous is the box's own certificate before the last change to it,
+	// and Last that change (internal/certstore/follow.go).
+	Previous *storedCert `json:"previousSelfSigned,omitempty"`
+	Last     *OwnChange  `json:"lastOwnChange,omitempty"`
 }
 
 type storedCert struct {
@@ -911,8 +921,8 @@ func (s *Store) revert(ctx context.Context) (Endpoint, error) {
 }
 
 // savedSelfSigned returns the recorded self-signed certificate and key
-// when it still has 30 days and names exactly the box's names, as
-// sneakers-osadmin would keep it.
+// when it still has 30 days and names the box's names, as FollowOwn would
+// keep it.
 func (s *Store) savedSelfSigned(host string, addrs []string) ([]byte, []byte, error) {
 	i := s.find(selfSignedID)
 	if i < 0 {
@@ -923,8 +933,7 @@ func (s *Store) savedSelfSigned(host string, addrs []string) ([]byte, []byte, er
 	if err != nil || len(certs) == 0 {
 		return nil, nil, nil //nolint:nilerr // a damaged record is replaced by a new certificate
 	}
-	leaf := certs[0]
-	if !s.o.Now().Add(RenewBefore).Before(leaf.NotAfter) || !slices.Equal(sortedNames(sans(leaf)), sortedNames(boxNames(host, addrs))) {
+	if WhyReplace(certs[0], host, addrs, s.o.Now()) != "" {
 		return nil, nil, nil
 	}
 	key, ok, err := s.o.Sealer.Unseal(sc.KeyItem)

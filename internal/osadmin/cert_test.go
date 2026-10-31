@@ -79,6 +79,28 @@ func TestARebootsAddressesComingBackKeepTheCertificate(t *testing.T) {
 	}
 }
 
+// osadmin only serves what's there: whether a certificate still names the
+// box is accessd's to decide, because only accessd knows a change is kept.
+// It makes one when there's nothing to serve, as on first boot.
+func TestServeCertServesWhatIsThereAndMakesOneOnlyWhenNothingLoads(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	_, first, err := osadmin.ServeCert(dir, "box1.sneakers.example.org", []string{"192.0.2.10"}, now)
+	if err != nil || first.Fingerprint == "" {
+		t.Fatalf("%+v %v", first, err)
+	}
+	for _, c := range []struct {
+		host string
+		addr string
+		at   time.Time
+	}{{"box1.sneakers.example.org", "192.0.2.20", now}, {"box2.sneakers.example.org", "192.0.2.10", now}, {"box1.sneakers.example.org", "192.0.2.10", first.Expires.Add(-time.Hour)}} {
+		_, got, err := osadmin.ServeCert(dir, c.host, []string{c.addr}, c.at)
+		if err != nil || got.Fingerprint != first.Fingerprint {
+			t.Fatalf("%+v: %s, want %s (%v)", c, got.Fingerprint, first.Fingerprint, err)
+		}
+	}
+}
+
 // accessd describes the certificate for Status without reading the key,
 // and doesn't follow a link sneakers-osadmin could plant.
 func TestReadCertInfo(t *testing.T) {

@@ -23,12 +23,16 @@ const (
 // maxPEM bounds a copied file.
 const maxPEM = 64 << 10
 
+// TLSDir is edgefall's own copy of the certificate.
+const TLSDir = "/run/sneakers/edgefall"
+
 // Prepare copies the box's :8443 certificate and key from src (osadmin's
 // directory, which the osadmin user can write, so links are never
 // followed) into dst, edgefall's own directory, owned by uid and gid with
 // mode 0700 and the files 0600. It runs as root before every start, as
-// k0s-interim hands the same pair to Traefik as box-tls. Without a whole
-// pair it leaves none behind.
+// k0s-interim hands the same pair to Traefik as box-tls, and accessd runs
+// it when the certificate changes. Without a whole pair it leaves none
+// behind.
 func Prepare(src, dst string, uid, gid int) error {
 	if err := os.MkdirAll(dst, 0o700); err != nil {
 		return err

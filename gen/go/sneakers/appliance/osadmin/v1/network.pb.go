@@ -285,8 +285,9 @@ type StagedReview struct {
 	NewAddress string `protobuf:"bytes,2,opt,name=new_address,json=newAddress,proto3" json:"new_address,omitempty"`
 	// new_url is the admin page at new_address.
 	NewUrl string `protobuf:"bytes,3,opt,name=new_url,json=newUrl,proto3" json:"new_url,omitempty"`
-	// new_certificate is true when the box makes a new self-signed :8443
-	// certificate for the change.
+	// new_certificate is true when the change can replace the box's own
+	// self-signed certificate, which happens once it's kept and only when
+	// the certificate doesn't already name the result.
 	NewCertificate bool `protobuf:"varint,4,opt,name=new_certificate,json=newCertificate,proto3" json:"new_certificate,omitempty"`
 	// changes_allow_list is true when the change touches the allow-list,
 	// which can shut out the session that commits it.
@@ -421,8 +422,10 @@ type SetNetworkResponse struct {
 	// the change sets one.
 	NewUrl string `protobuf:"bytes,4,opt,name=new_url,json=newUrl,proto3" json:"new_url,omitempty"`
 	// new_certificate is true when the host name or management address
-	// changes, so the box makes a new self-signed :8443 certificate (unless an
-	// owner assigned one). A browser that trusted the old one asks again.
+	// changes, so the box may replace its own self-signed certificate (never
+	// an assigned one). It does that only once the change is confirmed, and
+	// a change that reverts keeps the old certificate. A browser that
+	// trusted the old one then asks again.
 	NewCertificate bool `protobuf:"varint,5,opt,name=new_certificate,json=newCertificate,proto3" json:"new_certificate,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache

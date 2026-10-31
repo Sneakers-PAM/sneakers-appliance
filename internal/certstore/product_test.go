@@ -4,6 +4,7 @@
 package certstore_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -24,6 +25,24 @@ type fakeEdge struct {
 	sets      int
 	// own is the box's own certificate, what Reset puts back.
 	own []byte
+	// assigned is an owner's certificate on the edge, which Follow leaves
+	// alone; followErr makes Follow fail.
+	assigned  bool
+	followErr error
+}
+
+func (e *fakeEdge) Follow(crt, key []byte) ([]byte, bool, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.followErr != nil {
+		return nil, false, e.followErr
+	}
+	if e.assigned || bytes.Equal(e.crt, crt) {
+		return nil, false, nil
+	}
+	old := e.crt
+	e.crt, e.key = crt, key
+	return old, true, nil
 }
 
 func (e *fakeEdge) Installed() bool { e.mu.Lock(); defer e.mu.Unlock(); return e.installed }
