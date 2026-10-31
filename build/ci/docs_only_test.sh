@@ -25,20 +25,30 @@ expect() {
   [ "$got" = "$want" ] || bad "$event [$*]: got '$got', want '$want'"
 }
 
-expect pull_request "docs_only=true yaml=false workflows=false " AGENTS.md
-expect pull_request "docs_only=true yaml=false workflows=false " CLAUDE.md docs/testing.md docs/runbooks/a.md README.md os/README.md
-expect pull_request "docs_only=true yaml=false workflows=false " docs/diagram.svg
-expect pull_request "docs_only=false yaml=false workflows=false " docs/testing.md internal/netd/netd.go
-expect pull_request "docs_only=false yaml=false workflows=false " internal/netd/netd.go
-expect pull_request "docs_only=false yaml=false workflows=false " README.md.orig
-expect pull_request "docs_only=false yaml=true workflows=false " deploy/stack.yaml
-expect pull_request "docs_only=false yaml=true workflows=false " .yamllint
-expect pull_request "docs_only=false yaml=true workflows=true " .github/workflows/checks.yml
-expect pull_request "docs_only=false yaml=false workflows=true " .github/actions/x/run.sh
+expect pull_request "docs_only=true yaml=false workflows=false journeys=false " AGENTS.md
+expect pull_request "docs_only=true yaml=false workflows=false journeys=false " CLAUDE.md docs/testing.md docs/runbooks/a.md README.md os/README.md
+expect pull_request "docs_only=true yaml=false workflows=false journeys=false " docs/diagram.svg
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " docs/testing.md internal/netd/netd.go
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " internal/netd/netd.go
+expect pull_request "docs_only=false yaml=false workflows=false journeys=false " README.md.orig
+expect pull_request "docs_only=false yaml=true workflows=false journeys=false " deploy/stack.yaml
+expect pull_request "docs_only=false yaml=true workflows=false journeys=false " .yamllint
+expect pull_request "docs_only=false yaml=true workflows=true journeys=false " .github/workflows/checks.yml
+expect pull_request "docs_only=false yaml=false workflows=true journeys=false " .github/actions/x/run.sh
+# The browser journeys run on what goes into the image or its build, and on
+# the journeys themselves; not on docs, the other workflows or other tests.
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " test/e2e/journeys/specs/01-first-run-setup.spec.ts
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " test/image/journeys/journeys_test.go
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " test/image/harness/screen.go
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " build/release/pins.env
+expect pull_request "docs_only=false yaml=false workflows=false journeys=true " os/kernel/amd64.config go.sum
+expect pull_request "docs_only=false yaml=true workflows=true journeys=true " .github/workflows/image-e2e.yml
+expect pull_request "docs_only=false yaml=false workflows=false journeys=false " test/image/k0s/k0s_test.go test/kit/refusal_test.go scripts/x.sh
+expect pull_request "docs_only=true yaml=false workflows=false journeys=false " test/e2e/journeys/README.md
 # No list (a failed diff) runs everything.
-expect pull_request "docs_only=false yaml=true workflows=true "
+expect pull_request "docs_only=false yaml=true workflows=true journeys=true "
 for event in push schedule workflow_dispatch workflow_call; do
-  expect "$event" "docs_only=false yaml=true workflows=true " AGENTS.md
+  expect "$event" "docs_only=false yaml=true workflows=true journeys=true " AGENTS.md
 done
 
 # The wiring: which jobs gate on the classifier, and how. The required check
@@ -108,6 +118,7 @@ heavy = {
 for f, ids in heavy.items():
     for jid in ids:
         gate(f, jid, docs[f]["jobs"][jid], "docs_only")
+gate("image-e2e.yml", "journeys", docs["image-e2e.yml"]["jobs"]["journeys"], "journeys")
 gate("job-yaml-lint.yaml", "lint", docs["job-yaml-lint.yaml"]["jobs"]["lint"], "yaml")
 gate("action-lint.yaml", "actionlint", docs["action-lint.yaml"]["jobs"]["actionlint"], "workflows")
 
@@ -126,7 +137,7 @@ else:
     if list(on) != ["workflow_call"]:
         bad("changes.yml must be callable only (on: workflow_call)")
     outs = (on.get("workflow_call") or {}).get("outputs") or {}
-    for o in ("docs_only", "yaml", "workflows"):
+    for o in ("docs_only", "yaml", "workflows", "journeys"):
         if o not in outs:
             bad(f"changes.yml doesn't output {o}")
     run = yaml.safe_dump(ch["jobs"])

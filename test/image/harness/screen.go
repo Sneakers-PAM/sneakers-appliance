@@ -234,13 +234,30 @@ func (vm *VM) Screen() []string {
 	return rows
 }
 
-func (vm *VM) screen() ([]string, error) {
-	fs := fonts(vm.t)
+// ReadScreen is Screen for a reader on another goroutine, such as the
+// browser journeys' console reader: it answers an error instead of failing
+// the test. Read the screen once on the test's goroutine first (an
+// ExpectScreen), so the fonts are loaded. Calls must not overlap.
+func (vm *VM) ReadScreen() ([]string, error) { return vm.screen() }
+
+// ScreenText is the rows as ExpectScreen matches them: joined as they wrap,
+// with runs of blanks squeezed to one space.
+func ScreenText(rows []string) string { return flat(rows) }
+
+// Screendump answers the display now as QEMU's screendump writes it: a
+// binary PPM (P6). Calls must not overlap with each other or with a screen
+// read.
+func (vm *VM) Screendump() ([]byte, error) {
 	shot := filepath.Join(vm.dir, "screen.ppm")
 	if err := vm.qmp("screendump", map[string]string{"filename": shot}); err != nil {
 		return nil, err
 	}
-	b, err := os.ReadFile(shot) // #nosec G304 -- the VM's own screendump
+	return os.ReadFile(shot) // #nosec G304 -- the VM's own screendump
+}
+
+func (vm *VM) screen() ([]string, error) {
+	fs := fonts(vm.t)
+	b, err := vm.Screendump()
 	if err != nil {
 		return nil, err
 	}

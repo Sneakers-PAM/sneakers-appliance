@@ -19,6 +19,9 @@ on:
       workflows:
         description: A workflow or a local action changed
         value: ${{ jobs.classify.outputs.workflows }}
+      journeys:
+        description: A path that goes into the image or its build, or the browser journeys themselves
+        value: ${{ jobs.classify.outputs.journeys }}
 permissions:
   contents: read
 jobs:
@@ -30,6 +33,7 @@ jobs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
       yaml: ${{ steps.classify.outputs.yaml }}
       workflows: ${{ steps.classify.outputs.workflows }}
+      journeys: ${{ steps.classify.outputs.journeys }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
