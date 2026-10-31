@@ -162,9 +162,14 @@ warning) and the base look stays, and colours that fail the contrast check give 
 colours while the logo stays.
 
 - **The mark:** with no brand logo, every edge status page and the overlay show the Sneakers mark
-  inlined as SVG (`fill="currentColor"`, tinted by the brand's accent colour when there is one),
-  so it never needs a request: it's there the moment the page or the overlay builds, whether or not
-  the box is reachable. A brand logo still replaces it once it's there.
+  (the shoe, its sole, keyhole and laces, the drawing in `build/product/sneakers/brand/logo.svg`)
+  inlined as SVG, so it never needs a request: it's there the moment the page or the overlay
+  builds, whether or not the box is reachable. Brand colours turn it one colour, the brand's accent,
+  with the keyhole and laces in its background. A brand logo still replaces it once it's there.
+- **The Sneakers bundle:** the release and the real-bundle job build it with
+  `BRAND=build/product/sneakers/brand`, a logo and no colours, so the page carries that logo and the
+  overlay loads it. A bundle without a brand, such as a box still on an older one, keeps the inline
+  mark.
 - **The page:** the logo replaces the mark, carried in the page itself as a `data:` image, so it
   shows even when edgefall lets 443 go between the page and another request; the colours are
   added to the page's one stylesheet as the checked `#rrggbb` values. The CSP still pins that

@@ -48,8 +48,8 @@ func newLook(b *brand.Brand) *look {
 	if b != nil {
 		sl = &stateLook{}
 		if c := b.Colours; c != nil {
-			style += fmt.Sprintf("body{background:%s;color:%s}p{color:%s}.mark{color:%s}.spin{border-color:%s;border-top-color:%s}",
-				c.Background, c.Text, c.Text, c.Accent, mix(c.Accent, c.Background, 0.3), c.Accent)
+			style += fmt.Sprintf("body{background:%s;color:%s}p{color:%s}.mark{color:%s}.sole{fill:currentColor}.hole{fill:%s}.lace{stroke:%s}.spin{border-color:%s;border-top-color:%s}",
+				c.Background, c.Text, c.Text, c.Accent, c.Background, c.Background, mix(c.Accent, c.Background, 0.3), c.Accent)
 			sl.Background, sl.Text, sl.Accent = c.Background, c.Text, c.Accent
 		}
 		if b.Logo != nil {

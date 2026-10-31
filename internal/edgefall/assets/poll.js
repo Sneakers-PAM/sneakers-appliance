@@ -65,7 +65,10 @@
   // replaces it once it loads.
   var MARK_SVG = '<svg viewBox="0 0 64 64" role="img" aria-label="Sneakers-PAM" focusable="false">' +
     '<path d="M6 43c0-13 4-25 13-27h8c2 8 9 13 18 14l8 2c5 1 7 5 7 9v2H6z" fill="currentColor"/>' +
-    '<rect x="4" y="44" width="58" height="10" rx="5" fill="currentColor"/></svg>';
+    '<rect x="4" y="44" width="58" height="10" rx="5" fill="SOLE"/>' +
+    '<circle cx="19" cy="29" r="4.2" fill="HOLE"/>' +
+    '<rect x="17.4" y="30" width="3.2" height="8" rx="1.2" fill="HOLE"/>' +
+    '<path d="M30 23l5-2M34 27l5-2M39 30l5-2" stroke="HOLE" stroke-width="2.6" stroke-linecap="round" fill="none"/></svg>';
 
   var root = document.documentElement;
   var onPage = root.hasAttribute("data-sneakers-box");
@@ -85,7 +88,7 @@
   var backing = false;
   var ui = null;
   // The base look; the state answer's brand replaces it.
-  var look = { background: "#14212b", text: "#f4f7fa", accent: "#8fb3d9", muted: "#c9d4de", track: "#2f4252" };
+  var look = { background: "#14212b", text: "#f4f7fa", accent: "#8fb3d9", muted: "#c9d4de", track: "#2f4252", mark: "#eceff4", sole: "#ff9a55" };
   var HEX = /^#[0-9a-f]{6}$/;
   var logo = null;
   var branded = false;
@@ -121,7 +124,7 @@
     if (branded || onPage || !b || typeof b !== "object") return;
     branded = true;
     if (HEX.test(b.background) && HEX.test(b.text) && HEX.test(b.accent)) {
-      look = { background: b.background, text: b.text, accent: b.accent, muted: b.text, track: mix(b.accent, b.background, 0.3) };
+      look = { background: b.background, text: b.text, accent: b.accent, muted: b.text, track: mix(b.accent, b.background, 0.3), mark: b.accent, sole: b.accent };
     }
     if (b.logo === "/_box/logo") {
       logo = el("img", { display: "block", maxWidth: "12rem", maxHeight: "4rem", margin: "0 auto 1.5rem" });
@@ -142,9 +145,10 @@
     var box = el("div", { maxWidth: "34rem", padding: "2rem" });
     box.setAttribute("role", "status");
     box.setAttribute("aria-live", "polite");
-    // MARK_SVG is a fixed constant, never user data.
-    var mark = el("div", { margin: "0 auto 1.5rem", width: "2.75rem", height: "2.75rem", color: look.accent });
-    mark.innerHTML = MARK_SVG;
+    // MARK_SVG is a fixed constant and its colours are the base look's or
+    // checked #rrggbb values, never user data.
+    var mark = el("div", { margin: "0 auto 1.5rem", width: "2.75rem", height: "2.75rem", color: look.mark });
+    mark.innerHTML = MARK_SVG.replace(/SOLE/g, look.sole).replace(/HOLE/g, look.background);
     var spin = el("div", {
       width: "2.25rem", height: "2.25rem", margin: "0 auto 1.5rem", border: "3px solid " + look.track,
       borderTopColor: look.accent, borderRadius: "50%"

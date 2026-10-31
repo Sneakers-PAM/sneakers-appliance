@@ -98,7 +98,8 @@ bundled. A placeholder digest (`sha256:TBD-at-release`) is refused.
 
 A product bundle may carry the product's brand in `brand/`, which the box-state pages use while the
 product is away ([edge-fallback.md](edge-fallback.md#the-products-brand)). It's optional, and a
-bundle without one keeps the base look. It sits in the payload with everything else, so the
+bundle without one keeps the base look. The Sneakers bundle's is `build/product/sneakers/brand/`.
+It sits in the payload with everything else, so the
 header's signature covers it through the payload digest.
 
 `brand/brand.yaml` declares it:

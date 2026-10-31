@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxstate"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/brand"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 )
 
@@ -184,6 +185,69 @@ func TestTheMarkIsInlineSVGNotJustWords(t *testing.T) {
 	_, js := get(t, serve(t, boxstate.Starting).URL+"/_box/poll.js")
 	if !strings.Contains(js, "MARK_SVG") || !strings.Contains(js, "mark.innerHTML = MARK_SVG") {
 		t.Fatalf("the overlay's mark isn't inline SVG: %s", js)
+	}
+}
+
+// The base look's mark is the Sneakers mark itself, the drawing the docs,
+// the website and the product web carry: the keyhole, the laces and the
+// sole in its own colour, not a one-colour outline of it. The bundle the
+// release builds carries that drawing as its logo too.
+func TestTheBaseMarkIsTheRealMarkAndTheReleaseBundleCarriesIt(t *testing.T) {
+	drawing := []string{
+		`d="M6 43c0-13 4-25 13-27h8c2 8 9 13 18 14l8 2c5 1 7 5 7 9v2H6z"`,
+		`cx="19" cy="29" r="4.2"`,
+		`x="17.4" y="30" width="3.2" height="8" rx="1.2"`,
+		`d="M30 23l5-2M34 27l5-2M39 30l5-2"`,
+	}
+	ts := serve(t, boxstate.Starting)
+	res, page := get(t, ts.URL+"/")
+	_, js := get(t, ts.URL+"/_box/poll.js")
+	shipped := filepath.Join("..", "..", "build", "product", "sneakers", "brand")
+	svg, err := os.ReadFile(filepath.Join(shipped, "logo.svg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range drawing {
+		for name, s := range map[string]string{"page": page, "overlay": js, "logo.svg": string(svg)} {
+			if !strings.Contains(s, d) {
+				t.Fatalf("%s has no %s", name, d)
+			}
+		}
+	}
+	css := styleOf(t, res, page)
+	for _, rule := range []string{"color:#eceff4", ".sole{fill:#ff9a55}", ".hole{fill:#14212b}", ".lace{stroke:#14212b}"} {
+		if !strings.Contains(css, rule) {
+			t.Fatalf("no %s in %s", rule, css)
+		}
+	}
+
+	b, warn, err := brand.Load(os.DirFS(shipped))
+	if err != nil || len(warn) != 0 || b.Logo == nil {
+		t.Fatalf("the shipped brand: %v %v %v", b, warn, err)
+	}
+
+	for _, f := range []string{"../../.github/workflows/release.yml", "../../build/realci/product.sh"} {
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(string(src), "BRAND=build/product/sneakers/brand"); n != 2 {
+			t.Fatalf("%s names the brand %d times; its input digest and its build both need it", f, n)
+		}
+	}
+}
+
+// A brand with colours and no logo turns the mark one colour, with the
+// keyhole and the laces in the brand's background.
+func TestABrandsColoursReachTheWholeMark(t *testing.T) {
+	dir := product(t, "a", map[string]string{"brand.yaml": strings.Replace(brandYAML, "logo: logo.svg\n", "", 1)})
+	ts, _ := serveBranded(t, boxstate.Starting, dir)
+	res, body := get(t, ts.URL+"/")
+	css := styleOf(t, res, body)
+	for _, rule := range []string{".sole{fill:currentColor}", ".hole{fill:#0b1f33}", ".lace{stroke:#0b1f33}"} {
+		if !strings.Contains(css, rule) {
+			t.Fatalf("no %s in %s", rule, css)
+		}
 	}
 }
 
