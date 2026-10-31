@@ -72,6 +72,13 @@ has sign 'check-names\.sh --channel production' "check the signed files' names"
 has sign 'cat "\$f\.sha256" >> "\$units/SHA256SUMS"' "add each image to SHA256SUMS"
 has publish 'check-names\.sh --channel production "\$\{files\[@\]\}"' "check every asset's name"
 has lab 'check-names\.sh --channel lab' "check the lab files' names"
+# A fresh OVA boots through first boot before any OVA ships.
+has ovaproof 'needs: \[guard, sign\]' "wait for the signed OVA"
+has ovaproof 'SNEAKERS_REQUIRE_TOOLS: "1"' "fail, not skip, without the boot tools"
+has ovaproof 'SNEAKERS_OVA=.*/ova/sneakers-appliance-\$VERSION-amd64\.ova' "boot the production OVA"
+has ovaproof 'go test -tags image .*-run TestFreshOVAFirstBoot .*\./test/image/ova' "run the first-boot test"
+has publish 'needs: \[guard, sign, ovaproof\]' "wait for the fresh OVA's first boot"
+has lab 'SNEAKERS_OVA="\$ova"' "boot the lab OVA"
 
 for id in build sign publish; do
   if job "$id" | grep -qE 'sneakers-appliance-\$VERSION-amd64\.bin|--recipient keys/production/update.pub --version "\$VERSION" --arch amd64 --channel production --out'; then
