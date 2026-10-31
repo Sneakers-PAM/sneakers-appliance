@@ -724,20 +724,26 @@ Example:
 
 ## `support-bundle`
 
-Stream a support bundle to standard output.
+Print everything needed to diagnose the box, as one run of plain text.
 
-Streams a support bundle (status, logs and settings, with no secrets) to standard output. Over SSH only. Not available in this release.
+Runs the box's fixed set of read-only commands (the status, k0s, the cluster, the logs, the mounts and the update records, then the installed product's own sections) and prints them as one run of labelled plain text, with every log's time in UTC and one merged timeline at the end. Secrets, tokens and keys are removed before anything is written, and Secrets and env vars show as names only. Alone it prints the key sections with tails of about 50 lines, to copy out of the terminal; full prints every section, the same file as Download support bundle on :8443. On a terminal the headings, errors and warnings are in colour, which copying leaves behind; --no-color turns it off, and anything but a terminal gets no colour. One bundle runs at a time, and each one is audited. Over SSH only.
 
 Offered over: SSH.
 
 ```text
-support-bundle
+support-bundle [full] [flags]
 ```
+
+| Flag | Meaning |
+|---|---|
+| `--no-color` | no colour, even on a terminal |
 
 Example:
 
 ```text
-  ssh admin@box1.sneakers.example.org support-bundle > support.tar
+  support-bundle
+  support-bundle full
+  ssh admin@box1.sneakers.example.org support-bundle full > support-bundle.txt
 ```
 
 ## `tls`

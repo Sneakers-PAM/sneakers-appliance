@@ -498,6 +498,28 @@ within its settings. With no `data`, the guard samples every directory under the
 section is new in this release: an appliance older than it refuses a `product.yaml` that has one,
 so the base goes first.
 
+The product's **support sections** are what it adds to the box's support bundle
+([support-bundle.md](support-bundle.md#a-products-sections), which has every field):
+
+```yaml
+support:
+  - title: The workloads       # one line, unique
+    kubectl: {verb: get, resource: deployments, namespace: acme}
+    short: true                # in the short form too
+  - title: The gateway's log
+    kubectl: {verb: logs, namespace: acme, selector: app.kubernetes.io/component=gateway}
+    timeout: 30s               # up to 60s; 15s by default
+    redact: ['acct-[0-9]+']    # more patterns to mask; adds to the base's
+  - title: The database's size
+    command: du -s -h /var/lib/sneakers-data/postgres
+```
+
+The box refuses a section that isn't read-only, bounded and busybox-safe: a command other than the
+allowed applets and options, a path outside the data root, shell characters, a read of Secrets or
+ConfigMaps or any resource not on the list, a verb other than `get`, `describe` or `logs`, a timeout
+past 60s, a redact pattern that doesn't compile, a title declared twice, or more than 32 sections.
+The section is new in this release, so the base goes first here too.
+
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,
 Traefik, cert-manager and every Sneakers service, the MCP server among them), and the `mcp` switch,

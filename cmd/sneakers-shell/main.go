@@ -58,6 +58,10 @@ const accessTimeout = 2 * time.Minute
 // if the shell goes away.
 const resetTimeout = 45 * time.Minute
 
+// bundleTimeout is longer than the support bundle's own bound (10 minutes
+// for the full form, docs/support-bundle.md).
+const bundleTimeout = 12 * time.Minute
+
 func backend() *shell.Services {
 	name := "unknown"
 	if u, err := user.LookupId(strconv.Itoa(os.Getuid())); err == nil {
@@ -71,6 +75,7 @@ func backend() *shell.Services {
 	}
 	s.UseAccessd(unixClient(accessapi.SocketPath, accessTimeout), "http://access.sock")
 	s.UseResetClient(unixClient(accessapi.SocketPath, resetTimeout), "http://access.sock")
+	s.UseBundleClient(unixClient(accessapi.SocketPath, bundleTimeout), "http://access.sock")
 	return s
 }
 
@@ -95,7 +100,8 @@ func run() int {
 	}
 	defer b.EndLogin(context.WithoutCancel(ctx), login)
 	e := &shell.Env{Origin: shell.OriginSSH, Backend: b, In: stdin, Out: os.Stdout, Err: os.Stderr,
-		Product: productinfo.Installed(productinfo.Dir), Role: b.Role}
+		Product: productinfo.Installed(productinfo.Dir), Role: b.Role,
+		Terminal: term.IsTerminal(int(os.Stdout.Fd()))} // #nosec G115 -- a file descriptor fits an int
 	if e.Product.Present() {
 		// The values the bundle exposes to this login's role; accessd
 		// checks the role again on every read.

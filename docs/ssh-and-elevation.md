@@ -193,7 +193,8 @@ back with Up.
 | `setup recovery-key` | no | yes | accessd; first boot only |
 | `shell` | no | yes | accessd; root operators; see [The root shell](#the-root-shell) |
 | `tls show`, `backup ...`, `restore ...`, `upgrade ...`, `resources ...` | yes | yes | Not available in this release |
-| `logs export`, `support-bundle` | no | yes | Not available in this release |
+| `logs export` | no | yes | Not available in this release |
+| `support-bundle [full]` | no | yes | accessd; any admin; see [support-bundle.md](support-bundle.md) |
 | `updates`, `updates channel rc\|stable\|default`, `updates repo <owner>/<name>\|default` | yes | yes | accessd; see [The update channel](#the-update-channel) |
 | `history` | no | yes | the session itself; this session's command lines |
 | `reboot`, `poweroff` | yes | yes | init, over `/run/sneakers/power.sock`; typed `reboot` or `poweroff`; always graceful |
