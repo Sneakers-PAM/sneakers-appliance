@@ -8,6 +8,7 @@ package netd_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/netip"
 	"os"
 	"os/signal"
@@ -365,5 +366,63 @@ func TestNetdStatic(t *testing.T) {
 	n.checksPass(t, "link", "address", "gateway", "dns", "ntp")
 	if out := n.lab.IP(n.box, "-6", "route", "show", "default"); !strings.Contains(out, "2001:db8:1::1") {
 		t.Fatalf("IPv6 default route:\n%s", out)
+	}
+}
+
+// A commit on the real kernel: the staged gateway sits on a subnet the box
+// isn't on, so it can only answer from the staged address, and the old
+// address stays up throughout. A dead gateway refuses the commit and leaves
+// no trace on the interface.
+func TestNetdCommitTestsFromTheStagedAddress(t *testing.T) {
+	n := newNetdLab(t)
+	n.lab.IP(n.rtr, "addr", "add", "198.51.100.1/24", "dev", "lan0")
+	n.lab.IP(n.rtr, "addr", "add", "2001:db8:2::1/64", "dev", "lan0", "nodad")
+	n.router(t, netns.Router{Listen: []string{"192.0.2.1"}})
+	s := network.Defaults("eth0")
+	s.Management.IPv4 = network.Family4{Mode: network.V4Static, Address: netip.MustParsePrefix("192.0.2.10/24"), Gateway: netip.MustParseAddr("192.0.2.1")}
+	s.Management.IPv6 = network.Family6{Mode: network.V6Static, Address: netip.MustParsePrefix("2001:db8:1::10/64"), Gateway: netip.MustParseAddr("2001:db8:1::1")}
+	n.start(t, s)
+	n.waitAddr(t, "192.0.2.10/32", "2001:db8:1::10/128")
+	c, ctx := n.client(), context.Background()
+	commit := func(next network.Settings) (*connect.Response[netdv1.CommitResponse], error) {
+		st, err := c.Stage(ctx, connect.NewRequest(&netdv1.StageRequest{Settings: network.ToWire(next)}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.Commit(ctx, connect.NewRequest(&netdv1.CommitRequest{StagedId: st.Msg.GetStagedId()}))
+	}
+
+	dead := s
+	dead.Management.IPv4 = network.Family4{Mode: network.V4Static, Address: netip.MustParsePrefix("198.51.100.20/24"), Gateway: netip.MustParseAddr("198.51.100.254")}
+	if _, err := commit(dead); !strings.Contains(fmt.Sprint(err), "NET_GATEWAY") {
+		t.Fatalf("%v\nnetd:\n%s", err, n.box1.Output())
+	}
+	dead = s
+	dead.Management.IPv6 = network.Family6{Mode: network.V6Static, Address: netip.MustParsePrefix("2001:db8:2::20/64"), Gateway: netip.MustParseAddr("2001:db8:2::254")}
+	if _, err := commit(dead); !strings.Contains(fmt.Sprint(err), "NET_GATEWAY") {
+		t.Fatalf("%v\nnetd:\n%s", err, n.box1.Output())
+	}
+	out := n.lab.IP(n.box, "addr", "show", "dev", "eth0")
+	if strings.Contains(out, "198.51.100.20") || strings.Contains(out, "2001:db8:2::20") || !strings.Contains(out, "192.0.2.10/24") || !strings.Contains(out, "2001:db8:1::10/64") {
+		t.Fatalf("after the refusals:\n%s", out)
+	}
+
+	good := s
+	good.Management.IPv4 = network.Family4{Mode: network.V4Static, Address: netip.MustParsePrefix("198.51.100.20/24"), Gateway: netip.MustParseAddr("198.51.100.1")}
+	good.Management.IPv6 = network.Family6{Mode: network.V6Static, Address: netip.MustParsePrefix("2001:db8:2::20/64"), Gateway: netip.MustParseAddr("2001:db8:2::1")}
+	res, err := commit(good)
+	if err != nil {
+		t.Fatalf("%v\nnetd:\n%s", err, n.box1.Output())
+	}
+	if got := res.Msg.GetTestedGateways(); !slices.Equal(got, []string{"198.51.100.1", "2001:db8:2::1"}) {
+		t.Fatalf("tested %v", got)
+	}
+	n.waitAddr(t, "198.51.100.20/32", "2001:db8:2::20/128")
+	out = n.lab.IP(n.box, "addr", "show", "dev", "eth0")
+	if strings.Contains(out, "192.0.2.10") || strings.Contains(out, "2001:db8:1::10") {
+		t.Fatalf("the old addresses stayed:\n%s", out)
+	}
+	if out := n.lab.IP(n.box, "route", "show", "default"); !strings.Contains(out, "198.51.100.1") {
+		t.Fatalf("default route:\n%s", out)
 	}
 }

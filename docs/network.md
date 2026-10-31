@@ -31,7 +31,66 @@ accessd, osadmin, init, firstboot and the console) links Go's own copy (`time/tz
 A setting that fails these rules is refused with `NET_INVALID`; the error names the field, such as
 `management.ipv4.address` or `dns[1]`, and nothing is applied.
 
+## Stage and commit
+
+An address change can drop the session that made it, so the admin decides before anything moves,
+not after. Each surface shows the change first, and a change that goes through is kept for good,
+with no window.
+
+- **Console (N):** the editor shows the change and asks. Enter applies it and keeps it (`Set` with
+  `keep`), then shows netd's checks. **E** goes back to the fields with nothing applied.
+- **SSH (and the console's closed shell):** `network set` only stages. `network show` lists what's
+  staged and what it would change, a second `network set` builds on it, and `network discard` drops
+  it. `network commit` then says whether the session will drop and which address to reconnect to,
+  tests the gateway, and applies and saves. The dropped session is expected, not an error.
+- **:8443:** the Network page keeps the 120-second window below until it moves to the same RPCs.
+
+`Stage` records a whole set of settings in netd's memory, with an id. It's never written to disk:
+every surface sees the one stage and an SSH reconnect doesn't touch it, while a restart of netd or
+the box drops it, so a box can't come back on a change nobody committed. A new stage replaces the
+one before it. `GetNetwork` returns it as `staged`, with `staged_id` and `staged_review`, which says
+what a commit will do: `moves_management`, `new_address`, `new_url`, `new_certificate` and
+`changes_allow_list`.
+
+`Commit` takes the `staged_id` the caller reviewed and refuses any other, so it never applies a
+change nobody looked at. It also refuses (`NET_INVALID` naming `staged`) a stage the live settings
+have moved past, since committing that whole set would undo the newer change, and it's refused
+while a change is pending or applying, like any other change.
+
+**The gateway test.** For each family the change sets to a static address with a gateway, netd asks
+that gateway from that address before it applies anything:
+
+1. It adds the staged address to the interface as an extra one, with a 30-second lifetime and no
+   preferred lifetime, so the address in use stays up and nothing else picks the new one as a
+   source. The lifetime also clears it if netd dies mid-test, and the next start reconciles it away.
+2. On IPv6 it waits for DAD (up to 3 seconds), and refuses if another host holds the address.
+3. It sends the gateway a datagram from the staged address, so the kernel resolves the gateway with
+   ARP or neighbour discovery from that source, and waits up to 3 seconds for the answer.
+4. It removes the extra address, however the test ended.
+
+A gateway that doesn't answer refuses the commit with `NET_GATEWAY` and changes nothing; the stage
+stays, so it can be fixed with another `network set`. The extra address is left out of `Status` and
+`Watch`, because sshd and osadmin rebind to what those report. A family the change leaves alone
+isn't tested, so a gateway that was already down doesn't hold up a DNS change. DHCP and SLAAC have no
+staged gateway, and neither does a static address without one, so those commit with no test. An
+address that's already on the interface isn't added or removed, and on IPv6 that goes for the same
+IP with another prefix too, because the kernel would replace the live address. With IPv6 off on the
+interface, netd turns it on for the test and off again after.
+
+A commit doesn't follow its caller: osadmin runs it on its own context, so netd finishes and the
+audit records how it ended even when the new address drops the session mid-commit. The audit has
+`network.stage`, `network.discard` and `network.commit`, each with the id in `detail.staged`.
+`CommitNetwork` needs a fresh step-up on :8443, as `SetNetwork` does; staging doesn't, since it
+changes nothing.
+
+There's no revert after a commit, on purpose. An allow-list that shuts the admin out is undone on
+the console, with Recover access, and `network commit` says so when the change touches the list.
+
 ## Auto-revert
+
+The window applies to `Set` without `keep`: the :8443 Network page for now, and an allow-list reset
+(`network allow-list reset` and the console's Recover access), which waits for `network confirm`
+or the K key so a reset that makes things worse heals itself.
 
 A change that leaves the interfaces, their addresses, the host name, the allow-list and the cluster
 ranges alone (DNS servers, search domains, NTP servers, the time zone, the proxy) can't cut anyone
@@ -39,7 +98,7 @@ off, so it is applied and kept at once: no window, nothing to confirm, and `SetN
 empty token with `revert_after_seconds` 0 (the audit's `network.set` has `detail.kept: at-once`).
 
 Any other change applies at once and waits 120 seconds for a confirmation from a session that still works
-(the Network page, or the shell's `network set`, sends it). Without one, the previous settings are
+(the Network page sends it). Without one, the previous settings are
 applied again and the box records `NET_REVERTED`, so a change that cuts the admin off heals itself.
 Only one change waits at a time: a second one is refused naming `pending` until the first is
 confirmed or reverted, and so is one sent while the first is still being applied. `Get` and `Status`
@@ -81,10 +140,9 @@ static one by hand.
 `ipv4=dhcp|static|off`, `ipv4-address=<address>/<prefix>`, `ipv4-gateway=`, and `ipv6`,
 `ipv6-address`, `ipv6-gateway` for IPv6 (`help network set` lists them with examples). `ipv4=` and
 `ipv6=` take the mode only: the shell refuses anything else with `SHELL_PARSE`, and an address given
-there is pointed to `ipv4-address=` or `ipv6-address=`. A change to
-the mode or address goes through the same `Set`/`Confirm` window as any other interface change,
-since it can cut the admin off; `network set dns=...` and the like still keep at once. The service
-interface's addressing has no post-setup editor yet (console, SSH or :8443): it's set at first
+there is pointed to `ipv4-address=` or `ipv6-address=`. A change to the mode or address is staged
+like any other change, and `network commit` tests its gateway. The service interface's addressing
+has no post-setup editor yet (console, SSH or :8443): it's set at first
 boot and stays until that's added.
 
 The window survives a restart: while a change waits, netd keeps the previous settings in
@@ -225,7 +283,8 @@ the product its own name.
   client and other hypervisors have no vApp properties: the box then names itself
   `sneakers-<8 hex>` until the host name is set.
 - **Later.** The console shows the host name, and the :8443 Network page's Hostname field edits it.
-  A host name change waits 120 s for its confirm like an address change, and reverts without one.
+  A host name change on that page waits 120 s for its confirm like an address change, and reverts
+  without one. `network set hostname=` stages it for `network commit`, which keeps it for good.
 - **The product.** The box's FQDN for the product (`box.fqdn`, `internal/boxvalues`) is the host name
   above, else the first management address, else the box's own name. A product bundle's stacks
   carry a placeholder where the host goes (product.yaml `box_values`,

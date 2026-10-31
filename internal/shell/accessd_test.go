@@ -33,9 +33,13 @@ type fakeAccessd struct {
 	headers  []http.Header
 	settings *netdv1.Settings
 	set      []*netdv1.Settings
-	// keptAtOnce answers a set as netd does for a change with no revert
-	// window (the time zone): no token, nothing to confirm.
-	keptAtOnce bool
+	// staged and review are what's waiting for a commit.
+	staged *netdv1.Settings
+	review *osadminv1.StagedReview
+	// commitErr refuses a commit, as a dead gateway does.
+	commitErr error
+	committed []string
+	discarded int
 }
 
 func (f *fakeAccessd) saw(h http.Header) {
@@ -63,17 +67,38 @@ func (f *fakeAccessd) ListKeys(_ context.Context, r *connect.Request[accessv1.Li
 func (f *fakeAccessd) GetNetwork(context.Context, *connect.Request[accessv1.GetNetworkRequest]) (*connect.Response[accessv1.GetNetworkResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return connect.NewResponse(&accessv1.GetNetworkResponse{Settings: f.settings, ManagementAddresses: []string{"192.0.2.10/24"}, NtpSynced: true}), nil
+	out := &accessv1.GetNetworkResponse{Settings: f.settings, ManagementAddresses: []string{"192.0.2.10/24"}, NtpSynced: true}
+	if f.staged != nil {
+		out.Staged, out.StagedId, out.StagedReview = f.staged, "stg-1", f.review
+	}
+	return connect.NewResponse(out), nil
 }
 
-func (f *fakeAccessd) SetNetwork(_ context.Context, r *connect.Request[accessv1.SetNetworkRequest]) (*connect.Response[accessv1.SetNetworkResponse], error) {
+func (f *fakeAccessd) StageNetwork(_ context.Context, r *connect.Request[accessv1.StageNetworkRequest]) (*connect.Response[accessv1.StageNetworkResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.set = append(f.set, r.Msg.GetSettings())
-	if f.keptAtOnce {
-		return connect.NewResponse(&accessv1.SetNetworkResponse{}), nil
+	f.staged = r.Msg.GetSettings()
+	return connect.NewResponse(&accessv1.StageNetworkResponse{StagedId: "stg-1"}), nil
+}
+
+func (f *fakeAccessd) DiscardStagedNetwork(context.Context, *connect.Request[accessv1.DiscardStagedNetworkRequest]) (*connect.Response[accessv1.DiscardStagedNetworkResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.staged = nil
+	f.discarded++
+	return connect.NewResponse(&accessv1.DiscardStagedNetworkResponse{}), nil
+}
+
+func (f *fakeAccessd) CommitNetwork(_ context.Context, r *connect.Request[accessv1.CommitNetworkRequest]) (*connect.Response[accessv1.CommitNetworkResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.commitErr != nil {
+		return nil, f.commitErr
 	}
-	return connect.NewResponse(&accessv1.SetNetworkResponse{Token: "tok-1", RevertAfterSeconds: 120}), nil
+	f.committed = append(f.committed, r.Msg.GetStagedId())
+	f.settings, f.staged = f.staged, nil
+	return connect.NewResponse(&accessv1.CommitNetworkResponse{TestedGateways: []string{"192.0.2.1"}, Review: f.review}), nil
 }
 
 func withAccessd(t *testing.T, f *fakeAccessd) (*shell.Services, *httptest.Server) {
@@ -143,12 +168,12 @@ func TestAccessdDownLeavesCachedStatus(t *testing.T) {
 	}
 }
 
-// network set changes only the keys given, on top of the current settings.
+// network set stages only the keys given, on top of the current settings.
 func TestNetworkSet(t *testing.T) {
 	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "old.sneakers.example.org", Ntp: []string{"192.0.2.1"}}}
 	s, _ := withAccessd(t, f)
-	out, _, err := runWith(t, s, "network set hostname=box2.sneakers.example.org dns=192.0.2.53,192.0.2.54", "n\n")
-	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+	out, _, err := runWith(t, s, "network set hostname=box2.sneakers.example.org dns=192.0.2.53,192.0.2.54", "")
+	if err != nil || !strings.Contains(out, "network commit") {
 		t.Fatalf("%v %q", err, out)
 	}
 	got := f.set[0]
@@ -167,8 +192,8 @@ func TestNetworkSet(t *testing.T) {
 func TestNetworkSetIPv4AndIPv6(t *testing.T) {
 	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "box.sneakers.example.org", Management: &netdv1.Interface{Name: "ens192"}}}
 	s, _ := withAccessd(t, f)
-	out, _, err := runWith(t, s, "network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1 ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1", "n\n")
-	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+	out, _, err := runWith(t, s, "network set ipv4=static ipv4-address=192.0.2.10/24 ipv4-gateway=192.0.2.1 ipv6=static ipv6-address=2001:db8::10/64 ipv6-gateway=2001:db8::1", "")
+	if err != nil || !strings.Contains(out, "network commit") {
 		t.Fatalf("%v %q", err, out)
 	}
 	got := f.set[0].GetManagement()
@@ -179,8 +204,8 @@ func TestNetworkSetIPv4AndIPv6(t *testing.T) {
 
 	// Off, and a cleared gateway: the existing interface stays named, the
 	// address keys clear.
-	out, _, err = runWith(t, s, "network set ipv4=off ipv4-address= ipv4-gateway=", "n\n")
-	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+	out, _, err = runWith(t, s, "network set ipv4=off ipv4-address= ipv4-gateway=", "")
+	if err != nil || !strings.Contains(out, "network commit") {
 		t.Fatalf("%v %q", err, out)
 	}
 	got = f.set[1].GetManagement()
@@ -189,8 +214,8 @@ func TestNetworkSetIPv4AndIPv6(t *testing.T) {
 	}
 
 	// Back to DHCP, completing the round trip.
-	out, _, err = runWith(t, s, "network set ipv4=dhcp", "n\n")
-	if err != nil || !strings.Contains(out, "network confirm tok-1") {
+	out, _, err = runWith(t, s, "network set ipv4=dhcp", "")
+	if err != nil || !strings.Contains(out, "network commit") {
 		t.Fatalf("%v %q", err, out)
 	}
 	if got := f.set[2].GetManagement().GetIpv4().GetMode(); got != netdv1.Ipv4Mode_IPV4_MODE_DHCP {
@@ -198,23 +223,12 @@ func TestNetworkSetIPv4AndIPv6(t *testing.T) {
 	}
 
 	// An unrecognized mode is refused here, before anything reaches netd.
-	_, _, err = runWith(t, s, "network set ipv4=bogus", "n\n")
+	_, _, err = runWith(t, s, "network set ipv4=bogus", "")
 	if !codes.Is(err, codes.ShellParse) {
 		t.Fatalf("%v", err)
 	}
 	if len(f.set) != 3 {
 		t.Fatalf("netd was asked: %v", f.set)
-	}
-}
-
-// A change netd keeps at once (the time zone) has no revert window, so
-// network set says it's kept instead of "reverts in 0 seconds".
-func TestNetworkSetKeptAtOnce(t *testing.T) {
-	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "box.sneakers.example.org"}, keptAtOnce: true}
-	s, _ := withAccessd(t, f)
-	out, _, err := runWith(t, s, "network set time-zone=America/New_York", "")
-	if err != nil || strings.Contains(out, "reverts") || !strings.Contains(out, "kept") {
-		t.Fatalf("%v %q", err, out)
 	}
 }
 
@@ -225,5 +239,86 @@ func TestTheRootShellCallsAccessd(t *testing.T) {
 	_, err := s.Call(context.Background(), shell.Request{Action: "rootshell.begin"})
 	if !codes.Is(err, codes.NotAvailable) {
 		t.Fatalf("%v", err)
+	}
+}
+
+// A second network set builds on what's staged, so two commands make one
+// change.
+func TestNetworkSetBuildsOnTheStage(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "box.sneakers.example.org", Management: &netdv1.Interface{Name: "ens192"}}}
+	s, _ := withAccessd(t, f)
+	if _, _, err := runWith(t, s, "network set ipv4=static ipv4-address=192.0.2.50/24", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := runWith(t, s, "network set ipv4-gateway=192.0.2.1", ""); err != nil {
+		t.Fatal(err)
+	}
+	got := f.set[1].GetManagement().GetIpv4()
+	if got.GetAddress() != "192.0.2.50/24" || got.GetGateway() != "192.0.2.1" {
+		t.Fatalf("%v", got)
+	}
+}
+
+// network show lists what's staged, and only what it changes.
+func TestNetworkShowShowsWhatsStaged(t *testing.T) {
+	cur := &netdv1.Settings{Hostname: "box.sneakers.example.org", Dns: []string{"192.0.2.53"}, Management: &netdv1.Interface{Name: "ens192", Ipv4: &netdv1.Ipv4{Mode: netdv1.Ipv4Mode_IPV4_MODE_DHCP}}}
+	f := &fakeAccessd{settings: cur}
+	s, _ := withAccessd(t, f)
+	out, _, err := runWith(t, s, "network show", "")
+	if err != nil || strings.Contains(out, "Staged") {
+		t.Fatalf("%v %q", err, out)
+	}
+	f.staged = &netdv1.Settings{Hostname: cur.GetHostname(), Dns: cur.GetDns(), Management: &netdv1.Interface{Name: "ens192", Ipv4: &netdv1.Ipv4{Mode: netdv1.Ipv4Mode_IPV4_MODE_STATIC, Address: "192.0.2.50/24", Gateway: "192.0.2.1"}}}
+	out, _, err = runWith(t, s, "network show", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, staged, ok := strings.Cut(out, "Staged")
+	if !ok || !strings.Contains(staged, "static 192.0.2.50/24 via 192.0.2.1 (now dhcp)") || !strings.Contains(staged, "network commit") {
+		t.Fatalf("%q", out)
+	}
+	if strings.Contains(staged, "hostname") || strings.Contains(staged, "dns") {
+		t.Fatalf("listed what it doesn't change: %q", staged)
+	}
+}
+
+func TestNetworkCommitThroughAccessd(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{Hostname: "box.sneakers.example.org"},
+		staged: &netdv1.Settings{Hostname: "box.sneakers.example.org"},
+		review: &osadminv1.StagedReview{MovesManagement: true, NewAddress: "192.0.2.50", ChangesAllowList: true}}
+	s, _ := withAccessd(t, f)
+	out, stderr, err := runWith(t, s, "network commit", "")
+	if err != nil || !strings.Contains(stderr, "Reconnect to 192.0.2.50") || !strings.Contains(stderr, "allow-list") {
+		t.Fatalf("%v %q %q", err, out, stderr)
+	}
+	if strings.Join(f.committed, ",") != "stg-1" || !strings.Contains(out, "The gateway 192.0.2.1 answered") || !strings.Contains(out, "Applied and saved") {
+		t.Fatalf("%v %q", f.committed, out)
+	}
+}
+
+// A refused commit is an error the admin reads, by code.
+func TestNetworkCommitRefused(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{}, staged: &netdv1.Settings{},
+		commitErr: connect.NewError(connect.CodeFailedPrecondition, errors.New("NET_GATEWAY (3404): the gateway 192.0.2.1 doesn't answer from 192.0.2.50/24, so nothing was changed"))}
+	s, _ := withAccessd(t, f)
+	_, stderr, err := runWith(t, s, "network commit", "")
+	if err == nil || !strings.Contains(stderr, "the gateway 192.0.2.1 doesn't answer") || !strings.Contains(stderr, "NET_GATEWAY") {
+		t.Fatalf("%v %q", err, stderr)
+	}
+}
+
+func TestNetworkCommitWithNothingStagedThroughAccessd(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{}}
+	s, _ := withAccessd(t, f)
+	if _, _, err := runWith(t, s, "network commit", ""); !codes.Is(err, codes.NetInvalid) {
+		t.Fatal(err)
+	}
+}
+
+func TestNetworkDiscardThroughAccessd(t *testing.T) {
+	f := &fakeAccessd{settings: &netdv1.Settings{}, staged: &netdv1.Settings{}}
+	s, _ := withAccessd(t, f)
+	if _, _, err := runWith(t, s, "network discard", ""); err != nil || f.discarded != 1 {
+		t.Fatalf("%v %d", err, f.discarded)
 	}
 }

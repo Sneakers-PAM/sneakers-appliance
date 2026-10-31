@@ -66,7 +66,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 			return res, true, err
 		}
 		switch r.Action {
-		case "network.show", "network.set", "network.confirm", "network.allowlist.reset", "keys.list",
+		case "network.show", "network.set", "network.review", "network.commit", "network.discard", "network.confirm", "network.allowlist.reset", "keys.list",
 			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall":
 			return Result{}, true, ErrUnavailable
 		}
@@ -83,6 +83,13 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.networkShow(ctx)
 	case "network.set":
 		res, err = s.networkSet(ctx, r.Args)
+	case "network.review":
+		res, err = s.networkReview(ctx)
+	case "network.commit":
+		res, err = s.networkCommit(ctx, r.Args[0])
+	case "network.discard":
+		_, err = s.Network.DiscardStagedNetwork(ctx, connect.NewRequest(&accessv1.DiscardStagedNetworkRequest{}))
+		res = Result{Text: "Dropped; nothing is staged."}
 	case "network.confirm":
 		_, err = s.Network.ConfirmNetwork(ctx, connect.NewRequest(&accessv1.ConfirmNetworkRequest{Token: r.Args[0]}))
 		res = Result{Text: "Kept."}
@@ -459,6 +466,9 @@ func (s *Services) networkShow(ctx context.Context) (Result, error) {
 	row("allow-list", st.GetAllowList()...)
 	row("time-zone", st.GetTimeZone())
 	row("https-proxy", st.GetHttpsProxy())
+	if next := out.Msg.GetStaged(); next != nil {
+		writeStaged(&b, st, next)
+	}
 	data := map[string]any{}
 	if raw, err := protojson.Marshal(out.Msg); err == nil {
 		data["network"] = json.RawMessage(raw)
@@ -466,16 +476,60 @@ func (s *Services) networkShow(ctx context.Context) (Result, error) {
 	return Result{Text: b.String(), Data: data}, nil
 }
 
-// networkSet applies key=value pairs on top of the current settings,
-// including the management interface's IPv4 and IPv6 mode and address
-// (ipv4, ipv4-address, ipv4-gateway and the ipv6 equivalents); the same
-// settings are also on :8443 or the console's network screen.
+// writeStaged lists what the staged settings would change.
+func writeStaged(b *strings.Builder, cur, next *netdv1.Settings) {
+	b.WriteString("\nStaged, not applied yet. network commit applies it, network discard drops it.\n")
+	row := func(k, old, now string) {
+		if old != now {
+			fmt.Fprintf(b, "%-12s %s (now %s)\n", k, Printable(now), Printable(old))
+		}
+	}
+	join := func(v []string) string { return strings.Join(v, ", ") }
+	row("hostname", cur.GetHostname(), next.GetHostname())
+	row("ipv4", ipv4Line(cur.GetManagement().GetIpv4()), ipv4Line(next.GetManagement().GetIpv4()))
+	row("ipv6", ipv6Line(cur.GetManagement().GetIpv6()), ipv6Line(next.GetManagement().GetIpv6()))
+	row("dns", join(cur.GetDns()), join(next.GetDns()))
+	row("search", join(cur.GetSearch()), join(next.GetSearch()))
+	row("ntp", join(cur.GetNtp()), join(next.GetNtp()))
+	row("allow-list", join(cur.GetAllowList()), join(next.GetAllowList()))
+	row("time-zone", cur.GetTimeZone(), next.GetTimeZone())
+	row("https-proxy", cur.GetHttpsProxy(), next.GetHttpsProxy())
+}
+
+func familyLine(mode, addr, gw string) string {
+	switch {
+	case addr == "":
+		return mode
+	case gw == "":
+		return mode + " " + addr
+	}
+	return mode + " " + addr + " via " + gw
+}
+
+func ipv4Line(f *netdv1.Ipv4) string {
+	mode := strings.ToLower(strings.TrimPrefix(f.GetMode().String(), "IPV4_MODE_"))
+	return familyLine(mode, f.GetAddress(), f.GetGateway())
+}
+
+func ipv6Line(f *netdv1.Ipv6) string {
+	mode := strings.ToLower(strings.TrimPrefix(f.GetMode().String(), "IPV6_MODE_"))
+	return familyLine(mode, f.GetAddress(), f.GetGateway())
+}
+
+// networkSet stages key=value pairs on top of what's already staged, or of
+// the current settings, including the management interface's IPv4 and IPv6
+// mode and address (ipv4, ipv4-address, ipv4-gateway and the ipv6
+// equivalents); the same settings are also on :8443 or the console's network
+// screen. Nothing changes until network commit.
 func (s *Services) networkSet(ctx context.Context, args []string) (Result, error) {
 	cur, err := s.Network.GetNetwork(ctx, connect.NewRequest(&accessv1.GetNetworkRequest{}))
 	if err != nil {
 		return Result{}, err
 	}
-	st := cur.Msg.GetSettings()
+	st := cur.Msg.GetStaged()
+	if st == nil {
+		st = cur.Msg.GetSettings()
+	}
 	if st == nil {
 		st = &netdv1.Settings{}
 	}
@@ -486,16 +540,49 @@ func (s *Services) networkSet(ctx context.Context, args []string) (Result, error
 	for _, kv := range kvs {
 		kv.key.set(st, kv.value)
 	}
-	out, err := s.Network.SetNetwork(ctx, connect.NewRequest(&accessv1.SetNetworkRequest{Settings: st}))
+	out, err := s.Network.StageNetwork(ctx, connect.NewRequest(&accessv1.StageNetworkRequest{Settings: st}))
 	if err != nil {
 		return Result{}, err
 	}
-	t := out.Msg.GetToken()
-	if t == "" {
-		// netd kept it at once (no revert window, such as the time zone).
-		return Result{Text: "Applied and kept; there's nothing to confirm.", Data: map[string]string{"token": ""}}, nil
+	return Result{Text: "Staged; nothing has changed yet. network show shows it, network commit applies it, network discard drops it.",
+		Data: map[string]string{"staged": out.Msg.GetStagedId()}}, nil
+}
+
+// networkReview is what runNetworkCommit needs to warn with.
+func (s *Services) networkReview(ctx context.Context) (Result, error) {
+	out, err := s.Network.GetNetwork(ctx, connect.NewRequest(&accessv1.GetNetworkRequest{}))
+	if err != nil {
+		return Result{}, err
 	}
-	return Result{Text: fmt.Sprintf("Applied. It reverts in %d seconds unless kept.", out.Msg.GetRevertAfterSeconds()), Data: map[string]string{"token": t}}, nil
+	id := out.Msg.GetStagedId()
+	if id == "" {
+		return Result{}, codes.New(codes.NetInvalid, "nothing is staged; network set stages a change")
+	}
+	r := out.Msg.GetStagedReview()
+	review := map[string]string{"staged": id, "address": r.GetNewAddress()}
+	if r.GetMovesManagement() {
+		review["moves"] = "yes"
+	}
+	if r.GetChangesAllowList() {
+		review["allow-list"] = "yes"
+	}
+	return Result{Data: review}, nil
+}
+
+func (s *Services) networkCommit(ctx context.Context, id string) (Result, error) {
+	out, err := s.Network.CommitNetwork(ctx, connect.NewRequest(&accessv1.CommitNetworkRequest{StagedId: id}))
+	if err != nil {
+		return Result{}, err
+	}
+	var b strings.Builder
+	for _, gw := range out.Msg.GetTestedGateways() {
+		fmt.Fprintf(&b, "The gateway %s answered.\n", gw)
+	}
+	b.WriteString("Applied and saved.\n")
+	if a := out.Msg.GetReview().GetNewAddress(); a != "" {
+		fmt.Fprintf(&b, "The box is at %s now.\n", a)
+	}
+	return Result{Text: b.String(), Data: map[string]any{"tested_gateways": out.Msg.GetTestedGateways(), "new_address": out.Msg.GetReview().GetNewAddress()}}, nil
 }
 
 func (s *Services) keysList(ctx context.Context, admin string) (Result, error) {

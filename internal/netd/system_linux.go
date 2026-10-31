@@ -149,15 +149,29 @@ func (Linux) Firewall(t firewall.Table) error { return firewall.Apply(t) }
 
 // Reach sends gw a datagram, which has the kernel resolve its link-layer
 // address, then waits for the neighbour entry.
-func (Linux) Reach(ctx context.Context, name string, gw netip.Addr) error {
+func (l Linux) Reach(ctx context.Context, name string, gw netip.Addr) error {
+	return l.ReachFrom(ctx, name, netip.Addr{}, gw)
+}
+
+// ReachFrom is Reach with the datagram bound to src, when src is given. The
+// kernel takes an ARP request's sender address from the packet, so the
+// gateway answers the source being tested, not the address in use.
+func (Linux) ReachFrom(ctx context.Context, name string, src, gw netip.Addr) error {
 	addr := netip.AddrPortFrom(gw, 9)
 	if gw.IsLinkLocalUnicast() {
 		addr = netip.AddrPortFrom(gw.WithZone(name), 9)
 	}
 	var d net.Dialer
-	if c, err := d.DialContext(ctx, "udp", addr.String()); err == nil {
+	if src.IsValid() {
+		d.LocalAddr = net.UDPAddrFromAddrPort(netip.AddrPortFrom(src, 0))
+	}
+	c, err := d.DialContext(ctx, "udp", addr.String())
+	switch {
+	case err == nil:
 		_, _ = c.Write([]byte{0})
 		_ = c.Close()
+	case src.IsValid():
+		return fmt.Errorf("can't send from %s: %w", src, err)
 	}
 	for {
 		ns, err := netlink.Neighbours(name)

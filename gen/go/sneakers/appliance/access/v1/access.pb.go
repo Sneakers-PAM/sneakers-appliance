@@ -886,6 +886,9 @@ type GetNetworkResponse struct {
 	Settings            *v11.Settings          `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
 	ManagementAddresses []string               `protobuf:"bytes,2,rep,name=management_addresses,json=managementAddresses,proto3" json:"management_addresses,omitempty"`
 	NtpSynced           bool                   `protobuf:"varint,3,opt,name=ntp_synced,json=ntpSynced,proto3" json:"ntp_synced,omitempty"`
+	Staged              *v11.Settings          `protobuf:"bytes,4,opt,name=staged,proto3" json:"staged,omitempty"`
+	StagedId            string                 `protobuf:"bytes,5,opt,name=staged_id,json=stagedId,proto3" json:"staged_id,omitempty"`
+	StagedReview        *v1.StagedReview       `protobuf:"bytes,6,opt,name=staged_review,json=stagedReview,proto3" json:"staged_review,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -939,6 +942,27 @@ func (x *GetNetworkResponse) GetNtpSynced() bool {
 		return x.NtpSynced
 	}
 	return false
+}
+
+func (x *GetNetworkResponse) GetStaged() *v11.Settings {
+	if x != nil {
+		return x.Staged
+	}
+	return nil
+}
+
+func (x *GetNetworkResponse) GetStagedId() string {
+	if x != nil {
+		return x.StagedId
+	}
+	return ""
+}
+
+func (x *GetNetworkResponse) GetStagedReview() *v1.StagedReview {
+	if x != nil {
+		return x.StagedReview
+	}
+	return nil
 }
 
 type SetNetworkRequest struct {
@@ -1037,6 +1061,270 @@ func (x *SetNetworkResponse) GetRevertAfterSeconds() int32 {
 	return 0
 }
 
+type StageNetworkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Settings      *v11.Settings          `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StageNetworkRequest) Reset() {
+	*x = StageNetworkRequest{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageNetworkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageNetworkRequest) ProtoMessage() {}
+
+func (x *StageNetworkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageNetworkRequest.ProtoReflect.Descriptor instead.
+func (*StageNetworkRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *StageNetworkRequest) GetSettings() *v11.Settings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+type StageNetworkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StagedId      string                 `protobuf:"bytes,1,opt,name=staged_id,json=stagedId,proto3" json:"staged_id,omitempty"`
+	Review        *v1.StagedReview       `protobuf:"bytes,2,opt,name=review,proto3" json:"review,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StageNetworkResponse) Reset() {
+	*x = StageNetworkResponse{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageNetworkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageNetworkResponse) ProtoMessage() {}
+
+func (x *StageNetworkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageNetworkResponse.ProtoReflect.Descriptor instead.
+func (*StageNetworkResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *StageNetworkResponse) GetStagedId() string {
+	if x != nil {
+		return x.StagedId
+	}
+	return ""
+}
+
+func (x *StageNetworkResponse) GetReview() *v1.StagedReview {
+	if x != nil {
+		return x.Review
+	}
+	return nil
+}
+
+type DiscardStagedNetworkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardStagedNetworkRequest) Reset() {
+	*x = DiscardStagedNetworkRequest{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardStagedNetworkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardStagedNetworkRequest) ProtoMessage() {}
+
+func (x *DiscardStagedNetworkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardStagedNetworkRequest.ProtoReflect.Descriptor instead.
+func (*DiscardStagedNetworkRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{22}
+}
+
+type DiscardStagedNetworkResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardStagedNetworkResponse) Reset() {
+	*x = DiscardStagedNetworkResponse{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardStagedNetworkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardStagedNetworkResponse) ProtoMessage() {}
+
+func (x *DiscardStagedNetworkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardStagedNetworkResponse.ProtoReflect.Descriptor instead.
+func (*DiscardStagedNetworkResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{23}
+}
+
+type CommitNetworkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StagedId      string                 `protobuf:"bytes,1,opt,name=staged_id,json=stagedId,proto3" json:"staged_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitNetworkRequest) Reset() {
+	*x = CommitNetworkRequest{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitNetworkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitNetworkRequest) ProtoMessage() {}
+
+func (x *CommitNetworkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitNetworkRequest.ProtoReflect.Descriptor instead.
+func (*CommitNetworkRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *CommitNetworkRequest) GetStagedId() string {
+	if x != nil {
+		return x.StagedId
+	}
+	return ""
+}
+
+type CommitNetworkResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TestedGateways []string               `protobuf:"bytes,1,rep,name=tested_gateways,json=testedGateways,proto3" json:"tested_gateways,omitempty"`
+	Review         *v1.StagedReview       `protobuf:"bytes,2,opt,name=review,proto3" json:"review,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CommitNetworkResponse) Reset() {
+	*x = CommitNetworkResponse{}
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitNetworkResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitNetworkResponse) ProtoMessage() {}
+
+func (x *CommitNetworkResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitNetworkResponse.ProtoReflect.Descriptor instead.
+func (*CommitNetworkResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CommitNetworkResponse) GetTestedGateways() []string {
+	if x != nil {
+		return x.TestedGateways
+	}
+	return nil
+}
+
+func (x *CommitNetworkResponse) GetReview() *v1.StagedReview {
+	if x != nil {
+		return x.Review
+	}
+	return nil
+}
+
 type ConfirmNetworkRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -1046,7 +1334,7 @@ type ConfirmNetworkRequest struct {
 
 func (x *ConfirmNetworkRequest) Reset() {
 	*x = ConfirmNetworkRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1058,7 +1346,7 @@ func (x *ConfirmNetworkRequest) String() string {
 func (*ConfirmNetworkRequest) ProtoMessage() {}
 
 func (x *ConfirmNetworkRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1071,7 +1359,7 @@ func (x *ConfirmNetworkRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmNetworkRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmNetworkRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{20}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ConfirmNetworkRequest) GetToken() string {
@@ -1089,7 +1377,7 @@ type ConfirmNetworkResponse struct {
 
 func (x *ConfirmNetworkResponse) Reset() {
 	*x = ConfirmNetworkResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1101,7 +1389,7 @@ func (x *ConfirmNetworkResponse) String() string {
 func (*ConfirmNetworkResponse) ProtoMessage() {}
 
 func (x *ConfirmNetworkResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1402,7 @@ func (x *ConfirmNetworkResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmNetworkResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmNetworkResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{21}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{27}
 }
 
 type ResetAllowListRequest struct {
@@ -1125,7 +1413,7 @@ type ResetAllowListRequest struct {
 
 func (x *ResetAllowListRequest) Reset() {
 	*x = ResetAllowListRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1137,7 +1425,7 @@ func (x *ResetAllowListRequest) String() string {
 func (*ResetAllowListRequest) ProtoMessage() {}
 
 func (x *ResetAllowListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1150,7 +1438,7 @@ func (x *ResetAllowListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetAllowListRequest.ProtoReflect.Descriptor instead.
 func (*ResetAllowListRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{22}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{28}
 }
 
 type ResetAllowListResponse struct {
@@ -1163,7 +1451,7 @@ type ResetAllowListResponse struct {
 
 func (x *ResetAllowListResponse) Reset() {
 	*x = ResetAllowListResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1175,7 +1463,7 @@ func (x *ResetAllowListResponse) String() string {
 func (*ResetAllowListResponse) ProtoMessage() {}
 
 func (x *ResetAllowListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1188,7 +1476,7 @@ func (x *ResetAllowListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetAllowListResponse.ProtoReflect.Descriptor instead.
 func (*ResetAllowListResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{23}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ResetAllowListResponse) GetToken() string {
@@ -1213,7 +1501,7 @@ type GetSetupRequest struct {
 
 func (x *GetSetupRequest) Reset() {
 	*x = GetSetupRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1225,7 +1513,7 @@ func (x *GetSetupRequest) String() string {
 func (*GetSetupRequest) ProtoMessage() {}
 
 func (x *GetSetupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1238,7 +1526,7 @@ func (x *GetSetupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSetupRequest.ProtoReflect.Descriptor instead.
 func (*GetSetupRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{24}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{30}
 }
 
 type GetSetupResponse struct {
@@ -1250,7 +1538,7 @@ type GetSetupResponse struct {
 
 func (x *GetSetupResponse) Reset() {
 	*x = GetSetupResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1262,7 +1550,7 @@ func (x *GetSetupResponse) String() string {
 func (*GetSetupResponse) ProtoMessage() {}
 
 func (x *GetSetupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1275,7 +1563,7 @@ func (x *GetSetupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSetupResponse.ProtoReflect.Descriptor instead.
 func (*GetSetupResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{25}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetSetupResponse) GetSetup() *v1.GetSetupResponse {
@@ -1295,7 +1583,7 @@ type SetRecoveryKeyRequest struct {
 
 func (x *SetRecoveryKeyRequest) Reset() {
 	*x = SetRecoveryKeyRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1307,7 +1595,7 @@ func (x *SetRecoveryKeyRequest) String() string {
 func (*SetRecoveryKeyRequest) ProtoMessage() {}
 
 func (x *SetRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1320,7 +1608,7 @@ func (x *SetRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRecoveryKeyRequest.ProtoReflect.Descriptor instead.
 func (*SetRecoveryKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{26}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetRecoveryKeyRequest) GetPublicKey() string {
@@ -1346,7 +1634,7 @@ type SetRecoveryKeyResponse struct {
 
 func (x *SetRecoveryKeyResponse) Reset() {
 	*x = SetRecoveryKeyResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1358,7 +1646,7 @@ func (x *SetRecoveryKeyResponse) String() string {
 func (*SetRecoveryKeyResponse) ProtoMessage() {}
 
 func (x *SetRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1371,7 +1659,7 @@ func (x *SetRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetRecoveryKeyResponse.ProtoReflect.Descriptor instead.
 func (*SetRecoveryKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{27}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SetRecoveryKeyResponse) GetRecoveryKey() *v1.RecoveryKey {
@@ -1389,7 +1677,7 @@ type AcknowledgeSingleAdminRequest struct {
 
 func (x *AcknowledgeSingleAdminRequest) Reset() {
 	*x = AcknowledgeSingleAdminRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1401,7 +1689,7 @@ func (x *AcknowledgeSingleAdminRequest) String() string {
 func (*AcknowledgeSingleAdminRequest) ProtoMessage() {}
 
 func (x *AcknowledgeSingleAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1414,7 +1702,7 @@ func (x *AcknowledgeSingleAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeSingleAdminRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeSingleAdminRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{28}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{34}
 }
 
 type AcknowledgeSingleAdminResponse struct {
@@ -1425,7 +1713,7 @@ type AcknowledgeSingleAdminResponse struct {
 
 func (x *AcknowledgeSingleAdminResponse) Reset() {
 	*x = AcknowledgeSingleAdminResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[29]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1437,7 +1725,7 @@ func (x *AcknowledgeSingleAdminResponse) String() string {
 func (*AcknowledgeSingleAdminResponse) ProtoMessage() {}
 
 func (x *AcknowledgeSingleAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[29]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1450,7 +1738,7 @@ func (x *AcknowledgeSingleAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeSingleAdminResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeSingleAdminResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{29}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{35}
 }
 
 type CompleteRequest struct {
@@ -1461,7 +1749,7 @@ type CompleteRequest struct {
 
 func (x *CompleteRequest) Reset() {
 	*x = CompleteRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[30]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1473,7 +1761,7 @@ func (x *CompleteRequest) String() string {
 func (*CompleteRequest) ProtoMessage() {}
 
 func (x *CompleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[30]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1486,7 +1774,7 @@ func (x *CompleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteRequest.ProtoReflect.Descriptor instead.
 func (*CompleteRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{30}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{36}
 }
 
 type CompleteResponse struct {
@@ -1498,7 +1786,7 @@ type CompleteResponse struct {
 
 func (x *CompleteResponse) Reset() {
 	*x = CompleteResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[31]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1510,7 +1798,7 @@ func (x *CompleteResponse) String() string {
 func (*CompleteResponse) ProtoMessage() {}
 
 func (x *CompleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[31]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1523,7 +1811,7 @@ func (x *CompleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteResponse.ProtoReflect.Descriptor instead.
 func (*CompleteResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{31}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *CompleteResponse) GetProductSetupUrl() string {
@@ -1544,7 +1832,7 @@ type RequestElevationRequest struct {
 
 func (x *RequestElevationRequest) Reset() {
 	*x = RequestElevationRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[32]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1556,7 +1844,7 @@ func (x *RequestElevationRequest) String() string {
 func (*RequestElevationRequest) ProtoMessage() {}
 
 func (x *RequestElevationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[32]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1569,7 +1857,7 @@ func (x *RequestElevationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestElevationRequest.ProtoReflect.Descriptor instead.
 func (*RequestElevationRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{32}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RequestElevationRequest) GetMinutes() int32 {
@@ -1596,7 +1884,7 @@ type RequestElevationResponse struct {
 
 func (x *RequestElevationResponse) Reset() {
 	*x = RequestElevationResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[33]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1608,7 +1896,7 @@ func (x *RequestElevationResponse) String() string {
 func (*RequestElevationResponse) ProtoMessage() {}
 
 func (x *RequestElevationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[33]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1621,7 +1909,7 @@ func (x *RequestElevationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestElevationResponse.ProtoReflect.Descriptor instead.
 func (*RequestElevationResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{33}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *RequestElevationResponse) GetElevation() *v1.Elevation {
@@ -1639,7 +1927,7 @@ type ListElevationsRequest struct {
 
 func (x *ListElevationsRequest) Reset() {
 	*x = ListElevationsRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[34]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1651,7 +1939,7 @@ func (x *ListElevationsRequest) String() string {
 func (*ListElevationsRequest) ProtoMessage() {}
 
 func (x *ListElevationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[34]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1664,7 +1952,7 @@ func (x *ListElevationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListElevationsRequest.ProtoReflect.Descriptor instead.
 func (*ListElevationsRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{34}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{40}
 }
 
 type ListElevationsResponse struct {
@@ -1676,7 +1964,7 @@ type ListElevationsResponse struct {
 
 func (x *ListElevationsResponse) Reset() {
 	*x = ListElevationsResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[35]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1688,7 +1976,7 @@ func (x *ListElevationsResponse) String() string {
 func (*ListElevationsResponse) ProtoMessage() {}
 
 func (x *ListElevationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[35]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1701,7 +1989,7 @@ func (x *ListElevationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListElevationsResponse.ProtoReflect.Descriptor instead.
 func (*ListElevationsResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{35}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListElevationsResponse) GetElevations() []*v1.Elevation {
@@ -1721,7 +2009,7 @@ type GetElevationCertificateRequest struct {
 
 func (x *GetElevationCertificateRequest) Reset() {
 	*x = GetElevationCertificateRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[36]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1733,7 +2021,7 @@ func (x *GetElevationCertificateRequest) String() string {
 func (*GetElevationCertificateRequest) ProtoMessage() {}
 
 func (x *GetElevationCertificateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[36]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1746,7 +2034,7 @@ func (x *GetElevationCertificateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetElevationCertificateRequest.ProtoReflect.Descriptor instead.
 func (*GetElevationCertificateRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{36}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetElevationCertificateRequest) GetId() string {
@@ -1770,7 +2058,7 @@ type GetElevationCertificateResponse struct {
 
 func (x *GetElevationCertificateResponse) Reset() {
 	*x = GetElevationCertificateResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[37]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1782,7 +2070,7 @@ func (x *GetElevationCertificateResponse) String() string {
 func (*GetElevationCertificateResponse) ProtoMessage() {}
 
 func (x *GetElevationCertificateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[37]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1795,7 +2083,7 @@ func (x *GetElevationCertificateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetElevationCertificateResponse.ProtoReflect.Descriptor instead.
 func (*GetElevationCertificateResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{37}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetElevationCertificateResponse) GetCertificate() string {
@@ -1829,7 +2117,7 @@ type WithdrawElevationRequest struct {
 
 func (x *WithdrawElevationRequest) Reset() {
 	*x = WithdrawElevationRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[38]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1841,7 +2129,7 @@ func (x *WithdrawElevationRequest) String() string {
 func (*WithdrawElevationRequest) ProtoMessage() {}
 
 func (x *WithdrawElevationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[38]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1854,7 +2142,7 @@ func (x *WithdrawElevationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawElevationRequest.ProtoReflect.Descriptor instead.
 func (*WithdrawElevationRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{38}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *WithdrawElevationRequest) GetId() string {
@@ -1873,7 +2161,7 @@ type WithdrawElevationResponse struct {
 
 func (x *WithdrawElevationResponse) Reset() {
 	*x = WithdrawElevationResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[39]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1885,7 +2173,7 @@ func (x *WithdrawElevationResponse) String() string {
 func (*WithdrawElevationResponse) ProtoMessage() {}
 
 func (x *WithdrawElevationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[39]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1898,7 +2186,7 @@ func (x *WithdrawElevationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawElevationResponse.ProtoReflect.Descriptor instead.
 func (*WithdrawElevationResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{39}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{45}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -1912,7 +2200,7 @@ type ApproveElevationRequest struct {
 
 func (x *ApproveElevationRequest) Reset() {
 	*x = ApproveElevationRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[40]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1924,7 +2212,7 @@ func (x *ApproveElevationRequest) String() string {
 func (*ApproveElevationRequest) ProtoMessage() {}
 
 func (x *ApproveElevationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[40]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1937,7 +2225,7 @@ func (x *ApproveElevationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveElevationRequest.ProtoReflect.Descriptor instead.
 func (*ApproveElevationRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{40}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ApproveElevationRequest) GetId() string {
@@ -1963,7 +2251,7 @@ type ApproveElevationResponse struct {
 
 func (x *ApproveElevationResponse) Reset() {
 	*x = ApproveElevationResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[41]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1975,7 +2263,7 @@ func (x *ApproveElevationResponse) String() string {
 func (*ApproveElevationResponse) ProtoMessage() {}
 
 func (x *ApproveElevationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[41]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1988,7 +2276,7 @@ func (x *ApproveElevationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveElevationResponse.ProtoReflect.Descriptor instead.
 func (*ApproveElevationResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{41}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{47}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -2001,7 +2289,7 @@ type DenyElevationRequest struct {
 
 func (x *DenyElevationRequest) Reset() {
 	*x = DenyElevationRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[42]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2013,7 +2301,7 @@ func (x *DenyElevationRequest) String() string {
 func (*DenyElevationRequest) ProtoMessage() {}
 
 func (x *DenyElevationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[42]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2026,7 +2314,7 @@ func (x *DenyElevationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DenyElevationRequest.ProtoReflect.Descriptor instead.
 func (*DenyElevationRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{42}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *DenyElevationRequest) GetId() string {
@@ -2045,7 +2333,7 @@ type DenyElevationResponse struct {
 
 func (x *DenyElevationResponse) Reset() {
 	*x = DenyElevationResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[43]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2057,7 +2345,7 @@ func (x *DenyElevationResponse) String() string {
 func (*DenyElevationResponse) ProtoMessage() {}
 
 func (x *DenyElevationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[43]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2070,7 +2358,7 @@ func (x *DenyElevationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DenyElevationResponse.ProtoReflect.Descriptor instead.
 func (*DenyElevationResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{43}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{49}
 }
 
 type TerminateElevationRequest struct {
@@ -2082,7 +2370,7 @@ type TerminateElevationRequest struct {
 
 func (x *TerminateElevationRequest) Reset() {
 	*x = TerminateElevationRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[44]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2094,7 +2382,7 @@ func (x *TerminateElevationRequest) String() string {
 func (*TerminateElevationRequest) ProtoMessage() {}
 
 func (x *TerminateElevationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[44]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2107,7 +2395,7 @@ func (x *TerminateElevationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminateElevationRequest.ProtoReflect.Descriptor instead.
 func (*TerminateElevationRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{44}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *TerminateElevationRequest) GetId() string {
@@ -2125,7 +2413,7 @@ type TerminateElevationResponse struct {
 
 func (x *TerminateElevationResponse) Reset() {
 	*x = TerminateElevationResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[45]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2137,7 +2425,7 @@ func (x *TerminateElevationResponse) String() string {
 func (*TerminateElevationResponse) ProtoMessage() {}
 
 func (x *TerminateElevationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[45]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2150,7 +2438,7 @@ func (x *TerminateElevationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminateElevationResponse.ProtoReflect.Descriptor instead.
 func (*TerminateElevationResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{45}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{51}
 }
 
 type BeginElevatedSessionRequest struct {
@@ -2172,7 +2460,7 @@ type BeginElevatedSessionRequest struct {
 
 func (x *BeginElevatedSessionRequest) Reset() {
 	*x = BeginElevatedSessionRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[46]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2184,7 +2472,7 @@ func (x *BeginElevatedSessionRequest) String() string {
 func (*BeginElevatedSessionRequest) ProtoMessage() {}
 
 func (x *BeginElevatedSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[46]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2197,7 +2485,7 @@ func (x *BeginElevatedSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginElevatedSessionRequest.ProtoReflect.Descriptor instead.
 func (*BeginElevatedSessionRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{46}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{52}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -2240,7 +2528,7 @@ type BeginElevatedSessionResponse struct {
 
 func (x *BeginElevatedSessionResponse) Reset() {
 	*x = BeginElevatedSessionResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[47]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2252,7 +2540,7 @@ func (x *BeginElevatedSessionResponse) String() string {
 func (*BeginElevatedSessionResponse) ProtoMessage() {}
 
 func (x *BeginElevatedSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[47]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2265,7 +2553,7 @@ func (x *BeginElevatedSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginElevatedSessionResponse.ProtoReflect.Descriptor instead.
 func (*BeginElevatedSessionResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{47}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *BeginElevatedSessionResponse) GetElevation() *v1.Elevation {
@@ -2295,7 +2583,7 @@ type EndElevatedSessionRequest struct {
 
 func (x *EndElevatedSessionRequest) Reset() {
 	*x = EndElevatedSessionRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[48]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2307,7 +2595,7 @@ func (x *EndElevatedSessionRequest) String() string {
 func (*EndElevatedSessionRequest) ProtoMessage() {}
 
 func (x *EndElevatedSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[48]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2320,7 +2608,7 @@ func (x *EndElevatedSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndElevatedSessionRequest.ProtoReflect.Descriptor instead.
 func (*EndElevatedSessionRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{48}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *EndElevatedSessionRequest) GetId() string {
@@ -2352,7 +2640,7 @@ type EndElevatedSessionResponse struct {
 
 func (x *EndElevatedSessionResponse) Reset() {
 	*x = EndElevatedSessionResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[49]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2364,7 +2652,7 @@ func (x *EndElevatedSessionResponse) String() string {
 func (*EndElevatedSessionResponse) ProtoMessage() {}
 
 func (x *EndElevatedSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[49]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2377,7 +2665,7 @@ func (x *EndElevatedSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndElevatedSessionResponse.ProtoReflect.Descriptor instead.
 func (*EndElevatedSessionResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{49}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{55}
 }
 
 // Enrolment is an enrolment window as the console shows it.
@@ -2408,7 +2696,7 @@ type Enrolment struct {
 
 func (x *Enrolment) Reset() {
 	*x = Enrolment{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[50]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2420,7 +2708,7 @@ func (x *Enrolment) String() string {
 func (*Enrolment) ProtoMessage() {}
 
 func (x *Enrolment) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[50]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2433,7 +2721,7 @@ func (x *Enrolment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Enrolment.ProtoReflect.Descriptor instead.
 func (*Enrolment) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{50}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *Enrolment) GetOpen() bool {
@@ -2533,7 +2821,7 @@ type EnrolmentKey struct {
 
 func (x *EnrolmentKey) Reset() {
 	*x = EnrolmentKey{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[51]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2545,7 +2833,7 @@ func (x *EnrolmentKey) String() string {
 func (*EnrolmentKey) ProtoMessage() {}
 
 func (x *EnrolmentKey) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[51]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2558,7 +2846,7 @@ func (x *EnrolmentKey) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnrolmentKey.ProtoReflect.Descriptor instead.
 func (*EnrolmentKey) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{51}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *EnrolmentKey) GetId() string {
@@ -2622,7 +2910,7 @@ type OpenEnrolmentRequest struct {
 
 func (x *OpenEnrolmentRequest) Reset() {
 	*x = OpenEnrolmentRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[52]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2634,7 +2922,7 @@ func (x *OpenEnrolmentRequest) String() string {
 func (*OpenEnrolmentRequest) ProtoMessage() {}
 
 func (x *OpenEnrolmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[52]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2647,7 +2935,7 @@ func (x *OpenEnrolmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenEnrolmentRequest.ProtoReflect.Descriptor instead.
 func (*OpenEnrolmentRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{52}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *OpenEnrolmentRequest) GetAdmin() string {
@@ -2674,7 +2962,7 @@ type OpenEnrolmentResponse struct {
 
 func (x *OpenEnrolmentResponse) Reset() {
 	*x = OpenEnrolmentResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[53]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2686,7 +2974,7 @@ func (x *OpenEnrolmentResponse) String() string {
 func (*OpenEnrolmentResponse) ProtoMessage() {}
 
 func (x *OpenEnrolmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[53]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2699,7 +2987,7 @@ func (x *OpenEnrolmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenEnrolmentResponse.ProtoReflect.Descriptor instead.
 func (*OpenEnrolmentResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{53}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *OpenEnrolmentResponse) GetEnrolment() *Enrolment {
@@ -2718,7 +3006,7 @@ type GetEnrolmentRequest struct {
 
 func (x *GetEnrolmentRequest) Reset() {
 	*x = GetEnrolmentRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[54]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2730,7 +3018,7 @@ func (x *GetEnrolmentRequest) String() string {
 func (*GetEnrolmentRequest) ProtoMessage() {}
 
 func (x *GetEnrolmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[54]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2743,7 +3031,7 @@ func (x *GetEnrolmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnrolmentRequest.ProtoReflect.Descriptor instead.
 func (*GetEnrolmentRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{54}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{60}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -2756,7 +3044,7 @@ type GetEnrolmentResponse struct {
 
 func (x *GetEnrolmentResponse) Reset() {
 	*x = GetEnrolmentResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[55]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2768,7 +3056,7 @@ func (x *GetEnrolmentResponse) String() string {
 func (*GetEnrolmentResponse) ProtoMessage() {}
 
 func (x *GetEnrolmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[55]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2781,7 +3069,7 @@ func (x *GetEnrolmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnrolmentResponse.ProtoReflect.Descriptor instead.
 func (*GetEnrolmentResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{55}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetEnrolmentResponse) GetEnrolment() *Enrolment {
@@ -2803,7 +3091,7 @@ type AcceptEnrolmentKeyRequest struct {
 
 func (x *AcceptEnrolmentKeyRequest) Reset() {
 	*x = AcceptEnrolmentKeyRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[56]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2815,7 +3103,7 @@ func (x *AcceptEnrolmentKeyRequest) String() string {
 func (*AcceptEnrolmentKeyRequest) ProtoMessage() {}
 
 func (x *AcceptEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[56]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2828,7 +3116,7 @@ func (x *AcceptEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptEnrolmentKeyRequest.ProtoReflect.Descriptor instead.
 func (*AcceptEnrolmentKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{56}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *AcceptEnrolmentKeyRequest) GetId() string {
@@ -2855,7 +3143,7 @@ type AcceptEnrolmentKeyResponse struct {
 
 func (x *AcceptEnrolmentKeyResponse) Reset() {
 	*x = AcceptEnrolmentKeyResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[57]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2867,7 +3155,7 @@ func (x *AcceptEnrolmentKeyResponse) String() string {
 func (*AcceptEnrolmentKeyResponse) ProtoMessage() {}
 
 func (x *AcceptEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[57]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2880,7 +3168,7 @@ func (x *AcceptEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptEnrolmentKeyResponse.ProtoReflect.Descriptor instead.
 func (*AcceptEnrolmentKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{57}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *AcceptEnrolmentKeyResponse) GetKey() *v1.Key {
@@ -2900,7 +3188,7 @@ type RejectEnrolmentKeyRequest struct {
 
 func (x *RejectEnrolmentKeyRequest) Reset() {
 	*x = RejectEnrolmentKeyRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[58]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2912,7 +3200,7 @@ func (x *RejectEnrolmentKeyRequest) String() string {
 func (*RejectEnrolmentKeyRequest) ProtoMessage() {}
 
 func (x *RejectEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[58]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2925,7 +3213,7 @@ func (x *RejectEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectEnrolmentKeyRequest.ProtoReflect.Descriptor instead.
 func (*RejectEnrolmentKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{58}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *RejectEnrolmentKeyRequest) GetId() string {
@@ -2944,7 +3232,7 @@ type RejectEnrolmentKeyResponse struct {
 
 func (x *RejectEnrolmentKeyResponse) Reset() {
 	*x = RejectEnrolmentKeyResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[59]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2956,7 +3244,7 @@ func (x *RejectEnrolmentKeyResponse) String() string {
 func (*RejectEnrolmentKeyResponse) ProtoMessage() {}
 
 func (x *RejectEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[59]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2969,7 +3257,7 @@ func (x *RejectEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectEnrolmentKeyResponse.ProtoReflect.Descriptor instead.
 func (*RejectEnrolmentKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{59}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{65}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -2981,7 +3269,7 @@ type CloseEnrolmentRequest struct {
 
 func (x *CloseEnrolmentRequest) Reset() {
 	*x = CloseEnrolmentRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[60]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2993,7 +3281,7 @@ func (x *CloseEnrolmentRequest) String() string {
 func (*CloseEnrolmentRequest) ProtoMessage() {}
 
 func (x *CloseEnrolmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[60]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3006,7 +3294,7 @@ func (x *CloseEnrolmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseEnrolmentRequest.ProtoReflect.Descriptor instead.
 func (*CloseEnrolmentRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{60}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{66}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -3024,7 +3312,7 @@ type OfferEnrolmentKeyRequest struct {
 
 func (x *OfferEnrolmentKeyRequest) Reset() {
 	*x = OfferEnrolmentKeyRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[61]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3036,7 +3324,7 @@ func (x *OfferEnrolmentKeyRequest) String() string {
 func (*OfferEnrolmentKeyRequest) ProtoMessage() {}
 
 func (x *OfferEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[61]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3049,7 +3337,7 @@ func (x *OfferEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OfferEnrolmentKeyRequest.ProtoReflect.Descriptor instead.
 func (*OfferEnrolmentKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{61}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *OfferEnrolmentKeyRequest) GetPublicKey() string {
@@ -3083,7 +3371,7 @@ type OfferEnrolmentKeyResponse struct {
 
 func (x *OfferEnrolmentKeyResponse) Reset() {
 	*x = OfferEnrolmentKeyResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[62]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3095,7 +3383,7 @@ func (x *OfferEnrolmentKeyResponse) String() string {
 func (*OfferEnrolmentKeyResponse) ProtoMessage() {}
 
 func (x *OfferEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[62]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3108,7 +3396,7 @@ func (x *OfferEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OfferEnrolmentKeyResponse.ProtoReflect.Descriptor instead.
 func (*OfferEnrolmentKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{62}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *OfferEnrolmentKeyResponse) GetKey() *EnrolmentKey {
@@ -3127,7 +3415,7 @@ type CloseEnrolmentResponse struct {
 
 func (x *CloseEnrolmentResponse) Reset() {
 	*x = CloseEnrolmentResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[63]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3139,7 +3427,7 @@ func (x *CloseEnrolmentResponse) String() string {
 func (*CloseEnrolmentResponse) ProtoMessage() {}
 
 func (x *CloseEnrolmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[63]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3152,7 +3440,7 @@ func (x *CloseEnrolmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseEnrolmentResponse.ProtoReflect.Descriptor instead.
 func (*CloseEnrolmentResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{63}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{69}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/access/v1/access.proto.
@@ -3167,7 +3455,7 @@ type SubmitEnrolmentCodeRequest struct {
 
 func (x *SubmitEnrolmentCodeRequest) Reset() {
 	*x = SubmitEnrolmentCodeRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[64]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3179,7 +3467,7 @@ func (x *SubmitEnrolmentCodeRequest) String() string {
 func (*SubmitEnrolmentCodeRequest) ProtoMessage() {}
 
 func (x *SubmitEnrolmentCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[64]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3192,7 +3480,7 @@ func (x *SubmitEnrolmentCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitEnrolmentCodeRequest.ProtoReflect.Descriptor instead.
 func (*SubmitEnrolmentCodeRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{64}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *SubmitEnrolmentCodeRequest) GetCode() string {
@@ -3221,7 +3509,7 @@ type SubmitEnrolmentCodeResponse struct {
 
 func (x *SubmitEnrolmentCodeResponse) Reset() {
 	*x = SubmitEnrolmentCodeResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[65]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3233,7 +3521,7 @@ func (x *SubmitEnrolmentCodeResponse) String() string {
 func (*SubmitEnrolmentCodeResponse) ProtoMessage() {}
 
 func (x *SubmitEnrolmentCodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[65]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3246,7 +3534,7 @@ func (x *SubmitEnrolmentCodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitEnrolmentCodeResponse.ProtoReflect.Descriptor instead.
 func (*SubmitEnrolmentCodeResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{65}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *SubmitEnrolmentCodeResponse) GetId() string {
@@ -3280,7 +3568,7 @@ type GetEnrolmentKeyRequest struct {
 
 func (x *GetEnrolmentKeyRequest) Reset() {
 	*x = GetEnrolmentKeyRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[66]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3292,7 +3580,7 @@ func (x *GetEnrolmentKeyRequest) String() string {
 func (*GetEnrolmentKeyRequest) ProtoMessage() {}
 
 func (x *GetEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[66]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3305,7 +3593,7 @@ func (x *GetEnrolmentKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnrolmentKeyRequest.ProtoReflect.Descriptor instead.
 func (*GetEnrolmentKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{66}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *GetEnrolmentKeyRequest) GetId() string {
@@ -3325,7 +3613,7 @@ type GetEnrolmentKeyResponse struct {
 
 func (x *GetEnrolmentKeyResponse) Reset() {
 	*x = GetEnrolmentKeyResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[67]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3337,7 +3625,7 @@ func (x *GetEnrolmentKeyResponse) String() string {
 func (*GetEnrolmentKeyResponse) ProtoMessage() {}
 
 func (x *GetEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[67]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3350,7 +3638,7 @@ func (x *GetEnrolmentKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEnrolmentKeyResponse.ProtoReflect.Descriptor instead.
 func (*GetEnrolmentKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{67}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *GetEnrolmentKeyResponse) GetKey() *EnrolmentKey {
@@ -3368,7 +3656,7 @@ type GetBindingRequest struct {
 
 func (x *GetBindingRequest) Reset() {
 	*x = GetBindingRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[68]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3380,7 +3668,7 @@ func (x *GetBindingRequest) String() string {
 func (*GetBindingRequest) ProtoMessage() {}
 
 func (x *GetBindingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[68]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3393,7 +3681,7 @@ func (x *GetBindingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBindingRequest.ProtoReflect.Descriptor instead.
 func (*GetBindingRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{68}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{74}
 }
 
 type GetBindingResponse struct {
@@ -3407,7 +3695,7 @@ type GetBindingResponse struct {
 
 func (x *GetBindingResponse) Reset() {
 	*x = GetBindingResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[69]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3419,7 +3707,7 @@ func (x *GetBindingResponse) String() string {
 func (*GetBindingResponse) ProtoMessage() {}
 
 func (x *GetBindingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[69]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3432,7 +3720,7 @@ func (x *GetBindingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBindingResponse.ProtoReflect.Descriptor instead.
 func (*GetBindingResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{69}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *GetBindingResponse) GetHostname() string {
@@ -3497,7 +3785,7 @@ type ConsoleInfo struct {
 
 func (x *ConsoleInfo) Reset() {
 	*x = ConsoleInfo{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[70]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3509,7 +3797,7 @@ func (x *ConsoleInfo) String() string {
 func (*ConsoleInfo) ProtoMessage() {}
 
 func (x *ConsoleInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[70]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3522,7 +3810,7 @@ func (x *ConsoleInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsoleInfo.ProtoReflect.Descriptor instead.
 func (*ConsoleInfo) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{70}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *ConsoleInfo) GetState() SetupState {
@@ -3676,7 +3964,7 @@ type RecoverAccess struct {
 
 func (x *RecoverAccess) Reset() {
 	*x = RecoverAccess{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[71]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3688,7 +3976,7 @@ func (x *RecoverAccess) String() string {
 func (*RecoverAccess) ProtoMessage() {}
 
 func (x *RecoverAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[71]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3701,7 +3989,7 @@ func (x *RecoverAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecoverAccess.ProtoReflect.Descriptor instead.
 func (*RecoverAccess) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{71}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *RecoverAccess) GetCode() string {
@@ -3754,7 +4042,7 @@ type GetConsoleInfoRequest struct {
 
 func (x *GetConsoleInfoRequest) Reset() {
 	*x = GetConsoleInfoRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[72]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3766,7 +4054,7 @@ func (x *GetConsoleInfoRequest) String() string {
 func (*GetConsoleInfoRequest) ProtoMessage() {}
 
 func (x *GetConsoleInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[72]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3779,7 +4067,7 @@ func (x *GetConsoleInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConsoleInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetConsoleInfoRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{72}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{78}
 }
 
 type GetConsoleInfoResponse struct {
@@ -3791,7 +4079,7 @@ type GetConsoleInfoResponse struct {
 
 func (x *GetConsoleInfoResponse) Reset() {
 	*x = GetConsoleInfoResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[73]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3803,7 +4091,7 @@ func (x *GetConsoleInfoResponse) String() string {
 func (*GetConsoleInfoResponse) ProtoMessage() {}
 
 func (x *GetConsoleInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[73]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3816,7 +4104,7 @@ func (x *GetConsoleInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConsoleInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetConsoleInfoResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{73}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *GetConsoleInfoResponse) GetConsoleInfo() *ConsoleInfo {
@@ -3834,7 +4122,7 @@ type WatchConsoleInfoRequest struct {
 
 func (x *WatchConsoleInfoRequest) Reset() {
 	*x = WatchConsoleInfoRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[74]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3846,7 +4134,7 @@ func (x *WatchConsoleInfoRequest) String() string {
 func (*WatchConsoleInfoRequest) ProtoMessage() {}
 
 func (x *WatchConsoleInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[74]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3859,7 +4147,7 @@ func (x *WatchConsoleInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchConsoleInfoRequest.ProtoReflect.Descriptor instead.
 func (*WatchConsoleInfoRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{74}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{80}
 }
 
 type WatchConsoleInfoResponse struct {
@@ -3871,7 +4159,7 @@ type WatchConsoleInfoResponse struct {
 
 func (x *WatchConsoleInfoResponse) Reset() {
 	*x = WatchConsoleInfoResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[75]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3883,7 +4171,7 @@ func (x *WatchConsoleInfoResponse) String() string {
 func (*WatchConsoleInfoResponse) ProtoMessage() {}
 
 func (x *WatchConsoleInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[75]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3896,7 +4184,7 @@ func (x *WatchConsoleInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchConsoleInfoResponse.ProtoReflect.Descriptor instead.
 func (*WatchConsoleInfoResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{75}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *WatchConsoleInfoResponse) GetConsoleInfo() *ConsoleInfo {
@@ -3914,7 +4202,7 @@ type ResetSetupCodeRequest struct {
 
 func (x *ResetSetupCodeRequest) Reset() {
 	*x = ResetSetupCodeRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[76]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3926,7 +4214,7 @@ func (x *ResetSetupCodeRequest) String() string {
 func (*ResetSetupCodeRequest) ProtoMessage() {}
 
 func (x *ResetSetupCodeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[76]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3939,7 +4227,7 @@ func (x *ResetSetupCodeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetSetupCodeRequest.ProtoReflect.Descriptor instead.
 func (*ResetSetupCodeRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{76}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{82}
 }
 
 type ResetSetupCodeResponse struct {
@@ -3951,7 +4239,7 @@ type ResetSetupCodeResponse struct {
 
 func (x *ResetSetupCodeResponse) Reset() {
 	*x = ResetSetupCodeResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[77]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3963,7 +4251,7 @@ func (x *ResetSetupCodeResponse) String() string {
 func (*ResetSetupCodeResponse) ProtoMessage() {}
 
 func (x *ResetSetupCodeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[77]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3976,7 +4264,7 @@ func (x *ResetSetupCodeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetSetupCodeResponse.ProtoReflect.Descriptor instead.
 func (*ResetSetupCodeResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{77}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *ResetSetupCodeResponse) GetConsoleInfo() *ConsoleInfo {
@@ -3994,7 +4282,7 @@ type BeginRecoverAccessRequest struct {
 
 func (x *BeginRecoverAccessRequest) Reset() {
 	*x = BeginRecoverAccessRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[78]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4006,7 +4294,7 @@ func (x *BeginRecoverAccessRequest) String() string {
 func (*BeginRecoverAccessRequest) ProtoMessage() {}
 
 func (x *BeginRecoverAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[78]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4019,7 +4307,7 @@ func (x *BeginRecoverAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginRecoverAccessRequest.ProtoReflect.Descriptor instead.
 func (*BeginRecoverAccessRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{78}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{84}
 }
 
 type BeginRecoverAccessResponse struct {
@@ -4031,7 +4319,7 @@ type BeginRecoverAccessResponse struct {
 
 func (x *BeginRecoverAccessResponse) Reset() {
 	*x = BeginRecoverAccessResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[79]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4043,7 +4331,7 @@ func (x *BeginRecoverAccessResponse) String() string {
 func (*BeginRecoverAccessResponse) ProtoMessage() {}
 
 func (x *BeginRecoverAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[79]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4056,7 +4344,7 @@ func (x *BeginRecoverAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginRecoverAccessResponse.ProtoReflect.Descriptor instead.
 func (*BeginRecoverAccessResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{79}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *BeginRecoverAccessResponse) GetRecover() *RecoverAccess {
@@ -4074,7 +4362,7 @@ type CancelRecoverAccessRequest struct {
 
 func (x *CancelRecoverAccessRequest) Reset() {
 	*x = CancelRecoverAccessRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[80]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4086,7 +4374,7 @@ func (x *CancelRecoverAccessRequest) String() string {
 func (*CancelRecoverAccessRequest) ProtoMessage() {}
 
 func (x *CancelRecoverAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[80]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4099,7 +4387,7 @@ func (x *CancelRecoverAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRecoverAccessRequest.ProtoReflect.Descriptor instead.
 func (*CancelRecoverAccessRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{80}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{86}
 }
 
 type CancelRecoverAccessResponse struct {
@@ -4110,7 +4398,7 @@ type CancelRecoverAccessResponse struct {
 
 func (x *CancelRecoverAccessResponse) Reset() {
 	*x = CancelRecoverAccessResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[81]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4122,7 +4410,7 @@ func (x *CancelRecoverAccessResponse) String() string {
 func (*CancelRecoverAccessResponse) ProtoMessage() {}
 
 func (x *CancelRecoverAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[81]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4135,7 +4423,7 @@ func (x *CancelRecoverAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelRecoverAccessResponse.ProtoReflect.Descriptor instead.
 func (*CancelRecoverAccessResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{81}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{87}
 }
 
 type BeginRootShellRequest struct {
@@ -4148,7 +4436,7 @@ type BeginRootShellRequest struct {
 
 func (x *BeginRootShellRequest) Reset() {
 	*x = BeginRootShellRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[82]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4160,7 +4448,7 @@ func (x *BeginRootShellRequest) String() string {
 func (*BeginRootShellRequest) ProtoMessage() {}
 
 func (x *BeginRootShellRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[82]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4173,7 +4461,7 @@ func (x *BeginRootShellRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginRootShellRequest.ProtoReflect.Descriptor instead.
 func (*BeginRootShellRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{82}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *BeginRootShellRequest) GetReason() string {
@@ -4198,7 +4486,7 @@ type BeginRootShellResponse struct {
 
 func (x *BeginRootShellResponse) Reset() {
 	*x = BeginRootShellResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[83]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4210,7 +4498,7 @@ func (x *BeginRootShellResponse) String() string {
 func (*BeginRootShellResponse) ProtoMessage() {}
 
 func (x *BeginRootShellResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[83]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4223,7 +4511,7 @@ func (x *BeginRootShellResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginRootShellResponse.ProtoReflect.Descriptor instead.
 func (*BeginRootShellResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{83}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *BeginRootShellResponse) GetChallenge() string {
@@ -4265,7 +4553,7 @@ type OpenRootShellRequest struct {
 
 func (x *OpenRootShellRequest) Reset() {
 	*x = OpenRootShellRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[84]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4277,7 +4565,7 @@ func (x *OpenRootShellRequest) String() string {
 func (*OpenRootShellRequest) ProtoMessage() {}
 
 func (x *OpenRootShellRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[84]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4290,7 +4578,7 @@ func (x *OpenRootShellRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenRootShellRequest.ProtoReflect.Descriptor instead.
 func (*OpenRootShellRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{84}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *OpenRootShellRequest) GetChallenge() string {
@@ -4321,7 +4609,7 @@ type OpenRootShellResponse struct {
 
 func (x *OpenRootShellResponse) Reset() {
 	*x = OpenRootShellResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[85]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4333,7 +4621,7 @@ func (x *OpenRootShellResponse) String() string {
 func (*OpenRootShellResponse) ProtoMessage() {}
 
 func (x *OpenRootShellResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[85]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4346,7 +4634,7 @@ func (x *OpenRootShellResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenRootShellResponse.ProtoReflect.Descriptor instead.
 func (*OpenRootShellResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{85}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *OpenRootShellResponse) GetTicket() string {
@@ -4386,7 +4674,7 @@ type VerifyTotpRequest struct {
 
 func (x *VerifyTotpRequest) Reset() {
 	*x = VerifyTotpRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[86]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4398,7 +4686,7 @@ func (x *VerifyTotpRequest) String() string {
 func (*VerifyTotpRequest) ProtoMessage() {}
 
 func (x *VerifyTotpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[86]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4411,7 +4699,7 @@ func (x *VerifyTotpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyTotpRequest.ProtoReflect.Descriptor instead.
 func (*VerifyTotpRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{86}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *VerifyTotpRequest) GetTotpCode() string {
@@ -4434,7 +4722,7 @@ type VerifyTotpResponse struct {
 
 func (x *VerifyTotpResponse) Reset() {
 	*x = VerifyTotpResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[87]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4446,7 +4734,7 @@ func (x *VerifyTotpResponse) String() string {
 func (*VerifyTotpResponse) ProtoMessage() {}
 
 func (x *VerifyTotpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[87]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4459,7 +4747,7 @@ func (x *VerifyTotpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyTotpResponse.ProtoReflect.Descriptor instead.
 func (*VerifyTotpResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{87}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *VerifyTotpResponse) GetAdmin() string {
@@ -4499,7 +4787,7 @@ type EndSshLoginRequest struct {
 
 func (x *EndSshLoginRequest) Reset() {
 	*x = EndSshLoginRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[88]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4511,7 +4799,7 @@ func (x *EndSshLoginRequest) String() string {
 func (*EndSshLoginRequest) ProtoMessage() {}
 
 func (x *EndSshLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[88]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4524,7 +4812,7 @@ func (x *EndSshLoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndSshLoginRequest.ProtoReflect.Descriptor instead.
 func (*EndSshLoginRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{88}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *EndSshLoginRequest) GetLoginId() string {
@@ -4542,7 +4830,7 @@ type EndSshLoginResponse struct {
 
 func (x *EndSshLoginResponse) Reset() {
 	*x = EndSshLoginResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[89]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4554,7 +4842,7 @@ func (x *EndSshLoginResponse) String() string {
 func (*EndSshLoginResponse) ProtoMessage() {}
 
 func (x *EndSshLoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[89]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4567,7 +4855,7 @@ func (x *EndSshLoginResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EndSshLoginResponse.ProtoReflect.Descriptor instead.
 func (*EndSshLoginResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{89}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{95}
 }
 
 type GetExposedValueRequest struct {
@@ -4579,7 +4867,7 @@ type GetExposedValueRequest struct {
 
 func (x *GetExposedValueRequest) Reset() {
 	*x = GetExposedValueRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[90]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4591,7 +4879,7 @@ func (x *GetExposedValueRequest) String() string {
 func (*GetExposedValueRequest) ProtoMessage() {}
 
 func (x *GetExposedValueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[90]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4604,7 +4892,7 @@ func (x *GetExposedValueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetExposedValueRequest.ProtoReflect.Descriptor instead.
 func (*GetExposedValueRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{90}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *GetExposedValueRequest) GetName() string {
@@ -4623,7 +4911,7 @@ type GetExposedValueResponse struct {
 
 func (x *GetExposedValueResponse) Reset() {
 	*x = GetExposedValueResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[91]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4635,7 +4923,7 @@ func (x *GetExposedValueResponse) String() string {
 func (*GetExposedValueResponse) ProtoMessage() {}
 
 func (x *GetExposedValueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[91]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4648,7 +4936,7 @@ func (x *GetExposedValueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetExposedValueResponse.ProtoReflect.Descriptor instead.
 func (*GetExposedValueResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{91}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *GetExposedValueResponse) GetValue() *v1.GetExposedValueResponse {
@@ -4666,7 +4954,7 @@ type GetMcpRequest struct {
 
 func (x *GetMcpRequest) Reset() {
 	*x = GetMcpRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[92]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4678,7 +4966,7 @@ func (x *GetMcpRequest) String() string {
 func (*GetMcpRequest) ProtoMessage() {}
 
 func (x *GetMcpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[92]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4691,7 +4979,7 @@ func (x *GetMcpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMcpRequest.ProtoReflect.Descriptor instead.
 func (*GetMcpRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{92}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{98}
 }
 
 type GetMcpResponse struct {
@@ -4703,7 +4991,7 @@ type GetMcpResponse struct {
 
 func (x *GetMcpResponse) Reset() {
 	*x = GetMcpResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[93]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4715,7 +5003,7 @@ func (x *GetMcpResponse) String() string {
 func (*GetMcpResponse) ProtoMessage() {}
 
 func (x *GetMcpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[93]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4728,7 +5016,7 @@ func (x *GetMcpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMcpResponse.ProtoReflect.Descriptor instead.
 func (*GetMcpResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{93}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *GetMcpResponse) GetMcp() *v1.GetMcpResponse {
@@ -4748,7 +5036,7 @@ type SetMcpRequest struct {
 
 func (x *SetMcpRequest) Reset() {
 	*x = SetMcpRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[94]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4760,7 +5048,7 @@ func (x *SetMcpRequest) String() string {
 func (*SetMcpRequest) ProtoMessage() {}
 
 func (x *SetMcpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[94]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4773,7 +5061,7 @@ func (x *SetMcpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMcpRequest.ProtoReflect.Descriptor instead.
 func (*SetMcpRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{94}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *SetMcpRequest) GetMcpEnabled() bool {
@@ -4798,7 +5086,7 @@ type SetMcpResponse struct {
 
 func (x *SetMcpResponse) Reset() {
 	*x = SetMcpResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[95]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4810,7 +5098,7 @@ func (x *SetMcpResponse) String() string {
 func (*SetMcpResponse) ProtoMessage() {}
 
 func (x *SetMcpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[95]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4823,7 +5111,7 @@ func (x *SetMcpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMcpResponse.ProtoReflect.Descriptor instead.
 func (*SetMcpResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{95}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{101}
 }
 
 type GetUpdateChannelRequest struct {
@@ -4834,7 +5122,7 @@ type GetUpdateChannelRequest struct {
 
 func (x *GetUpdateChannelRequest) Reset() {
 	*x = GetUpdateChannelRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[96]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4846,7 +5134,7 @@ func (x *GetUpdateChannelRequest) String() string {
 func (*GetUpdateChannelRequest) ProtoMessage() {}
 
 func (x *GetUpdateChannelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[96]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4859,7 +5147,7 @@ func (x *GetUpdateChannelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpdateChannelRequest.ProtoReflect.Descriptor instead.
 func (*GetUpdateChannelRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{96}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{102}
 }
 
 type GetUpdateChannelResponse struct {
@@ -4874,7 +5162,7 @@ type GetUpdateChannelResponse struct {
 
 func (x *GetUpdateChannelResponse) Reset() {
 	*x = GetUpdateChannelResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[97]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4886,7 +5174,7 @@ func (x *GetUpdateChannelResponse) String() string {
 func (*GetUpdateChannelResponse) ProtoMessage() {}
 
 func (x *GetUpdateChannelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[97]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4899,7 +5187,7 @@ func (x *GetUpdateChannelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpdateChannelResponse.ProtoReflect.Descriptor instead.
 func (*GetUpdateChannelResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{97}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *GetUpdateChannelResponse) GetPolicy() *v1.UpgradePolicy {
@@ -4930,7 +5218,7 @@ type SetUpdateChannelRequest struct {
 
 func (x *SetUpdateChannelRequest) Reset() {
 	*x = SetUpdateChannelRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[98]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4942,7 +5230,7 @@ func (x *SetUpdateChannelRequest) String() string {
 func (*SetUpdateChannelRequest) ProtoMessage() {}
 
 func (x *SetUpdateChannelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[98]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4955,7 +5243,7 @@ func (x *SetUpdateChannelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUpdateChannelRequest.ProtoReflect.Descriptor instead.
 func (*SetUpdateChannelRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{98}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *SetUpdateChannelRequest) GetReleaseChannel() string {
@@ -4980,7 +5268,7 @@ type SetUpdateChannelResponse struct {
 
 func (x *SetUpdateChannelResponse) Reset() {
 	*x = SetUpdateChannelResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[99]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4992,7 +5280,7 @@ func (x *SetUpdateChannelResponse) String() string {
 func (*SetUpdateChannelResponse) ProtoMessage() {}
 
 func (x *SetUpdateChannelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[99]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5005,7 +5293,7 @@ func (x *SetUpdateChannelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUpdateChannelResponse.ProtoReflect.Descriptor instead.
 func (*SetUpdateChannelResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{99}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{105}
 }
 
 type CleanUpDiskRequest struct {
@@ -5016,7 +5304,7 @@ type CleanUpDiskRequest struct {
 
 func (x *CleanUpDiskRequest) Reset() {
 	*x = CleanUpDiskRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[100]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5028,7 +5316,7 @@ func (x *CleanUpDiskRequest) String() string {
 func (*CleanUpDiskRequest) ProtoMessage() {}
 
 func (x *CleanUpDiskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[100]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5041,7 +5329,7 @@ func (x *CleanUpDiskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanUpDiskRequest.ProtoReflect.Descriptor instead.
 func (*CleanUpDiskRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{100}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{106}
 }
 
 type CleanUpDiskResponse struct {
@@ -5053,7 +5341,7 @@ type CleanUpDiskResponse struct {
 
 func (x *CleanUpDiskResponse) Reset() {
 	*x = CleanUpDiskResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[101]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5065,7 +5353,7 @@ func (x *CleanUpDiskResponse) String() string {
 func (*CleanUpDiskResponse) ProtoMessage() {}
 
 func (x *CleanUpDiskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[101]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5078,7 +5366,7 @@ func (x *CleanUpDiskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanUpDiskResponse.ProtoReflect.Descriptor instead.
 func (*CleanUpDiskResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{101}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *CleanUpDiskResponse) GetCleanup() *v1.DiskCleanup {
@@ -5100,7 +5388,7 @@ type ResetProductRequest struct {
 
 func (x *ResetProductRequest) Reset() {
 	*x = ResetProductRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[102]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5112,7 +5400,7 @@ func (x *ResetProductRequest) String() string {
 func (*ResetProductRequest) ProtoMessage() {}
 
 func (x *ResetProductRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[102]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5125,7 +5413,7 @@ func (x *ResetProductRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetProductRequest.ProtoReflect.Descriptor instead.
 func (*ResetProductRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{102}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *ResetProductRequest) GetTotpCode() string {
@@ -5151,7 +5439,7 @@ type ResetProductResponse struct {
 
 func (x *ResetProductResponse) Reset() {
 	*x = ResetProductResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[103]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5163,7 +5451,7 @@ func (x *ResetProductResponse) String() string {
 func (*ResetProductResponse) ProtoMessage() {}
 
 func (x *ResetProductResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[103]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5176,7 +5464,7 @@ func (x *ResetProductResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetProductResponse.ProtoReflect.Descriptor instead.
 func (*ResetProductResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{103}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *ResetProductResponse) GetResult() *v1.ResetProductResponse {
@@ -5198,7 +5486,7 @@ type ReinstallProductRequest struct {
 
 func (x *ReinstallProductRequest) Reset() {
 	*x = ReinstallProductRequest{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[104]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5210,7 +5498,7 @@ func (x *ReinstallProductRequest) String() string {
 func (*ReinstallProductRequest) ProtoMessage() {}
 
 func (x *ReinstallProductRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[104]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5223,7 +5511,7 @@ func (x *ReinstallProductRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReinstallProductRequest.ProtoReflect.Descriptor instead.
 func (*ReinstallProductRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{104}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *ReinstallProductRequest) GetTotpCode() string {
@@ -5253,7 +5541,7 @@ type ReinstallProductResponse struct {
 
 func (x *ReinstallProductResponse) Reset() {
 	*x = ReinstallProductResponse{}
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[105]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5265,7 +5553,7 @@ func (x *ReinstallProductResponse) String() string {
 func (*ReinstallProductResponse) ProtoMessage() {}
 
 func (x *ReinstallProductResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[105]
+	mi := &file_sneakers_appliance_access_v1_access_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5278,7 +5566,7 @@ func (x *ReinstallProductResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReinstallProductResponse.ProtoReflect.Descriptor instead.
 func (*ReinstallProductResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{105}
+	return file_sneakers_appliance_access_v1_access_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *ReinstallProductResponse) GetVersion() string {
@@ -5299,7 +5587,7 @@ var File_sneakers_appliance_access_v1_access_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\n" +
-	")sneakers/appliance/access/v1/access.proto\x12\x1csneakers.appliance.access.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%sneakers/appliance/netd/v1/netd.proto\x1a*sneakers/appliance/osadmin/v1/access.proto\x1a-sneakers/appliance/osadmin/v1/elevation.proto\x1a'sneakers/appliance/osadmin/v1/mcp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a+sneakers/appliance/osadmin/v1/product.proto\x1a)sneakers/appliance/osadmin/v1/setup.proto\x1a*sneakers/appliance/osadmin/v1/status.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\x12\n" +
+	")sneakers/appliance/access/v1/access.proto\x12\x1csneakers.appliance.access.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%sneakers/appliance/netd/v1/netd.proto\x1a*sneakers/appliance/osadmin/v1/access.proto\x1a-sneakers/appliance/osadmin/v1/elevation.proto\x1a'sneakers/appliance/osadmin/v1/mcp.proto\x1a+sneakers/appliance/osadmin/v1/network.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a+sneakers/appliance/osadmin/v1/product.proto\x1a)sneakers/appliance/osadmin/v1/setup.proto\x1a*sneakers/appliance/osadmin/v1/status.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\x12\n" +
 	"\x10GetStatusRequest\"]\n" +
 	"\x11GetStatusResponse\x12H\n" +
 	"\x06status\x18\x01 \x01(\v20.sneakers.appliance.osadmin.v1.GetStatusResponseR\x06status\"\x13\n" +
@@ -5341,17 +5629,32 @@ const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\x05label\x18\x02 \x01(\tR\x05label\"g\n" +
 	"\x16AddRecoveryKeyResponse\x12M\n" +
 	"\frecovery_key\x18\x01 \x01(\v2*.sneakers.appliance.osadmin.v1.RecoveryKeyR\vrecoveryKey\"\x13\n" +
-	"\x11GetNetworkRequest\"\xa8\x01\n" +
+	"\x11GetNetworkRequest\"\xd5\x02\n" +
 	"\x12GetNetworkResponse\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\x121\n" +
 	"\x14management_addresses\x18\x02 \x03(\tR\x13managementAddresses\x12\x1d\n" +
 	"\n" +
-	"ntp_synced\x18\x03 \x01(\bR\tntpSynced\"U\n" +
+	"ntp_synced\x18\x03 \x01(\bR\tntpSynced\x12<\n" +
+	"\x06staged\x18\x04 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\x06staged\x12\x1b\n" +
+	"\tstaged_id\x18\x05 \x01(\tR\bstagedId\x12P\n" +
+	"\rstaged_review\x18\x06 \x01(\v2+.sneakers.appliance.osadmin.v1.StagedReviewR\fstagedReview\"U\n" +
 	"\x11SetNetworkRequest\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"\\\n" +
 	"\x12SetNetworkResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x120\n" +
-	"\x14revert_after_seconds\x18\x02 \x01(\x05R\x12revertAfterSeconds\"-\n" +
+	"\x14revert_after_seconds\x18\x02 \x01(\x05R\x12revertAfterSeconds\"W\n" +
+	"\x13StageNetworkRequest\x12@\n" +
+	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"x\n" +
+	"\x14StageNetworkResponse\x12\x1b\n" +
+	"\tstaged_id\x18\x01 \x01(\tR\bstagedId\x12C\n" +
+	"\x06review\x18\x02 \x01(\v2+.sneakers.appliance.osadmin.v1.StagedReviewR\x06review\"\x1d\n" +
+	"\x1bDiscardStagedNetworkRequest\"\x1e\n" +
+	"\x1cDiscardStagedNetworkResponse\"3\n" +
+	"\x14CommitNetworkRequest\x12\x1b\n" +
+	"\tstaged_id\x18\x01 \x01(\tR\bstagedId\"\x85\x01\n" +
+	"\x15CommitNetworkResponse\x12'\n" +
+	"\x0ftested_gateways\x18\x01 \x03(\tR\x0etestedGateways\x12C\n" +
+	"\x06review\x18\x02 \x01(\v2+.sneakers.appliance.osadmin.v1.StagedReviewR\x06review\"-\n" +
 	"\x15ConfirmNetworkRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"\x18\n" +
 	"\x16ConfirmNetworkResponse\"\x17\n" +
@@ -5609,12 +5912,15 @@ const file_sneakers_appliance_access_v1_access_proto_rawDesc = "" +
 	"\x10SetUpdateChannel\x125.sneakers.appliance.access.v1.SetUpdateChannelRequest\x1a6.sneakers.appliance.access.v1.SetUpdateChannelResponse\x12r\n" +
 	"\vCleanUpDisk\x120.sneakers.appliance.access.v1.CleanUpDiskRequest\x1a1.sneakers.appliance.access.v1.CleanUpDiskResponse\x12u\n" +
 	"\fResetProduct\x121.sneakers.appliance.access.v1.ResetProductRequest\x1a2.sneakers.appliance.access.v1.ResetProductResponse\x12\x81\x01\n" +
-	"\x10ReinstallProduct\x125.sneakers.appliance.access.v1.ReinstallProductRequest\x1a6.sneakers.appliance.access.v1.ReinstallProductResponse2\xf1\x03\n" +
+	"\x10ReinstallProduct\x125.sneakers.appliance.access.v1.ReinstallProductRequest\x1a6.sneakers.appliance.access.v1.ReinstallProductResponse2\xf2\x06\n" +
 	"\x0eNetworkService\x12t\n" +
 	"\n" +
 	"GetNetwork\x12/.sneakers.appliance.access.v1.GetNetworkRequest\x1a0.sneakers.appliance.access.v1.GetNetworkResponse\"\x03\x90\x02\x01\x12o\n" +
 	"\n" +
-	"SetNetwork\x12/.sneakers.appliance.access.v1.SetNetworkRequest\x1a0.sneakers.appliance.access.v1.SetNetworkResponse\x12{\n" +
+	"SetNetwork\x12/.sneakers.appliance.access.v1.SetNetworkRequest\x1a0.sneakers.appliance.access.v1.SetNetworkResponse\x12u\n" +
+	"\fStageNetwork\x121.sneakers.appliance.access.v1.StageNetworkRequest\x1a2.sneakers.appliance.access.v1.StageNetworkResponse\x12\x8d\x01\n" +
+	"\x14DiscardStagedNetwork\x129.sneakers.appliance.access.v1.DiscardStagedNetworkRequest\x1a:.sneakers.appliance.access.v1.DiscardStagedNetworkResponse\x12x\n" +
+	"\rCommitNetwork\x122.sneakers.appliance.access.v1.CommitNetworkRequest\x1a3.sneakers.appliance.access.v1.CommitNetworkResponse\x12{\n" +
 	"\x0eConfirmNetwork\x123.sneakers.appliance.access.v1.ConfirmNetworkRequest\x1a4.sneakers.appliance.access.v1.ConfirmNetworkResponse\x12{\n" +
 	"\x0eResetAllowList\x123.sneakers.appliance.access.v1.ResetAllowListRequest\x1a4.sneakers.appliance.access.v1.ResetAllowListResponse2\x9e\t\n" +
 	"\fSetupService\x12n\n" +
@@ -5669,7 +5975,7 @@ func file_sneakers_appliance_access_v1_access_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_access_v1_access_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sneakers_appliance_access_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 106)
+var file_sneakers_appliance_access_v1_access_proto_msgTypes = make([]protoimpl.MessageInfo, 112)
 var file_sneakers_appliance_access_v1_access_proto_goTypes = []any{
 	(SetupState)(0),                         // 0: sneakers.appliance.access.v1.SetupState
 	(*GetStatusRequest)(nil),                // 1: sneakers.appliance.access.v1.GetStatusRequest
@@ -5692,265 +5998,283 @@ var file_sneakers_appliance_access_v1_access_proto_goTypes = []any{
 	(*GetNetworkResponse)(nil),              // 18: sneakers.appliance.access.v1.GetNetworkResponse
 	(*SetNetworkRequest)(nil),               // 19: sneakers.appliance.access.v1.SetNetworkRequest
 	(*SetNetworkResponse)(nil),              // 20: sneakers.appliance.access.v1.SetNetworkResponse
-	(*ConfirmNetworkRequest)(nil),           // 21: sneakers.appliance.access.v1.ConfirmNetworkRequest
-	(*ConfirmNetworkResponse)(nil),          // 22: sneakers.appliance.access.v1.ConfirmNetworkResponse
-	(*ResetAllowListRequest)(nil),           // 23: sneakers.appliance.access.v1.ResetAllowListRequest
-	(*ResetAllowListResponse)(nil),          // 24: sneakers.appliance.access.v1.ResetAllowListResponse
-	(*GetSetupRequest)(nil),                 // 25: sneakers.appliance.access.v1.GetSetupRequest
-	(*GetSetupResponse)(nil),                // 26: sneakers.appliance.access.v1.GetSetupResponse
-	(*SetRecoveryKeyRequest)(nil),           // 27: sneakers.appliance.access.v1.SetRecoveryKeyRequest
-	(*SetRecoveryKeyResponse)(nil),          // 28: sneakers.appliance.access.v1.SetRecoveryKeyResponse
-	(*AcknowledgeSingleAdminRequest)(nil),   // 29: sneakers.appliance.access.v1.AcknowledgeSingleAdminRequest
-	(*AcknowledgeSingleAdminResponse)(nil),  // 30: sneakers.appliance.access.v1.AcknowledgeSingleAdminResponse
-	(*CompleteRequest)(nil),                 // 31: sneakers.appliance.access.v1.CompleteRequest
-	(*CompleteResponse)(nil),                // 32: sneakers.appliance.access.v1.CompleteResponse
-	(*RequestElevationRequest)(nil),         // 33: sneakers.appliance.access.v1.RequestElevationRequest
-	(*RequestElevationResponse)(nil),        // 34: sneakers.appliance.access.v1.RequestElevationResponse
-	(*ListElevationsRequest)(nil),           // 35: sneakers.appliance.access.v1.ListElevationsRequest
-	(*ListElevationsResponse)(nil),          // 36: sneakers.appliance.access.v1.ListElevationsResponse
-	(*GetElevationCertificateRequest)(nil),  // 37: sneakers.appliance.access.v1.GetElevationCertificateRequest
-	(*GetElevationCertificateResponse)(nil), // 38: sneakers.appliance.access.v1.GetElevationCertificateResponse
-	(*WithdrawElevationRequest)(nil),        // 39: sneakers.appliance.access.v1.WithdrawElevationRequest
-	(*WithdrawElevationResponse)(nil),       // 40: sneakers.appliance.access.v1.WithdrawElevationResponse
-	(*ApproveElevationRequest)(nil),         // 41: sneakers.appliance.access.v1.ApproveElevationRequest
-	(*ApproveElevationResponse)(nil),        // 42: sneakers.appliance.access.v1.ApproveElevationResponse
-	(*DenyElevationRequest)(nil),            // 43: sneakers.appliance.access.v1.DenyElevationRequest
-	(*DenyElevationResponse)(nil),           // 44: sneakers.appliance.access.v1.DenyElevationResponse
-	(*TerminateElevationRequest)(nil),       // 45: sneakers.appliance.access.v1.TerminateElevationRequest
-	(*TerminateElevationResponse)(nil),      // 46: sneakers.appliance.access.v1.TerminateElevationResponse
-	(*BeginElevatedSessionRequest)(nil),     // 47: sneakers.appliance.access.v1.BeginElevatedSessionRequest
-	(*BeginElevatedSessionResponse)(nil),    // 48: sneakers.appliance.access.v1.BeginElevatedSessionResponse
-	(*EndElevatedSessionRequest)(nil),       // 49: sneakers.appliance.access.v1.EndElevatedSessionRequest
-	(*EndElevatedSessionResponse)(nil),      // 50: sneakers.appliance.access.v1.EndElevatedSessionResponse
-	(*Enrolment)(nil),                       // 51: sneakers.appliance.access.v1.Enrolment
-	(*EnrolmentKey)(nil),                    // 52: sneakers.appliance.access.v1.EnrolmentKey
-	(*OpenEnrolmentRequest)(nil),            // 53: sneakers.appliance.access.v1.OpenEnrolmentRequest
-	(*OpenEnrolmentResponse)(nil),           // 54: sneakers.appliance.access.v1.OpenEnrolmentResponse
-	(*GetEnrolmentRequest)(nil),             // 55: sneakers.appliance.access.v1.GetEnrolmentRequest
-	(*GetEnrolmentResponse)(nil),            // 56: sneakers.appliance.access.v1.GetEnrolmentResponse
-	(*AcceptEnrolmentKeyRequest)(nil),       // 57: sneakers.appliance.access.v1.AcceptEnrolmentKeyRequest
-	(*AcceptEnrolmentKeyResponse)(nil),      // 58: sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse
-	(*RejectEnrolmentKeyRequest)(nil),       // 59: sneakers.appliance.access.v1.RejectEnrolmentKeyRequest
-	(*RejectEnrolmentKeyResponse)(nil),      // 60: sneakers.appliance.access.v1.RejectEnrolmentKeyResponse
-	(*CloseEnrolmentRequest)(nil),           // 61: sneakers.appliance.access.v1.CloseEnrolmentRequest
-	(*OfferEnrolmentKeyRequest)(nil),        // 62: sneakers.appliance.access.v1.OfferEnrolmentKeyRequest
-	(*OfferEnrolmentKeyResponse)(nil),       // 63: sneakers.appliance.access.v1.OfferEnrolmentKeyResponse
-	(*CloseEnrolmentResponse)(nil),          // 64: sneakers.appliance.access.v1.CloseEnrolmentResponse
-	(*SubmitEnrolmentCodeRequest)(nil),      // 65: sneakers.appliance.access.v1.SubmitEnrolmentCodeRequest
-	(*SubmitEnrolmentCodeResponse)(nil),     // 66: sneakers.appliance.access.v1.SubmitEnrolmentCodeResponse
-	(*GetEnrolmentKeyRequest)(nil),          // 67: sneakers.appliance.access.v1.GetEnrolmentKeyRequest
-	(*GetEnrolmentKeyResponse)(nil),         // 68: sneakers.appliance.access.v1.GetEnrolmentKeyResponse
-	(*GetBindingRequest)(nil),               // 69: sneakers.appliance.access.v1.GetBindingRequest
-	(*GetBindingResponse)(nil),              // 70: sneakers.appliance.access.v1.GetBindingResponse
-	(*ConsoleInfo)(nil),                     // 71: sneakers.appliance.access.v1.ConsoleInfo
-	(*RecoverAccess)(nil),                   // 72: sneakers.appliance.access.v1.RecoverAccess
-	(*GetConsoleInfoRequest)(nil),           // 73: sneakers.appliance.access.v1.GetConsoleInfoRequest
-	(*GetConsoleInfoResponse)(nil),          // 74: sneakers.appliance.access.v1.GetConsoleInfoResponse
-	(*WatchConsoleInfoRequest)(nil),         // 75: sneakers.appliance.access.v1.WatchConsoleInfoRequest
-	(*WatchConsoleInfoResponse)(nil),        // 76: sneakers.appliance.access.v1.WatchConsoleInfoResponse
-	(*ResetSetupCodeRequest)(nil),           // 77: sneakers.appliance.access.v1.ResetSetupCodeRequest
-	(*ResetSetupCodeResponse)(nil),          // 78: sneakers.appliance.access.v1.ResetSetupCodeResponse
-	(*BeginRecoverAccessRequest)(nil),       // 79: sneakers.appliance.access.v1.BeginRecoverAccessRequest
-	(*BeginRecoverAccessResponse)(nil),      // 80: sneakers.appliance.access.v1.BeginRecoverAccessResponse
-	(*CancelRecoverAccessRequest)(nil),      // 81: sneakers.appliance.access.v1.CancelRecoverAccessRequest
-	(*CancelRecoverAccessResponse)(nil),     // 82: sneakers.appliance.access.v1.CancelRecoverAccessResponse
-	(*BeginRootShellRequest)(nil),           // 83: sneakers.appliance.access.v1.BeginRootShellRequest
-	(*BeginRootShellResponse)(nil),          // 84: sneakers.appliance.access.v1.BeginRootShellResponse
-	(*OpenRootShellRequest)(nil),            // 85: sneakers.appliance.access.v1.OpenRootShellRequest
-	(*OpenRootShellResponse)(nil),           // 86: sneakers.appliance.access.v1.OpenRootShellResponse
-	(*VerifyTotpRequest)(nil),               // 87: sneakers.appliance.access.v1.VerifyTotpRequest
-	(*VerifyTotpResponse)(nil),              // 88: sneakers.appliance.access.v1.VerifyTotpResponse
-	(*EndSshLoginRequest)(nil),              // 89: sneakers.appliance.access.v1.EndSshLoginRequest
-	(*EndSshLoginResponse)(nil),             // 90: sneakers.appliance.access.v1.EndSshLoginResponse
-	(*GetExposedValueRequest)(nil),          // 91: sneakers.appliance.access.v1.GetExposedValueRequest
-	(*GetExposedValueResponse)(nil),         // 92: sneakers.appliance.access.v1.GetExposedValueResponse
-	(*GetMcpRequest)(nil),                   // 93: sneakers.appliance.access.v1.GetMcpRequest
-	(*GetMcpResponse)(nil),                  // 94: sneakers.appliance.access.v1.GetMcpResponse
-	(*SetMcpRequest)(nil),                   // 95: sneakers.appliance.access.v1.SetMcpRequest
-	(*SetMcpResponse)(nil),                  // 96: sneakers.appliance.access.v1.SetMcpResponse
-	(*GetUpdateChannelRequest)(nil),         // 97: sneakers.appliance.access.v1.GetUpdateChannelRequest
-	(*GetUpdateChannelResponse)(nil),        // 98: sneakers.appliance.access.v1.GetUpdateChannelResponse
-	(*SetUpdateChannelRequest)(nil),         // 99: sneakers.appliance.access.v1.SetUpdateChannelRequest
-	(*SetUpdateChannelResponse)(nil),        // 100: sneakers.appliance.access.v1.SetUpdateChannelResponse
-	(*CleanUpDiskRequest)(nil),              // 101: sneakers.appliance.access.v1.CleanUpDiskRequest
-	(*CleanUpDiskResponse)(nil),             // 102: sneakers.appliance.access.v1.CleanUpDiskResponse
-	(*ResetProductRequest)(nil),             // 103: sneakers.appliance.access.v1.ResetProductRequest
-	(*ResetProductResponse)(nil),            // 104: sneakers.appliance.access.v1.ResetProductResponse
-	(*ReinstallProductRequest)(nil),         // 105: sneakers.appliance.access.v1.ReinstallProductRequest
-	(*ReinstallProductResponse)(nil),        // 106: sneakers.appliance.access.v1.ReinstallProductResponse
-	(*v1.GetStatusResponse)(nil),            // 107: sneakers.appliance.osadmin.v1.GetStatusResponse
-	(*v1.Admin)(nil),                        // 108: sneakers.appliance.osadmin.v1.Admin
-	(v1.Role)(0),                            // 109: sneakers.appliance.osadmin.v1.Role
-	(*v1.Invitation)(nil),                   // 110: sneakers.appliance.osadmin.v1.Invitation
-	(*v1.Key)(nil),                          // 111: sneakers.appliance.osadmin.v1.Key
-	(*v1.RecoveryKey)(nil),                  // 112: sneakers.appliance.osadmin.v1.RecoveryKey
-	(*v11.Settings)(nil),                    // 113: sneakers.appliance.netd.v1.Settings
-	(*v1.GetSetupResponse)(nil),             // 114: sneakers.appliance.osadmin.v1.GetSetupResponse
-	(*v1.Elevation)(nil),                    // 115: sneakers.appliance.osadmin.v1.Elevation
-	(*timestamppb.Timestamp)(nil),           // 116: google.protobuf.Timestamp
-	(*v1.HostKey)(nil),                      // 117: sneakers.appliance.osadmin.v1.HostKey
-	(v1.SetupStepKind)(0),                   // 118: sneakers.appliance.osadmin.v1.SetupStepKind
-	(*v1.GetExposedValueResponse)(nil),      // 119: sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	(*v1.GetMcpResponse)(nil),               // 120: sneakers.appliance.osadmin.v1.GetMcpResponse
-	(*v1.UpgradePolicy)(nil),                // 121: sneakers.appliance.osadmin.v1.UpgradePolicy
-	(*v1.MirrorStatus)(nil),                 // 122: sneakers.appliance.osadmin.v1.MirrorStatus
-	(*v1.DiskCleanup)(nil),                  // 123: sneakers.appliance.osadmin.v1.DiskCleanup
-	(*v1.ResetProductResponse)(nil),         // 124: sneakers.appliance.osadmin.v1.ResetProductResponse
+	(*StageNetworkRequest)(nil),             // 21: sneakers.appliance.access.v1.StageNetworkRequest
+	(*StageNetworkResponse)(nil),            // 22: sneakers.appliance.access.v1.StageNetworkResponse
+	(*DiscardStagedNetworkRequest)(nil),     // 23: sneakers.appliance.access.v1.DiscardStagedNetworkRequest
+	(*DiscardStagedNetworkResponse)(nil),    // 24: sneakers.appliance.access.v1.DiscardStagedNetworkResponse
+	(*CommitNetworkRequest)(nil),            // 25: sneakers.appliance.access.v1.CommitNetworkRequest
+	(*CommitNetworkResponse)(nil),           // 26: sneakers.appliance.access.v1.CommitNetworkResponse
+	(*ConfirmNetworkRequest)(nil),           // 27: sneakers.appliance.access.v1.ConfirmNetworkRequest
+	(*ConfirmNetworkResponse)(nil),          // 28: sneakers.appliance.access.v1.ConfirmNetworkResponse
+	(*ResetAllowListRequest)(nil),           // 29: sneakers.appliance.access.v1.ResetAllowListRequest
+	(*ResetAllowListResponse)(nil),          // 30: sneakers.appliance.access.v1.ResetAllowListResponse
+	(*GetSetupRequest)(nil),                 // 31: sneakers.appliance.access.v1.GetSetupRequest
+	(*GetSetupResponse)(nil),                // 32: sneakers.appliance.access.v1.GetSetupResponse
+	(*SetRecoveryKeyRequest)(nil),           // 33: sneakers.appliance.access.v1.SetRecoveryKeyRequest
+	(*SetRecoveryKeyResponse)(nil),          // 34: sneakers.appliance.access.v1.SetRecoveryKeyResponse
+	(*AcknowledgeSingleAdminRequest)(nil),   // 35: sneakers.appliance.access.v1.AcknowledgeSingleAdminRequest
+	(*AcknowledgeSingleAdminResponse)(nil),  // 36: sneakers.appliance.access.v1.AcknowledgeSingleAdminResponse
+	(*CompleteRequest)(nil),                 // 37: sneakers.appliance.access.v1.CompleteRequest
+	(*CompleteResponse)(nil),                // 38: sneakers.appliance.access.v1.CompleteResponse
+	(*RequestElevationRequest)(nil),         // 39: sneakers.appliance.access.v1.RequestElevationRequest
+	(*RequestElevationResponse)(nil),        // 40: sneakers.appliance.access.v1.RequestElevationResponse
+	(*ListElevationsRequest)(nil),           // 41: sneakers.appliance.access.v1.ListElevationsRequest
+	(*ListElevationsResponse)(nil),          // 42: sneakers.appliance.access.v1.ListElevationsResponse
+	(*GetElevationCertificateRequest)(nil),  // 43: sneakers.appliance.access.v1.GetElevationCertificateRequest
+	(*GetElevationCertificateResponse)(nil), // 44: sneakers.appliance.access.v1.GetElevationCertificateResponse
+	(*WithdrawElevationRequest)(nil),        // 45: sneakers.appliance.access.v1.WithdrawElevationRequest
+	(*WithdrawElevationResponse)(nil),       // 46: sneakers.appliance.access.v1.WithdrawElevationResponse
+	(*ApproveElevationRequest)(nil),         // 47: sneakers.appliance.access.v1.ApproveElevationRequest
+	(*ApproveElevationResponse)(nil),        // 48: sneakers.appliance.access.v1.ApproveElevationResponse
+	(*DenyElevationRequest)(nil),            // 49: sneakers.appliance.access.v1.DenyElevationRequest
+	(*DenyElevationResponse)(nil),           // 50: sneakers.appliance.access.v1.DenyElevationResponse
+	(*TerminateElevationRequest)(nil),       // 51: sneakers.appliance.access.v1.TerminateElevationRequest
+	(*TerminateElevationResponse)(nil),      // 52: sneakers.appliance.access.v1.TerminateElevationResponse
+	(*BeginElevatedSessionRequest)(nil),     // 53: sneakers.appliance.access.v1.BeginElevatedSessionRequest
+	(*BeginElevatedSessionResponse)(nil),    // 54: sneakers.appliance.access.v1.BeginElevatedSessionResponse
+	(*EndElevatedSessionRequest)(nil),       // 55: sneakers.appliance.access.v1.EndElevatedSessionRequest
+	(*EndElevatedSessionResponse)(nil),      // 56: sneakers.appliance.access.v1.EndElevatedSessionResponse
+	(*Enrolment)(nil),                       // 57: sneakers.appliance.access.v1.Enrolment
+	(*EnrolmentKey)(nil),                    // 58: sneakers.appliance.access.v1.EnrolmentKey
+	(*OpenEnrolmentRequest)(nil),            // 59: sneakers.appliance.access.v1.OpenEnrolmentRequest
+	(*OpenEnrolmentResponse)(nil),           // 60: sneakers.appliance.access.v1.OpenEnrolmentResponse
+	(*GetEnrolmentRequest)(nil),             // 61: sneakers.appliance.access.v1.GetEnrolmentRequest
+	(*GetEnrolmentResponse)(nil),            // 62: sneakers.appliance.access.v1.GetEnrolmentResponse
+	(*AcceptEnrolmentKeyRequest)(nil),       // 63: sneakers.appliance.access.v1.AcceptEnrolmentKeyRequest
+	(*AcceptEnrolmentKeyResponse)(nil),      // 64: sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse
+	(*RejectEnrolmentKeyRequest)(nil),       // 65: sneakers.appliance.access.v1.RejectEnrolmentKeyRequest
+	(*RejectEnrolmentKeyResponse)(nil),      // 66: sneakers.appliance.access.v1.RejectEnrolmentKeyResponse
+	(*CloseEnrolmentRequest)(nil),           // 67: sneakers.appliance.access.v1.CloseEnrolmentRequest
+	(*OfferEnrolmentKeyRequest)(nil),        // 68: sneakers.appliance.access.v1.OfferEnrolmentKeyRequest
+	(*OfferEnrolmentKeyResponse)(nil),       // 69: sneakers.appliance.access.v1.OfferEnrolmentKeyResponse
+	(*CloseEnrolmentResponse)(nil),          // 70: sneakers.appliance.access.v1.CloseEnrolmentResponse
+	(*SubmitEnrolmentCodeRequest)(nil),      // 71: sneakers.appliance.access.v1.SubmitEnrolmentCodeRequest
+	(*SubmitEnrolmentCodeResponse)(nil),     // 72: sneakers.appliance.access.v1.SubmitEnrolmentCodeResponse
+	(*GetEnrolmentKeyRequest)(nil),          // 73: sneakers.appliance.access.v1.GetEnrolmentKeyRequest
+	(*GetEnrolmentKeyResponse)(nil),         // 74: sneakers.appliance.access.v1.GetEnrolmentKeyResponse
+	(*GetBindingRequest)(nil),               // 75: sneakers.appliance.access.v1.GetBindingRequest
+	(*GetBindingResponse)(nil),              // 76: sneakers.appliance.access.v1.GetBindingResponse
+	(*ConsoleInfo)(nil),                     // 77: sneakers.appliance.access.v1.ConsoleInfo
+	(*RecoverAccess)(nil),                   // 78: sneakers.appliance.access.v1.RecoverAccess
+	(*GetConsoleInfoRequest)(nil),           // 79: sneakers.appliance.access.v1.GetConsoleInfoRequest
+	(*GetConsoleInfoResponse)(nil),          // 80: sneakers.appliance.access.v1.GetConsoleInfoResponse
+	(*WatchConsoleInfoRequest)(nil),         // 81: sneakers.appliance.access.v1.WatchConsoleInfoRequest
+	(*WatchConsoleInfoResponse)(nil),        // 82: sneakers.appliance.access.v1.WatchConsoleInfoResponse
+	(*ResetSetupCodeRequest)(nil),           // 83: sneakers.appliance.access.v1.ResetSetupCodeRequest
+	(*ResetSetupCodeResponse)(nil),          // 84: sneakers.appliance.access.v1.ResetSetupCodeResponse
+	(*BeginRecoverAccessRequest)(nil),       // 85: sneakers.appliance.access.v1.BeginRecoverAccessRequest
+	(*BeginRecoverAccessResponse)(nil),      // 86: sneakers.appliance.access.v1.BeginRecoverAccessResponse
+	(*CancelRecoverAccessRequest)(nil),      // 87: sneakers.appliance.access.v1.CancelRecoverAccessRequest
+	(*CancelRecoverAccessResponse)(nil),     // 88: sneakers.appliance.access.v1.CancelRecoverAccessResponse
+	(*BeginRootShellRequest)(nil),           // 89: sneakers.appliance.access.v1.BeginRootShellRequest
+	(*BeginRootShellResponse)(nil),          // 90: sneakers.appliance.access.v1.BeginRootShellResponse
+	(*OpenRootShellRequest)(nil),            // 91: sneakers.appliance.access.v1.OpenRootShellRequest
+	(*OpenRootShellResponse)(nil),           // 92: sneakers.appliance.access.v1.OpenRootShellResponse
+	(*VerifyTotpRequest)(nil),               // 93: sneakers.appliance.access.v1.VerifyTotpRequest
+	(*VerifyTotpResponse)(nil),              // 94: sneakers.appliance.access.v1.VerifyTotpResponse
+	(*EndSshLoginRequest)(nil),              // 95: sneakers.appliance.access.v1.EndSshLoginRequest
+	(*EndSshLoginResponse)(nil),             // 96: sneakers.appliance.access.v1.EndSshLoginResponse
+	(*GetExposedValueRequest)(nil),          // 97: sneakers.appliance.access.v1.GetExposedValueRequest
+	(*GetExposedValueResponse)(nil),         // 98: sneakers.appliance.access.v1.GetExposedValueResponse
+	(*GetMcpRequest)(nil),                   // 99: sneakers.appliance.access.v1.GetMcpRequest
+	(*GetMcpResponse)(nil),                  // 100: sneakers.appliance.access.v1.GetMcpResponse
+	(*SetMcpRequest)(nil),                   // 101: sneakers.appliance.access.v1.SetMcpRequest
+	(*SetMcpResponse)(nil),                  // 102: sneakers.appliance.access.v1.SetMcpResponse
+	(*GetUpdateChannelRequest)(nil),         // 103: sneakers.appliance.access.v1.GetUpdateChannelRequest
+	(*GetUpdateChannelResponse)(nil),        // 104: sneakers.appliance.access.v1.GetUpdateChannelResponse
+	(*SetUpdateChannelRequest)(nil),         // 105: sneakers.appliance.access.v1.SetUpdateChannelRequest
+	(*SetUpdateChannelResponse)(nil),        // 106: sneakers.appliance.access.v1.SetUpdateChannelResponse
+	(*CleanUpDiskRequest)(nil),              // 107: sneakers.appliance.access.v1.CleanUpDiskRequest
+	(*CleanUpDiskResponse)(nil),             // 108: sneakers.appliance.access.v1.CleanUpDiskResponse
+	(*ResetProductRequest)(nil),             // 109: sneakers.appliance.access.v1.ResetProductRequest
+	(*ResetProductResponse)(nil),            // 110: sneakers.appliance.access.v1.ResetProductResponse
+	(*ReinstallProductRequest)(nil),         // 111: sneakers.appliance.access.v1.ReinstallProductRequest
+	(*ReinstallProductResponse)(nil),        // 112: sneakers.appliance.access.v1.ReinstallProductResponse
+	(*v1.GetStatusResponse)(nil),            // 113: sneakers.appliance.osadmin.v1.GetStatusResponse
+	(*v1.Admin)(nil),                        // 114: sneakers.appliance.osadmin.v1.Admin
+	(v1.Role)(0),                            // 115: sneakers.appliance.osadmin.v1.Role
+	(*v1.Invitation)(nil),                   // 116: sneakers.appliance.osadmin.v1.Invitation
+	(*v1.Key)(nil),                          // 117: sneakers.appliance.osadmin.v1.Key
+	(*v1.RecoveryKey)(nil),                  // 118: sneakers.appliance.osadmin.v1.RecoveryKey
+	(*v11.Settings)(nil),                    // 119: sneakers.appliance.netd.v1.Settings
+	(*v1.StagedReview)(nil),                 // 120: sneakers.appliance.osadmin.v1.StagedReview
+	(*v1.GetSetupResponse)(nil),             // 121: sneakers.appliance.osadmin.v1.GetSetupResponse
+	(*v1.Elevation)(nil),                    // 122: sneakers.appliance.osadmin.v1.Elevation
+	(*timestamppb.Timestamp)(nil),           // 123: google.protobuf.Timestamp
+	(*v1.HostKey)(nil),                      // 124: sneakers.appliance.osadmin.v1.HostKey
+	(v1.SetupStepKind)(0),                   // 125: sneakers.appliance.osadmin.v1.SetupStepKind
+	(*v1.GetExposedValueResponse)(nil),      // 126: sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	(*v1.GetMcpResponse)(nil),               // 127: sneakers.appliance.osadmin.v1.GetMcpResponse
+	(*v1.UpgradePolicy)(nil),                // 128: sneakers.appliance.osadmin.v1.UpgradePolicy
+	(*v1.MirrorStatus)(nil),                 // 129: sneakers.appliance.osadmin.v1.MirrorStatus
+	(*v1.DiskCleanup)(nil),                  // 130: sneakers.appliance.osadmin.v1.DiskCleanup
+	(*v1.ResetProductResponse)(nil),         // 131: sneakers.appliance.osadmin.v1.ResetProductResponse
 }
 var file_sneakers_appliance_access_v1_access_proto_depIdxs = []int32{
-	107, // 0: sneakers.appliance.access.v1.GetStatusResponse.status:type_name -> sneakers.appliance.osadmin.v1.GetStatusResponse
-	108, // 1: sneakers.appliance.access.v1.ListAdminsResponse.admins:type_name -> sneakers.appliance.osadmin.v1.Admin
-	109, // 2: sneakers.appliance.access.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	108, // 3: sneakers.appliance.access.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
-	110, // 4: sneakers.appliance.access.v1.AddAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
-	111, // 5: sneakers.appliance.access.v1.ListKeysResponse.keys:type_name -> sneakers.appliance.osadmin.v1.Key
-	111, // 6: sneakers.appliance.access.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
-	112, // 7: sneakers.appliance.access.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	113, // 8: sneakers.appliance.access.v1.GetNetworkResponse.settings:type_name -> sneakers.appliance.netd.v1.Settings
-	113, // 9: sneakers.appliance.access.v1.SetNetworkRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
-	114, // 10: sneakers.appliance.access.v1.GetSetupResponse.setup:type_name -> sneakers.appliance.osadmin.v1.GetSetupResponse
-	112, // 11: sneakers.appliance.access.v1.SetRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	115, // 12: sneakers.appliance.access.v1.RequestElevationResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	115, // 13: sneakers.appliance.access.v1.ListElevationsResponse.elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	116, // 14: sneakers.appliance.access.v1.GetElevationCertificateResponse.valid_before:type_name -> google.protobuf.Timestamp
-	115, // 15: sneakers.appliance.access.v1.BeginElevatedSessionResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
-	116, // 16: sneakers.appliance.access.v1.BeginElevatedSessionResponse.ends:type_name -> google.protobuf.Timestamp
-	116, // 17: sneakers.appliance.access.v1.Enrolment.opened:type_name -> google.protobuf.Timestamp
-	116, // 18: sneakers.appliance.access.v1.Enrolment.idle_until:type_name -> google.protobuf.Timestamp
-	117, // 19: sneakers.appliance.access.v1.Enrolment.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
-	52,  // 20: sneakers.appliance.access.v1.Enrolment.keys:type_name -> sneakers.appliance.access.v1.EnrolmentKey
-	51,  // 21: sneakers.appliance.access.v1.OpenEnrolmentResponse.enrolment:type_name -> sneakers.appliance.access.v1.Enrolment
-	51,  // 22: sneakers.appliance.access.v1.GetEnrolmentResponse.enrolment:type_name -> sneakers.appliance.access.v1.Enrolment
-	111, // 23: sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
-	52,  // 24: sneakers.appliance.access.v1.OfferEnrolmentKeyResponse.key:type_name -> sneakers.appliance.access.v1.EnrolmentKey
-	52,  // 25: sneakers.appliance.access.v1.GetEnrolmentKeyResponse.key:type_name -> sneakers.appliance.access.v1.EnrolmentKey
-	0,   // 26: sneakers.appliance.access.v1.ConsoleInfo.state:type_name -> sneakers.appliance.access.v1.SetupState
-	116, // 27: sneakers.appliance.access.v1.ConsoleInfo.code_expires:type_name -> google.protobuf.Timestamp
-	116, // 28: sneakers.appliance.access.v1.ConsoleInfo.setup_started:type_name -> google.protobuf.Timestamp
-	118, // 29: sneakers.appliance.access.v1.ConsoleInfo.setup_step_kind:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
-	117, // 30: sneakers.appliance.access.v1.ConsoleInfo.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
-	72,  // 31: sneakers.appliance.access.v1.ConsoleInfo.recover:type_name -> sneakers.appliance.access.v1.RecoverAccess
-	116, // 32: sneakers.appliance.access.v1.ConsoleInfo.updated:type_name -> google.protobuf.Timestamp
-	116, // 33: sneakers.appliance.access.v1.RecoverAccess.expires:type_name -> google.protobuf.Timestamp
-	71,  // 34: sneakers.appliance.access.v1.GetConsoleInfoResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
-	71,  // 35: sneakers.appliance.access.v1.WatchConsoleInfoResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
-	71,  // 36: sneakers.appliance.access.v1.ResetSetupCodeResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
-	72,  // 37: sneakers.appliance.access.v1.BeginRecoverAccessResponse.recover:type_name -> sneakers.appliance.access.v1.RecoverAccess
-	116, // 38: sneakers.appliance.access.v1.BeginRootShellResponse.expires:type_name -> google.protobuf.Timestamp
-	109, // 39: sneakers.appliance.access.v1.VerifyTotpResponse.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	119, // 40: sneakers.appliance.access.v1.GetExposedValueResponse.value:type_name -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	120, // 41: sneakers.appliance.access.v1.GetMcpResponse.mcp:type_name -> sneakers.appliance.osadmin.v1.GetMcpResponse
-	121, // 42: sneakers.appliance.access.v1.GetUpdateChannelResponse.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
-	122, // 43: sneakers.appliance.access.v1.GetUpdateChannelResponse.mirror_status:type_name -> sneakers.appliance.osadmin.v1.MirrorStatus
-	123, // 44: sneakers.appliance.access.v1.CleanUpDiskResponse.cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
-	124, // 45: sneakers.appliance.access.v1.ResetProductResponse.result:type_name -> sneakers.appliance.osadmin.v1.ResetProductResponse
-	1,   // 46: sneakers.appliance.access.v1.AccessService.GetStatus:input_type -> sneakers.appliance.access.v1.GetStatusRequest
-	3,   // 47: sneakers.appliance.access.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.access.v1.ListAdminsRequest
-	5,   // 48: sneakers.appliance.access.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.access.v1.AddAdminRequest
-	7,   // 49: sneakers.appliance.access.v1.AccessService.RemoveAdmin:input_type -> sneakers.appliance.access.v1.RemoveAdminRequest
-	9,   // 50: sneakers.appliance.access.v1.AccessService.ListKeys:input_type -> sneakers.appliance.access.v1.ListKeysRequest
-	11,  // 51: sneakers.appliance.access.v1.AccessService.AddKey:input_type -> sneakers.appliance.access.v1.AddKeyRequest
-	13,  // 52: sneakers.appliance.access.v1.AccessService.RemoveKey:input_type -> sneakers.appliance.access.v1.RemoveKeyRequest
-	15,  // 53: sneakers.appliance.access.v1.AccessService.AddRecoveryKey:input_type -> sneakers.appliance.access.v1.AddRecoveryKeyRequest
-	91,  // 54: sneakers.appliance.access.v1.AccessService.GetExposedValue:input_type -> sneakers.appliance.access.v1.GetExposedValueRequest
-	93,  // 55: sneakers.appliance.access.v1.AccessService.GetMcp:input_type -> sneakers.appliance.access.v1.GetMcpRequest
-	95,  // 56: sneakers.appliance.access.v1.AccessService.SetMcp:input_type -> sneakers.appliance.access.v1.SetMcpRequest
-	97,  // 57: sneakers.appliance.access.v1.AccessService.GetUpdateChannel:input_type -> sneakers.appliance.access.v1.GetUpdateChannelRequest
-	99,  // 58: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:input_type -> sneakers.appliance.access.v1.SetUpdateChannelRequest
-	101, // 59: sneakers.appliance.access.v1.AccessService.CleanUpDisk:input_type -> sneakers.appliance.access.v1.CleanUpDiskRequest
-	103, // 60: sneakers.appliance.access.v1.AccessService.ResetProduct:input_type -> sneakers.appliance.access.v1.ResetProductRequest
-	105, // 61: sneakers.appliance.access.v1.AccessService.ReinstallProduct:input_type -> sneakers.appliance.access.v1.ReinstallProductRequest
-	17,  // 62: sneakers.appliance.access.v1.NetworkService.GetNetwork:input_type -> sneakers.appliance.access.v1.GetNetworkRequest
-	19,  // 63: sneakers.appliance.access.v1.NetworkService.SetNetwork:input_type -> sneakers.appliance.access.v1.SetNetworkRequest
-	21,  // 64: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:input_type -> sneakers.appliance.access.v1.ConfirmNetworkRequest
-	23,  // 65: sneakers.appliance.access.v1.NetworkService.ResetAllowList:input_type -> sneakers.appliance.access.v1.ResetAllowListRequest
-	25,  // 66: sneakers.appliance.access.v1.SetupService.GetSetup:input_type -> sneakers.appliance.access.v1.GetSetupRequest
-	27,  // 67: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:input_type -> sneakers.appliance.access.v1.SetRecoveryKeyRequest
-	29,  // 68: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminRequest
-	31,  // 69: sneakers.appliance.access.v1.SetupService.Complete:input_type -> sneakers.appliance.access.v1.CompleteRequest
-	73,  // 70: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:input_type -> sneakers.appliance.access.v1.GetConsoleInfoRequest
-	75,  // 71: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:input_type -> sneakers.appliance.access.v1.WatchConsoleInfoRequest
-	77,  // 72: sneakers.appliance.access.v1.SetupService.ResetSetupCode:input_type -> sneakers.appliance.access.v1.ResetSetupCodeRequest
-	79,  // 73: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:input_type -> sneakers.appliance.access.v1.BeginRecoverAccessRequest
-	81,  // 74: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:input_type -> sneakers.appliance.access.v1.CancelRecoverAccessRequest
-	83,  // 75: sneakers.appliance.access.v1.ElevationService.BeginRootShell:input_type -> sneakers.appliance.access.v1.BeginRootShellRequest
-	85,  // 76: sneakers.appliance.access.v1.ElevationService.OpenRootShell:input_type -> sneakers.appliance.access.v1.OpenRootShellRequest
-	33,  // 77: sneakers.appliance.access.v1.ElevationService.RequestElevation:input_type -> sneakers.appliance.access.v1.RequestElevationRequest
-	35,  // 78: sneakers.appliance.access.v1.ElevationService.ListElevations:input_type -> sneakers.appliance.access.v1.ListElevationsRequest
-	37,  // 79: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:input_type -> sneakers.appliance.access.v1.GetElevationCertificateRequest
-	39,  // 80: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:input_type -> sneakers.appliance.access.v1.WithdrawElevationRequest
-	41,  // 81: sneakers.appliance.access.v1.ElevationService.ApproveElevation:input_type -> sneakers.appliance.access.v1.ApproveElevationRequest
-	43,  // 82: sneakers.appliance.access.v1.ElevationService.DenyElevation:input_type -> sneakers.appliance.access.v1.DenyElevationRequest
-	45,  // 83: sneakers.appliance.access.v1.ElevationService.TerminateElevation:input_type -> sneakers.appliance.access.v1.TerminateElevationRequest
-	47,  // 84: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:input_type -> sneakers.appliance.access.v1.BeginElevatedSessionRequest
-	49,  // 85: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:input_type -> sneakers.appliance.access.v1.EndElevatedSessionRequest
-	53,  // 86: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:input_type -> sneakers.appliance.access.v1.OpenEnrolmentRequest
-	55,  // 87: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:input_type -> sneakers.appliance.access.v1.GetEnrolmentRequest
-	57,  // 88: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:input_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyRequest
-	59,  // 89: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:input_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyRequest
-	61,  // 90: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:input_type -> sneakers.appliance.access.v1.CloseEnrolmentRequest
-	62,  // 91: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:input_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyRequest
-	65,  // 92: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:input_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeRequest
-	67,  // 93: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:input_type -> sneakers.appliance.access.v1.GetEnrolmentKeyRequest
-	87,  // 94: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:input_type -> sneakers.appliance.access.v1.VerifyTotpRequest
-	89,  // 95: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:input_type -> sneakers.appliance.access.v1.EndSshLoginRequest
-	69,  // 96: sneakers.appliance.access.v1.BindingService.GetBinding:input_type -> sneakers.appliance.access.v1.GetBindingRequest
-	2,   // 97: sneakers.appliance.access.v1.AccessService.GetStatus:output_type -> sneakers.appliance.access.v1.GetStatusResponse
-	4,   // 98: sneakers.appliance.access.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.access.v1.ListAdminsResponse
-	6,   // 99: sneakers.appliance.access.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.access.v1.AddAdminResponse
-	8,   // 100: sneakers.appliance.access.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.access.v1.RemoveAdminResponse
-	10,  // 101: sneakers.appliance.access.v1.AccessService.ListKeys:output_type -> sneakers.appliance.access.v1.ListKeysResponse
-	12,  // 102: sneakers.appliance.access.v1.AccessService.AddKey:output_type -> sneakers.appliance.access.v1.AddKeyResponse
-	14,  // 103: sneakers.appliance.access.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.access.v1.RemoveKeyResponse
-	16,  // 104: sneakers.appliance.access.v1.AccessService.AddRecoveryKey:output_type -> sneakers.appliance.access.v1.AddRecoveryKeyResponse
-	92,  // 105: sneakers.appliance.access.v1.AccessService.GetExposedValue:output_type -> sneakers.appliance.access.v1.GetExposedValueResponse
-	94,  // 106: sneakers.appliance.access.v1.AccessService.GetMcp:output_type -> sneakers.appliance.access.v1.GetMcpResponse
-	96,  // 107: sneakers.appliance.access.v1.AccessService.SetMcp:output_type -> sneakers.appliance.access.v1.SetMcpResponse
-	98,  // 108: sneakers.appliance.access.v1.AccessService.GetUpdateChannel:output_type -> sneakers.appliance.access.v1.GetUpdateChannelResponse
-	100, // 109: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:output_type -> sneakers.appliance.access.v1.SetUpdateChannelResponse
-	102, // 110: sneakers.appliance.access.v1.AccessService.CleanUpDisk:output_type -> sneakers.appliance.access.v1.CleanUpDiskResponse
-	104, // 111: sneakers.appliance.access.v1.AccessService.ResetProduct:output_type -> sneakers.appliance.access.v1.ResetProductResponse
-	106, // 112: sneakers.appliance.access.v1.AccessService.ReinstallProduct:output_type -> sneakers.appliance.access.v1.ReinstallProductResponse
-	18,  // 113: sneakers.appliance.access.v1.NetworkService.GetNetwork:output_type -> sneakers.appliance.access.v1.GetNetworkResponse
-	20,  // 114: sneakers.appliance.access.v1.NetworkService.SetNetwork:output_type -> sneakers.appliance.access.v1.SetNetworkResponse
-	22,  // 115: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:output_type -> sneakers.appliance.access.v1.ConfirmNetworkResponse
-	24,  // 116: sneakers.appliance.access.v1.NetworkService.ResetAllowList:output_type -> sneakers.appliance.access.v1.ResetAllowListResponse
-	26,  // 117: sneakers.appliance.access.v1.SetupService.GetSetup:output_type -> sneakers.appliance.access.v1.GetSetupResponse
-	28,  // 118: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:output_type -> sneakers.appliance.access.v1.SetRecoveryKeyResponse
-	30,  // 119: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminResponse
-	32,  // 120: sneakers.appliance.access.v1.SetupService.Complete:output_type -> sneakers.appliance.access.v1.CompleteResponse
-	74,  // 121: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:output_type -> sneakers.appliance.access.v1.GetConsoleInfoResponse
-	76,  // 122: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:output_type -> sneakers.appliance.access.v1.WatchConsoleInfoResponse
-	78,  // 123: sneakers.appliance.access.v1.SetupService.ResetSetupCode:output_type -> sneakers.appliance.access.v1.ResetSetupCodeResponse
-	80,  // 124: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:output_type -> sneakers.appliance.access.v1.BeginRecoverAccessResponse
-	82,  // 125: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:output_type -> sneakers.appliance.access.v1.CancelRecoverAccessResponse
-	84,  // 126: sneakers.appliance.access.v1.ElevationService.BeginRootShell:output_type -> sneakers.appliance.access.v1.BeginRootShellResponse
-	86,  // 127: sneakers.appliance.access.v1.ElevationService.OpenRootShell:output_type -> sneakers.appliance.access.v1.OpenRootShellResponse
-	34,  // 128: sneakers.appliance.access.v1.ElevationService.RequestElevation:output_type -> sneakers.appliance.access.v1.RequestElevationResponse
-	36,  // 129: sneakers.appliance.access.v1.ElevationService.ListElevations:output_type -> sneakers.appliance.access.v1.ListElevationsResponse
-	38,  // 130: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:output_type -> sneakers.appliance.access.v1.GetElevationCertificateResponse
-	40,  // 131: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:output_type -> sneakers.appliance.access.v1.WithdrawElevationResponse
-	42,  // 132: sneakers.appliance.access.v1.ElevationService.ApproveElevation:output_type -> sneakers.appliance.access.v1.ApproveElevationResponse
-	44,  // 133: sneakers.appliance.access.v1.ElevationService.DenyElevation:output_type -> sneakers.appliance.access.v1.DenyElevationResponse
-	46,  // 134: sneakers.appliance.access.v1.ElevationService.TerminateElevation:output_type -> sneakers.appliance.access.v1.TerminateElevationResponse
-	48,  // 135: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:output_type -> sneakers.appliance.access.v1.BeginElevatedSessionResponse
-	50,  // 136: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:output_type -> sneakers.appliance.access.v1.EndElevatedSessionResponse
-	54,  // 137: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:output_type -> sneakers.appliance.access.v1.OpenEnrolmentResponse
-	56,  // 138: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:output_type -> sneakers.appliance.access.v1.GetEnrolmentResponse
-	58,  // 139: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:output_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse
-	60,  // 140: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:output_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyResponse
-	64,  // 141: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:output_type -> sneakers.appliance.access.v1.CloseEnrolmentResponse
-	63,  // 142: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:output_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyResponse
-	66,  // 143: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:output_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeResponse
-	68,  // 144: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:output_type -> sneakers.appliance.access.v1.GetEnrolmentKeyResponse
-	88,  // 145: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:output_type -> sneakers.appliance.access.v1.VerifyTotpResponse
-	90,  // 146: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:output_type -> sneakers.appliance.access.v1.EndSshLoginResponse
-	70,  // 147: sneakers.appliance.access.v1.BindingService.GetBinding:output_type -> sneakers.appliance.access.v1.GetBindingResponse
-	97,  // [97:148] is the sub-list for method output_type
-	46,  // [46:97] is the sub-list for method input_type
-	46,  // [46:46] is the sub-list for extension type_name
-	46,  // [46:46] is the sub-list for extension extendee
-	0,   // [0:46] is the sub-list for field type_name
+	113, // 0: sneakers.appliance.access.v1.GetStatusResponse.status:type_name -> sneakers.appliance.osadmin.v1.GetStatusResponse
+	114, // 1: sneakers.appliance.access.v1.ListAdminsResponse.admins:type_name -> sneakers.appliance.osadmin.v1.Admin
+	115, // 2: sneakers.appliance.access.v1.AddAdminRequest.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	114, // 3: sneakers.appliance.access.v1.AddAdminResponse.admin:type_name -> sneakers.appliance.osadmin.v1.Admin
+	116, // 4: sneakers.appliance.access.v1.AddAdminResponse.invitation:type_name -> sneakers.appliance.osadmin.v1.Invitation
+	117, // 5: sneakers.appliance.access.v1.ListKeysResponse.keys:type_name -> sneakers.appliance.osadmin.v1.Key
+	117, // 6: sneakers.appliance.access.v1.AddKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	118, // 7: sneakers.appliance.access.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	119, // 8: sneakers.appliance.access.v1.GetNetworkResponse.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	119, // 9: sneakers.appliance.access.v1.GetNetworkResponse.staged:type_name -> sneakers.appliance.netd.v1.Settings
+	120, // 10: sneakers.appliance.access.v1.GetNetworkResponse.staged_review:type_name -> sneakers.appliance.osadmin.v1.StagedReview
+	119, // 11: sneakers.appliance.access.v1.SetNetworkRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	119, // 12: sneakers.appliance.access.v1.StageNetworkRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	120, // 13: sneakers.appliance.access.v1.StageNetworkResponse.review:type_name -> sneakers.appliance.osadmin.v1.StagedReview
+	120, // 14: sneakers.appliance.access.v1.CommitNetworkResponse.review:type_name -> sneakers.appliance.osadmin.v1.StagedReview
+	121, // 15: sneakers.appliance.access.v1.GetSetupResponse.setup:type_name -> sneakers.appliance.osadmin.v1.GetSetupResponse
+	118, // 16: sneakers.appliance.access.v1.SetRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	122, // 17: sneakers.appliance.access.v1.RequestElevationResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	122, // 18: sneakers.appliance.access.v1.ListElevationsResponse.elevations:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	123, // 19: sneakers.appliance.access.v1.GetElevationCertificateResponse.valid_before:type_name -> google.protobuf.Timestamp
+	122, // 20: sneakers.appliance.access.v1.BeginElevatedSessionResponse.elevation:type_name -> sneakers.appliance.osadmin.v1.Elevation
+	123, // 21: sneakers.appliance.access.v1.BeginElevatedSessionResponse.ends:type_name -> google.protobuf.Timestamp
+	123, // 22: sneakers.appliance.access.v1.Enrolment.opened:type_name -> google.protobuf.Timestamp
+	123, // 23: sneakers.appliance.access.v1.Enrolment.idle_until:type_name -> google.protobuf.Timestamp
+	124, // 24: sneakers.appliance.access.v1.Enrolment.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
+	58,  // 25: sneakers.appliance.access.v1.Enrolment.keys:type_name -> sneakers.appliance.access.v1.EnrolmentKey
+	57,  // 26: sneakers.appliance.access.v1.OpenEnrolmentResponse.enrolment:type_name -> sneakers.appliance.access.v1.Enrolment
+	57,  // 27: sneakers.appliance.access.v1.GetEnrolmentResponse.enrolment:type_name -> sneakers.appliance.access.v1.Enrolment
+	117, // 28: sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse.key:type_name -> sneakers.appliance.osadmin.v1.Key
+	58,  // 29: sneakers.appliance.access.v1.OfferEnrolmentKeyResponse.key:type_name -> sneakers.appliance.access.v1.EnrolmentKey
+	58,  // 30: sneakers.appliance.access.v1.GetEnrolmentKeyResponse.key:type_name -> sneakers.appliance.access.v1.EnrolmentKey
+	0,   // 31: sneakers.appliance.access.v1.ConsoleInfo.state:type_name -> sneakers.appliance.access.v1.SetupState
+	123, // 32: sneakers.appliance.access.v1.ConsoleInfo.code_expires:type_name -> google.protobuf.Timestamp
+	123, // 33: sneakers.appliance.access.v1.ConsoleInfo.setup_started:type_name -> google.protobuf.Timestamp
+	125, // 34: sneakers.appliance.access.v1.ConsoleInfo.setup_step_kind:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
+	124, // 35: sneakers.appliance.access.v1.ConsoleInfo.host_keys:type_name -> sneakers.appliance.osadmin.v1.HostKey
+	78,  // 36: sneakers.appliance.access.v1.ConsoleInfo.recover:type_name -> sneakers.appliance.access.v1.RecoverAccess
+	123, // 37: sneakers.appliance.access.v1.ConsoleInfo.updated:type_name -> google.protobuf.Timestamp
+	123, // 38: sneakers.appliance.access.v1.RecoverAccess.expires:type_name -> google.protobuf.Timestamp
+	77,  // 39: sneakers.appliance.access.v1.GetConsoleInfoResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
+	77,  // 40: sneakers.appliance.access.v1.WatchConsoleInfoResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
+	77,  // 41: sneakers.appliance.access.v1.ResetSetupCodeResponse.console_info:type_name -> sneakers.appliance.access.v1.ConsoleInfo
+	78,  // 42: sneakers.appliance.access.v1.BeginRecoverAccessResponse.recover:type_name -> sneakers.appliance.access.v1.RecoverAccess
+	123, // 43: sneakers.appliance.access.v1.BeginRootShellResponse.expires:type_name -> google.protobuf.Timestamp
+	115, // 44: sneakers.appliance.access.v1.VerifyTotpResponse.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	126, // 45: sneakers.appliance.access.v1.GetExposedValueResponse.value:type_name -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	127, // 46: sneakers.appliance.access.v1.GetMcpResponse.mcp:type_name -> sneakers.appliance.osadmin.v1.GetMcpResponse
+	128, // 47: sneakers.appliance.access.v1.GetUpdateChannelResponse.policy:type_name -> sneakers.appliance.osadmin.v1.UpgradePolicy
+	129, // 48: sneakers.appliance.access.v1.GetUpdateChannelResponse.mirror_status:type_name -> sneakers.appliance.osadmin.v1.MirrorStatus
+	130, // 49: sneakers.appliance.access.v1.CleanUpDiskResponse.cleanup:type_name -> sneakers.appliance.osadmin.v1.DiskCleanup
+	131, // 50: sneakers.appliance.access.v1.ResetProductResponse.result:type_name -> sneakers.appliance.osadmin.v1.ResetProductResponse
+	1,   // 51: sneakers.appliance.access.v1.AccessService.GetStatus:input_type -> sneakers.appliance.access.v1.GetStatusRequest
+	3,   // 52: sneakers.appliance.access.v1.AccessService.ListAdmins:input_type -> sneakers.appliance.access.v1.ListAdminsRequest
+	5,   // 53: sneakers.appliance.access.v1.AccessService.AddAdmin:input_type -> sneakers.appliance.access.v1.AddAdminRequest
+	7,   // 54: sneakers.appliance.access.v1.AccessService.RemoveAdmin:input_type -> sneakers.appliance.access.v1.RemoveAdminRequest
+	9,   // 55: sneakers.appliance.access.v1.AccessService.ListKeys:input_type -> sneakers.appliance.access.v1.ListKeysRequest
+	11,  // 56: sneakers.appliance.access.v1.AccessService.AddKey:input_type -> sneakers.appliance.access.v1.AddKeyRequest
+	13,  // 57: sneakers.appliance.access.v1.AccessService.RemoveKey:input_type -> sneakers.appliance.access.v1.RemoveKeyRequest
+	15,  // 58: sneakers.appliance.access.v1.AccessService.AddRecoveryKey:input_type -> sneakers.appliance.access.v1.AddRecoveryKeyRequest
+	97,  // 59: sneakers.appliance.access.v1.AccessService.GetExposedValue:input_type -> sneakers.appliance.access.v1.GetExposedValueRequest
+	99,  // 60: sneakers.appliance.access.v1.AccessService.GetMcp:input_type -> sneakers.appliance.access.v1.GetMcpRequest
+	101, // 61: sneakers.appliance.access.v1.AccessService.SetMcp:input_type -> sneakers.appliance.access.v1.SetMcpRequest
+	103, // 62: sneakers.appliance.access.v1.AccessService.GetUpdateChannel:input_type -> sneakers.appliance.access.v1.GetUpdateChannelRequest
+	105, // 63: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:input_type -> sneakers.appliance.access.v1.SetUpdateChannelRequest
+	107, // 64: sneakers.appliance.access.v1.AccessService.CleanUpDisk:input_type -> sneakers.appliance.access.v1.CleanUpDiskRequest
+	109, // 65: sneakers.appliance.access.v1.AccessService.ResetProduct:input_type -> sneakers.appliance.access.v1.ResetProductRequest
+	111, // 66: sneakers.appliance.access.v1.AccessService.ReinstallProduct:input_type -> sneakers.appliance.access.v1.ReinstallProductRequest
+	17,  // 67: sneakers.appliance.access.v1.NetworkService.GetNetwork:input_type -> sneakers.appliance.access.v1.GetNetworkRequest
+	19,  // 68: sneakers.appliance.access.v1.NetworkService.SetNetwork:input_type -> sneakers.appliance.access.v1.SetNetworkRequest
+	21,  // 69: sneakers.appliance.access.v1.NetworkService.StageNetwork:input_type -> sneakers.appliance.access.v1.StageNetworkRequest
+	23,  // 70: sneakers.appliance.access.v1.NetworkService.DiscardStagedNetwork:input_type -> sneakers.appliance.access.v1.DiscardStagedNetworkRequest
+	25,  // 71: sneakers.appliance.access.v1.NetworkService.CommitNetwork:input_type -> sneakers.appliance.access.v1.CommitNetworkRequest
+	27,  // 72: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:input_type -> sneakers.appliance.access.v1.ConfirmNetworkRequest
+	29,  // 73: sneakers.appliance.access.v1.NetworkService.ResetAllowList:input_type -> sneakers.appliance.access.v1.ResetAllowListRequest
+	31,  // 74: sneakers.appliance.access.v1.SetupService.GetSetup:input_type -> sneakers.appliance.access.v1.GetSetupRequest
+	33,  // 75: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:input_type -> sneakers.appliance.access.v1.SetRecoveryKeyRequest
+	35,  // 76: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminRequest
+	37,  // 77: sneakers.appliance.access.v1.SetupService.Complete:input_type -> sneakers.appliance.access.v1.CompleteRequest
+	79,  // 78: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:input_type -> sneakers.appliance.access.v1.GetConsoleInfoRequest
+	81,  // 79: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:input_type -> sneakers.appliance.access.v1.WatchConsoleInfoRequest
+	83,  // 80: sneakers.appliance.access.v1.SetupService.ResetSetupCode:input_type -> sneakers.appliance.access.v1.ResetSetupCodeRequest
+	85,  // 81: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:input_type -> sneakers.appliance.access.v1.BeginRecoverAccessRequest
+	87,  // 82: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:input_type -> sneakers.appliance.access.v1.CancelRecoverAccessRequest
+	89,  // 83: sneakers.appliance.access.v1.ElevationService.BeginRootShell:input_type -> sneakers.appliance.access.v1.BeginRootShellRequest
+	91,  // 84: sneakers.appliance.access.v1.ElevationService.OpenRootShell:input_type -> sneakers.appliance.access.v1.OpenRootShellRequest
+	39,  // 85: sneakers.appliance.access.v1.ElevationService.RequestElevation:input_type -> sneakers.appliance.access.v1.RequestElevationRequest
+	41,  // 86: sneakers.appliance.access.v1.ElevationService.ListElevations:input_type -> sneakers.appliance.access.v1.ListElevationsRequest
+	43,  // 87: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:input_type -> sneakers.appliance.access.v1.GetElevationCertificateRequest
+	45,  // 88: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:input_type -> sneakers.appliance.access.v1.WithdrawElevationRequest
+	47,  // 89: sneakers.appliance.access.v1.ElevationService.ApproveElevation:input_type -> sneakers.appliance.access.v1.ApproveElevationRequest
+	49,  // 90: sneakers.appliance.access.v1.ElevationService.DenyElevation:input_type -> sneakers.appliance.access.v1.DenyElevationRequest
+	51,  // 91: sneakers.appliance.access.v1.ElevationService.TerminateElevation:input_type -> sneakers.appliance.access.v1.TerminateElevationRequest
+	53,  // 92: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:input_type -> sneakers.appliance.access.v1.BeginElevatedSessionRequest
+	55,  // 93: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:input_type -> sneakers.appliance.access.v1.EndElevatedSessionRequest
+	59,  // 94: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:input_type -> sneakers.appliance.access.v1.OpenEnrolmentRequest
+	61,  // 95: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:input_type -> sneakers.appliance.access.v1.GetEnrolmentRequest
+	63,  // 96: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:input_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyRequest
+	65,  // 97: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:input_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyRequest
+	67,  // 98: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:input_type -> sneakers.appliance.access.v1.CloseEnrolmentRequest
+	68,  // 99: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:input_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyRequest
+	71,  // 100: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:input_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeRequest
+	73,  // 101: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:input_type -> sneakers.appliance.access.v1.GetEnrolmentKeyRequest
+	93,  // 102: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:input_type -> sneakers.appliance.access.v1.VerifyTotpRequest
+	95,  // 103: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:input_type -> sneakers.appliance.access.v1.EndSshLoginRequest
+	75,  // 104: sneakers.appliance.access.v1.BindingService.GetBinding:input_type -> sneakers.appliance.access.v1.GetBindingRequest
+	2,   // 105: sneakers.appliance.access.v1.AccessService.GetStatus:output_type -> sneakers.appliance.access.v1.GetStatusResponse
+	4,   // 106: sneakers.appliance.access.v1.AccessService.ListAdmins:output_type -> sneakers.appliance.access.v1.ListAdminsResponse
+	6,   // 107: sneakers.appliance.access.v1.AccessService.AddAdmin:output_type -> sneakers.appliance.access.v1.AddAdminResponse
+	8,   // 108: sneakers.appliance.access.v1.AccessService.RemoveAdmin:output_type -> sneakers.appliance.access.v1.RemoveAdminResponse
+	10,  // 109: sneakers.appliance.access.v1.AccessService.ListKeys:output_type -> sneakers.appliance.access.v1.ListKeysResponse
+	12,  // 110: sneakers.appliance.access.v1.AccessService.AddKey:output_type -> sneakers.appliance.access.v1.AddKeyResponse
+	14,  // 111: sneakers.appliance.access.v1.AccessService.RemoveKey:output_type -> sneakers.appliance.access.v1.RemoveKeyResponse
+	16,  // 112: sneakers.appliance.access.v1.AccessService.AddRecoveryKey:output_type -> sneakers.appliance.access.v1.AddRecoveryKeyResponse
+	98,  // 113: sneakers.appliance.access.v1.AccessService.GetExposedValue:output_type -> sneakers.appliance.access.v1.GetExposedValueResponse
+	100, // 114: sneakers.appliance.access.v1.AccessService.GetMcp:output_type -> sneakers.appliance.access.v1.GetMcpResponse
+	102, // 115: sneakers.appliance.access.v1.AccessService.SetMcp:output_type -> sneakers.appliance.access.v1.SetMcpResponse
+	104, // 116: sneakers.appliance.access.v1.AccessService.GetUpdateChannel:output_type -> sneakers.appliance.access.v1.GetUpdateChannelResponse
+	106, // 117: sneakers.appliance.access.v1.AccessService.SetUpdateChannel:output_type -> sneakers.appliance.access.v1.SetUpdateChannelResponse
+	108, // 118: sneakers.appliance.access.v1.AccessService.CleanUpDisk:output_type -> sneakers.appliance.access.v1.CleanUpDiskResponse
+	110, // 119: sneakers.appliance.access.v1.AccessService.ResetProduct:output_type -> sneakers.appliance.access.v1.ResetProductResponse
+	112, // 120: sneakers.appliance.access.v1.AccessService.ReinstallProduct:output_type -> sneakers.appliance.access.v1.ReinstallProductResponse
+	18,  // 121: sneakers.appliance.access.v1.NetworkService.GetNetwork:output_type -> sneakers.appliance.access.v1.GetNetworkResponse
+	20,  // 122: sneakers.appliance.access.v1.NetworkService.SetNetwork:output_type -> sneakers.appliance.access.v1.SetNetworkResponse
+	22,  // 123: sneakers.appliance.access.v1.NetworkService.StageNetwork:output_type -> sneakers.appliance.access.v1.StageNetworkResponse
+	24,  // 124: sneakers.appliance.access.v1.NetworkService.DiscardStagedNetwork:output_type -> sneakers.appliance.access.v1.DiscardStagedNetworkResponse
+	26,  // 125: sneakers.appliance.access.v1.NetworkService.CommitNetwork:output_type -> sneakers.appliance.access.v1.CommitNetworkResponse
+	28,  // 126: sneakers.appliance.access.v1.NetworkService.ConfirmNetwork:output_type -> sneakers.appliance.access.v1.ConfirmNetworkResponse
+	30,  // 127: sneakers.appliance.access.v1.NetworkService.ResetAllowList:output_type -> sneakers.appliance.access.v1.ResetAllowListResponse
+	32,  // 128: sneakers.appliance.access.v1.SetupService.GetSetup:output_type -> sneakers.appliance.access.v1.GetSetupResponse
+	34,  // 129: sneakers.appliance.access.v1.SetupService.SetRecoveryKey:output_type -> sneakers.appliance.access.v1.SetRecoveryKeyResponse
+	36,  // 130: sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.access.v1.AcknowledgeSingleAdminResponse
+	38,  // 131: sneakers.appliance.access.v1.SetupService.Complete:output_type -> sneakers.appliance.access.v1.CompleteResponse
+	80,  // 132: sneakers.appliance.access.v1.SetupService.GetConsoleInfo:output_type -> sneakers.appliance.access.v1.GetConsoleInfoResponse
+	82,  // 133: sneakers.appliance.access.v1.SetupService.WatchConsoleInfo:output_type -> sneakers.appliance.access.v1.WatchConsoleInfoResponse
+	84,  // 134: sneakers.appliance.access.v1.SetupService.ResetSetupCode:output_type -> sneakers.appliance.access.v1.ResetSetupCodeResponse
+	86,  // 135: sneakers.appliance.access.v1.SetupService.BeginRecoverAccess:output_type -> sneakers.appliance.access.v1.BeginRecoverAccessResponse
+	88,  // 136: sneakers.appliance.access.v1.SetupService.CancelRecoverAccess:output_type -> sneakers.appliance.access.v1.CancelRecoverAccessResponse
+	90,  // 137: sneakers.appliance.access.v1.ElevationService.BeginRootShell:output_type -> sneakers.appliance.access.v1.BeginRootShellResponse
+	92,  // 138: sneakers.appliance.access.v1.ElevationService.OpenRootShell:output_type -> sneakers.appliance.access.v1.OpenRootShellResponse
+	40,  // 139: sneakers.appliance.access.v1.ElevationService.RequestElevation:output_type -> sneakers.appliance.access.v1.RequestElevationResponse
+	42,  // 140: sneakers.appliance.access.v1.ElevationService.ListElevations:output_type -> sneakers.appliance.access.v1.ListElevationsResponse
+	44,  // 141: sneakers.appliance.access.v1.ElevationService.GetElevationCertificate:output_type -> sneakers.appliance.access.v1.GetElevationCertificateResponse
+	46,  // 142: sneakers.appliance.access.v1.ElevationService.WithdrawElevation:output_type -> sneakers.appliance.access.v1.WithdrawElevationResponse
+	48,  // 143: sneakers.appliance.access.v1.ElevationService.ApproveElevation:output_type -> sneakers.appliance.access.v1.ApproveElevationResponse
+	50,  // 144: sneakers.appliance.access.v1.ElevationService.DenyElevation:output_type -> sneakers.appliance.access.v1.DenyElevationResponse
+	52,  // 145: sneakers.appliance.access.v1.ElevationService.TerminateElevation:output_type -> sneakers.appliance.access.v1.TerminateElevationResponse
+	54,  // 146: sneakers.appliance.access.v1.ElevationService.BeginElevatedSession:output_type -> sneakers.appliance.access.v1.BeginElevatedSessionResponse
+	56,  // 147: sneakers.appliance.access.v1.ElevationService.EndElevatedSession:output_type -> sneakers.appliance.access.v1.EndElevatedSessionResponse
+	60,  // 148: sneakers.appliance.access.v1.EnrolmentService.OpenEnrolment:output_type -> sneakers.appliance.access.v1.OpenEnrolmentResponse
+	62,  // 149: sneakers.appliance.access.v1.EnrolmentService.GetEnrolment:output_type -> sneakers.appliance.access.v1.GetEnrolmentResponse
+	64,  // 150: sneakers.appliance.access.v1.EnrolmentService.AcceptEnrolmentKey:output_type -> sneakers.appliance.access.v1.AcceptEnrolmentKeyResponse
+	66,  // 151: sneakers.appliance.access.v1.EnrolmentService.RejectEnrolmentKey:output_type -> sneakers.appliance.access.v1.RejectEnrolmentKeyResponse
+	70,  // 152: sneakers.appliance.access.v1.EnrolmentService.CloseEnrolment:output_type -> sneakers.appliance.access.v1.CloseEnrolmentResponse
+	69,  // 153: sneakers.appliance.access.v1.EnrolmentService.OfferEnrolmentKey:output_type -> sneakers.appliance.access.v1.OfferEnrolmentKeyResponse
+	72,  // 154: sneakers.appliance.access.v1.EnrolmentService.SubmitEnrolmentCode:output_type -> sneakers.appliance.access.v1.SubmitEnrolmentCodeResponse
+	74,  // 155: sneakers.appliance.access.v1.EnrolmentService.GetEnrolmentKey:output_type -> sneakers.appliance.access.v1.GetEnrolmentKeyResponse
+	94,  // 156: sneakers.appliance.access.v1.SshLoginService.VerifyTotp:output_type -> sneakers.appliance.access.v1.VerifyTotpResponse
+	96,  // 157: sneakers.appliance.access.v1.SshLoginService.EndSshLogin:output_type -> sneakers.appliance.access.v1.EndSshLoginResponse
+	76,  // 158: sneakers.appliance.access.v1.BindingService.GetBinding:output_type -> sneakers.appliance.access.v1.GetBindingResponse
+	105, // [105:159] is the sub-list for method output_type
+	51,  // [51:105] is the sub-list for method input_type
+	51,  // [51:51] is the sub-list for extension type_name
+	51,  // [51:51] is the sub-list for extension extendee
+	0,   // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_access_v1_access_proto_init() }
@@ -5958,14 +6282,14 @@ func file_sneakers_appliance_access_v1_access_proto_init() {
 	if File_sneakers_appliance_access_v1_access_proto != nil {
 		return
 	}
-	file_sneakers_appliance_access_v1_access_proto_msgTypes[98].OneofWrappers = []any{}
+	file_sneakers_appliance_access_v1_access_proto_msgTypes[104].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_access_v1_access_proto_rawDesc), len(file_sneakers_appliance_access_v1_access_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   106,
+			NumMessages:   112,
 			NumExtensions: 0,
 			NumServices:   7,
 		},

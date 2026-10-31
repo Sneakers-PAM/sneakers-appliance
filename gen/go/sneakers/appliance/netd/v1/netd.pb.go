@@ -593,7 +593,11 @@ type GetResponse struct {
 	// seconds_left is how long the pending change still waits for Confirm.
 	SecondsLeft int32 `protobuf:"varint,5,opt,name=seconds_left,json=secondsLeft,proto3" json:"seconds_left,omitempty"`
 	// last is how the most recent change ended, absent before the first.
-	Last          *ChangeOutcome `protobuf:"bytes,6,opt,name=last,proto3" json:"last,omitempty"`
+	Last *ChangeOutcome `protobuf:"bytes,6,opt,name=last,proto3" json:"last,omitempty"`
+	// staged is what Stage recorded, absent when nothing is staged.
+	Staged *Settings `protobuf:"bytes,7,opt,name=staged,proto3" json:"staged,omitempty"`
+	// staged_id is what Commit takes for it.
+	StagedId      string `protobuf:"bytes,8,opt,name=staged_id,json=stagedId,proto3" json:"staged_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -670,6 +674,20 @@ func (x *GetResponse) GetLast() *ChangeOutcome {
 	return nil
 }
 
+func (x *GetResponse) GetStaged() *Settings {
+	if x != nil {
+		return x.Staged
+	}
+	return nil
+}
+
+func (x *GetResponse) GetStagedId() string {
+	if x != nil {
+		return x.StagedId
+	}
+	return ""
+}
+
 // ChangeOutcome is how a change ended: confirmed or reverted.
 type ChangeOutcome struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -743,8 +761,10 @@ func (x *ChangeOutcome) GetAtStart() bool {
 }
 
 type SetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Settings      *Settings              `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Settings *Settings              `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	// keep keeps the change at once, with no window and nothing to confirm.
+	Keep          bool `protobuf:"varint,2,opt,name=keep,proto3" json:"keep,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -784,6 +804,13 @@ func (x *SetRequest) GetSettings() *Settings {
 		return x.Settings
 	}
 	return nil
+}
+
+func (x *SetRequest) GetKeep() bool {
+	if x != nil {
+		return x.Keep
+	}
+	return false
 }
 
 type SetResponse struct {
@@ -933,6 +960,259 @@ func (*ConfirmResponse) Descriptor() ([]byte, []int) {
 	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{11}
 }
 
+type StageRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Settings      *Settings              `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StageRequest) Reset() {
+	*x = StageRequest{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageRequest) ProtoMessage() {}
+
+func (x *StageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageRequest.ProtoReflect.Descriptor instead.
+func (*StageRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *StageRequest) GetSettings() *Settings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+type StageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// staged_id is what Commit takes.
+	StagedId      string `protobuf:"bytes,1,opt,name=staged_id,json=stagedId,proto3" json:"staged_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StageResponse) Reset() {
+	*x = StageResponse{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StageResponse) ProtoMessage() {}
+
+func (x *StageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StageResponse.ProtoReflect.Descriptor instead.
+func (*StageResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *StageResponse) GetStagedId() string {
+	if x != nil {
+		return x.StagedId
+	}
+	return ""
+}
+
+type DiscardStagedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardStagedRequest) Reset() {
+	*x = DiscardStagedRequest{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardStagedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardStagedRequest) ProtoMessage() {}
+
+func (x *DiscardStagedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardStagedRequest.ProtoReflect.Descriptor instead.
+func (*DiscardStagedRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{14}
+}
+
+type DiscardStagedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DiscardStagedResponse) Reset() {
+	*x = DiscardStagedResponse{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DiscardStagedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DiscardStagedResponse) ProtoMessage() {}
+
+func (x *DiscardStagedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DiscardStagedResponse.ProtoReflect.Descriptor instead.
+func (*DiscardStagedResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{15}
+}
+
+type CommitRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// staged_id names the staged settings the caller reviewed; anything else
+	// is refused, so a commit never applies a change nobody looked at.
+	StagedId      string `protobuf:"bytes,1,opt,name=staged_id,json=stagedId,proto3" json:"staged_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommitRequest) Reset() {
+	*x = CommitRequest{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitRequest) ProtoMessage() {}
+
+func (x *CommitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitRequest.ProtoReflect.Descriptor instead.
+func (*CommitRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CommitRequest) GetStagedId() string {
+	if x != nil {
+		return x.StagedId
+	}
+	return ""
+}
+
+type CommitResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// tested_gateways are the gateways that answered; empty when the change
+	// set no new gateway to test.
+	TestedGateways []string `protobuf:"bytes,1,rep,name=tested_gateways,json=testedGateways,proto3" json:"tested_gateways,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CommitResponse) Reset() {
+	*x = CommitResponse{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommitResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommitResponse) ProtoMessage() {}
+
+func (x *CommitResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommitResponse.ProtoReflect.Descriptor instead.
+func (*CommitResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CommitResponse) GetTestedGateways() []string {
+	if x != nil {
+		return x.TestedGateways
+	}
+	return nil
+}
+
 type Check struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// name is link, address, gateway, dns or ntp.
@@ -950,7 +1230,7 @@ type Check struct {
 
 func (x *Check) Reset() {
 	*x = Check{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -962,7 +1242,7 @@ func (x *Check) String() string {
 func (*Check) ProtoMessage() {}
 
 func (x *Check) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -975,7 +1255,7 @@ func (x *Check) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Check.ProtoReflect.Descriptor instead.
 func (*Check) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{12}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *Check) GetName() string {
@@ -1021,7 +1301,7 @@ type ChecksRequest struct {
 
 func (x *ChecksRequest) Reset() {
 	*x = ChecksRequest{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1033,7 +1313,7 @@ func (x *ChecksRequest) String() string {
 func (*ChecksRequest) ProtoMessage() {}
 
 func (x *ChecksRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1046,7 +1326,7 @@ func (x *ChecksRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChecksRequest.ProtoReflect.Descriptor instead.
 func (*ChecksRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{13}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{19}
 }
 
 type ChecksResponse struct {
@@ -1058,7 +1338,7 @@ type ChecksResponse struct {
 
 func (x *ChecksResponse) Reset() {
 	*x = ChecksResponse{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1070,7 +1350,7 @@ func (x *ChecksResponse) String() string {
 func (*ChecksResponse) ProtoMessage() {}
 
 func (x *ChecksResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[14]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1083,7 +1363,7 @@ func (x *ChecksResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChecksResponse.ProtoReflect.Descriptor instead.
 func (*ChecksResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{14}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ChecksResponse) GetChecks() []*Check {
@@ -1101,7 +1381,7 @@ type StatusRequest struct {
 
 func (x *StatusRequest) Reset() {
 	*x = StatusRequest{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1113,7 +1393,7 @@ func (x *StatusRequest) String() string {
 func (*StatusRequest) ProtoMessage() {}
 
 func (x *StatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[15]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1126,7 +1406,7 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{15}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{21}
 }
 
 type StatusResponse struct {
@@ -1155,7 +1435,7 @@ type StatusResponse struct {
 
 func (x *StatusResponse) Reset() {
 	*x = StatusResponse{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1167,7 +1447,7 @@ func (x *StatusResponse) String() string {
 func (*StatusResponse) ProtoMessage() {}
 
 func (x *StatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1180,7 +1460,7 @@ func (x *StatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{16}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *StatusResponse) GetManagementAddresses() []string {
@@ -1268,7 +1548,7 @@ type ListInterfacesRequest struct {
 
 func (x *ListInterfacesRequest) Reset() {
 	*x = ListInterfacesRequest{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1280,7 +1560,7 @@ func (x *ListInterfacesRequest) String() string {
 func (*ListInterfacesRequest) ProtoMessage() {}
 
 func (x *ListInterfacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1293,7 +1573,7 @@ func (x *ListInterfacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInterfacesRequest.ProtoReflect.Descriptor instead.
 func (*ListInterfacesRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{17}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{23}
 }
 
 // Nic is one network interface the box has (loopback left out).
@@ -1310,7 +1590,7 @@ type Nic struct {
 
 func (x *Nic) Reset() {
 	*x = Nic{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1322,7 +1602,7 @@ func (x *Nic) String() string {
 func (*Nic) ProtoMessage() {}
 
 func (x *Nic) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1335,7 +1615,7 @@ func (x *Nic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Nic.ProtoReflect.Descriptor instead.
 func (*Nic) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{18}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *Nic) GetName() string {
@@ -1375,7 +1655,7 @@ type ListInterfacesResponse struct {
 
 func (x *ListInterfacesResponse) Reset() {
 	*x = ListInterfacesResponse{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1387,7 +1667,7 @@ func (x *ListInterfacesResponse) String() string {
 func (*ListInterfacesResponse) ProtoMessage() {}
 
 func (x *ListInterfacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1400,7 +1680,7 @@ func (x *ListInterfacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInterfacesResponse.ProtoReflect.Descriptor instead.
 func (*ListInterfacesResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{19}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListInterfacesResponse) GetInterfaces() []*Nic {
@@ -1420,7 +1700,7 @@ type SetManagementPortsRequest struct {
 
 func (x *SetManagementPortsRequest) Reset() {
 	*x = SetManagementPortsRequest{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1432,7 +1712,7 @@ func (x *SetManagementPortsRequest) String() string {
 func (*SetManagementPortsRequest) ProtoMessage() {}
 
 func (x *SetManagementPortsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1445,7 +1725,7 @@ func (x *SetManagementPortsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetManagementPortsRequest.ProtoReflect.Descriptor instead.
 func (*SetManagementPortsRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{20}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *SetManagementPortsRequest) GetSsh() bool {
@@ -1470,7 +1750,7 @@ type SetManagementPortsResponse struct {
 
 func (x *SetManagementPortsResponse) Reset() {
 	*x = SetManagementPortsResponse{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1482,7 +1762,7 @@ func (x *SetManagementPortsResponse) String() string {
 func (*SetManagementPortsResponse) ProtoMessage() {}
 
 func (x *SetManagementPortsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1495,7 +1775,7 @@ func (x *SetManagementPortsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetManagementPortsResponse.ProtoReflect.Descriptor instead.
 func (*SetManagementPortsResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{21}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{27}
 }
 
 type WatchRequest struct {
@@ -1506,7 +1786,7 @@ type WatchRequest struct {
 
 func (x *WatchRequest) Reset() {
 	*x = WatchRequest{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1518,7 +1798,7 @@ func (x *WatchRequest) String() string {
 func (*WatchRequest) ProtoMessage() {}
 
 func (x *WatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1531,7 +1811,7 @@ func (x *WatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
 func (*WatchRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{22}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{28}
 }
 
 type WatchResponse struct {
@@ -1545,7 +1825,7 @@ type WatchResponse struct {
 
 func (x *WatchResponse) Reset() {
 	*x = WatchResponse{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1557,7 +1837,7 @@ func (x *WatchResponse) String() string {
 func (*WatchResponse) ProtoMessage() {}
 
 func (x *WatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1570,7 +1850,7 @@ func (x *WatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
 func (*WatchResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{23}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *WatchResponse) GetManagementAddresses() []string {
@@ -1606,7 +1886,7 @@ type PortRule struct {
 
 func (x *PortRule) Reset() {
 	*x = PortRule{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1618,7 +1898,7 @@ func (x *PortRule) String() string {
 func (*PortRule) ProtoMessage() {}
 
 func (x *PortRule) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1631,7 +1911,7 @@ func (x *PortRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PortRule.ProtoReflect.Descriptor instead.
 func (*PortRule) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{24}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *PortRule) GetProtocol() string {
@@ -1664,7 +1944,7 @@ type SetServicePortsRequest struct {
 
 func (x *SetServicePortsRequest) Reset() {
 	*x = SetServicePortsRequest{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1676,7 +1956,7 @@ func (x *SetServicePortsRequest) String() string {
 func (*SetServicePortsRequest) ProtoMessage() {}
 
 func (x *SetServicePortsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1689,7 +1969,7 @@ func (x *SetServicePortsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetServicePortsRequest.ProtoReflect.Descriptor instead.
 func (*SetServicePortsRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{25}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *SetServicePortsRequest) GetRules() []*PortRule {
@@ -1707,7 +1987,7 @@ type SetServicePortsResponse struct {
 
 func (x *SetServicePortsResponse) Reset() {
 	*x = SetServicePortsResponse{}
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1719,7 +1999,7 @@ func (x *SetServicePortsResponse) String() string {
 func (*SetServicePortsResponse) ProtoMessage() {}
 
 func (x *SetServicePortsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1732,7 +2012,7 @@ func (x *SetServicePortsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetServicePortsResponse.ProtoReflect.Descriptor instead.
 func (*SetServicePortsResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{26}
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{32}
 }
 
 var File_sneakers_appliance_netd_v1_netd_proto protoreflect.FileDescriptor
@@ -1772,29 +2052,42 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\acluster\x18\n" +
 	" \x01(\v2).sneakers.appliance.netd.v1.ClusterRangesR\acluster\"\f\n" +
 	"\n" +
-	"GetRequest\"\xfe\x01\n" +
+	"GetRequest\"\xd9\x02\n" +
 	"\vGetResponse\x12@\n" +
 	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\x12\x18\n" +
 	"\apending\x18\x02 \x01(\bR\apending\x12\x14\n" +
 	"\x05token\x18\x03 \x01(\tR\x05token\x12\x1b\n" +
 	"\tchange_id\x18\x04 \x01(\tR\bchangeId\x12!\n" +
 	"\fseconds_left\x18\x05 \x01(\x05R\vsecondsLeft\x12=\n" +
-	"\x04last\x18\x06 \x01(\v2).sneakers.appliance.netd.v1.ChangeOutcomeR\x04last\"|\n" +
+	"\x04last\x18\x06 \x01(\v2).sneakers.appliance.netd.v1.ChangeOutcomeR\x04last\x12<\n" +
+	"\x06staged\x18\a \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\x06staged\x12\x1b\n" +
+	"\tstaged_id\x18\b \x01(\tR\bstagedId\"|\n" +
 	"\rChangeOutcome\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1a\n" +
 	"\breverted\x18\x02 \x01(\bR\breverted\x12\x17\n" +
 	"\aat_unix\x18\x03 \x01(\x03R\x06atUnix\x12\x19\n" +
-	"\bat_start\x18\x04 \x01(\bR\aatStart\"N\n" +
+	"\bat_start\x18\x04 \x01(\bR\aatStart\"b\n" +
 	"\n" +
 	"SetRequest\x12@\n" +
-	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\"r\n" +
+	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\x12\x12\n" +
+	"\x04keep\x18\x02 \x01(\bR\x04keep\"r\n" +
 	"\vSetResponse\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x120\n" +
 	"\x14revert_after_seconds\x18\x02 \x01(\x05R\x12revertAfterSeconds\x12\x1b\n" +
 	"\tchange_id\x18\x03 \x01(\tR\bchangeId\"&\n" +
 	"\x0eConfirmRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\"\x11\n" +
-	"\x0fConfirmResponse\"\xa3\x01\n" +
+	"\x0fConfirmResponse\"P\n" +
+	"\fStageRequest\x12@\n" +
+	"\bsettings\x18\x01 \x01(\v2$.sneakers.appliance.netd.v1.SettingsR\bsettings\",\n" +
+	"\rStageResponse\x12\x1b\n" +
+	"\tstaged_id\x18\x01 \x01(\tR\bstagedId\"\x16\n" +
+	"\x14DiscardStagedRequest\"\x17\n" +
+	"\x15DiscardStagedResponse\",\n" +
+	"\rCommitRequest\x12\x1b\n" +
+	"\tstaged_id\x18\x01 \x01(\tR\bstagedId\"9\n" +
+	"\x0eCommitResponse\x12'\n" +
+	"\x0ftested_gateways\x18\x01 \x03(\tR\x0etestedGateways\"\xa3\x01\n" +
 	"\x05Check\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
 	"\x05state\x18\x02 \x01(\x0e2&.sneakers.appliance.netd.v1.CheckStateR\x05state\x12\x12\n" +
@@ -1865,11 +2158,14 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\x17CHECK_STATE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eCHECK_STATE_OK\x10\x01\x12\x14\n" +
 	"\x10CHECK_STATE_WARN\x10\x02\x12\x16\n" +
-	"\x12CHECK_STATE_FAILED\x10\x032\xc1\a\n" +
+	"\x12CHECK_STATE_FAILED\x10\x032\xf6\t\n" +
 	"\x0eNetworkService\x12V\n" +
 	"\x03Get\x12&.sneakers.appliance.netd.v1.GetRequest\x1a'.sneakers.appliance.netd.v1.GetResponse\x12V\n" +
 	"\x03Set\x12&.sneakers.appliance.netd.v1.SetRequest\x1a'.sneakers.appliance.netd.v1.SetResponse\x12b\n" +
-	"\aConfirm\x12*.sneakers.appliance.netd.v1.ConfirmRequest\x1a+.sneakers.appliance.netd.v1.ConfirmResponse\x12_\n" +
+	"\aConfirm\x12*.sneakers.appliance.netd.v1.ConfirmRequest\x1a+.sneakers.appliance.netd.v1.ConfirmResponse\x12\\\n" +
+	"\x05Stage\x12(.sneakers.appliance.netd.v1.StageRequest\x1a).sneakers.appliance.netd.v1.StageResponse\x12t\n" +
+	"\rDiscardStaged\x120.sneakers.appliance.netd.v1.DiscardStagedRequest\x1a1.sneakers.appliance.netd.v1.DiscardStagedResponse\x12_\n" +
+	"\x06Commit\x12).sneakers.appliance.netd.v1.CommitRequest\x1a*.sneakers.appliance.netd.v1.CommitResponse\x12_\n" +
 	"\x06Checks\x12).sneakers.appliance.netd.v1.ChecksRequest\x1a*.sneakers.appliance.netd.v1.ChecksResponse\x12z\n" +
 	"\x0fSetServicePorts\x122.sneakers.appliance.netd.v1.SetServicePortsRequest\x1a3.sneakers.appliance.netd.v1.SetServicePortsResponse\x12_\n" +
 	"\x06Status\x12).sneakers.appliance.netd.v1.StatusRequest\x1a*.sneakers.appliance.netd.v1.StatusResponse\x12w\n" +
@@ -1890,7 +2186,7 @@ func file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_netd_v1_netd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_sneakers_appliance_netd_v1_netd_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_sneakers_appliance_netd_v1_netd_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_sneakers_appliance_netd_v1_netd_proto_goTypes = []any{
 	(Ipv4Mode)(0),                      // 0: sneakers.appliance.netd.v1.Ipv4Mode
 	(Ipv6Mode)(0),                      // 1: sneakers.appliance.netd.v1.Ipv6Mode
@@ -1907,21 +2203,27 @@ var file_sneakers_appliance_netd_v1_netd_proto_goTypes = []any{
 	(*SetResponse)(nil),                // 12: sneakers.appliance.netd.v1.SetResponse
 	(*ConfirmRequest)(nil),             // 13: sneakers.appliance.netd.v1.ConfirmRequest
 	(*ConfirmResponse)(nil),            // 14: sneakers.appliance.netd.v1.ConfirmResponse
-	(*Check)(nil),                      // 15: sneakers.appliance.netd.v1.Check
-	(*ChecksRequest)(nil),              // 16: sneakers.appliance.netd.v1.ChecksRequest
-	(*ChecksResponse)(nil),             // 17: sneakers.appliance.netd.v1.ChecksResponse
-	(*StatusRequest)(nil),              // 18: sneakers.appliance.netd.v1.StatusRequest
-	(*StatusResponse)(nil),             // 19: sneakers.appliance.netd.v1.StatusResponse
-	(*ListInterfacesRequest)(nil),      // 20: sneakers.appliance.netd.v1.ListInterfacesRequest
-	(*Nic)(nil),                        // 21: sneakers.appliance.netd.v1.Nic
-	(*ListInterfacesResponse)(nil),     // 22: sneakers.appliance.netd.v1.ListInterfacesResponse
-	(*SetManagementPortsRequest)(nil),  // 23: sneakers.appliance.netd.v1.SetManagementPortsRequest
-	(*SetManagementPortsResponse)(nil), // 24: sneakers.appliance.netd.v1.SetManagementPortsResponse
-	(*WatchRequest)(nil),               // 25: sneakers.appliance.netd.v1.WatchRequest
-	(*WatchResponse)(nil),              // 26: sneakers.appliance.netd.v1.WatchResponse
-	(*PortRule)(nil),                   // 27: sneakers.appliance.netd.v1.PortRule
-	(*SetServicePortsRequest)(nil),     // 28: sneakers.appliance.netd.v1.SetServicePortsRequest
-	(*SetServicePortsResponse)(nil),    // 29: sneakers.appliance.netd.v1.SetServicePortsResponse
+	(*StageRequest)(nil),               // 15: sneakers.appliance.netd.v1.StageRequest
+	(*StageResponse)(nil),              // 16: sneakers.appliance.netd.v1.StageResponse
+	(*DiscardStagedRequest)(nil),       // 17: sneakers.appliance.netd.v1.DiscardStagedRequest
+	(*DiscardStagedResponse)(nil),      // 18: sneakers.appliance.netd.v1.DiscardStagedResponse
+	(*CommitRequest)(nil),              // 19: sneakers.appliance.netd.v1.CommitRequest
+	(*CommitResponse)(nil),             // 20: sneakers.appliance.netd.v1.CommitResponse
+	(*Check)(nil),                      // 21: sneakers.appliance.netd.v1.Check
+	(*ChecksRequest)(nil),              // 22: sneakers.appliance.netd.v1.ChecksRequest
+	(*ChecksResponse)(nil),             // 23: sneakers.appliance.netd.v1.ChecksResponse
+	(*StatusRequest)(nil),              // 24: sneakers.appliance.netd.v1.StatusRequest
+	(*StatusResponse)(nil),             // 25: sneakers.appliance.netd.v1.StatusResponse
+	(*ListInterfacesRequest)(nil),      // 26: sneakers.appliance.netd.v1.ListInterfacesRequest
+	(*Nic)(nil),                        // 27: sneakers.appliance.netd.v1.Nic
+	(*ListInterfacesResponse)(nil),     // 28: sneakers.appliance.netd.v1.ListInterfacesResponse
+	(*SetManagementPortsRequest)(nil),  // 29: sneakers.appliance.netd.v1.SetManagementPortsRequest
+	(*SetManagementPortsResponse)(nil), // 30: sneakers.appliance.netd.v1.SetManagementPortsResponse
+	(*WatchRequest)(nil),               // 31: sneakers.appliance.netd.v1.WatchRequest
+	(*WatchResponse)(nil),              // 32: sneakers.appliance.netd.v1.WatchResponse
+	(*PortRule)(nil),                   // 33: sneakers.appliance.netd.v1.PortRule
+	(*SetServicePortsRequest)(nil),     // 34: sneakers.appliance.netd.v1.SetServicePortsRequest
+	(*SetServicePortsResponse)(nil),    // 35: sneakers.appliance.netd.v1.SetServicePortsResponse
 }
 var file_sneakers_appliance_netd_v1_netd_proto_depIdxs = []int32{
 	0,  // 0: sneakers.appliance.netd.v1.Ipv4.mode:type_name -> sneakers.appliance.netd.v1.Ipv4Mode
@@ -1933,34 +2235,42 @@ var file_sneakers_appliance_netd_v1_netd_proto_depIdxs = []int32{
 	6,  // 6: sneakers.appliance.netd.v1.Settings.cluster:type_name -> sneakers.appliance.netd.v1.ClusterRanges
 	7,  // 7: sneakers.appliance.netd.v1.GetResponse.settings:type_name -> sneakers.appliance.netd.v1.Settings
 	10, // 8: sneakers.appliance.netd.v1.GetResponse.last:type_name -> sneakers.appliance.netd.v1.ChangeOutcome
-	7,  // 9: sneakers.appliance.netd.v1.SetRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
-	2,  // 10: sneakers.appliance.netd.v1.Check.state:type_name -> sneakers.appliance.netd.v1.CheckState
-	15, // 11: sneakers.appliance.netd.v1.ChecksResponse.checks:type_name -> sneakers.appliance.netd.v1.Check
-	21, // 12: sneakers.appliance.netd.v1.ListInterfacesResponse.interfaces:type_name -> sneakers.appliance.netd.v1.Nic
-	27, // 13: sneakers.appliance.netd.v1.SetServicePortsRequest.rules:type_name -> sneakers.appliance.netd.v1.PortRule
-	8,  // 14: sneakers.appliance.netd.v1.NetworkService.Get:input_type -> sneakers.appliance.netd.v1.GetRequest
-	11, // 15: sneakers.appliance.netd.v1.NetworkService.Set:input_type -> sneakers.appliance.netd.v1.SetRequest
-	13, // 16: sneakers.appliance.netd.v1.NetworkService.Confirm:input_type -> sneakers.appliance.netd.v1.ConfirmRequest
-	16, // 17: sneakers.appliance.netd.v1.NetworkService.Checks:input_type -> sneakers.appliance.netd.v1.ChecksRequest
-	28, // 18: sneakers.appliance.netd.v1.NetworkService.SetServicePorts:input_type -> sneakers.appliance.netd.v1.SetServicePortsRequest
-	18, // 19: sneakers.appliance.netd.v1.NetworkService.Status:input_type -> sneakers.appliance.netd.v1.StatusRequest
-	20, // 20: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:input_type -> sneakers.appliance.netd.v1.ListInterfacesRequest
-	23, // 21: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:input_type -> sneakers.appliance.netd.v1.SetManagementPortsRequest
-	25, // 22: sneakers.appliance.netd.v1.NetworkService.Watch:input_type -> sneakers.appliance.netd.v1.WatchRequest
-	9,  // 23: sneakers.appliance.netd.v1.NetworkService.Get:output_type -> sneakers.appliance.netd.v1.GetResponse
-	12, // 24: sneakers.appliance.netd.v1.NetworkService.Set:output_type -> sneakers.appliance.netd.v1.SetResponse
-	14, // 25: sneakers.appliance.netd.v1.NetworkService.Confirm:output_type -> sneakers.appliance.netd.v1.ConfirmResponse
-	17, // 26: sneakers.appliance.netd.v1.NetworkService.Checks:output_type -> sneakers.appliance.netd.v1.ChecksResponse
-	29, // 27: sneakers.appliance.netd.v1.NetworkService.SetServicePorts:output_type -> sneakers.appliance.netd.v1.SetServicePortsResponse
-	19, // 28: sneakers.appliance.netd.v1.NetworkService.Status:output_type -> sneakers.appliance.netd.v1.StatusResponse
-	22, // 29: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:output_type -> sneakers.appliance.netd.v1.ListInterfacesResponse
-	24, // 30: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:output_type -> sneakers.appliance.netd.v1.SetManagementPortsResponse
-	26, // 31: sneakers.appliance.netd.v1.NetworkService.Watch:output_type -> sneakers.appliance.netd.v1.WatchResponse
-	23, // [23:32] is the sub-list for method output_type
-	14, // [14:23] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	7,  // 9: sneakers.appliance.netd.v1.GetResponse.staged:type_name -> sneakers.appliance.netd.v1.Settings
+	7,  // 10: sneakers.appliance.netd.v1.SetRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	7,  // 11: sneakers.appliance.netd.v1.StageRequest.settings:type_name -> sneakers.appliance.netd.v1.Settings
+	2,  // 12: sneakers.appliance.netd.v1.Check.state:type_name -> sneakers.appliance.netd.v1.CheckState
+	21, // 13: sneakers.appliance.netd.v1.ChecksResponse.checks:type_name -> sneakers.appliance.netd.v1.Check
+	27, // 14: sneakers.appliance.netd.v1.ListInterfacesResponse.interfaces:type_name -> sneakers.appliance.netd.v1.Nic
+	33, // 15: sneakers.appliance.netd.v1.SetServicePortsRequest.rules:type_name -> sneakers.appliance.netd.v1.PortRule
+	8,  // 16: sneakers.appliance.netd.v1.NetworkService.Get:input_type -> sneakers.appliance.netd.v1.GetRequest
+	11, // 17: sneakers.appliance.netd.v1.NetworkService.Set:input_type -> sneakers.appliance.netd.v1.SetRequest
+	13, // 18: sneakers.appliance.netd.v1.NetworkService.Confirm:input_type -> sneakers.appliance.netd.v1.ConfirmRequest
+	15, // 19: sneakers.appliance.netd.v1.NetworkService.Stage:input_type -> sneakers.appliance.netd.v1.StageRequest
+	17, // 20: sneakers.appliance.netd.v1.NetworkService.DiscardStaged:input_type -> sneakers.appliance.netd.v1.DiscardStagedRequest
+	19, // 21: sneakers.appliance.netd.v1.NetworkService.Commit:input_type -> sneakers.appliance.netd.v1.CommitRequest
+	22, // 22: sneakers.appliance.netd.v1.NetworkService.Checks:input_type -> sneakers.appliance.netd.v1.ChecksRequest
+	34, // 23: sneakers.appliance.netd.v1.NetworkService.SetServicePorts:input_type -> sneakers.appliance.netd.v1.SetServicePortsRequest
+	24, // 24: sneakers.appliance.netd.v1.NetworkService.Status:input_type -> sneakers.appliance.netd.v1.StatusRequest
+	26, // 25: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:input_type -> sneakers.appliance.netd.v1.ListInterfacesRequest
+	29, // 26: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:input_type -> sneakers.appliance.netd.v1.SetManagementPortsRequest
+	31, // 27: sneakers.appliance.netd.v1.NetworkService.Watch:input_type -> sneakers.appliance.netd.v1.WatchRequest
+	9,  // 28: sneakers.appliance.netd.v1.NetworkService.Get:output_type -> sneakers.appliance.netd.v1.GetResponse
+	12, // 29: sneakers.appliance.netd.v1.NetworkService.Set:output_type -> sneakers.appliance.netd.v1.SetResponse
+	14, // 30: sneakers.appliance.netd.v1.NetworkService.Confirm:output_type -> sneakers.appliance.netd.v1.ConfirmResponse
+	16, // 31: sneakers.appliance.netd.v1.NetworkService.Stage:output_type -> sneakers.appliance.netd.v1.StageResponse
+	18, // 32: sneakers.appliance.netd.v1.NetworkService.DiscardStaged:output_type -> sneakers.appliance.netd.v1.DiscardStagedResponse
+	20, // 33: sneakers.appliance.netd.v1.NetworkService.Commit:output_type -> sneakers.appliance.netd.v1.CommitResponse
+	23, // 34: sneakers.appliance.netd.v1.NetworkService.Checks:output_type -> sneakers.appliance.netd.v1.ChecksResponse
+	35, // 35: sneakers.appliance.netd.v1.NetworkService.SetServicePorts:output_type -> sneakers.appliance.netd.v1.SetServicePortsResponse
+	25, // 36: sneakers.appliance.netd.v1.NetworkService.Status:output_type -> sneakers.appliance.netd.v1.StatusResponse
+	28, // 37: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:output_type -> sneakers.appliance.netd.v1.ListInterfacesResponse
+	30, // 38: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:output_type -> sneakers.appliance.netd.v1.SetManagementPortsResponse
+	32, // 39: sneakers.appliance.netd.v1.NetworkService.Watch:output_type -> sneakers.appliance.netd.v1.WatchResponse
+	28, // [28:40] is the sub-list for method output_type
+	16, // [16:28] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_netd_v1_netd_proto_init() }
@@ -1974,7 +2284,7 @@ func file_sneakers_appliance_netd_v1_netd_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_netd_v1_netd_proto_rawDesc), len(file_sneakers_appliance_netd_v1_netd_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   27,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

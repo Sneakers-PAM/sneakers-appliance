@@ -52,6 +52,9 @@ func (h *handler) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*co
 	if l, ok := h.d.LastChange(); ok {
 		out.Last = &netdv1.ChangeOutcome{ChangeId: l.ID, Reverted: l.Reverted, AtUnix: l.At.Unix(), AtStart: l.AtStart}
 	}
+	if st, id, ok := h.d.Staged(); ok {
+		out.Staged, out.StagedId = network.ToWire(st), id
+	}
 	return connect.NewResponse(out), nil
 }
 
@@ -59,6 +62,12 @@ func (h *handler) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) 
 	s, err := network.FromWire(r.Msg.GetSettings())
 	if err != nil {
 		return nil, toConnect(err)
+	}
+	if r.Msg.GetKeep() {
+		if err := h.d.SetAndKeep(s); err != nil {
+			return nil, toConnect(err)
+		}
+		return connect.NewResponse(&netdv1.SetResponse{}), nil
 	}
 	tok, err := h.d.Set(s)
 	if err != nil {
@@ -81,6 +90,31 @@ func (h *handler) Confirm(_ context.Context, r *connect.Request[netdv1.ConfirmRe
 		return nil, toConnect(err)
 	}
 	return connect.NewResponse(&netdv1.ConfirmResponse{}), nil
+}
+
+func (h *handler) Stage(_ context.Context, r *connect.Request[netdv1.StageRequest]) (*connect.Response[netdv1.StageResponse], error) {
+	s, err := network.FromWire(r.Msg.GetSettings())
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	id, err := h.d.Stage(s)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&netdv1.StageResponse{StagedId: id}), nil
+}
+
+func (h *handler) DiscardStaged(context.Context, *connect.Request[netdv1.DiscardStagedRequest]) (*connect.Response[netdv1.DiscardStagedResponse], error) {
+	h.d.DiscardStaged()
+	return connect.NewResponse(&netdv1.DiscardStagedResponse{}), nil
+}
+
+func (h *handler) Commit(ctx context.Context, r *connect.Request[netdv1.CommitRequest]) (*connect.Response[netdv1.CommitResponse], error) {
+	tested, err := h.d.Commit(ctx, r.Msg.GetStagedId())
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&netdv1.CommitResponse{TestedGateways: tested}), nil
 }
 
 var checkStates = map[CheckState]netdv1.CheckState{

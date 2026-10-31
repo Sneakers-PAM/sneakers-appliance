@@ -286,7 +286,8 @@ func (h *networkH) GetNetwork(ctx context.Context, r *connect.Request[accessv1.G
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&accessv1.GetNetworkResponse{Settings: out.GetSettings(), ManagementAddresses: out.GetManagementAddresses(), NtpSynced: out.GetNtpSynced()}), nil
+	return connect.NewResponse(&accessv1.GetNetworkResponse{Settings: out.GetSettings(), ManagementAddresses: out.GetManagementAddresses(), NtpSynced: out.GetNtpSynced(),
+		Staged: out.GetStaged(), StagedId: out.GetStagedId(), StagedReview: out.GetStagedReview()}), nil
 }
 
 func (h *networkH) SetNetwork(ctx context.Context, r *connect.Request[accessv1.SetNetworkRequest]) (*connect.Response[accessv1.SetNetworkResponse], error) {
@@ -295,6 +296,29 @@ func (h *networkH) SetNetwork(ctx context.Context, r *connect.Request[accessv1.S
 		return nil, err
 	}
 	return connect.NewResponse(&accessv1.SetNetworkResponse{Token: out.GetToken(), RevertAfterSeconds: out.GetRevertAfterSeconds()}), nil
+}
+
+func (h *networkH) StageNetwork(ctx context.Context, r *connect.Request[accessv1.StageNetworkRequest]) (*connect.Response[accessv1.StageNetworkResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.NetworkServiceStageNetworkProcedure, osadminv1connect.NetworkServiceStageNetworkProcedure, h.s.h.Network.StageNetwork, &osadminv1.StageNetworkRequest{Settings: r.Msg.GetSettings()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.StageNetworkResponse{StagedId: out.GetStagedId(), Review: out.GetReview()}), nil
+}
+
+func (h *networkH) DiscardStagedNetwork(ctx context.Context, r *connect.Request[accessv1.DiscardStagedNetworkRequest]) (*connect.Response[accessv1.DiscardStagedNetworkResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.NetworkServiceDiscardStagedNetworkProcedure, osadminv1connect.NetworkServiceDiscardStagedNetworkProcedure, h.s.h.Network.DiscardStagedNetwork, &osadminv1.DiscardStagedNetworkRequest{}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.DiscardStagedNetworkResponse{}), nil
+}
+
+func (h *networkH) CommitNetwork(ctx context.Context, r *connect.Request[accessv1.CommitNetworkRequest]) (*connect.Response[accessv1.CommitNetworkResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.NetworkServiceCommitNetworkProcedure, osadminv1connect.NetworkServiceCommitNetworkProcedure, h.s.h.Network.CommitNetwork, &osadminv1.CommitNetworkRequest{StagedId: r.Msg.GetStagedId()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.CommitNetworkResponse{TestedGateways: out.GetTestedGateways(), Review: out.GetReview()}), nil
 }
 
 func (h *networkH) ConfirmNetwork(ctx context.Context, r *connect.Request[accessv1.ConfirmNetworkRequest]) (*connect.Response[accessv1.ConfirmNetworkResponse], error) {

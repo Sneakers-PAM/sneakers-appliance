@@ -356,6 +356,72 @@ type fakeNetd struct {
 	// keepAtOnce makes Set keep the change with no window, as netd does
 	// for a DNS or NTP change.
 	keepAtOnce bool
+	// staged and stagedID are what Stage recorded.
+	staged   *netdv1.Settings
+	stagedID string
+	// commitErr refuses the next commits, as a dead gateway does.
+	commitErr error
+	// commitCtxErr is the context error the last Commit saw.
+	commitCtxErr error
+	// commitGate, when set, holds a Commit until it closes; committing says
+	// one is in.
+	commitGate chan struct{}
+	committing bool
+}
+
+func (n *fakeNetd) waitCommitting(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		n.mu.Lock()
+		in := n.committing
+		n.mu.Unlock()
+		if in {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("no commit reached netd")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func (n *fakeNetd) Stage(_ context.Context, r *connect.Request[netdv1.StageRequest]) (*connect.Response[netdv1.StageResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.staged, n.stagedID = r.Msg.GetSettings(), "stg-1"
+	return connect.NewResponse(&netdv1.StageResponse{StagedId: n.stagedID}), nil
+}
+
+func (n *fakeNetd) DiscardStaged(context.Context, *connect.Request[netdv1.DiscardStagedRequest]) (*connect.Response[netdv1.DiscardStagedResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.staged, n.stagedID = nil, ""
+	return connect.NewResponse(&netdv1.DiscardStagedResponse{}), nil
+}
+
+func (n *fakeNetd) Commit(ctx context.Context, r *connect.Request[netdv1.CommitRequest]) (*connect.Response[netdv1.CommitResponse], error) {
+	n.mu.Lock()
+	gate := n.commitGate
+	n.committing = true
+	n.mu.Unlock()
+	if gate != nil {
+		select {
+		case <-gate:
+		case <-ctx.Done():
+		}
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.commitCtxErr = ctx.Err()
+	if n.commitErr != nil {
+		return nil, n.commitErr
+	}
+	if n.staged == nil || r.Msg.GetStagedId() != n.stagedID {
+		return nil, connect.NewError(connect.CodeInvalidArgument, codes.New(codes.NetInvalid, "staged: nothing is staged"))
+	}
+	n.settings, n.staged, n.stagedID = n.staged, nil, ""
+	return connect.NewResponse(&netdv1.CommitResponse{TestedGateways: []string{"192.0.2.1"}}), nil
 }
 
 func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
@@ -365,6 +431,7 @@ func (n *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*c
 	if n.pending != "" {
 		out.Token, out.ChangeId, out.SecondsLeft = n.pending, n.changeID, 95
 	}
+	out.Staged, out.StagedId = n.staged, n.stagedID
 	return connect.NewResponse(out), nil
 }
 

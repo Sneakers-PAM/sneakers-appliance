@@ -59,8 +59,8 @@ func (f *fakeNetd) Get(context.Context, *connect.Request[netdv1.GetRequest]) (*c
 }
 
 func (f *fakeNetd) Set(_ context.Context, r *connect.Request[netdv1.SetRequest]) (*connect.Response[netdv1.SetResponse], error) {
-	f.calls = append(f.calls, "set "+r.Msg.GetSettings().GetManagement().GetName())
-	return connect.NewResponse(&netdv1.SetResponse{Token: "T1", RevertAfterSeconds: 120}), nil
+	f.calls = append(f.calls, fmt.Sprintf("set %s keep=%v", r.Msg.GetSettings().GetManagement().GetName(), r.Msg.GetKeep()))
+	return connect.NewResponse(&netdv1.SetResponse{}), nil
 }
 
 func (f *fakeNetd) Checks(context.Context, *connect.Request[netdv1.ChecksRequest]) (*connect.Response[netdv1.ChecksResponse], error) {
@@ -82,6 +82,18 @@ type netdClient struct{ h *fakeNetd }
 func (c netdClient) Get(ctx context.Context, r *connect.Request[netdv1.GetRequest]) (*connect.Response[netdv1.GetResponse], error) {
 	return c.h.Get(ctx, r)
 }
+func (c netdClient) Stage(context.Context, *connect.Request[netdv1.StageRequest]) (*connect.Response[netdv1.StageResponse], error) {
+	return nil, errors.New("not used")
+}
+
+func (c netdClient) DiscardStaged(context.Context, *connect.Request[netdv1.DiscardStagedRequest]) (*connect.Response[netdv1.DiscardStagedResponse], error) {
+	return nil, errors.New("not used")
+}
+
+func (c netdClient) Commit(context.Context, *connect.Request[netdv1.CommitRequest]) (*connect.Response[netdv1.CommitResponse], error) {
+	return nil, errors.New("not used")
+}
+
 func (c netdClient) Set(ctx context.Context, r *connect.Request[netdv1.SetRequest]) (*connect.Response[netdv1.SetResponse], error) {
 	return c.h.Set(ctx, r)
 }
@@ -152,10 +164,9 @@ func TestTheNetworkSwitchesFromTheStubToNetd(t *testing.T) {
 	if !stub.Installed() {
 		for _, err := range []error{
 			func() error { _, err := stub.Get(ctx); return err }(),
-			func() error { _, _, err := stub.Set(ctx, network.Defaults("ens192")); return err }(),
+			stub.Keep(ctx, network.Defaults("ens192")),
 			func() error { _, err := stub.Checks(ctx); return err }(),
 			func() error { _, err := stub.Status(ctx); return err }(),
-			stub.Confirm(ctx, "T1"),
 		} {
 			var ni sources.NotInstalled
 			if !errors.As(err, &ni) || ni.Error() != "The network service isn't installed in this build yet" {
@@ -176,9 +187,8 @@ func TestTheNetworkSwitchesFromTheStubToNetd(t *testing.T) {
 	if _, err := real.Get(ctx); err != nil {
 		t.Fatal(err)
 	}
-	tok, after, err := real.Set(ctx, network.Defaults("ens192"))
-	if err != nil || tok != "T1" || after != 120 {
-		t.Fatalf("%q %d %v", tok, after, err)
+	if err := real.Keep(ctx, network.Defaults("ens192")); err != nil {
+		t.Fatal(err)
 	}
 	cs, err := real.Checks(ctx)
 	if err != nil || len(cs) != 2 || cs[1].State != sources.CheckFailed || !cs[1].Skippable {
@@ -188,9 +198,6 @@ func TestTheNetworkSwitchesFromTheStubToNetd(t *testing.T) {
 	if err != nil || st.Hostname != "sneakers.example.org" || st.Management[0] != "192.0.2.10/24" {
 		t.Fatalf("%+v %v", st, err)
 	}
-	if err := real.Confirm(ctx, "T1"); err != nil {
-		t.Fatal(err)
-	}
 	ns, err := real.Interfaces(ctx)
 	if err != nil || len(ns) != 1 || ns[0].Name != "eth0" || !ns[0].Up || !ns[0].Link {
 		t.Fatalf("netd's interfaces: %+v %v", ns, err)
@@ -198,7 +205,7 @@ func TestTheNetworkSwitchesFromTheStubToNetd(t *testing.T) {
 	if err := real.SetManagementPorts(ctx, true, true); err != nil {
 		t.Fatal(err)
 	}
-	if got := f.calls; len(got) != 7 || got[1] != "set ens192" || got[6] != "ports ssh=true https=true" {
+	if got := f.calls; len(got) != 6 || got[1] != "set ens192 keep=true" || got[5] != "ports ssh=true https=true" {
 		t.Fatalf("netd calls %v", got)
 	}
 }

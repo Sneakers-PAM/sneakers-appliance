@@ -283,3 +283,44 @@ func TestStatusIsCachedForWhenAccessdIsDown(t *testing.T) {
 		t.Fatalf("%v %v", fi, err)
 	}
 }
+
+// The relay an SSH session uses: an owner stages, sees the stage and commits
+// it; an admin is refused by osadmin's own rule.
+func TestTheShellStagesAndCommitsThroughAccessd(t *testing.T) {
+	b := newBox(t)
+	ctx := context.Background()
+	hc, url := b.as(b.uids["alice"])
+	alice := accessv1connect.NewNetworkServiceClient(hc, url, connect.WithInterceptors(keyHeader(b.keys["alice"].fp)))
+	g, err := alice.GetNetwork(ctx, connect.NewRequest(&accessv1.GetNetworkRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := g.Msg.GetSettings()
+	next.Hostname = "box2.sneakers.example.org"
+	st, err := alice.StageNetwork(ctx, connect.NewRequest(&accessv1.StageNetworkRequest{Settings: next}))
+	if err != nil || st.Msg.GetStagedId() != "stg-1" {
+		t.Fatalf("%v %v", st, err)
+	}
+	g, err = alice.GetNetwork(ctx, connect.NewRequest(&accessv1.GetNetworkRequest{}))
+	if err != nil || g.Msg.GetStagedId() != "stg-1" || g.Msg.GetStaged().GetHostname() != next.GetHostname() || g.Msg.GetStagedReview() == nil {
+		t.Fatalf("%v %v", g, err)
+	}
+	hb, urlb := b.as(b.uids["bob"])
+	bob := accessv1connect.NewNetworkServiceClient(hb, urlb, connect.WithInterceptors(keyHeader(b.keys["bob"].fp)))
+	if _, err := bob.CommitNetwork(ctx, connect.NewRequest(&accessv1.CommitNetworkRequest{StagedId: "stg-1"})); err == nil {
+		t.Fatal("bob committed")
+	}
+	com, err := alice.CommitNetwork(ctx, connect.NewRequest(&accessv1.CommitNetworkRequest{StagedId: "stg-1"}))
+	if err != nil || len(com.Msg.GetTestedGateways()) != 1 {
+		t.Fatalf("%v %v", com, err)
+	}
+	if e := lastEntry(t, b.log, "network.commit"); e.Actor != "alice" || e.Outcome != "ok" {
+		t.Fatalf("%+v", e)
+	}
+	if _, err := alice.StageNetwork(ctx, connect.NewRequest(&accessv1.StageNetworkRequest{Settings: next})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := alice.DiscardStagedNetwork(ctx, connect.NewRequest(&accessv1.DiscardStagedNetworkRequest{})); err != nil {
+		t.Fatal(err)
+	}
+}

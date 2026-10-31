@@ -93,6 +93,10 @@ type Daemon struct {
 	subs     map[int]chan Addresses
 	nextSub  int
 	noNIC    bool
+	// staged is the change waiting for its commit.
+	staged *staged
+	// testing is the address on the interface only for a gateway test.
+	testing netip.Prefix
 }
 
 // observed is what the clients learnt on one interface.
@@ -879,9 +883,12 @@ func (d *Daemon) usable(name string) []string {
 	if err != nil {
 		return nil
 	}
+	d.mu.Lock()
+	testing := d.testing
+	d.mu.Unlock()
 	var out []string
 	for _, a := range addrs {
-		if a.Prefix.Addr().IsLinkLocalUnicast() || a.Tentative() || a.DADFailed() || a.Scope != 0 && a.Scope != 200 {
+		if a.Prefix.Addr().IsLinkLocalUnicast() || a.Tentative() || a.DADFailed() || a.Scope != 0 && a.Scope != 200 || a.Prefix == testing {
 			continue
 		}
 		out = append(out, a.Prefix.String())

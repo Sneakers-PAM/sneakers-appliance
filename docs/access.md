@@ -279,8 +279,10 @@ audit action of every method.
   (its reason and how to raise it, in the console's words), the self-signed certificate, an
   unsynced clock, and a console Recover access in the last 24 hours.
   The Secure Boot setting is changed here (owner, step-up, the host name typed to confirm).
-- **Network:** reads and changes netd's settings. A change is undone unless `ConfirmNetwork` comes
-  within 120 seconds from a session that still works.
+- **Network:** reads and changes netd's settings. `StageNetwork` records a change without applying
+  it, `CommitNetwork` tests its gateway and applies it for good ([network.md](network.md#stage-and-commit)),
+  and `DiscardStagedNetwork` drops it. `SetNetwork` still applies a change that's undone unless
+  `ConfirmNetwork` comes within 120 seconds from a session that still works.
 - **Logs and audit:** the OS audit log, newest first, filtered by action, with its chain state, and the
   whole log as a download.
 - **Power:** reboot and shut down, graceful by default; the page lists the live sessions first

@@ -59,6 +59,9 @@ type System interface {
 	// Reach resolves gw's link-layer address (ARP or neighbour
 	// discovery) on name.
 	Reach(ctx context.Context, name string, gw netip.Addr) error
+	// ReachFrom is Reach with src, an address on name, as the probe's
+	// source, so the gateway is asked from that address.
+	ReachFrom(ctx context.Context, name string, src, gw netip.Addr) error
 	// QueryDNS asks server for name; an answer of any kind, NXDOMAIN too,
 	// means the server works.
 	QueryDNS(ctx context.Context, server netip.Addr, name string) error
