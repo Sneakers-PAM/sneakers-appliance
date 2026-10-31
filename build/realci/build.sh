@@ -18,8 +18,9 @@
 #   OUT/product-next.bin the product under test (UNDER_TEST, version
 #                      0.1.0-lab.realci.next, newer than .13)
 #   OUT/bin/sneakers-migrate, OUT/bin/synth
-#                      the next release's, for the import leg's source
-#                      (build/realci/source.sh)
+#                      for the import leg's source (build/realci/source.sh):
+#                      the commit the next release pins for the migrate
+#                      image, and the next release's synth
 #   OUT/realci.env     the paths and versions, for the image test
 #
 # Each product is the production path with lab keys: the service images
@@ -219,12 +220,18 @@ product 12 "$P12_APPLIANCE_COMMIT" "$P12_RELEASE_COMMIT"
 product 13 "$P13_APPLIANCE_COMMIT" "$P13_RELEASE_COMMIT"
 product next "$under" "$next_release"
 
-# The import leg's source (build/realci/source.sh): the next release's
-# sneakers-migrate and synth, built for the runner.
+# The import leg's source (build/realci/source.sh), built for the runner:
+# the next release's synth, and sneakers-migrate from the commit that
+# release pins for the migrate image, so the export writes a bundle format
+# the box's steps read. A bundle format moves in sneakers-release before
+# its pin does.
 rel_next="$(release "$next_release")"
-(cd "$rel_next" && CGO_ENABLED=0 go build -trimpath -o "$bin_dir/sneakers-migrate" ./migrate/cmd/sneakers-migrate &&
-  CGO_ENABLED=0 go build -trimpath -o "$bin_dir/synth" ./migrate/test/synth)
-say "the import source's tools from sneakers-release $next_release"
+migrate_commit="$(cd "$root" && go run ./build/tools/bundle sources --release "$rel_next/manifest/release.yaml" | awk '$1 == "migrate" { print $5 }')"
+[ -n "$migrate_commit" ] || { echo "realci: release.yaml pins no commit for the migrate image" >&2; exit 1; }
+rel_migrate="$(release "$migrate_commit")"
+(cd "$rel_migrate" && CGO_ENABLED=0 go build -trimpath -o "$bin_dir/sneakers-migrate" ./migrate/cmd/sneakers-migrate)
+(cd "$rel_next" && CGO_ENABLED=0 go build -trimpath -o "$bin_dir/synth" ./migrate/test/synth)
+say "the import source's sneakers-migrate from sneakers-release $migrate_commit, synth from $next_release"
 
 cat > "$OUT/realci.env" <<ENV
 SNEAKERS_KEYS=$KEYS

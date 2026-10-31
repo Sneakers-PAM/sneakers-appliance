@@ -1,9 +1,20 @@
 # The Import page
 
 The Import page on :8443 brings an export of an earlier install into the installed product before
-its own first-run setup: the users, groups, secrets, folders and audit chain come from the export,
-and the box goes into **imported-users mode**. It is the appliance side of
-`sneakers-migrate` (sneakers-release `docs/migrate-appliance.md` has the whole move, step by step).
+its own first-run setup: the users, groups, secrets and folders come from the export, and the box
+goes into **imported-users mode**. It is the appliance side of `sneakers-migrate`
+(sneakers-release `docs/migrate-appliance.md` has the whole move, step by step).
+
+**The audit trail stays on the old box.** An audit trail belongs to the install that recorded it,
+so an export in bundle format 2.0 doesn't carry one. The new box's chain starts with one record of
+the import, "imported from" the old box: its name (`export --source-name`) and version, the bundle
+id, who ran the import and when, and the folders, secrets and users carried. Its own events follow.
+A bundle in format 1.x carries the old box's trail, so it's refused (exit 5, 4003): export it again
+with a current `sneakers-migrate`. Keep the old box's audit history with the old box, or offline,
+if you need it after that box is retired.
+
+This takes a migrate image from Sneakers-PAM/sneakers-release#158 on. The product pins its migrate
+image in the release's `spec.jobs.migrate`.
 
 The product declares it in `product.yaml` ([release.md](release.md#productyaml)): a switch whose
 stack holds the migrate service account, the Job template the steps run from, the Job's user, the
@@ -79,10 +90,11 @@ earlier import; a box whose data didn't come from an import is refused.
 
 ## Memory
 
-`sneakers-migrate` holds the whole bundle in memory while a step runs, about 2.3 KB for each
-audit record, so a step's memory grows with the source's audit chain. The table has the peaks
-measured on the real bundle (the real-bundle job's [import leg](testing.md#the-real-bundle-job))
-with a 727,000-record chain, a 37 MB bundle:
+`sneakers-migrate` holds the whole bundle in memory while a step runs. A format 1.x bundle carried
+the audit chain, about 2.3 KB for each record, so a step's memory grew with it; a format 2.0
+bundle carries no audit records, so it doesn't. The table has the peaks measured on a format 1.x
+bundle (the real-bundle job's [import leg](testing.md#the-real-bundle-job)) with a 727,000-record
+chain, a 37 MB bundle. They're the most a step has needed, not what a 2.0 bundle needs:
 
 | Step | Peak memory |
 |---|---|
@@ -94,10 +106,8 @@ with a 727,000-record chain, a 37 MB bundle:
 | verify | 2.6 GiB |
 
 Each step's Job (`build/product/sneakers/import-job.yaml`) requests 1Gi and is limited to 4Gi,
-about one and a half times the largest peak (verify's), which leaves room for a chain of about
-1.1 million records. A step that goes past its limit is killed by the kernel and ends as failed
-with that reason (above). Streaming the tables instead of holding them
-(Sneakers-PAM/sneakers-release#123) would take the steps' memory off the chain's length.
+about one and a half times the largest peak (verify's). A step that goes past its limit is killed
+by the kernel and ends as failed with that reason (above).
 
 **What the box needs.** With the product running on the same box, the box and the product use
 1.3 GiB. With the import open, and the gateway and the web apps held, they use 1.27 GiB. A step

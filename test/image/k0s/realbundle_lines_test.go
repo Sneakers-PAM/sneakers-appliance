@@ -187,3 +187,32 @@ func TestTheImportPeakLineMatchesItsJob(t *testing.T) {
 		t.Fatalf("%q", m)
 	}
 }
+
+// The step reports of an import that left the source's audit trail behind.
+func TestTheTrailStaysCheckReadsTheStepReports(t *testing.T) {
+	const name = "old-box.example.org"
+	export := "parity\nnot carried: audit.audit_records (727000 rows): it stays on the source\n"
+	review := `{"audit_trail":"not moved; it stays on the source install"}`
+	imp := `{"imported_from":"old-box.example.org","migration_audit_entries":1,"tables":[{"table":"vault.secrets"}],"not_carried":[{"name":"audit.audit_records","rows":727000}]}`
+	verify := `{"ok":true,"checks":[{"name":"audit chain","ok":true,"detail":"valid from genesis to head: 40 records, starting with the import record (imported from old-box.example.org)"}],"counts":[{"table":"vault.secrets"}]}`
+	if err := trailStays(name, 727000, export, review, imp, verify); err != nil {
+		t.Fatal(err)
+	}
+	bad := map[string][4]string{
+		"the export carried it":        {"parity\n", review, imp, verify},
+		"the export left too few":      {strings.Replace(export, "727000", "10", 1), review, imp, verify},
+		"the review doesn't say":       {export, `{}`, imp, verify},
+		"the import names another":     {export, review, strings.Replace(imp, name, "other.example.org", 1), verify},
+		"the import wrote more":        {export, review, strings.Replace(imp, `"migration_audit_entries":1`, `"migration_audit_entries":2`, 1), verify},
+		"the import took audit rows":   {export, review, strings.Replace(imp, `vault.secrets`, `audit.audit_records`, 1), verify},
+		"the import doesn't list it":   {export, review, strings.Replace(imp, `audit.audit_records`, `vault.other`, 1), verify},
+		"the verify failed":            {export, review, imp, strings.Replace(verify, `{"ok":true,"checks"`, `{"ok":false,"checks"`, 1)},
+		"the chain has no import head": {export, review, imp, strings.Replace(verify, "starting with the import record (imported from old-box.example.org)", "", 1)},
+		"the verify counted the trail": {export, review, imp, strings.Replace(verify, `"counts":[{"table":"vault.secrets"}]`, `"counts":[{"table":"audit.audit_records"}]`, 1)},
+	}
+	for what, r := range bad {
+		if err := trailStays(name, 727000, r[0], r[1], r[2], r[3]); err == nil {
+			t.Errorf("%s: passed", what)
+		}
+	}
+}

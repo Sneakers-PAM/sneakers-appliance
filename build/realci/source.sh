@@ -25,12 +25,16 @@
 #   AUDIT_RECORDS  how many audit records synth chains (default 727000,
 #                  more than the largest source measured: 726,805)
 #   PREFIX         the containers' name prefix (default realci-source)
+#   SOURCE_NAME    the source's name, which the box's "imported from" audit
+#                  record names (default source.example.org); a host name
+#                  here would be the runner's
 # The keys synth makes are invented for the run; nothing here is a real
 # system's, and none of it is printed.
 set -euo pipefail
 : "${RELEASE_SRC:?}" "${MIGRATE:?}" "${SYNTH:?}" "${WORK:?}"
 prefix="${PREFIX:-realci-source}"
 records="${AUDIT_RECORDS:-727000}"
+source_name="${SOURCE_NAME:-source.example.org}"
 owner="owner@example.org"
 # The same images sneakers-release's rehearsal runs its source on.
 pg_image="docker.io/library/postgres:18.6@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722"
@@ -109,14 +113,21 @@ export_to() {
     keys() { python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$WORK/source-keys.json" "$1"; }
     export SOURCE_VAULT_ROOT_KEK SOURCE_DEV_KEK_SEED
     SOURCE_VAULT_ROOT_KEK="$(keys SOURCE_VAULT_ROOT_KEK)" SOURCE_DEV_KEK_SEED="$(keys SOURCE_DEV_KEK_SEED)"
+    # MIGRATE is the box's migrate image's commit (build.sh), which may be
+    # from before format 2.0 and its --source-name.
+    named=()
+    case "$("$MIGRATE" export --help 2>&1 || true)" in
+      *--source-name*) named=(--source-name "$source_name") ;;
+    esac
     # Its peak resident memory, from the kernel's accounting once it ends.
     exec python3 -c '
 import resource, subprocess, sys
 code = subprocess.call(sys.argv[1:])
 print("peak RSS %d MiB" % (resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024), file=sys.stderr)
-sys.exit(code)' "$MIGRATE" export --recipient "$rcpt" --out "$out" --current-only --reset-sign-in
+sys.exit(code)' "$MIGRATE" export --recipient "$rcpt" --out "$out" --current-only --reset-sign-in ${named[@]+"${named[@]}"}
   ) > "$WORK/export.txt" 2>&1 || status=$?
   sed -n '/^parity/,/^  connections/p' "$WORK/export.txt"
+  grep '^not carried: ' "$WORK/export.txt" || true
   [ "$status" = 0 ] || { tail -20 "$WORK/export.txt" >&2; echo "realci: source: export failed ($status)" >&2; exit 1; }
   say "export: $(stat -c %s "$out") bytes in $(( $(date +%s) - start ))s, $(grep -o 'peak RSS [0-9]* MiB' "$WORK/export.txt")"
 }

@@ -133,6 +133,7 @@ jobs:
           bash build/ci/docs_only_test.sh
           bash build/realci/pins_test.sh
           bash build/realci/cache_test.sh
+          bash build/realci/source_test.sh
       - name: Lab keys, cosign, efitools, sbsign and unsquashfs interop
         run: go test -tags tools ./test/kit/labkeys/
       - name: Lab keys never silently regenerate an existing set
