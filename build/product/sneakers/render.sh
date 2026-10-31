@@ -30,9 +30,9 @@
 # Every phased workload's first init container runs the release's
 # sneakers-migrate image's `wait` (product.yaml phases needs).
 #
-# The gateway gets the release's version (metadata.version) as
-# SNEAKERS_PRODUCT_VERSION, and the box's values (values.yaml) for the
-# product's About and diagnostics.
+# The gateway gets the release's version (metadata.version, which bundle
+# fill --version sets from the tag) as SNEAKERS_PRODUCT_VERSION, bare, and
+# the box's values (values.yaml) for the product's About and diagnostics.
 #
 # Inputs (environment):
 #   CHARTS        a sneakers-release checkout (its charts/ are copied, never changed)

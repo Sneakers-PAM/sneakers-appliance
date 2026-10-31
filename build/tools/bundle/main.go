@@ -294,11 +294,13 @@ func sources(args []string, w io.Writer) error {
 }
 
 // fill writes release.yaml with the built images' digests in place of the
-// placeholders (bundle.Fill).
+// placeholders (bundle.Fill) and, with --version, that version as its
+// metadata.version, without a leading v (bundle.SetVersion).
 func fill(args []string, w io.Writer) error {
 	fl := flag.NewFlagSet("bundle fill", flag.ContinueOnError)
 	relPath := fl.String("release", "", "release.yaml")
 	layouts := fl.String("layouts", "", "the images the release built, an OCI layout per service")
+	tag := fl.String("version", "", "the release's own version (default: the manifest's)")
 	if err := fl.Parse(args); err != nil {
 		return err
 	}
@@ -309,6 +311,15 @@ func fill(args []string, w io.Writer) error {
 	out, err := bundle.Fill(b, *layouts)
 	if err != nil {
 		return err
+	}
+	if *tag != "" {
+		v := strings.TrimPrefix(*tag, "v")
+		if !releaseVersionRE.MatchString(v) {
+			return fmt.Errorf("bundle fill: --version %q isn't a version", *tag)
+		}
+		if out, err = bundle.SetVersion(out, v); err != nil {
+			return err
+		}
 	}
 	_, err = w.Write(out)
 	return err

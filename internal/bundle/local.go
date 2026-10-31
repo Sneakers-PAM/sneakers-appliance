@@ -140,10 +140,31 @@ func Fill(relYAML []byte, layouts string) ([]byte, error) {
 		sort.Strings(stray)
 		return nil, codes.New(codes.KitBundleMismatch, "images were built for %s, which release.yaml doesn't name", strings.Join(stray, ", "))
 	}
+	return encode(&doc)
+}
+
+// SetVersion writes release.yaml with version as its metadata.version. A
+// sneakers-release manifest names the final version it's heading for, so a
+// release candidate's tag says which release this one is, and the stacks
+// give that version to the product.
+func SetVersion(relYAML []byte, version string) ([]byte, error) {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(relYAML, &doc); err != nil {
+		return nil, codes.New(codes.KitBundleMismatch, "release.yaml doesn't parse: %v", err)
+	}
+	v := lookup(&doc, "metadata", "version")
+	if v == nil {
+		return nil, codes.New(codes.KitBundleMismatch, "release.yaml has no metadata.version")
+	}
+	v.Value = version
+	return encode(&doc)
+}
+
+func encode(doc *yaml.Node) ([]byte, error) {
 	var b strings.Builder
 	enc := yaml.NewEncoder(&b)
 	enc.SetIndent(2)
-	if err := enc.Encode(&doc); err != nil {
+	if err := enc.Encode(doc); err != nil {
 		return nil, fmt.Errorf("bundle: %w", err)
 	}
 	if err := enc.Close(); err != nil {
