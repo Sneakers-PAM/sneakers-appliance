@@ -4,8 +4,10 @@
 package productspec
 
 import (
+	"path"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -52,7 +54,10 @@ type DataCluster struct {
 	Name string `yaml:"name"`
 	// Container is the pod's PostgreSQL container; empty is "postgres".
 	Container string `yaml:"container"`
-	// Host is what the tools connect to, from inside the pod.
+	// Host is what the tools connect to, from inside the pod: a name, or
+	// the directory of the server's local socket. A socket takes no
+	// sslmode, since libpq ignores it there, and can log in by the pod's
+	// user with no password at all.
 	Host string `yaml:"host"`
 	// Port is empty for 5432.
 	Port int `yaml:"port"`
@@ -185,8 +190,15 @@ func checkDataCluster(s Spec, after, role string, c DataCluster) error {
 	if !ok || s.Phases[i].Name != after {
 		return bad("data_move: the %s %q isn't a workload of the phase %q", role, c.Name, after)
 	}
-	if !dnsNameRE.MatchString(c.Namespace) || !dnsNameRE.MatchString(c.Host) {
+	socket := strings.HasPrefix(c.Host, "/")
+	if socket && (!inPodPath.MatchString(c.Host) || path.Clean(c.Host) != c.Host) {
+		return bad("data_move: the %s's socket directory %q isn't an absolute path", role, c.Host)
+	}
+	if !dnsNameRE.MatchString(c.Namespace) || (!socket && !dnsNameRE.MatchString(c.Host)) {
 		return bad("data_move: the %s needs a namespace and a host", role)
+	}
+	if socket && c.SSLMode != "" {
+		return bad("data_move: the %s connects over a local socket, where sslmode does nothing", role)
 	}
 	if c.Port < 0 || c.Port > 65535 {
 		return bad("data_move: the %s's port %d is out of range", role, c.Port)

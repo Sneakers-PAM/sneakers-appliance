@@ -47,15 +47,24 @@ box_running() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: %s\r\n\r\n' "$1" | nc -w 5 "$1" "$2" 2>/dev/null | grep -q '"state":"running"'
 }
 
+# pg_pod: the pod of the cluster the product runs on: the new one once the
+# data move has placed it, and the old one until then and after a revert.
+pg_pod() {
+  if k -n sneakers get pod sneakers-pgha-0 -o name >/dev/null 2>&1 && ! grep -q '"state":"failed"' /var/lib/sneakers/platform/data-move.json 2>/dev/null; then
+    echo sneakers-pgha-0
+  else
+    echo sneakers-postgres-0
+  fi
+}
 # pg_in <database> <sql>: psql as postgres in the bundled PostgreSQL's
 # pod, through the root's kubectl.
-pg_in() { k -n sneakers exec sneakers-postgres-0 -c postgres -- psql -U postgres -d "$1" -qtAX -v ON_ERROR_STOP=1 -c "$2"; }
+pg_in() { k -n sneakers exec "$(pg_pod)" -c postgres -- psql -U postgres -d "$1" -qtAX -v ON_ERROR_STOP=1 -c "$2"; }
 # pg_start: how the bundled PostgreSQL's current start began, from its
 # log: first (a new data directory), clean (after a shutdown checkpoint)
 # or recovered. The image's first start runs initdb's own server and stops
 # it cleanly, so its init line comes first.
 pg_start() {
-  log="$(k -n sneakers logs sneakers-postgres-0 -c postgres 2>/dev/null)"
+  log="$(k -n sneakers logs "$(pg_pod)" -c postgres 2>/dev/null)"
   case "$log" in
     *"init process complete"*) echo first ;;
     *"database system was interrupted"*|*"not properly shut down"*) echo recovered ;;
@@ -145,6 +154,7 @@ realci_rows() { # version when
     line="$line $db[$n]"
   done
   say "realci: rows $2 version=$1 start=$(pg_start)$line"
+  say "realci: database $2 version=$1 on=$(pg_pod) move=$(sed -n 's/.*"state": *"\([a-z]*\)".*/\1/p' /var/lib/sneakers/platform/data-move.json 2>/dev/null | head -1)"
 }
 realci_pods() { # version when
   say "realci: pods $2 version=$1: $(k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} app={.metadata.labels.app\.kubernetes\.io/name} order={.metadata.labels.sneakers-appliance/phase-order} phase={.status.phase} restarts={.status.containerStatuses[*].restartCount} init=[{range .status.initContainerStatuses[*]}{.name}/{.restartCount}/{.state.terminated.reason}{.state.waiting.reason},{end}] waiting={.status.containerStatuses[*].state.waiting.reason} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].status}@{.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"

@@ -51,13 +51,13 @@ spec:
                   name: sneakers-bundled
                   key: password
             - name: TARGET_IDENTITY_DSN
-              value: postgres://sneakers@sneakers-postgres:5432/sneakers_identity?sslmode=disable
+              value: postgres://sneakers@sneakers-pgha-primary:5432/sneakers_identity?sslmode=require
             - name: TARGET_VAULT_DSN
-              value: postgres://sneakers@sneakers-postgres:5432/sneakers_vault?sslmode=disable
+              value: postgres://sneakers@sneakers-pgha-primary:5432/sneakers_vault?sslmode=require
             - name: TARGET_WORKFLOW_DSN
-              value: postgres://sneakers@sneakers-postgres:5432/sneakers_workflow?sslmode=disable
+              value: postgres://sneakers@sneakers-pgha-primary:5432/sneakers_workflow?sslmode=require
             - name: TARGET_AUDIT_DSN
-              value: postgres://sneakers@sneakers-postgres:5432/sneakers_audit?sslmode=disable
+              value: postgres://sneakers@sneakers-pgha-primary:5432/sneakers_audit?sslmode=require
             - name: TARGET_KRATOS_ADMIN_URL
               value: http://sneakers-kratos-admin
             - name: TARGET_VAULT_ADDR

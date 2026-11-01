@@ -124,8 +124,8 @@ func render(o options, w io.Writer) error {
 			continue
 		}
 		box[b.SecretName()] = map[string]bool{}
-		for _, k := range b.Keys {
-			box[b.SecretName()][k.Key] = true
+		for _, k := range b.KeyNames() {
+			box[b.SecretName()][k] = true
 		}
 	}
 	o.secretKeys, o.boxMaps = map[string]bool{}, map[string]bool{}
@@ -379,6 +379,9 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 				return fmt.Errorf("it mounts the Secret %s, which product.yaml doesn't declare as a box secret", sn)
 			}
 		}
+		if err := projectedSecrets(vm, box); err != nil {
+			return err
+		}
 	}
 	if sts != nil {
 		if vct, ok := sts["volumeClaimTemplates"].([]any); ok {
@@ -391,6 +394,34 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 				vols = append(vols, vol)
 			}
 			ps["volumes"] = vols
+		}
+	}
+	return nil
+}
+
+// projectedSecrets checks every Secret a projected volume reads is a box
+// secret, key and all.
+func projectedSecrets(vol doc, box map[string]map[string]bool) error {
+	sources, _ := dig(vol, "projected")["sources"].([]any)
+	for _, src := range sources {
+		sm, _ := src.(doc)
+		sec := dig(sm, "secret")
+		if sec == nil {
+			continue
+		}
+		name, _ := sec["name"].(string)
+		if opt, _ := sec["optional"].(bool); opt {
+			continue
+		}
+		if box[name] == nil {
+			return fmt.Errorf("it mounts the Secret %s, which product.yaml doesn't declare as a box secret", name)
+		}
+		items, _ := sec["items"].([]any)
+		for _, it := range items {
+			im, _ := it.(doc)
+			if key, _ := im["key"].(string); !box[name][key] {
+				return fmt.Errorf("it mounts %s from the Secret %s, which product.yaml doesn't declare as a box secret key", key, name)
+			}
 		}
 	}
 	return nil

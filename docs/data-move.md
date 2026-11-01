@@ -26,7 +26,8 @@ data_move:
   target:
     namespace: app
     name: new-db
-    host: new-db-primary.app.svc  # what the tools connect to, from inside new-db-0
+    host: new-db-primary.app.svc  # what the tools connect to, from inside new-db-0, or the
+                                  # directory of its local socket
     port: 5432                    # 5432 without it
     sslmode: require              # disable without it
     ssl_root_cert: /tls/ca.crt    # for verify-ca and verify-full
@@ -42,7 +43,10 @@ data_move:
 The box refuses a move whose `after` isn't a phase with later phases, a cluster that isn't a
 workload of that phase, a target with the source's name, a host or sslmode that libpq can't take, a
 `password_env` that isn't a variable's name, a check on a database the move doesn't carry, and a
-timeout out of range. `user` is a superuser on both sides.
+timeout out of range. `user` is a superuser on both sides. A `host` that's a socket directory takes
+no `sslmode`, since libpq ignores it there, and needs no `password_env` when the pod's own user is a
+superuser: Sneakers' target logs in that way, because that chart keeps its passwords in files. Its
+services then prove TLS as they start, and a failure there goes back like any other.
 
 ## What it does
 
@@ -136,3 +140,22 @@ They kill `pg_dump` and `pg_restore` with SIGKILL mid-stream, lose the target ju
 switch, and SIGKILL the moving process itself at each of those points, as a power loss would. Each
 time the old cluster must hold exactly what it held and still take writes, and the next attempt must
 succeed. `DATAMOVE_POSTGRES_IMAGE` picks the image.
+
+The rehearsal does the same against the real charts on a kind cluster, with the real services and
+the Secrets as a box makes them. `test/datamove/rehearsal.sh` seeds the old cluster, brings up the
+new one beside it with the bundle's values, and SIGKILLs the real move mid-dump, mid-restore and
+just before the switch. Each time the old cluster must hold what it held and the services must
+start on it. The last run goes through, every table's rows, every sequence and object, the locale,
+the owners and the audit chain are compared, and the services start on the new cluster over TLS.
+It takes a sneakers-release checkout with its service images loaded:
+
+```sh
+CHARTS=../sneakers-release bash test/datamove/rehearsal.sh
+```
+
+`SKIP_WEB=1` leaves out the two web apps, and `SEED_ROWS` and `AUDIT_ROWS` size the data.
+`test/datamove/new-box.sh` runs after it on the same cluster and takes the same settings: both
+clusters come up empty, nothing moves, and the services make their tables on the new one. The
+`Data Move Rehearsal` workflow runs it on amd64 and arm64. The real-bundle job's `move` leg
+([testing.md](testing.md#the-real-bundle-job)) takes a box from rc.6 through the normal update path
+in QEMU.

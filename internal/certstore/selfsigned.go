@@ -69,6 +69,41 @@ func NewSelfSigned(hostname string, addrs []string, now time.Time) (certPEM, key
 		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), nil
 }
 
+// NewInternal makes a self-signed ECDSA P-256 certificate for a workload
+// inside the box: it signs itself, so one file is both the certificate and
+// the CA a peer checks it with, and it works as server and as client.
+func NewInternal(commonName string, dnsNames []string, lifetime time.Duration, now time.Time) (certPEM, keyPEM []byte, err error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tls: %w", err)
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 127))
+	if err != nil {
+		return nil, nil, fmt.Errorf("tls: %w", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: commonName, Organization: []string{"Sneakers-PAM Appliance internal"}},
+		NotBefore:             now.Add(-time.Hour),
+		NotAfter:              now.Add(lifetime),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		DNSNames:              dnsNames,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tls: %w", err)
+	}
+	kder, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("tls: %w", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
+		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: kder}), nil
+}
+
 // Fingerprint is a certificate's SHA-256 as colon-separated upper-case
 // hex, the form the console shows for checking on first visit.
 func Fingerprint(der []byte) string {
