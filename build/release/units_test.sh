@@ -80,6 +80,7 @@ has ovaproof 'SNEAKERS_OVA=.*/ova/sneakers-appliance-\$VERSION-amd64\.ova' "boot
 has ovaproof 'go test -tags image .*-run TestFreshOVAFirstBoot .*\./test/image/ova' "run the first-boot test"
 has publish 'needs: \[guard, sign, ovaproof\]' "wait for the fresh OVA's first boot"
 has lab "python3-virt-firmware" "install virt-fw-vars for the boot"
+has lab "BUILD_STAMP: n" "stamp the build without a build time, which the name check refuses"
 has lab 'SNEAKERS_OVA="\$ova"' "boot the lab OVA"
 
 for id in build sign publish; do

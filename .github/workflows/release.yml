@@ -787,6 +787,7 @@ jobs:
           bash build/openssh/build.sh out/static
       - name: Build a lab release and its .bin
         env:
+          BUILD_STAMP: n${{ github.run_number }}
           VERSION: ${{ needs.guard.outputs.version }}
           COSIGN_PASSWORD: ""
         run: |
