@@ -62,9 +62,9 @@ own directory, so it stays clear of `data-move/`, and only the cluster's user ca
 | The sets | `<dir>/sets/<name>` | when an admin asks |
 
 For Sneakers the schedules, the seven nightly base backups the chart keeps and the small-box limits
-are in sneakers-release's `deploy/postgres-ha/`. On a small box one upload and one disk reader run at
-a time, inside the database pod's 512 MiB, and the restore check gets at most 512 MiB and one CPU.
-The check runs on the state volume, up to the database's size. Nothing here is a setting yet: that's
+are under `postgres-ha` in sneakers-release's `charts/sneakers/values.yaml`. On a small box one
+upload and one disk reader run at a time, inside the database pod's 512 MiB, and the restore check
+gets at most 512 MiB and one CPU. The check runs on the state volume, up to the database's size. Nothing here is a setting yet: that's
 [#2](https://github.com/Sneakers-PAM/sneakers-appliance/issues/2).
 
 ## Sets

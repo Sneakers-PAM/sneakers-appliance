@@ -95,15 +95,34 @@ k create secret generic sneakers-bundled --from-literal=password="$(pw)" --from-
 k create secret generic sneakers-box --from-literal=VAULT_ROOT_KEK="$(pw)" --from-literal=TOTP_ENC_KEY="$(pw)" --dry-run=client -o yaml | k apply -f - >/dev/null
 
 step "the cluster, with the box's values"
-chart="$(HELM="${HELM:-helm}" bash "$CHARTS/scripts/pull-postgres-ha.sh" "$work/pgha")"
+(cd "$CHARTS" && scripts/build-deps.sh)
+# The umbrella with only the cluster on: no service runs in this rehearsal, and
+# the Secrets above stand in for the box's.
 cat > "$work/kind.yaml" <<'YAML'
-storage: {size: 20Gi, storageClassName: box}
-backup:
-  file:
-    persistence: {storageClassName: box}
+bundledSecrets: {enabled: false}
+bundledNetworkPolicies: {enabled: false}
+postgres: {enabled: false}
+valkey: {enabled: false}
+kratos: {enabled: false}
+identity: {enabled: false}
+vault: {enabled: false}
+workflow: {enabled: false}
+audit: {enabled: false}
+notify: {enabled: false}
+connector: {enabled: false}
+sshbroker: {enabled: false}
+gateway: {enabled: false, ingress: {enabled: false}}
+mcp: {enabled: false}
+web-staff: {enabled: false}
+web-admin: {enabled: false}
+postgres-ha:
+  storage: {size: 20Gi, storageClassName: box}
+  backup:
+    file:
+      persistence: {storageClassName: box}
 YAML
-helm upgrade --install sneakers-pgha "$chart" -n "$ns" \
-  -f "$CHARTS/deploy/postgres-ha/values.yaml" -f "$CHARTS/deploy/postgres-ha/values-small-box.yaml" \
+helm upgrade --install sneakers "$CHARTS/charts/sneakers" -n "$ns" \
+  -f "$CHARTS/charts/sneakers/examples/values-small-box.yaml" \
   -f "$root/build/product/sneakers/values-postgres-ha.yaml" -f "$work/kind.yaml" --wait --timeout 5m >/dev/null
 ready
 until n "ls /box/backup/postgres/walg/basebackups_005/*sentinel.json" >/dev/null 2>&1; do sleep 1; done
