@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"filippo.io/age" // scrub:allow=fqdn -- a Go module path
+	"filippo.io/age"        // scrub:allow=fqdn -- a Go module path
 	"filippo.io/age/agessh" // scrub:allow=fqdn -- a Go module path
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"

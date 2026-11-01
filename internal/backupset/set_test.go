@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"filippo.io/age" // scrub:allow=fqdn -- a Go module path
+	"filippo.io/age"        // scrub:allow=fqdn -- a Go module path
 	"filippo.io/age/agessh" // scrub:allow=fqdn -- a Go module path
 	"golang.org/x/crypto/ssh"
 
