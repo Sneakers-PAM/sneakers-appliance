@@ -67,7 +67,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.review", "network.commit", "network.discard", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall", "product.dumps.list", "product.dumps.remove", "support.bundle":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall", "product.dumps.list", "product.dumps.remove", "product.backup.list", "product.backup.create", "product.backup.remove", "product.backup.restore", "product.backup.export", "support.bundle":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -136,6 +136,16 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.productReset(ctx, r.Args[0], r.Args[1])
 	case "product.reinstall":
 		res, err = s.productReinstall(ctx, r.Args[0], r.Args[1])
+	case "product.backup.list":
+		res, err = s.backupSets(ctx)
+	case "product.backup.create":
+		res, err = s.createBackup(ctx, r.Args)
+	case "product.backup.remove":
+		res, err = s.removeBackup(ctx, r.Args[0], r.Args[1])
+	case "product.backup.restore":
+		res, err = s.restoreBackup(ctx, r.Args[0], r.Args[1])
+	case "product.backup.export":
+		res, err = s.exportBackup(ctx, r.Args[0], r.Args[1])
 	case "product.dumps.list":
 		res, err = s.keptDumps(ctx)
 	case "product.dumps.remove":

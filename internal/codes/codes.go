@@ -91,6 +91,18 @@ const (
 	// DataMoveBundle: a return to the new cluster is owed, and that bundle
 	// would land the box on it without one.
 	DataMoveBundle = 2538
+	// Backup: a backup set couldn't be made, or a restore failed and the box
+	// went back to the data it had.
+	Backup = 2539
+	// BackupBusy: another backup or restore runs, or an update does.
+	BackupBusy = 2540
+	// BackupRoom: the partition or volume a backup or restore needs is out
+	// of room.
+	BackupRoom = 2541
+	// BackupSet: no such set, or a name that can't be one.
+	BackupSet = 2542
+	// BackupOtherBox: the set was made on a box holding other keys.
+	BackupOtherBox = 2543
 	// ProductNotInstalled: there's no installed product to act on.
 	ProductNotInstalled = 2534
 )
@@ -137,6 +149,11 @@ var Entries = []apperr.Entry{
 	{Code: DataMoveRoom, Symbol: "DATA_MOVE_ROOM", Title: "upgrade", Cause: "the database move won't fit on the box, so it didn't start"},
 	{Code: DataMoveBundle, Symbol: "DATA_MOVE_BUNDLE", Title: "upgrade", Cause: "the box reverted over a data move, and that bundle neither declares the move nor keeps the old database, so it isn't applied"},
 	{Code: DataMoveDump, Symbol: "DATA_MOVE_DUMP", Title: "upgrade", Cause: "that kept dump isn't there, or the box's return to the new database still needs it"},
+	{Code: Backup, Symbol: "BACKUP", Title: "backup", Cause: "a backup set couldn't be made, or a restore failed and the box went back to the data it had"},
+	{Code: BackupBusy, Symbol: "BACKUP_BUSY", Title: "backup", Cause: "another backup or restore runs, or an update does"},
+	{Code: BackupRoom, Symbol: "BACKUP_ROOM", Title: "backup", Cause: "the partition or volume the backup or restore needs is out of room"},
+	{Code: BackupSet, Symbol: "BACKUP_SET", Title: "backup", Cause: "there's no such backup set, or that name can't be one"},
+	{Code: BackupOtherBox, Symbol: "BACKUP_OTHER_BOX", Title: "backup", Cause: "the backup set was made on a box holding other keys, so this box can't restore it"},
 	{Code: UpgradeDowngrade, Symbol: "UPGRADE_DOWNGRADE", Title: "upgrade", Cause: "the release isn't newer than the running one"},
 	{Code: UpgradeUnpredictable, Symbol: "UPGRADE_UNPREDICTABLE", Title: "upgrade", Cause: "the release's UKI isn't one whose PCR 11 the box can predict"},
 	{Code: UpgradeNoPrevious, Symbol: "UPGRADE_NO_PREVIOUS", Title: "upgrade", Cause: "there's no previous release to roll back to"},

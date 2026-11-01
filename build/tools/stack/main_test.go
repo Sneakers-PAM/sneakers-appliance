@@ -293,3 +293,47 @@ func TestRenderWithoutASwitch(t *testing.T) {
 		t.Fatal("a switch ConfigMap without a switch")
 	}
 }
+
+// A claim the product declares for its backups is the backup partition's,
+// whichever workload mounts it, and every other claim stays on the data
+// directory.
+func TestTheBackupClaimGoesToTheBackupPartition(t *testing.T) {
+	pins := map[string]string{"docker.io/library/postgres": "sha256:3333333333333333333333333333333333333333333333333333333333333333"}
+	const src = `apiVersion: batch/v1
+kind: CronJob
+metadata: {name: sneakers-pgha-backup-verify}
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          securityContext: {runAsUser: 999}
+          containers:
+            - name: verify
+              image: "postgres:18.6"
+          volumes:
+            - name: backup
+              persistentVolumeClaim: {claimName: sneakers-pgha-backup, readOnly: true}
+            - name: other
+              persistentVolumeClaim: {claimName: another}
+`
+	var d doc
+	if err := yaml.Unmarshal([]byte(src), &d); err != nil {
+		t.Fatal(err)
+	}
+	o := options{Namespace: "sneakers", Data: "/var/lib/sneakers-data", backupClaim: "sneakers-pgha-backup", backupDir: "/var/lib/sneakers/backup/postgres"}
+	if err := pod(o, d, "CronJob", "sneakers-pgha-backup-verify", pins, nil, map[string]bool{}); err != nil {
+		t.Fatal(err)
+	}
+	ps := dig(d, "spec", "jobTemplate", "spec", "template", "spec")
+	vols := ps["volumes"].([]any)
+	if got := dig(vols[0].(doc), "hostPath")["path"]; got != "/var/lib/sneakers/backup/postgres" {
+		t.Fatalf("the backup claim went to %v", got)
+	}
+	if got := dig(vols[1].(doc), "hostPath")["path"]; got != "/var/lib/sneakers-data/pgha-backup-verify" {
+		t.Fatalf("another claim went to %v", got)
+	}
+	if len(ps["initContainers"].([]any)) != 2 {
+		t.Fatalf("each volume needs its owner set: %v", ps["initContainers"])
+	}
+}

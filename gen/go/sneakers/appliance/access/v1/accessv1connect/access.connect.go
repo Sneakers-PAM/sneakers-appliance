@@ -112,6 +112,21 @@ const (
 	// AccessServiceRemoveKeptDumpProcedure is the fully-qualified name of the AccessService's
 	// RemoveKeptDump RPC.
 	AccessServiceRemoveKeptDumpProcedure = "/sneakers.appliance.access.v1.AccessService/RemoveKeptDump"
+	// AccessServiceListBackupsProcedure is the fully-qualified name of the AccessService's ListBackups
+	// RPC.
+	AccessServiceListBackupsProcedure = "/sneakers.appliance.access.v1.AccessService/ListBackups"
+	// AccessServiceCreateBackupProcedure is the fully-qualified name of the AccessService's
+	// CreateBackup RPC.
+	AccessServiceCreateBackupProcedure = "/sneakers.appliance.access.v1.AccessService/CreateBackup"
+	// AccessServiceRemoveBackupProcedure is the fully-qualified name of the AccessService's
+	// RemoveBackup RPC.
+	AccessServiceRemoveBackupProcedure = "/sneakers.appliance.access.v1.AccessService/RemoveBackup"
+	// AccessServiceRestoreBackupProcedure is the fully-qualified name of the AccessService's
+	// RestoreBackup RPC.
+	AccessServiceRestoreBackupProcedure = "/sneakers.appliance.access.v1.AccessService/RestoreBackup"
+	// AccessServicePrepareBackupExportProcedure is the fully-qualified name of the AccessService's
+	// PrepareBackupExport RPC.
+	AccessServicePrepareBackupExportProcedure = "/sneakers.appliance.access.v1.AccessService/PrepareBackupExport"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -284,6 +299,14 @@ type AccessServiceClient interface {
 	// osadmin's ProductService.RemoveKeptDump run as the login's admin, which
 	// must be an owner and give a new authenticator code.
 	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
+	// ListBackups, CreateBackup, RemoveBackup, RestoreBackup and
+	// PrepareBackupExport are the closed shell's "<product> backup" commands:
+	// osadmin's ProductService methods run as the login's admin.
+	ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error)
+	CreateBackup(context.Context, *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error)
+	RemoveBackup(context.Context, *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error)
+	RestoreBackup(context.Context, *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error)
+	PrepareBackupExport(context.Context, *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -410,29 +433,64 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("RemoveKeptDump")),
 			connect.WithClientOptions(opts...),
 		),
+		listBackups: connect.NewClient[v1.ListBackupsRequest, v1.ListBackupsResponse](
+			httpClient,
+			baseURL+AccessServiceListBackupsProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("ListBackups")),
+			connect.WithClientOptions(opts...),
+		),
+		createBackup: connect.NewClient[v1.CreateBackupRequest, v1.CreateBackupResponse](
+			httpClient,
+			baseURL+AccessServiceCreateBackupProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("CreateBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		removeBackup: connect.NewClient[v1.RemoveBackupRequest, v1.RemoveBackupResponse](
+			httpClient,
+			baseURL+AccessServiceRemoveBackupProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("RemoveBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		restoreBackup: connect.NewClient[v1.RestoreBackupRequest, v1.RestoreBackupResponse](
+			httpClient,
+			baseURL+AccessServiceRestoreBackupProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("RestoreBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		prepareBackupExport: connect.NewClient[v1.PrepareBackupExportRequest, v1.PrepareBackupExportResponse](
+			httpClient,
+			baseURL+AccessServicePrepareBackupExportProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("PrepareBackupExport")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // accessServiceClient implements AccessServiceClient.
 type accessServiceClient struct {
-	getStatus        *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
-	listAdmins       *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
-	addAdmin         *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
-	removeAdmin      *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
-	listKeys         *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
-	addKey           *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
-	removeKey        *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
-	addRecoveryKey   *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
-	getExposedValue  *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
-	getMcp           *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
-	setMcp           *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
-	getUpdateChannel *connect.Client[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse]
-	setUpdateChannel *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
-	cleanUpDisk      *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
-	resetProduct     *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
-	reinstallProduct *connect.Client[v1.ReinstallProductRequest, v1.ReinstallProductResponse]
-	listKeptDumps    *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
-	removeKeptDump   *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
+	getStatus           *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	listAdmins          *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
+	addAdmin            *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
+	removeAdmin         *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
+	listKeys            *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
+	addKey              *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
+	removeKey           *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
+	addRecoveryKey      *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getExposedValue     *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
+	getMcp              *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
+	setMcp              *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
+	getUpdateChannel    *connect.Client[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse]
+	setUpdateChannel    *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
+	cleanUpDisk         *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
+	resetProduct        *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
+	reinstallProduct    *connect.Client[v1.ReinstallProductRequest, v1.ReinstallProductResponse]
+	listKeptDumps       *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
+	removeKeptDump      *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
+	listBackups         *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
+	createBackup        *connect.Client[v1.CreateBackupRequest, v1.CreateBackupResponse]
+	removeBackup        *connect.Client[v1.RemoveBackupRequest, v1.RemoveBackupResponse]
+	restoreBackup       *connect.Client[v1.RestoreBackupRequest, v1.RestoreBackupResponse]
+	prepareBackupExport *connect.Client[v1.PrepareBackupExportRequest, v1.PrepareBackupExportResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -527,6 +585,31 @@ func (c *accessServiceClient) RemoveKeptDump(ctx context.Context, req *connect.R
 	return c.removeKeptDump.CallUnary(ctx, req)
 }
 
+// ListBackups calls sneakers.appliance.access.v1.AccessService.ListBackups.
+func (c *accessServiceClient) ListBackups(ctx context.Context, req *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error) {
+	return c.listBackups.CallUnary(ctx, req)
+}
+
+// CreateBackup calls sneakers.appliance.access.v1.AccessService.CreateBackup.
+func (c *accessServiceClient) CreateBackup(ctx context.Context, req *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error) {
+	return c.createBackup.CallUnary(ctx, req)
+}
+
+// RemoveBackup calls sneakers.appliance.access.v1.AccessService.RemoveBackup.
+func (c *accessServiceClient) RemoveBackup(ctx context.Context, req *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error) {
+	return c.removeBackup.CallUnary(ctx, req)
+}
+
+// RestoreBackup calls sneakers.appliance.access.v1.AccessService.RestoreBackup.
+func (c *accessServiceClient) RestoreBackup(ctx context.Context, req *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error) {
+	return c.restoreBackup.CallUnary(ctx, req)
+}
+
+// PrepareBackupExport calls sneakers.appliance.access.v1.AccessService.PrepareBackupExport.
+func (c *accessServiceClient) PrepareBackupExport(ctx context.Context, req *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error) {
+	return c.prepareBackupExport.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -586,6 +669,14 @@ type AccessServiceHandler interface {
 	// osadmin's ProductService.RemoveKeptDump run as the login's admin, which
 	// must be an owner and give a new authenticator code.
 	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
+	// ListBackups, CreateBackup, RemoveBackup, RestoreBackup and
+	// PrepareBackupExport are the closed shell's "<product> backup" commands:
+	// osadmin's ProductService methods run as the login's admin.
+	ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error)
+	CreateBackup(context.Context, *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error)
+	RemoveBackup(context.Context, *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error)
+	RestoreBackup(context.Context, *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error)
+	PrepareBackupExport(context.Context, *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -708,6 +799,36 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("RemoveKeptDump")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceListBackupsHandler := connect.NewUnaryHandler(
+		AccessServiceListBackupsProcedure,
+		svc.ListBackups,
+		connect.WithSchema(accessServiceMethods.ByName("ListBackups")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceCreateBackupHandler := connect.NewUnaryHandler(
+		AccessServiceCreateBackupProcedure,
+		svc.CreateBackup,
+		connect.WithSchema(accessServiceMethods.ByName("CreateBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceRemoveBackupHandler := connect.NewUnaryHandler(
+		AccessServiceRemoveBackupProcedure,
+		svc.RemoveBackup,
+		connect.WithSchema(accessServiceMethods.ByName("RemoveBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceRestoreBackupHandler := connect.NewUnaryHandler(
+		AccessServiceRestoreBackupProcedure,
+		svc.RestoreBackup,
+		connect.WithSchema(accessServiceMethods.ByName("RestoreBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServicePrepareBackupExportHandler := connect.NewUnaryHandler(
+		AccessServicePrepareBackupExportProcedure,
+		svc.PrepareBackupExport,
+		connect.WithSchema(accessServiceMethods.ByName("PrepareBackupExport")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -746,6 +867,16 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceListKeptDumpsHandler.ServeHTTP(w, r)
 		case AccessServiceRemoveKeptDumpProcedure:
 			accessServiceRemoveKeptDumpHandler.ServeHTTP(w, r)
+		case AccessServiceListBackupsProcedure:
+			accessServiceListBackupsHandler.ServeHTTP(w, r)
+		case AccessServiceCreateBackupProcedure:
+			accessServiceCreateBackupHandler.ServeHTTP(w, r)
+		case AccessServiceRemoveBackupProcedure:
+			accessServiceRemoveBackupHandler.ServeHTTP(w, r)
+		case AccessServiceRestoreBackupProcedure:
+			accessServiceRestoreBackupHandler.ServeHTTP(w, r)
+		case AccessServicePrepareBackupExportProcedure:
+			accessServicePrepareBackupExportHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -825,6 +956,26 @@ func (UnimplementedAccessServiceHandler) ListKeptDumps(context.Context, *connect
 
 func (UnimplementedAccessServiceHandler) RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.RemoveKeptDump is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.ListBackups is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) CreateBackup(context.Context, *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.CreateBackup is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) RemoveBackup(context.Context, *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.RemoveBackup is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) RestoreBackup(context.Context, *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.RestoreBackup is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) PrepareBackupExport(context.Context, *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.PrepareBackupExport is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

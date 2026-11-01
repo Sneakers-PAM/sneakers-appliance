@@ -65,6 +65,10 @@ type Reset struct {
 	// MoveDumps is the data move's directory on the backup partition, whose
 	// dumps hold the product's data.
 	MoveDumps string
+	// Backups lists what else of the product's data the box holds outside
+	// DataRoot: its archive, its backup sets and their records. A new install
+	// won't start on another cluster's archive.
+	Backups func() []string
 	// Images is where k0s takes the airgap images from
 	// (/var/lib/k0s/images); Products is the slots' directory, which the
 	// links there point into.
@@ -419,6 +423,9 @@ func (r *Reset) Data(remove ...string) (int64, error) {
 	}
 	if r.MoveDumps != "" {
 		remove = append(remove, r.MoveDumps)
+	}
+	if r.Backups != nil {
+		remove = append(remove, r.Backups()...)
 	}
 	for _, p := range remove {
 		n, err := product.DirBytes(p)

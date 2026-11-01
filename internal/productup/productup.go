@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/backupset"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
@@ -107,6 +108,15 @@ type Probe struct {
 	// Move runs a data move the slot declares; nil can't run one. Only the
 	// process that follows the product sets it.
 	Move DataMover
+	// Restore runs a restore of the product's database; nil can't run one.
+	// Only the process that follows the product sets it.
+	Restore Restorer
+}
+
+// Restorer is the box's restore, which holds the product while it runs.
+type Restorer interface {
+	Ask(svc backupset.Services) backupset.Status
+	Settle(ctx context.Context) error
 }
 
 // defaultAskTimeout bounds each command and the edge request.

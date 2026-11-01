@@ -12,7 +12,8 @@
 //     never pulled (the box is airgapped);
 //   - a PersistentVolumeClaim goes, and the volume that used it (or a
 //     StatefulSet's volume claim template) becomes a hostPath under the
-//     data directory, owned by the pod's user;
+//     data directory, owned by the pod's user, and the claim product.yaml's
+//     backups name becomes their directory on the backup partition;
 //   - an Ingress loses its host and TLS: the box's edge serves every name
 //     on 443 with the box's certificate;
 //   - no Secret value is carried: a Secret the chart renders must be one
@@ -64,6 +65,9 @@ type options struct {
 	SwitchFrom          []string
 	// Data is the directory the hostPath volumes go under.
 	Data string
+	// backupClaim is the claim of product.yaml's backups, which becomes
+	// backupDir on the backup partition wherever a pod mounts it.
+	backupClaim, backupDir string
 	// WaitJob names the release's Job image (spec.jobs) whose `wait`
 	// command each phased workload's init container runs; empty adds none.
 	WaitJob string
@@ -117,6 +121,9 @@ func render(o options, w io.Writer) error {
 	spec, err := productspec.Parse(pb)
 	if err != nil {
 		return err
+	}
+	if spec.Backups != nil {
+		o.backupClaim, o.backupDir = spec.Backups.Claim, spec.Backups.HostDir()
 	}
 	box := map[string]map[string]bool{}
 	for _, b := range spec.BoxSecrets {
@@ -352,8 +359,8 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 			uid = u
 		}
 	}
-	hostPath := func(vol doc) {
-		vol["hostPath"] = doc{"path": path.Join(o.Data, strings.TrimPrefix(name, o.Namespace+"-")), "type": "DirectoryOrCreate"}
+	hostPath := func(vol doc, dir string) {
+		vol["hostPath"] = doc{"path": dir, "type": "DirectoryOrCreate"}
 		init := doc{"name": "data-owner", "image": mainImage, "imagePullPolicy": "Never",
 			"command": []any{"sh", "-c", fmt.Sprintf("chown %d:%d /data && chmod 0700 /data", uid, uid)},
 			"securityContext": doc{"runAsUser": 0, "runAsNonRoot": false, "allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true,
@@ -363,15 +370,20 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 		inits, _ := ps["initContainers"].([]any)
 		ps["initContainers"] = append([]any{init}, inits...)
 	}
+	data := path.Join(o.Data, strings.TrimPrefix(name, o.Namespace+"-"))
 	vols, _ := ps["volumes"].([]any)
 	for _, v := range vols {
 		vm, _ := v.(doc)
 		if vm == nil {
 			continue
 		}
-		if _, ok := vm["persistentVolumeClaim"]; ok {
+		if pvc, ok := vm["persistentVolumeClaim"].(doc); ok {
 			delete(vm, "persistentVolumeClaim")
-			hostPath(vm)
+			if claim, _ := pvc["claimName"].(string); claim != "" && claim == o.backupClaim {
+				hostPath(vm, o.backupDir)
+			} else {
+				hostPath(vm, data)
+			}
 		}
 		if sv := dig(vm, "secret"); sv != nil {
 			sn, _ := sv["secretName"].(string)
@@ -390,7 +402,7 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 				tm, _ := t.(doc)
 				vname, _ := dig(tm, "metadata")["name"].(string)
 				vol := doc{"name": vname}
-				hostPath(vol)
+				hostPath(vol, data)
 				vols = append(vols, vol)
 			}
 			ps["volumes"] = vols

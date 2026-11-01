@@ -27,6 +27,7 @@ Offered over: SSH and console.
 Its commands:
 
 - `<product> <value>`: <Value label> (shown to the roles the product names)
+- `<product> backup`: backup commands
 - `<product> dumps`: dumps commands
 - `<product> mcp`: Show or set the MCP switch, the one the MCP card on :8443 sets
 - `<product> reinstall`: Install the installed version again, keeping its data (an owner, with a new authenticator code)
@@ -36,6 +37,7 @@ Example:
 
 ```text
   <product> <value>
+  <product> backup create
   <product> dumps list
   <product> mcp
   <product> reinstall
@@ -58,6 +60,132 @@ Example:
 
 ```text
   <product> <value>
+```
+
+## `<product> backup`
+
+backup commands.
+
+backup commands.
+
+Offered over: SSH and console.
+
+```text
+<product> backup <command>
+```
+
+Its commands:
+
+- `<product> backup create`: Cut a backup set now, with the product running
+- `<product> backup export`: Write a backup set to the terminal, encrypted to the recovery keys (an owner, with a new authenticator code)
+- `<product> backup list`: List the backup sets on the box
+- `<product> backup remove`: Remove a backup set for good (an owner, with a new authenticator code)
+- `<product> backup restore`: Bring the database back at a set's restore point (an owner, with a new authenticator code)
+
+Example:
+
+```text
+  <product> backup create
+  ssh owner@box1.sneakers.example.org <product> backup export before-the-change --code 123456 > before-the-change.age
+  <product> backup list
+  <product> backup remove before-the-change
+  <product> backup restore before-the-change
+```
+
+## `<product> backup create`
+
+Cut a backup set now, with the product running.
+
+Makes a named restore point, sends its WAL to the archive and links a base backup and the WAL up to the point into a new set. The set outlives the archive's own retention and costs no copy. The product keeps running. Without a name, the set is named after the time.
+
+Offered over: SSH.
+
+```text
+<product> backup create [name]
+```
+
+Example:
+
+```text
+  <product> backup create
+  <product> backup create before-the-change
+```
+
+## `<product> backup export`
+
+Write a backup set to the terminal, encrypted to the recovery keys (an owner, with a new authenticator code).
+
+Writes the set as one tar encrypted with age to the box's recovery keys, for a redirect to a file on your own machine. The box can't read it back; any one recovery key opens it. Because the output is the file, the code goes in --code. Owners only, over SSH; audited as product.backup.export.
+
+Offered over: SSH.
+
+```text
+<product> backup export <name> [flags]
+```
+
+| Flag | Meaning |
+|---|---|
+| `--code` | a new code from your authenticator |
+
+Example:
+
+```text
+  ssh owner@box1.sneakers.example.org <product> backup export before-the-change --code 123456 > before-the-change.age
+```
+
+## `<product> backup list`
+
+List the backup sets on the box.
+
+Lists the backup sets: each is a base backup and the WAL up to a named restore point, on the encrypted backup partition. docs/backups.md has the rest.
+
+Offered over: SSH.
+
+```text
+<product> backup list
+```
+
+Example:
+
+```text
+  <product> backup list
+  <product> backup list -o json
+```
+
+## `<product> backup remove`
+
+Remove a backup set for good (an owner, with a new authenticator code).
+
+Removes one set backup list shows. Type the set's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.backup.remove. There's no undo.
+
+Offered over: SSH.
+
+```text
+<product> backup remove <name>
+```
+
+Example:
+
+```text
+  <product> backup remove before-the-change
+```
+
+## `<product> backup restore`
+
+Bring the database back at a set's restore point (an owner, with a new authenticator code).
+
+Takes the product offline, keeps the data the box has, and brings the database back at the set's restore point: what was written after it is gone once the box settles. The box checks the data before the services start, and any failure puts the data it had back. A set made on a box holding other keys is refused with BACKUP_OTHER_BOX. Type the set's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited.
+
+Offered over: SSH.
+
+```text
+<product> backup restore <name>
+```
+
+Example:
+
+```text
+  <product> backup restore before-the-change
 ```
 
 ## `<product> dumps`

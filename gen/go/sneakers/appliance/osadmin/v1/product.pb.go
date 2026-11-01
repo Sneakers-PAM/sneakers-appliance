@@ -727,6 +727,525 @@ func (*RemoveKeptDumpResponse) Descriptor() ([]byte, []int) {
 	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{11}
 }
 
+// BoxBackupSet is one backup set on the box.
+type BoxBackupSet struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// point is the named restore point it restores to.
+	Point string `protobuf:"bytes,2,opt,name=point,proto3" json:"point,omitempty"`
+	// taken is when it was cut, in RFC 3339.
+	Taken         string `protobuf:"bytes,3,opt,name=taken,proto3" json:"taken,omitempty"`
+	Bytes         uint64 `protobuf:"varint,4,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BoxBackupSet) Reset() {
+	*x = BoxBackupSet{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BoxBackupSet) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BoxBackupSet) ProtoMessage() {}
+
+func (x *BoxBackupSet) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BoxBackupSet.ProtoReflect.Descriptor instead.
+func (*BoxBackupSet) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *BoxBackupSet) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *BoxBackupSet) GetPoint() string {
+	if x != nil {
+		return x.Point
+	}
+	return ""
+}
+
+func (x *BoxBackupSet) GetTaken() string {
+	if x != nil {
+		return x.Taken
+	}
+	return ""
+}
+
+func (x *BoxBackupSet) GetBytes() uint64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+type ListBackupsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBackupsRequest) Reset() {
+	*x = ListBackupsRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBackupsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBackupsRequest) ProtoMessage() {}
+
+func (x *ListBackupsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBackupsRequest.ProtoReflect.Descriptor instead.
+func (*ListBackupsRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{13}
+}
+
+type ListBackupsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sets          []*BoxBackupSet        `protobuf:"bytes,1,rep,name=sets,proto3" json:"sets,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBackupsResponse) Reset() {
+	*x = ListBackupsResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBackupsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBackupsResponse) ProtoMessage() {}
+
+func (x *ListBackupsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBackupsResponse.ProtoReflect.Descriptor instead.
+func (*ListBackupsResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListBackupsResponse) GetSets() []*BoxBackupSet {
+	if x != nil {
+		return x.Sets
+	}
+	return nil
+}
+
+type CreateBackupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// name is the set's name; empty makes one from the time.
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateBackupRequest) Reset() {
+	*x = CreateBackupRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateBackupRequest) ProtoMessage() {}
+
+func (x *CreateBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateBackupRequest.ProtoReflect.Descriptor instead.
+func (*CreateBackupRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CreateBackupRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type CreateBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Set           *BoxBackupSet          `protobuf:"bytes,1,opt,name=set,proto3" json:"set,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateBackupResponse) Reset() {
+	*x = CreateBackupResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateBackupResponse) ProtoMessage() {}
+
+func (x *CreateBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateBackupResponse.ProtoReflect.Descriptor instead.
+func (*CreateBackupResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CreateBackupResponse) GetSet() *BoxBackupSet {
+	if x != nil {
+		return x.Set
+	}
+	return nil
+}
+
+type RemoveBackupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// totp_code is a new code from the owner's authenticator.
+	TotpCode string `protobuf:"bytes,1,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	// name is the set's name, as typed.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveBackupRequest) Reset() {
+	*x = RemoveBackupRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveBackupRequest) ProtoMessage() {}
+
+func (x *RemoveBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveBackupRequest.ProtoReflect.Descriptor instead.
+func (*RemoveBackupRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RemoveBackupRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *RemoveBackupRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type RemoveBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveBackupResponse) Reset() {
+	*x = RemoveBackupResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveBackupResponse) ProtoMessage() {}
+
+func (x *RemoveBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveBackupResponse.ProtoReflect.Descriptor instead.
+func (*RemoveBackupResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{18}
+}
+
+type RestoreBackupRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// totp_code is a new code from the owner's authenticator.
+	TotpCode string `protobuf:"bytes,1,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	// name is the set's name, as typed.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreBackupRequest) Reset() {
+	*x = RestoreBackupRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreBackupRequest) ProtoMessage() {}
+
+func (x *RestoreBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreBackupRequest.ProtoReflect.Descriptor instead.
+func (*RestoreBackupRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *RestoreBackupRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *RestoreBackupRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type RestoreBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreBackupResponse) Reset() {
+	*x = RestoreBackupResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreBackupResponse) ProtoMessage() {}
+
+func (x *RestoreBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreBackupResponse.ProtoReflect.Descriptor instead.
+func (*RestoreBackupResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{20}
+}
+
+type PrepareBackupExportRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// totp_code is a new code from the owner's authenticator.
+	TotpCode string `protobuf:"bytes,1,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	// name is the set's name, as typed.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareBackupExportRequest) Reset() {
+	*x = PrepareBackupExportRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareBackupExportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareBackupExportRequest) ProtoMessage() {}
+
+func (x *PrepareBackupExportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareBackupExportRequest.ProtoReflect.Descriptor instead.
+func (*PrepareBackupExportRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *PrepareBackupExportRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *PrepareBackupExportRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type PrepareBackupExportResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ticket opens the export's stream once.
+	Ticket        string `protobuf:"bytes,1,opt,name=ticket,proto3" json:"ticket,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareBackupExportResponse) Reset() {
+	*x = PrepareBackupExportResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareBackupExportResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareBackupExportResponse) ProtoMessage() {}
+
+func (x *PrepareBackupExportResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareBackupExportResponse.ProtoReflect.Descriptor instead.
+func (*PrepareBackupExportResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *PrepareBackupExportResponse) GetTicket() string {
+	if x != nil {
+		return x.Ticket
+	}
+	return ""
+}
+
 var File_sneakers_appliance_osadmin_v1_product_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_product_proto_rawDesc = "" +
@@ -775,12 +1294,42 @@ const file_sneakers_appliance_osadmin_v1_product_proto_rawDesc = "" +
 	"\x15RemoveKeptDumpRequest\x12\x1b\n" +
 	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x18\n" +
-	"\x16RemoveKeptDumpResponse2\x86\x06\n" +
+	"\x16RemoveKeptDumpResponse\"d\n" +
+	"\fBoxBackupSet\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
+	"\x05point\x18\x02 \x01(\tR\x05point\x12\x14\n" +
+	"\x05taken\x18\x03 \x01(\tR\x05taken\x12\x14\n" +
+	"\x05bytes\x18\x04 \x01(\x04R\x05bytes\"\x14\n" +
+	"\x12ListBackupsRequest\"V\n" +
+	"\x13ListBackupsResponse\x12?\n" +
+	"\x04sets\x18\x01 \x03(\v2+.sneakers.appliance.osadmin.v1.BoxBackupSetR\x04sets\")\n" +
+	"\x13CreateBackupRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"U\n" +
+	"\x14CreateBackupResponse\x12=\n" +
+	"\x03set\x18\x01 \x01(\v2+.sneakers.appliance.osadmin.v1.BoxBackupSetR\x03set\"F\n" +
+	"\x13RemoveBackupRequest\x12\x1b\n" +
+	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x16\n" +
+	"\x14RemoveBackupResponse\"G\n" +
+	"\x14RestoreBackupRequest\x12\x1b\n" +
+	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x17\n" +
+	"\x15RestoreBackupResponse\"M\n" +
+	"\x1aPrepareBackupExportRequest\x12\x1b\n" +
+	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"5\n" +
+	"\x1bPrepareBackupExportResponse\x12\x16\n" +
+	"\x06ticket\x18\x01 \x01(\tR\x06ticket2\xa1\f\n" +
 	"\x0eProductService\x12\x91\x01\n" +
 	"\x11ListExposedValues\x127.sneakers.appliance.osadmin.v1.ListExposedValuesRequest\x1a8.sneakers.appliance.osadmin.v1.ListExposedValuesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
 	"\x0fGetExposedValue\x125.sneakers.appliance.osadmin.v1.GetExposedValueRequest\x1a6.sneakers.appliance.osadmin.v1.GetExposedValueResponse\"\x1a\xc2\xf3\x18\x16\x10\x01\"\x12product.value.read\x12\x92\x01\n" +
 	"\fResetProduct\x122.sneakers.appliance.osadmin.v1.ResetProductRequest\x1a3.sneakers.appliance.osadmin.v1.ResetProductResponse\"\x19\xc2\xf3\x18\x15\x10\x02\"\rproduct.reset8\x01@\x01\x12\x85\x01\n" +
-	"\rListKeptDumps\x123.sneakers.appliance.osadmin.v1.ListKeptDumpsRequest\x1a4.sneakers.appliance.osadmin.v1.ListKeptDumpsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa3\x01\n" +
+	"\rListKeptDumps\x123.sneakers.appliance.osadmin.v1.ListKeptDumpsRequest\x1a4.sneakers.appliance.osadmin.v1.ListKeptDumpsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x7f\n" +
+	"\vListBackups\x121.sneakers.appliance.osadmin.v1.ListBackupsRequest\x1a2.sneakers.appliance.osadmin.v1.ListBackupsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x97\x01\n" +
+	"\fCreateBackup\x122.sneakers.appliance.osadmin.v1.CreateBackupRequest\x1a3.sneakers.appliance.osadmin.v1.CreateBackupResponse\"\x1e\xc2\xf3\x18\x1a\x10\x01\"\x16product.backup.request\x12\xa2\x01\n" +
+	"\fRemoveBackup\x122.sneakers.appliance.osadmin.v1.RemoveBackupRequest\x1a3.sneakers.appliance.osadmin.v1.RemoveBackupResponse\")\xc2\xf3\x18%\x10\x02\"\x1dproduct.backup.remove-request8\x01@\x01\x12\x9e\x01\n" +
+	"\rRestoreBackup\x123.sneakers.appliance.osadmin.v1.RestoreBackupRequest\x1a4.sneakers.appliance.osadmin.v1.RestoreBackupResponse\"\"\xc2\xf3\x18\x1e\x10\x02\"\x16product.backup.restore8\x01@\x01\x12\xb7\x01\n" +
+	"\x13PrepareBackupExport\x129.sneakers.appliance.osadmin.v1.PrepareBackupExportRequest\x1a:.sneakers.appliance.osadmin.v1.PrepareBackupExportResponse\")\xc2\xf3\x18%\x10\x02\"\x1dproduct.backup.export-request8\x01@\x01\x12\xa3\x01\n" +
 	"\x0eRemoveKeptDump\x124.sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest\x1a5.sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse\"$\xc2\xf3\x18 \x10\x02\"\x18product.kept-dump.remove8\x01@\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
@@ -795,42 +1344,65 @@ func file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_sneakers_appliance_osadmin_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_sneakers_appliance_osadmin_v1_product_proto_goTypes = []any{
-	(*ExposedValue)(nil),              // 0: sneakers.appliance.osadmin.v1.ExposedValue
-	(*ListExposedValuesRequest)(nil),  // 1: sneakers.appliance.osadmin.v1.ListExposedValuesRequest
-	(*ListExposedValuesResponse)(nil), // 2: sneakers.appliance.osadmin.v1.ListExposedValuesResponse
-	(*GetExposedValueRequest)(nil),    // 3: sneakers.appliance.osadmin.v1.GetExposedValueRequest
-	(*GetExposedValueResponse)(nil),   // 4: sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	(*ResetProductRequest)(nil),       // 5: sneakers.appliance.osadmin.v1.ResetProductRequest
-	(*ResetProductResponse)(nil),      // 6: sneakers.appliance.osadmin.v1.ResetProductResponse
-	(*KeptDump)(nil),                  // 7: sneakers.appliance.osadmin.v1.KeptDump
-	(*ListKeptDumpsRequest)(nil),      // 8: sneakers.appliance.osadmin.v1.ListKeptDumpsRequest
-	(*ListKeptDumpsResponse)(nil),     // 9: sneakers.appliance.osadmin.v1.ListKeptDumpsResponse
-	(*RemoveKeptDumpRequest)(nil),     // 10: sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest
-	(*RemoveKeptDumpResponse)(nil),    // 11: sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse
-	(Role)(0),                         // 12: sneakers.appliance.osadmin.v1.Role
+	(*ExposedValue)(nil),                // 0: sneakers.appliance.osadmin.v1.ExposedValue
+	(*ListExposedValuesRequest)(nil),    // 1: sneakers.appliance.osadmin.v1.ListExposedValuesRequest
+	(*ListExposedValuesResponse)(nil),   // 2: sneakers.appliance.osadmin.v1.ListExposedValuesResponse
+	(*GetExposedValueRequest)(nil),      // 3: sneakers.appliance.osadmin.v1.GetExposedValueRequest
+	(*GetExposedValueResponse)(nil),     // 4: sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	(*ResetProductRequest)(nil),         // 5: sneakers.appliance.osadmin.v1.ResetProductRequest
+	(*ResetProductResponse)(nil),        // 6: sneakers.appliance.osadmin.v1.ResetProductResponse
+	(*KeptDump)(nil),                    // 7: sneakers.appliance.osadmin.v1.KeptDump
+	(*ListKeptDumpsRequest)(nil),        // 8: sneakers.appliance.osadmin.v1.ListKeptDumpsRequest
+	(*ListKeptDumpsResponse)(nil),       // 9: sneakers.appliance.osadmin.v1.ListKeptDumpsResponse
+	(*RemoveKeptDumpRequest)(nil),       // 10: sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest
+	(*RemoveKeptDumpResponse)(nil),      // 11: sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse
+	(*BoxBackupSet)(nil),                // 12: sneakers.appliance.osadmin.v1.BoxBackupSet
+	(*ListBackupsRequest)(nil),          // 13: sneakers.appliance.osadmin.v1.ListBackupsRequest
+	(*ListBackupsResponse)(nil),         // 14: sneakers.appliance.osadmin.v1.ListBackupsResponse
+	(*CreateBackupRequest)(nil),         // 15: sneakers.appliance.osadmin.v1.CreateBackupRequest
+	(*CreateBackupResponse)(nil),        // 16: sneakers.appliance.osadmin.v1.CreateBackupResponse
+	(*RemoveBackupRequest)(nil),         // 17: sneakers.appliance.osadmin.v1.RemoveBackupRequest
+	(*RemoveBackupResponse)(nil),        // 18: sneakers.appliance.osadmin.v1.RemoveBackupResponse
+	(*RestoreBackupRequest)(nil),        // 19: sneakers.appliance.osadmin.v1.RestoreBackupRequest
+	(*RestoreBackupResponse)(nil),       // 20: sneakers.appliance.osadmin.v1.RestoreBackupResponse
+	(*PrepareBackupExportRequest)(nil),  // 21: sneakers.appliance.osadmin.v1.PrepareBackupExportRequest
+	(*PrepareBackupExportResponse)(nil), // 22: sneakers.appliance.osadmin.v1.PrepareBackupExportResponse
+	(Role)(0),                           // 23: sneakers.appliance.osadmin.v1.Role
 }
 var file_sneakers_appliance_osadmin_v1_product_proto_depIdxs = []int32{
-	12, // 0: sneakers.appliance.osadmin.v1.ExposedValue.roles:type_name -> sneakers.appliance.osadmin.v1.Role
+	23, // 0: sneakers.appliance.osadmin.v1.ExposedValue.roles:type_name -> sneakers.appliance.osadmin.v1.Role
 	0,  // 1: sneakers.appliance.osadmin.v1.ListExposedValuesResponse.values:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
 	0,  // 2: sneakers.appliance.osadmin.v1.GetExposedValueResponse.entry:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
 	7,  // 3: sneakers.appliance.osadmin.v1.ListKeptDumpsResponse.dumps:type_name -> sneakers.appliance.osadmin.v1.KeptDump
-	1,  // 4: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:input_type -> sneakers.appliance.osadmin.v1.ListExposedValuesRequest
-	3,  // 5: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:input_type -> sneakers.appliance.osadmin.v1.GetExposedValueRequest
-	5,  // 6: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:input_type -> sneakers.appliance.osadmin.v1.ResetProductRequest
-	8,  // 7: sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps:input_type -> sneakers.appliance.osadmin.v1.ListKeptDumpsRequest
-	10, // 8: sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump:input_type -> sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest
-	2,  // 9: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:output_type -> sneakers.appliance.osadmin.v1.ListExposedValuesResponse
-	4,  // 10: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:output_type -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	6,  // 11: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:output_type -> sneakers.appliance.osadmin.v1.ResetProductResponse
-	9,  // 12: sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps:output_type -> sneakers.appliance.osadmin.v1.ListKeptDumpsResponse
-	11, // 13: sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump:output_type -> sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	12, // 4: sneakers.appliance.osadmin.v1.ListBackupsResponse.sets:type_name -> sneakers.appliance.osadmin.v1.BoxBackupSet
+	12, // 5: sneakers.appliance.osadmin.v1.CreateBackupResponse.set:type_name -> sneakers.appliance.osadmin.v1.BoxBackupSet
+	1,  // 6: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:input_type -> sneakers.appliance.osadmin.v1.ListExposedValuesRequest
+	3,  // 7: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:input_type -> sneakers.appliance.osadmin.v1.GetExposedValueRequest
+	5,  // 8: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:input_type -> sneakers.appliance.osadmin.v1.ResetProductRequest
+	8,  // 9: sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps:input_type -> sneakers.appliance.osadmin.v1.ListKeptDumpsRequest
+	13, // 10: sneakers.appliance.osadmin.v1.ProductService.ListBackups:input_type -> sneakers.appliance.osadmin.v1.ListBackupsRequest
+	15, // 11: sneakers.appliance.osadmin.v1.ProductService.CreateBackup:input_type -> sneakers.appliance.osadmin.v1.CreateBackupRequest
+	17, // 12: sneakers.appliance.osadmin.v1.ProductService.RemoveBackup:input_type -> sneakers.appliance.osadmin.v1.RemoveBackupRequest
+	19, // 13: sneakers.appliance.osadmin.v1.ProductService.RestoreBackup:input_type -> sneakers.appliance.osadmin.v1.RestoreBackupRequest
+	21, // 14: sneakers.appliance.osadmin.v1.ProductService.PrepareBackupExport:input_type -> sneakers.appliance.osadmin.v1.PrepareBackupExportRequest
+	10, // 15: sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump:input_type -> sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest
+	2,  // 16: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:output_type -> sneakers.appliance.osadmin.v1.ListExposedValuesResponse
+	4,  // 17: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:output_type -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	6,  // 18: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:output_type -> sneakers.appliance.osadmin.v1.ResetProductResponse
+	9,  // 19: sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps:output_type -> sneakers.appliance.osadmin.v1.ListKeptDumpsResponse
+	14, // 20: sneakers.appliance.osadmin.v1.ProductService.ListBackups:output_type -> sneakers.appliance.osadmin.v1.ListBackupsResponse
+	16, // 21: sneakers.appliance.osadmin.v1.ProductService.CreateBackup:output_type -> sneakers.appliance.osadmin.v1.CreateBackupResponse
+	18, // 22: sneakers.appliance.osadmin.v1.ProductService.RemoveBackup:output_type -> sneakers.appliance.osadmin.v1.RemoveBackupResponse
+	20, // 23: sneakers.appliance.osadmin.v1.ProductService.RestoreBackup:output_type -> sneakers.appliance.osadmin.v1.RestoreBackupResponse
+	22, // 24: sneakers.appliance.osadmin.v1.ProductService.PrepareBackupExport:output_type -> sneakers.appliance.osadmin.v1.PrepareBackupExportResponse
+	11, // 25: sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump:output_type -> sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse
+	16, // [16:26] is the sub-list for method output_type
+	6,  // [6:16] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_product_proto_init() }
@@ -845,7 +1417,7 @@ func file_sneakers_appliance_osadmin_v1_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_product_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_product_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

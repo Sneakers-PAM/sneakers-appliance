@@ -146,6 +146,21 @@ realci_write() {
     say "realci: the rows couldn't be written"
   fi
 }
+# realci_later: the backup leg's marker. Once the set realci-before exists a
+# table goes in that the set can't hold, and every change in whether the
+# database has it is said, so the leg sees a restore take it away.
+realci_later_mark=/var/lib/sneakers/lab-realci-later
+realci_later_was=
+realci_later() {
+  [ -f /var/lib/sneakers/backup/postgres/sets/realci-before/manifest.json ] || return 0
+  if [ ! -e "$realci_later_mark" ] && pg_in sneakers_audit "CREATE TABLE realci_later (i int)" >/dev/null 2>&1; then
+    : > "$realci_later_mark"
+  fi
+  now="$(pg_in sneakers_audit "SELECT to_regclass('realci_later') IS NOT NULL" 2>/dev/null)" || return 0
+  [ "$now" = "$realci_later_was" ] && return 0
+  realci_later_was="$now"
+  say "realci: later present=$now restore=$(sed -n 's/.*"state": *"\([a-z-]*\)".*/\1/p' /var/lib/sneakers/platform/backup-restore.json 2>/dev/null | head -1)"
+}
 realci_rows() { # version when
   line=""
   for db in $realci_dbs; do
@@ -223,6 +238,7 @@ realci() {
   while :; do
     v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
     realci_memory
+    realci_later
     if box_running 127.0.0.1 9180; then
       ticks=""
       # The box says running three times in a row before a report, so a

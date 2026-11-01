@@ -21,6 +21,10 @@ import (
 // the next (docs/data-move.md).
 const StepDataMove = "data_move"
 
+// StepRestore is a restore of the product's database, ahead of the phases
+// (docs/backups.md).
+const StepRestore = "restore"
+
 // stopEvery is how often stopping the later phases looks again.
 const stopEvery = 2 * time.Second
 

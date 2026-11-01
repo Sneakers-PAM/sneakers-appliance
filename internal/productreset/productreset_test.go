@@ -329,3 +329,22 @@ func TestClusterSaysSoBeforeItRemovesAnything(t *testing.T) {
 		t.Fatal("a stack went although the record didn't write")
 	}
 }
+
+// An archive left behind stops a new install's database from starting, so the
+// reset takes the backups with the data.
+func TestTheDataStepRemovesTheBackups(t *testing.T) {
+	f := newFixture(t)
+	dir := filepath.Join(f.root, "backup", "postgres")
+	journal := filepath.Join(f.root, "platform-backup-restore.json")
+	write(t, filepath.Join(dir, "walg", "wal_005", "000000010000000000000001.lz4"), "wal")
+	write(t, journal, "{}")
+	f.r.Backups = func() []string { return []string{dir, journal} }
+	if _, err := f.r.Data(); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{dir, journal} {
+		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s stayed: %v", p, err)
+		}
+	}
+}

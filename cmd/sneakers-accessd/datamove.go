@@ -12,6 +12,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/diskguard"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/elevated"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
@@ -21,9 +22,10 @@ import (
 // followingProbe is the probe of the one process that follows the product:
 // it can run the data move a slot declares (docs/data-move.md). k0s's
 // pre-stop and the product reset ask the plain one.
-func followingProbe(c config, lg log.Logger, audit *osaudit.Log) *productup.Probe {
+func followingProbe(c config, lg log.Logger, audit *osaudit.Log, bk *osadmin.Backups) *productup.Probe {
 	p := productProbe(c)
 	p.Move = dataMover(c, lg, audit)
+	p.Restore = bk.Restore
 	return p
 }
 

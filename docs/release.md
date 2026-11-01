@@ -569,6 +569,9 @@ key and TOTP key (`sneakers-box`) and the setup token it exposes. Its data path 
   its index next to the disk, for the base it built and newer (`PRODUCT_MIN_BASE` and
   `PRODUCT_MAX_BASE` set another range, as a test of the refusal does), and checks it with the key in its signed UKI.
 
+`backups` declares how the box backs up and restores the product's database, with `escrow` to tie a
+set to the box that holds its keys ([backups.md](backups.md)).
+
 ## Lab and production keys
 
 The release key (which signs the artifact and the `.bin` header) and the update key (which the
