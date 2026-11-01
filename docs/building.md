@@ -58,5 +58,7 @@ through links. A missing one fails the build. A lab build's version carries its 
 `r<UTC time>` (or `BUILD_STAMP`), before `g<commit>`, so two builds of one commit never share a
 version.
 
-The first boot of a fresh OVA is proved on the lab ESXi proof VM before it ships; the build itself
-runs no VM.
+The build itself runs no VM. The first boot of a fresh OVA is proved in QEMU before it ships
+(`ova.TestFreshOVAFirstBoot`, [testing.md](testing.md)): the release workflow's `ovaproof` job boots
+the production OVA and `publish` waits for it, and the lab dry run and the image suite do the same
+with a lab OVA. A real VMware host is still the lab ESXi proof VM's job.

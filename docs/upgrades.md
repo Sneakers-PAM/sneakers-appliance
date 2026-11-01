@@ -322,6 +322,10 @@ file is in, its signature and SHA-256 are checked as a stage will (`verified`), 
 fails stays held for Verify and stage to refuse, or Cancel. Install an update is the upload, for
 air-gapped boxes: the uploaded file's signed header picks its card.
 
+A stage answers with the file's own SHA-256, the value `sha256sum` gives for the `.bin`, so the
+Updates page can be checked against a release's `SHA256SUMS`. The digest the signed header carries
+covers the payload inside the file, and is checked but not shown.
+
 **The elevation override.** An owner may end the open shell and go ahead in the same request:
 Apply and Revert take an `elevation_override` with the session's id, a typed confirmation of its
 admin and id (`bob E-7KQ2`) and a reason. The override is owner only and needs the same fresh

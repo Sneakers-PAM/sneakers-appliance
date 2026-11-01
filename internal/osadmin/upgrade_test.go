@@ -6,6 +6,8 @@ package osadmin_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -597,6 +599,24 @@ func TestThePreviousReleaseIsReportedWithItsSlot(t *testing.T) {
 		if m := upgrades(); m.GetPreviousVersion() != "0.0.9" || m.GetPreviousSlot() != want {
 			t.Fatalf("running from %s: upgrades %+v", running, m)
 		}
+	}
+}
+
+// The SHA-256 a stage shows is the file's own, the value sha256sum gives
+// for the .bin the admin holds, not the digest of the payload inside it.
+func TestAStagedFileShowsItsOwnSHA256(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	body := bin(t, b.sign, b.enc, full(release.ChannelProduction))
+	id, _ := alice.upload(t, body)
+	res, err := alice.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(body)
+	if got, want := res.Msg.GetPackage().GetSha256(), hex.EncodeToString(sum[:]); got != want {
+		t.Fatalf("stage shows %s, the file's sha256sum is %s", got, want)
 	}
 }
 

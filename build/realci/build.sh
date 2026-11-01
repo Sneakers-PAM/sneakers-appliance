@@ -160,7 +160,7 @@ base() {
   keyset
   components "$src"
   say "base $1 from $2"
-  (cd "$src" && env "${reuse[@]}" KERNEL="$KERNEL" KERNELRELEASE="$KERNELRELEASE" VERITYSETUP="$c_static/veritysetup-amd64" \
+  (cd "$src" && env "${reuse[@]}" NO_PAGES=1 KERNEL="$KERNEL" KERNELRELEASE="$KERNELRELEASE" VERITYSETUP="$c_static/veritysetup-amd64" \
     OPENSSH="$c_openssh" BUSYBOX="$c_busybox" STATIC="$c_static" KEYS="$KEYS" VERSION="$3" OUT="$OUT/$1" \
     bash build/lab/build.sh) > "$OUT/$1.log" 2>&1 || { tail -40 "$OUT/$1.log" >&2; exit 1; }
   say "base $1: $(cat "$OUT/$1/version") in $(( $(date +%s) - start ))s"

@@ -565,9 +565,45 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  # The OVA a new install starts from, booted fresh through first boot. It
+  # holds no key and needs none: the box enrols the keys on its own disk. A
+  # release doesn't publish until it passes.
+  ovaproof:
+    name: 🧪 Fresh OVA first boot
+    needs: [guard, sign]
+    if: needs.guard.outputs.channel == 'production'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Download the signed release
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        with:
+          name: signed-amd64
+          path: ${{ runner.temp }}/signed
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install the boot tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ovmf qemu-system-x86 qemu-utils swtpm
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
+      - name: Boot the OVA
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+          SNEAKERS_REQUIRE_TOOLS: "1"
+        run: |
+          SNEAKERS_OVA="$RUNNER_TEMP/signed/ova/sneakers-appliance-$VERSION-amd64.ova" \
+            go test -tags image -timeout 20m -run TestFreshOVAFirstBoot -v ./test/image/ova
+
   publish:
     name: 📦 Publish
-    needs: [guard, sign]
+    needs: [guard, sign, ovaproof]
     if: needs.guard.outputs.channel == 'production'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -688,7 +724,7 @@ jobs:
     needs: guard
     if: needs.guard.outputs.channel == 'lab'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 110
     # Never the production environment. The lab environment holds no keys:
     # this job makes a fresh lab set for the run (docs/release.md).
     environment: lab
@@ -699,18 +735,41 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
+      # guard.sh names the pinned commits only for a production tag, so the
+      # lab job reads the same pins itself.
+      - name: Read the sneakers-web pin
+        id: pins
+        run: |
+          # shellcheck source=build/release/pins.env
+          source build/release/pins.env
+          [[ "$SNEAKERS_WEB_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "SNEAKERS_WEB_COMMIT is '$SNEAKERS_WEB_COMMIT'" >&2; exit 1; }
+          echo "web_repo=$SNEAKERS_WEB_REPO" >> "$GITHUB_OUTPUT"
+          echo "web_commit=$SNEAKERS_WEB_COMMIT" >> "$GITHUB_OUTPUT"
+      - name: Check out the pinned sneakers-web
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: ${{ steps.pins.outputs.web_repo }}
+          ref: ${{ steps.pins.outputs.web_commit }}
+          path: .pinned/sneakers-web
+          persist-credentials: false
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version-file: go.mod
+      - name: Setup Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444  # v5.0.0
+        with:
+          node-version: '24'
       - name: Install the build tools
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q build-essential bc bison flex libelf-dev libssl-dev \
             efitools sbsigntool squashfs-tools cryptsetup-bin cpio \
-            systemd-ukify systemd-boot-efi python3-pefile qemu-utils
+            systemd-ukify systemd-boot-efi python3-pefile qemu-utils \
+            ovmf qemu-system-x86 swtpm
           bash build/ci/install-cosign.sh "$RUNNER_TEMP/bin"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
       - name: Build the kernel
         env:
           SOURCE_DATE_EPOCH: "1700000000"
@@ -740,7 +799,7 @@ jobs:
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 \
           OPENSSH=out/static BUSYBOX=out/static/busybox STATIC=build/out \
-          KEYS="$keys" OUT="$lab" bash build/lab/build.sh
+          WEB=.pinned/sneakers-web KEYS="$keys" OUT="$lab" bash build/lab/build.sh
           # The lab build appends the build number (g<short commit>).
           VERSION="$(cat "$lab/version")"
           go build -o "$work/sneakers-artifact" ./cmd/sneakers-artifact
@@ -779,6 +838,9 @@ jobs:
           # have the lab names (docs/release.md, File names).
           bash build/release/check-asset-sizes.sh "$bin" "$product" "$ova" "$qcow2"
           bash build/release/check-names.sh --channel lab "$bin" "$product" "$ova" "$qcow2"
+          # A fresh OVA boots through first boot, as ovaproof proves the
+          # production one.
+          SNEAKERS_OVA="$ova" SNEAKERS_REQUIRE_TOOLS=1 go test -tags image -timeout 20m -run TestFreshOVAFirstBoot -v ./test/image/ova
           if [ -s keys/production/fingerprints.txt ] && bash build/release/check-fingerprints.sh "$keys" keys/production/fingerprints.txt; then
             echo "the lab keys passed the production fingerprint check" >&2; exit 1
           fi
