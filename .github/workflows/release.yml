@@ -861,8 +861,8 @@ jobs:
         run: |
           # shellcheck source=build/release/pins.env
           source build/release/pins.env
-          work="$RUNNER_TEMP/work"
-          go run ./build/tools/svcchecklist --release "$work/release.yaml" \
+          lab="$RUNNER_TEMP/lab"
+          go run ./build/tools/svcchecklist --release "$lab/work/release.yaml" \
             --release-repo "$SNEAKERS_RELEASE_REPO" --release-commit "$SNEAKERS_RELEASE_COMMIT" \
             --web-repo "$SNEAKERS_WEB_REPO" --web-commit "$SNEAKERS_WEB_COMMIT" >> "$GITHUB_STEP_SUMMARY"
       - name: Wipe the lab keys
