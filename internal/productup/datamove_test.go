@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -39,6 +40,12 @@ type fakeMover struct {
 	settled   int
 	failed    []string
 	again     int
+	reverted  bool
+	onOld     bool
+	onNew     bool
+	tidied    int
+	removed   string
+	owed      string
 }
 
 func (f *fakeMover) Ask(_ productspec.DataMove, svc datamove.Services) datamove.Status {
@@ -53,6 +60,16 @@ func (f *fakeMover) Fail(_ productspec.DataMove, why string) error {
 	return nil
 }
 func (f *fakeMover) Again() { f.again++ }
+func (f *fakeMover) RecordRevert(holds func(string) bool) (bool, error) {
+	f.onOld, f.onNew = holds("app-db"), holds("app-db-new")
+	return f.reverted, nil
+}
+func (f *fakeMover) Tidy(holds func(string) bool) { f.tidied++; f.onNew = holds("app-db-new") }
+func (f *fakeMover) KeptDumps() ([]datamove.KeptDump, error) {
+	return []datamove.KeptDump{{Name: "replaced-20261101T120000Z"}}, nil
+}
+func (f *fakeMover) RemoveKept(name string) error { f.removed = name; return nil }
+func (f *fakeMover) OwedSource() (string, error)  { return f.owed, nil }
 
 func movingProbe(t *testing.T, c *fakeCluster, m productup.DataMover) (*productup.Probe, string) {
 	t.Helper()
@@ -231,6 +248,151 @@ func TestASlotWithoutAMoveHasNothingToSettle(t *testing.T) {
 		t.Fatal(err)
 	}
 	if m.settled != 0 || len(m.failed) != 0 {
+		t.Fatalf("%+v", m)
+	}
+}
+
+// What's recorded of a revert is judged by the slot now current, whether it
+// declares a move or not: the slot gone back to usually doesn't.
+func TestTheProbeAsksTheCurrentSlotWhetherItHoldsTheTarget(t *testing.T) {
+	m := &fakeMover{reverted: true}
+	p, _ := movingProbe(t, newCluster(), m)
+	if ok, err := p.RecordMoveRevert(); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if !m.onNew || !m.onOld {
+		t.Fatalf("%+v", m)
+	}
+	p, _ = phasedProbe(t, newCluster())
+	p.Move = m
+	if ok, err := p.RecordMoveRevert(); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if m.onNew {
+		t.Fatal("a slot without the target holds it")
+	}
+	p.TidyMove()
+	if m.tidied != 1 || m.onNew {
+		t.Fatalf("%+v", m)
+	}
+}
+
+// A slot that can't be read says nothing about where the box is.
+func TestASlotThatCannotBeReadRecordsNothing(t *testing.T) {
+	m := &fakeMover{reverted: true}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	p.Slot = filepath.Join(t.TempDir(), "gone")
+	if ok, err := p.RecordMoveRevert(); ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	p.TidyMove()
+	if m.tidied != 0 {
+		t.Fatalf("%+v", m)
+	}
+}
+
+func TestTheProbePassesKeptDumpsOnToTheMove(t *testing.T) {
+	m := &fakeMover{}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	list, err := p.KeptDumps()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("%+v %v", list, err)
+	}
+	if err := p.RemoveKeptDump("replaced-20261101T120000Z"); err != nil || m.removed == "" {
+		t.Fatalf("%v %+v", err, m)
+	}
+}
+
+// bundle is a staged slot with the given product.yaml and, in its stack
+// app-data, a StatefulSet of each name.
+func bundle(t *testing.T, yaml string, workloads ...string) string {
+	t.Helper()
+	slot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(slot, productspec.File), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(slot, "manifests", "app-data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var m strings.Builder
+	for _, w := range workloads {
+		m.WriteString("---\napiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: " + w + "\n  namespace: app\nspec:\n  replicas: 1\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stack.yaml"), []byte(m.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return slot
+}
+
+const noMoveNewOnly = `format: 2
+phases:
+  - {name: data, label: Starting the database, stack: app-data, workloads: [app-db-new], timeout: 3m}
+`
+
+const noMoveOldToo = `format: 2
+phases:
+  - {name: data, label: Starting the database, stack: app-data, workloads: [app-db], timeout: 3m}
+`
+
+func TestAnApplyThatWouldStrandTheOldClustersWritesIsRefused(t *testing.T) {
+	m := &fakeMover{owed: "app-db"}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+
+	err := p.CheckMoveApply(bundle(t, noMoveNewOnly, "app-db-new"))
+	if !codes.Is(err, codes.DataMoveBundle) || !strings.Contains(err.Error(), "app-db") || !strings.Contains(err.Error(), "data_move") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestAnOlderBundleThatKeepsTheOldClusterMayApply(t *testing.T) {
+	m := &fakeMover{owed: "app-db"}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	if err := p.CheckMoveApply(bundle(t, noMoveOldToo, "app-db")); err != nil {
+		t.Fatalf("phased: %v", err)
+	}
+	// A bundle without phases names its workloads only in its stacks.
+	if err := p.CheckMoveApply(bundle(t, "format: 2\n", "app-db")); err != nil {
+		t.Fatalf("no phases: %v", err)
+	}
+}
+
+func TestABundleThatDeclaresTheMoveMayApply(t *testing.T) {
+	m := &fakeMover{owed: "app-db"}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	if err := p.CheckMoveApply(bundle(t, movingProduct, "app-db", "app-db-new")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWithNoReturnOwedAnyBundleMayApply(t *testing.T) {
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = &fakeMover{}
+	if err := p.CheckMoveApply(bundle(t, noMoveNewOnly, "app-db-new")); err != nil {
+		t.Fatal(err)
+	}
+	p.Move = nil
+	if err := p.CheckMoveApply(bundle(t, noMoveNewOnly, "app-db-new")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// What only the stacks name still counts as the slot holding it: a slot
+// without phases can run the target, so going to one isn't a revert.
+func TestASlotWithoutPhasesHoldsWhatItsStacksHold(t *testing.T) {
+	m := &fakeMover{reverted: true}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	p.Slot = bundle(t, "format: 2\n", "app-db-new")
+	if _, err := p.RecordMoveRevert(); err != nil {
+		t.Fatal(err)
+	}
+	if !m.onNew || m.onOld {
 		t.Fatalf("%+v", m)
 	}
 }

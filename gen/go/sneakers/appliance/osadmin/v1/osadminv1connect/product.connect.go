@@ -49,6 +49,12 @@ const (
 	// ProductServiceResetProductProcedure is the fully-qualified name of the ProductService's
 	// ResetProduct RPC.
 	ProductServiceResetProductProcedure = "/sneakers.appliance.osadmin.v1.ProductService/ResetProduct"
+	// ProductServiceListKeptDumpsProcedure is the fully-qualified name of the ProductService's
+	// ListKeptDumps RPC.
+	ProductServiceListKeptDumpsProcedure = "/sneakers.appliance.osadmin.v1.ProductService/ListKeptDumps"
+	// ProductServiceRemoveKeptDumpProcedure is the fully-qualified name of the ProductService's
+	// RemoveKeptDump RPC.
+	ProductServiceRemoveKeptDumpProcedure = "/sneakers.appliance.osadmin.v1.ProductService/RemoveKeptDump"
 )
 
 // ProductServiceClient is a client for the sneakers.appliance.osadmin.v1.ProductService service.
@@ -74,6 +80,15 @@ type ProductServiceClient interface {
 	// an owner, with a new authenticator code and the product's name or the
 	// box's host name typed to confirm (docs/upgrades.md#removing-the-product).
 	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
+	// ListKeptDumps lists the dumps a data move kept of the data it replaced
+	// when the box returned to the new cluster (docs/data-move.md). The box
+	// never removes them itself.
+	ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error)
+	// RemoveKeptDump removes one kept dump for good. The closed shell's
+	// "<product> dumps remove" only, by an owner, with a new authenticator
+	// code and the dump's name typed to confirm. One a return still needs is
+	// refused (DATA_MOVE_DUMP).
+	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
 }
 
 // NewProductServiceClient constructs a client for the sneakers.appliance.osadmin.v1.ProductService
@@ -106,6 +121,19 @@ func NewProductServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(productServiceMethods.ByName("ResetProduct")),
 			connect.WithClientOptions(opts...),
 		),
+		listKeptDumps: connect.NewClient[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse](
+			httpClient,
+			baseURL+ProductServiceListKeptDumpsProcedure,
+			connect.WithSchema(productServiceMethods.ByName("ListKeptDumps")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		removeKeptDump: connect.NewClient[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse](
+			httpClient,
+			baseURL+ProductServiceRemoveKeptDumpProcedure,
+			connect.WithSchema(productServiceMethods.ByName("RemoveKeptDump")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -114,6 +142,8 @@ type productServiceClient struct {
 	listExposedValues *connect.Client[v1.ListExposedValuesRequest, v1.ListExposedValuesResponse]
 	getExposedValue   *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
 	resetProduct      *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
+	listKeptDumps     *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
+	removeKeptDump    *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
 }
 
 // ListExposedValues calls sneakers.appliance.osadmin.v1.ProductService.ListExposedValues.
@@ -129,6 +159,16 @@ func (c *productServiceClient) GetExposedValue(ctx context.Context, req *connect
 // ResetProduct calls sneakers.appliance.osadmin.v1.ProductService.ResetProduct.
 func (c *productServiceClient) ResetProduct(ctx context.Context, req *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
 	return c.resetProduct.CallUnary(ctx, req)
+}
+
+// ListKeptDumps calls sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps.
+func (c *productServiceClient) ListKeptDumps(ctx context.Context, req *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error) {
+	return c.listKeptDumps.CallUnary(ctx, req)
+}
+
+// RemoveKeptDump calls sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump.
+func (c *productServiceClient) RemoveKeptDump(ctx context.Context, req *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
+	return c.removeKeptDump.CallUnary(ctx, req)
 }
 
 // ProductServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.ProductService
@@ -155,6 +195,15 @@ type ProductServiceHandler interface {
 	// an owner, with a new authenticator code and the product's name or the
 	// box's host name typed to confirm (docs/upgrades.md#removing-the-product).
 	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
+	// ListKeptDumps lists the dumps a data move kept of the data it replaced
+	// when the box returned to the new cluster (docs/data-move.md). The box
+	// never removes them itself.
+	ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error)
+	// RemoveKeptDump removes one kept dump for good. The closed shell's
+	// "<product> dumps remove" only, by an owner, with a new authenticator
+	// code and the dump's name typed to confirm. One a return still needs is
+	// refused (DATA_MOVE_DUMP).
+	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
 }
 
 // NewProductServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -183,6 +232,19 @@ func NewProductServiceHandler(svc ProductServiceHandler, opts ...connect.Handler
 		connect.WithSchema(productServiceMethods.ByName("ResetProduct")),
 		connect.WithHandlerOptions(opts...),
 	)
+	productServiceListKeptDumpsHandler := connect.NewUnaryHandler(
+		ProductServiceListKeptDumpsProcedure,
+		svc.ListKeptDumps,
+		connect.WithSchema(productServiceMethods.ByName("ListKeptDumps")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServiceRemoveKeptDumpHandler := connect.NewUnaryHandler(
+		ProductServiceRemoveKeptDumpProcedure,
+		svc.RemoveKeptDump,
+		connect.WithSchema(productServiceMethods.ByName("RemoveKeptDump")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.ProductService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProductServiceListExposedValuesProcedure:
@@ -191,6 +253,10 @@ func NewProductServiceHandler(svc ProductServiceHandler, opts ...connect.Handler
 			productServiceGetExposedValueHandler.ServeHTTP(w, r)
 		case ProductServiceResetProductProcedure:
 			productServiceResetProductHandler.ServeHTTP(w, r)
+		case ProductServiceListKeptDumpsProcedure:
+			productServiceListKeptDumpsHandler.ServeHTTP(w, r)
+		case ProductServiceRemoveKeptDumpProcedure:
+			productServiceRemoveKeptDumpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -210,4 +276,12 @@ func (UnimplementedProductServiceHandler) GetExposedValue(context.Context, *conn
 
 func (UnimplementedProductServiceHandler) ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.ResetProduct is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump is not implemented"))
 }

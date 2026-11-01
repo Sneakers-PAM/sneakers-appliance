@@ -26,6 +26,20 @@ type resetAccessd struct {
 	fakeAccessd
 	resets     []*accessv1.ResetProductRequest
 	reinstalls []*accessv1.ReinstallProductRequest
+	removals   []*accessv1.RemoveKeptDumpRequest
+}
+
+func (f *resetAccessd) ListKeptDumps(_ context.Context, r *connect.Request[accessv1.ListKeptDumpsRequest]) (*connect.Response[accessv1.ListKeptDumpsResponse], error) {
+	f.saw(r.Header())
+	return connect.NewResponse(&accessv1.ListKeptDumpsResponse{Dumps: []*osadminv1.KeptDump{{
+		Name: "replaced-20261101T120000Z", Path: "/var/lib/sneakers/backup/data-move/replaced-20261101T120000Z", Taken: "2026-11-01T12:00:00Z", Bytes: 3 << 20, Whole: true,
+	}}}), nil
+}
+
+func (f *resetAccessd) RemoveKeptDump(_ context.Context, r *connect.Request[accessv1.RemoveKeptDumpRequest]) (*connect.Response[accessv1.RemoveKeptDumpResponse], error) {
+	f.saw(r.Header())
+	f.removals = append(f.removals, r.Msg)
+	return connect.NewResponse(&accessv1.RemoveKeptDumpResponse{}), nil
 }
 
 func (f *resetAccessd) ReinstallProduct(_ context.Context, r *connect.Request[accessv1.ReinstallProductRequest]) (*connect.Response[accessv1.ReinstallProductResponse], error) {
@@ -194,5 +208,45 @@ func TestTheReinstallCommandSendsTheVersionAndANewCode(t *testing.T) {
 	admin.Out, admin.Err, admin.In = &help, &help, strings.NewReader("")
 	if err := shell.Run(context.Background(), admin, "help sneakers"); err != nil || strings.Contains(help.String(), "reinstall") {
 		t.Fatalf("an admin's help offers the reinstall (%v):\n%s", err, help.String())
+	}
+}
+
+// "<product> dumps list" names each kept dump and where it is.
+func TestTheDumpsCommandListsTheKeptDumps(t *testing.T) {
+	f := &resetAccessd{}
+	e, out := resetEnv(t, f, "")
+	if err := shell.Run(context.Background(), e, "sneakers dumps list"); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	for _, want := range []string{"replaced-20261101T120000Z", "3.0 MiB", "/var/lib/sneakers/backup/data-move/replaced-20261101T120000Z"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("no %q in:\n%s", want, out)
+		}
+	}
+}
+
+// "<product> dumps remove <name>" reads the name again and a new code, and
+// an answer that isn't the name sends nothing.
+func TestTheDumpsRemoveCommandConfirmsTheNameAndTakesANewCode(t *testing.T) {
+	const name = "replaced-20261101T120000Z"
+	f := &resetAccessd{}
+	e, out := resetEnv(t, f, name+"\n123456\n")
+	if err := shell.Run(context.Background(), e, "sneakers dumps remove "+name); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if len(f.removals) != 1 || f.removals[0].GetName() != name || f.removals[0].GetTotpCode() != "123456" {
+		t.Fatalf("%v\n%s", f.removals, out)
+	}
+	if !strings.Contains(out.String(), "can't be undone") || strings.Contains(out.String(), "123456") {
+		t.Fatalf("%s", out)
+	}
+
+	f = &resetAccessd{}
+	e, out = resetEnv(t, f, "something-else\n123456\n")
+	if err := shell.Run(context.Background(), e, "sneakers dumps remove "+name); err == nil {
+		t.Fatalf("no error:\n%s", out)
+	}
+	if len(f.removals) != 0 {
+		t.Fatalf("%v", f.removals)
 	}
 }

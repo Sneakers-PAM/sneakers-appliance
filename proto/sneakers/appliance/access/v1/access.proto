@@ -97,6 +97,13 @@ service AccessService {
   // UpgradeService method run as the login's admin (an owner, with a new
   // authenticator code for the apply). The data is kept.
   rpc ReinstallProduct(ReinstallProductRequest) returns (ReinstallProductResponse);
+  // ListKeptDumps is the closed shell's "<product> dumps list": osadmin's
+  // ProductService.ListKeptDumps run as the login's admin.
+  rpc ListKeptDumps(ListKeptDumpsRequest) returns (ListKeptDumpsResponse);
+  // RemoveKeptDump is the closed shell's "<product> dumps remove":
+  // osadmin's ProductService.RemoveKeptDump run as the login's admin, which
+  // must be an owner and give a new authenticator code.
+  rpc RemoveKeptDump(RemoveKeptDumpRequest) returns (RemoveKeptDumpResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -846,6 +853,21 @@ message ReinstallProductRequest {
   // confirm is the installed version, as typed.
   string confirm = 2;
 }
+
+message ListKeptDumpsRequest {}
+
+message ListKeptDumpsResponse {
+  repeated sneakers.appliance.osadmin.v1.KeptDump dumps = 1;
+}
+
+message RemoveKeptDumpRequest {
+  // totp_code is a new authenticator code, read at the command.
+  string totp_code = 1;
+  // name is the dump's name, as typed.
+  string name = 2;
+}
+
+message RemoveKeptDumpResponse {}
 
 message ReinstallProductResponse {
   // version is the version reinstalled; source is where the bundle came

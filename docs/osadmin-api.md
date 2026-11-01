@@ -175,6 +175,8 @@ same.
 | `ProductService.ListExposedValues` | admin | no | |
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
 | `ProductService.ResetProduct` | owner, SSH only | every call | `product.reset` |
+| `ProductService.ListKeptDumps` | admin | no | |
+| `ProductService.RemoveKeptDump` | owner, SSH only | every call | `product.kept-dump.remove` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `EmailService.GetEmail` | admin | no | |

@@ -52,6 +52,25 @@ service ProductService {
       audit: "product.reset"
     };
   }
+  // ListKeptDumps lists the dumps a data move kept of the data it replaced
+  // when the box returned to the new cluster (docs/data-move.md). The box
+  // never removes them itself.
+  rpc ListKeptDumps(ListKeptDumpsRequest) returns (ListKeptDumpsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // RemoveKeptDump removes one kept dump for good. The closed shell's
+  // "<product> dumps remove" only, by an owner, with a new authenticator
+  // code and the dump's name typed to confirm. One a return still needs is
+  // refused (DATA_MOVE_DUMP).
+  rpc RemoveKeptDump(RemoveKeptDumpRequest) returns (RemoveKeptDumpResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      code_each_call: true
+      ssh_only: true
+      audit: "product.kept-dump.remove"
+    };
+  }
 }
 
 // ExposedValue describes one declared value.
@@ -115,3 +134,31 @@ message ResetProductResponse {
   // installs again.
   string staged_version = 7;
 }
+
+// KeptDump is one dump of the data a return replaced.
+message KeptDump {
+  // name is the dump's directory name, path where it is on the box.
+  string name = 1;
+  string path = 2;
+  // taken is when it was written, in RFC 3339.
+  string taken = 3;
+  uint64 bytes = 4;
+  // whole: every file is there. One that isn't was cut off before it counted.
+  bool whole = 5;
+}
+
+message ListKeptDumpsRequest {}
+
+message ListKeptDumpsResponse {
+  repeated KeptDump dumps = 1;
+}
+
+message RemoveKeptDumpRequest {
+  // totp_code is a new code from the owner's authenticator, on top of the
+  // one the login took.
+  string totp_code = 1;
+  // name is the dump's name, as typed.
+  string name = 2;
+}
+
+message RemoveKeptDumpResponse {}

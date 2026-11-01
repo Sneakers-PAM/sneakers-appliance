@@ -420,6 +420,8 @@ type killer struct {
 	t    *testing.T
 	tool string
 	db   string
+	// on narrows the kill to one cluster's tools.
+	on   string
 	once sync.Once
 	hit  bool
 }
@@ -463,7 +465,7 @@ func (r *killReader) Read(b []byte) (int, error) {
 }
 
 func (k *killer) Run(ctx context.Context, c productspec.DataCluster, argv []string, in io.Reader, out io.Writer) error {
-	match := argv[0] == k.tool && (k.db == "" || slices.ContainsFunc(argv, func(a string) bool { return strings.HasSuffix(a, "="+k.db) }))
+	match := argv[0] == k.tool && (k.on == "" || c.Name == k.on) && (k.db == "" || slices.ContainsFunc(argv, func(a string) bool { return strings.HasSuffix(a, "="+k.db) }))
 	if !match {
 		return k.Exec.Run(ctx, c, argv, in, out)
 	}
@@ -553,17 +555,7 @@ func failurePaths(t *testing.T, b *bench) {
 func boxDies(t *testing.T, b *bench, at string) {
 	b.clearTarget(t)
 	m, svc := b.move(t, execShell())
-	cfg, err := json.Marshal(helperConfig{Spec: m.Spec, Slot: m.Slot, BackupDir: m.BackupDir, Journal: m.Journal, Volumes: m.Volumes, At: at})
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(os.Args[0], "-test.run", "^TestHelperMoveThatDies$") // #nosec G204 -- this test binary
-	cmd.Env = append(os.Environ(), "DATAMOVE_HELPER="+string(cfg))
-	out, err := cmd.CombinedOutput()
-	var ee *exec.ExitError
-	if !errors.As(err, &ee) || ee.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
-		t.Fatalf("the helper wasn't killed: %v: %s", err, out)
-	}
+	dieIn(t, m, at)
 	j, rerr := m.Read()
 	if rerr != nil {
 		t.Fatal(rerr)
@@ -571,7 +563,7 @@ func boxDies(t *testing.T, b *bench, at string) {
 	if j.State != StateRunning {
 		t.Fatalf("the journal says %+v", j)
 	}
-	err = m.Run(context.Background())
+	err := m.Run(context.Background())
 	if !errors.Is(err, ErrInterrupted) {
 		t.Fatalf("%v", err)
 	}
@@ -584,6 +576,23 @@ func boxDies(t *testing.T, b *bench, at string) {
 	}
 }
 
+// dieIn runs m in a process of its own, which SIGKILLs itself at the point
+// named.
+func dieIn(t *testing.T, m *Move, at string) {
+	t.Helper()
+	cfg, err := json.Marshal(helperConfig{Spec: m.Spec, Slot: m.Slot, BackupDir: m.BackupDir, Journal: m.Journal, Volumes: m.Volumes, At: at})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(os.Args[0], "-test.run", "^TestHelperMoveThatDies$") // #nosec G204 -- this test binary
+	cmd.Env = append(os.Environ(), "DATAMOVE_HELPER="+string(cfg))
+	out, err := cmd.CombinedOutput()
+	var ee *exec.ExitError
+	if !errors.As(err, &ee) || ee.Sys().(syscall.WaitStatus).Signal() != syscall.SIGKILL {
+		t.Fatalf("the helper wasn't killed: %v: %s", err, out)
+	}
+}
+
 type helperConfig struct {
 	Spec                              productspec.DataMove
 	Slot, BackupDir, Journal, Volumes string
@@ -593,7 +602,8 @@ type helperConfig struct {
 // dying is a Shell whose process dies at a tool, mid-stream.
 type dying struct {
 	Exec
-	at string
+	at     string
+	target string
 }
 
 type dieWriter struct{ w io.Writer }
@@ -625,6 +635,8 @@ func (d dying) Run(ctx context.Context, c productspec.DataCluster, argv []string
 		out = dieWriter{out}
 	case d.at == "restore" && argv[0] == "pg_restore":
 		in = &dieReader{r: in}
+	case d.at == "keep" && argv[0] == "pg_dump" && c.Name == d.target && slices.Contains(argv, "--dbname=app_workflow"):
+		out = dieWriter{out}
 	case d.at == "switch" && in != nil && argv[0] == "psql":
 		q, err := io.ReadAll(in)
 		if err != nil {
@@ -653,11 +665,280 @@ func TestHelperMoveThatDies(t *testing.T) {
 	}
 	m := &Move{
 		Spec: cfg.Spec, Slot: cfg.Slot, BackupDir: cfg.BackupDir, Journal: cfg.Journal, Volumes: cfg.Volumes,
-		Engine:   &PG{Shell: dying{Exec: execShell(), at: cfg.At}, ReadyBound: 20 * time.Second, Every: 500 * time.Millisecond},
+		Engine:   &PG{Shell: dying{Exec: execShell(), at: cfg.At, target: cfg.Spec.Target.Name}, ReadyBound: 20 * time.Second, Every: 500 * time.Millisecond},
 		Services: &fakeServices{},
 		Disk:     func(string) (Usage, error) { return Usage{Avail: 1 << 40, Device: 1}, nil },
 	}
 	t.Fatalf("the move ended: %v", m.Run(context.Background()))
+}
+
+const (
+	onNewCluster = "written on the new cluster"
+	onOldCluster = "written on the old cluster"
+)
+
+// reverted is a box on the old cluster after a settled move and a revert,
+// with a row on each side that only that side has.
+func (b *bench) reverted(t *testing.T) *Move {
+	t.Helper()
+	b.clearTarget(t)
+	b.src.sql("app_identity", "DELETE FROM items WHERE label LIKE 'written on %';")
+	m, _ := b.move(t, execShell())
+	if err := m.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Settle(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(m.dumpDir()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the dump outlived the settle: %v", err)
+	}
+	b.tgt.sql("app_identity", "INSERT INTO items (label) VALUES ("+literal(onNewCluster)+");")
+	if ok, err := m.RecordRevert(func(string) bool { return false }); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	b.src.sql("app_identity", "INSERT INTO items (label) VALUES ("+literal(onOldCluster)+");")
+	return m
+}
+
+func has(c *cluster, label string) bool {
+	return c.sql("app_identity", "SELECT count(*) FROM items WHERE label = "+literal(label)+";") == "1"
+}
+
+// isLive says the return's data is the old cluster's, every table of it.
+func (b *bench) isLive(t *testing.T) {
+	t.Helper()
+	if !has(b.tgt, onOldCluster) || has(b.tgt, onNewCluster) {
+		t.Fatalf("old side's row %v, new side's row %v", has(b.tgt, onOldCluster), has(b.tgt, onNewCluster))
+	}
+	if got, want := fingerprint(b.tgt), fingerprint(b.src); got != want {
+		t.Fatalf("the target isn't the old cluster:\n%s\nold:\n%s", got, want)
+	}
+}
+
+// keptRestores restores the kept dump the way docs/data-move.md says and
+// finds the new side's write in it, as the only thing that differs.
+func (b *bench) keptRestores(t *testing.T, m *Move) {
+	t.Helper()
+	j, err := m.Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j.Kept == "" {
+		t.Fatalf("%+v", j)
+	}
+	dir := filepath.Join(m.BackupDir, j.Kept)
+	man, err := readManifest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(man.Databases) != len(moved) {
+		t.Fatalf("%+v", man)
+	}
+	if err := m.verifyDump(dir, man); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(filepath.Join(dir, "app_identity.dump")) // #nosec G304 -- the test's own dump
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = f.Close() }()
+	b.tgt.sql("postgres", "DROP DATABASE IF EXISTS kept_app_identity WITH (FORCE); CREATE DATABASE kept_app_identity;")
+	script := `PGPASSWORD="$POSTGRES_PASSWORD" exec pg_restore -h 127.0.0.1 -U postgres --no-owner --dbname=kept_app_identity`
+	cmd := exec.Command("docker", "exec", "-i", b.tgt.name, "sh", "-c", script) // #nosec G204 -- test containers
+	cmd.Stdin = f
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got := b.tgt.sql("kept_app_identity", "SELECT count(*) FROM items WHERE label = "+literal(onNewCluster)+";"); got != "1" {
+		t.Fatalf("the kept dump doesn't hold the new side's write: %s", got)
+	}
+	if got := b.tgt.sql("kept_app_identity", "SELECT count(*) FROM items WHERE label = "+literal(onOldCluster)+";"); got != "0" {
+		t.Fatalf("the kept dump holds the old side's write: %s", got)
+	}
+	b.tgt.sql("postgres", "DROP DATABASE kept_app_identity WITH (FORCE);")
+}
+
+func TestAReturnAgainstPlainPostgres(t *testing.T) {
+	b := newBench(t)
+
+	t.Run("both sides' writes exist afterwards", func(t *testing.T) {
+		m := b.reverted(t)
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		b.isLive(t)
+		b.keptRestores(t, m)
+		if err := m.Settle(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(m.dumpDir()); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("the dump outlived the settle: %v", err)
+		}
+		if list, err := m.KeptDumps(); err != nil || len(list) != 1 || !list[0].Whole {
+			t.Fatalf("%+v %v", list, err)
+		}
+	})
+
+	t.Run("a second revert and return keeps both dumps", func(t *testing.T) {
+		m := b.reverted(t)
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if err := m.Settle(); err != nil {
+			t.Fatal(err)
+		}
+		m.Now = func() time.Time { return time.Now().Add(time.Hour) }
+		if ok, err := m.RecordRevert(func(string) bool { return false }); !ok || err != nil {
+			t.Fatalf("%v %v", ok, err)
+		}
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if list, err := m.KeptDumps(); err != nil || len(list) != 2 {
+			t.Fatalf("%+v %v", list, err)
+		}
+	})
+
+	t.Run("a return with no room touches nothing", func(t *testing.T) {
+		m := b.reverted(t)
+		before := fingerprint(b.tgt)
+		m.Disk = func(string) (Usage, error) { return Usage{Avail: 1 << 20, Device: 1}, nil }
+		err := m.Run(context.Background())
+		if !codes.Is(err, codes.DataMoveRoom) {
+			t.Fatalf("%v", err)
+		}
+		if got := fingerprint(b.tgt); got != before {
+			t.Fatal("the target changed")
+		}
+		if !has(b.src, onOldCluster) {
+			t.Fatal("the old cluster lost its write")
+		}
+		if j, _ := m.Read(); j.State != StateFailed || !j.Returning {
+			t.Fatalf("%+v", j)
+		}
+	})
+
+	t.Run("the kept dump's tool killed mid-stream leaves the target whole", func(t *testing.T) {
+		m := b.reverted(t)
+		before := fingerprint(b.tgt)
+		k := &killer{Exec: execShell(), t: t, tool: "pg_dump", db: "app_vault", on: b.tgt.name}
+		m.Engine = &PG{Shell: k, ReadyBound: 20 * time.Second, Every: 500 * time.Millisecond}
+		if err := m.Run(context.Background()); !codes.Is(err, codes.DataMove) || !k.hit {
+			t.Fatalf("%v %v", err, k.hit)
+		}
+		if got := fingerprint(b.tgt); got != before {
+			t.Fatal("the target changed")
+		}
+		m.Engine = &PG{Shell: execShell(), ReadyBound: 20 * time.Second, Every: 500 * time.Millisecond}
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		b.isLive(t)
+		b.keptRestores(t, m)
+	})
+
+	t.Run("the box dies mid-kept-dump", func(t *testing.T) {
+		m := b.reverted(t)
+		before := fingerprint(b.tgt)
+		dieIn(t, m, "keep")
+		j, err := m.Read()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if j.State != StateRunning || j.Step != StepKeep || j.Keeping == "" || j.Kept != "" {
+			t.Fatalf("%+v", j)
+		}
+		if err := m.Run(context.Background()); !errors.Is(err, ErrInterrupted) {
+			t.Fatalf("%v", err)
+		}
+		if got := fingerprint(b.tgt); got != before {
+			t.Fatal("the target changed")
+		}
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		b.isLive(t)
+		b.keptRestores(t, m)
+		if list, err := m.KeptDumps(); err != nil || len(list) != 1 {
+			t.Fatalf("the partial dump stayed: %+v %v", list, err)
+		}
+	})
+
+	t.Run("the restore killed mid-stream", func(t *testing.T) {
+		m := b.reverted(t)
+		k := &killer{Exec: execShell(), t: t, tool: "pg_restore"}
+		m.Engine = &PG{Shell: k, ReadyBound: 20 * time.Second, Every: 500 * time.Millisecond}
+		if err := m.Run(context.Background()); !codes.Is(err, codes.DataMove) || !k.hit {
+			t.Fatalf("%v %v", err, k.hit)
+		}
+		kept := func() string {
+			j, err := m.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			return j.Kept
+		}
+		first := kept()
+		m.Engine = &PG{Shell: execShell(), ReadyBound: 20 * time.Second, Every: 500 * time.Millisecond}
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if kept() != first {
+			t.Fatalf("%s then %s", first, kept())
+		}
+		b.isLive(t)
+		b.keptRestores(t, m)
+	})
+
+	t.Run("the box dies mid-restore", func(t *testing.T) {
+		m := b.reverted(t)
+		dieIn(t, m, "restore")
+		if err := m.Run(context.Background()); !errors.Is(err, ErrInterrupted) {
+			t.Fatalf("%v", err)
+		}
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		b.isLive(t)
+		b.keptRestores(t, m)
+	})
+
+	t.Run("a failed attempt's dump goes once the box is back on the old cluster", func(t *testing.T) {
+		b.clearTarget(t)
+		k := &killer{Exec: execShell(), t: t, tool: "pg_restore"}
+		m, _ := b.move(t, k)
+		if err := m.Run(context.Background()); !codes.Is(err, codes.DataMove) {
+			t.Fatalf("%v", err)
+		}
+		m.Tidy(func(string) bool { return false })
+		if _, err := os.Stat(m.dumpDir()); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("the dump stayed: %v", err)
+		}
+	})
+
+	t.Run("a removal that fails is tried again", func(t *testing.T) {
+		b.clearTarget(t)
+		m, _ := b.move(t, execShell())
+		if err := m.Run(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		m.Remove = func(string) error { return errors.New("the partition said no") }
+		if err := m.Settle(); err != nil {
+			t.Fatal(err)
+		}
+		if j, _ := m.Read(); j.DumpLeft == "" || j.State != StateDone {
+			t.Fatalf("%+v", j)
+		}
+		m.Remove = nil
+		m.Tidy(func(string) bool { return true })
+		if _, err := os.Stat(m.dumpDir()); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("the dump stayed: %v", err)
+		}
+		if j, _ := m.Read(); j.DumpLeft != "" {
+			t.Fatalf("%+v", j)
+		}
+	})
 }
 
 func TestTheTLSModeIsHonoured(t *testing.T) {

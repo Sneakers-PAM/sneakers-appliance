@@ -214,6 +214,12 @@ var specs = []spec{
 	{path: "reinstall", owner: true, short: "Install the installed version again, keeping its data (an owner, with a new authenticator code)", action: "product.reinstall", origins: []Origin{OriginSSH}, product: true, run: runReinstall,
 		long:    "Installs the version that's installed again, from a fresh copy of its bundle, and keeps all of the product's data: for a broken install or a damaged product slot. A staged bundle of the installed version is used as it is; otherwise the box fetches it from its update source and verifies it (signature, channel, SHA-256), as Updates on :8443 does. It's then applied like an update: the product stops in order and comes up phase by phase, and Revert on Updates goes back to the copy it replaced. Type the installed version to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.reinstall.",
 		example: "  {product} reinstall"},
+	{path: "dumps list", short: "List the dumps the data move kept of what it replaced", action: "product.dumps.list", origins: []Origin{OriginSSH}, product: true,
+		long:    "Lists the dumps the box kept when it returned to the new database after a revert: each holds the new database as it stood before that return replaced it, with the checksums of its files. The box never removes one itself; each stays until dumps remove or a product reset takes it. docs/data-move.md says how to restore from one.",
+		example: "  {product} dumps list\n  {product} dumps list -o json"},
+	{path: "dumps remove", use: "remove <name>", owner: true, short: "Remove a kept dump for good (an owner, with a new authenticator code)", action: "product.dumps.remove", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}, product: true, run: runDumpsRemove,
+		long:    "Removes one dump dumps list shows, to make room or once its data isn't wanted. One the box's return still needs, until the box has settled on the new database, is refused with DATA_MOVE_DUMP. Type the dump's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.kept-dump.remove. There's no undo.",
+		example: "  {product} dumps remove replaced-20261101T120000Z"},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Shows and sets the resources the product may use. Not available in this release.",
 		example: "  resources"},
@@ -593,6 +599,7 @@ var groupDoc = map[string][2]string{
 	"setup":              {"First boot setup", "The steps of first boot that are done over SSH."},
 	"tls":                {"TLS certificates", "The TLS certificates the box serves."},
 	"logs":               {"Logs", "The box's logs."},
+	"dumps":              {"Kept dumps", "The dumps the box kept of the new database's data when it returned to it after a revert."},
 	"disk":               {"Disk space", "The box's disk: it cleans up after itself every hour and when a volume passes 80%; Status shows each volume's use."},
 }
 
@@ -910,6 +917,22 @@ func runReset(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]
 	}
 	e.Product, e.Values, e.Switches = productinfo.Info{}, nil, nil
 	return res, nil
+}
+
+// runDumpsRemove removes a kept dump: it reads the name again and a new
+// authenticator code, without echo and out of recall.
+func runDumpsRemove(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
+	name := args[0]
+	_, _ = fmt.Fprintf(e.Out, "This removes the kept dump %s for good. What it holds exists nowhere else, and it can't be undone.\n", name)
+	in := &lineReader{e: e}
+	if confirm := in.read(fmt.Sprintf("Type %s to confirm: ", name), false); confirm != name {
+		return Result{}, codes.New(codes.AccessConfirm, "not confirmed; nothing was removed")
+	}
+	code := in.read("New authenticator code: ", true)
+	if code == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "no authenticator code; nothing was removed")
+	}
+	return e.Backend.Call(ctx, Request{Action: "product.dumps.remove", Args: []string{name, code}})
 }
 
 // runReinstall installs the installed version again: it reads the version

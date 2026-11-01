@@ -1,7 +1,7 @@
 # The data move
 
-A product can move its databases to a new PostgreSQL cluster once, as one step of an upgrade. The
-box dumps the old cluster to the backup partition, restores into the new one, proves the copy and
+A product can move its databases to a new PostgreSQL cluster as one step of an upgrade: once, unless
+a [revert](#going-back-and-returning) goes back over it. The box dumps the old cluster to the backup partition, restores into the new one, proves the copy and
 only then lets the services start. It never writes to the old cluster: that cluster and its volume
 are the way back, and any failure returns the box to them.
 
@@ -65,11 +65,13 @@ the move is through; on an upgrade the quiesce has already stopped the old versi
    grants, and every table's row count is compared with the dump, in both directions.
 6. **Check.** Each of the product's checks runs on the target.
 7. **Start.** The journal says the box has switched, and the phase loop goes on to the next phase.
-8. **Settle.** Once the product is ready the move is done for good. Until then a failure of the
-   product goes back as well.
+8. **Settle.** Once the product is ready the move is done, and the working dump is removed. Until
+   then a failure of the product goes back as well.
 
 The dump's roles file holds password verifiers, so the directory is root's alone, on the encrypted
-partition. No password reaches the box's memory, a command line or a log: the tools read it from
+partition, and it goes as soon as it's worthless: at the settle, or after a failed attempt once the
+box is back on the old cluster. A removal that fails never fails the box: it's logged, the journal
+says so in `dump_left`, and the next start tries again. No password reaches the box's memory, a command line or a log: the tools read it from
 the pod's own environment.
 
 ## When it fails
@@ -91,11 +93,81 @@ anything that quotes.
 With no previous slot, or with an elevated shell open, the revert can't run: the box stays failed,
 and the old cluster is untouched. An owner reverts by hand, or the next start tries the move again.
 
-A revert an admin asks for after the move has settled goes back to the old cluster as it stood at
-the move. What was written on the new cluster since stays there and isn't carried back, and applying
-again doesn't move anything a second time.
+`sneakers reset` removes the journal, the working dump and every kept dump with the data.
 
-`sneakers reset` removes the journal with the data.
+## Going back and returning
+
+Any slot switch that lands on a slot without the target's workload goes back over the move: Revert on
+Updates, the revert of a later failure, or an apply of an older bundle. The box judges that by the
+slot itself, right after the switch and again at every start, so a switch cut off in between is still
+caught. A failed move isn't one of these: the services never settled on its target.
+
+The journal says `reverted`, and the switch says what that means in the Updates step, the history
+line and `upgrade.data-move-reverted` in the audit log: the box is back on the old cluster as it stood
+at the move, and what was written on the new cluster since stays there and isn't carried back.
+
+The services now write to the old cluster, so that's the data the box has to return with. A recorded
+revert is what triggers it, because row counts miss updates and LSNs move on a restart. The next time
+the step runs (an apply, a reinstall, or a revert back to the moving slot), it does this before its
+usual steps, with the step's detail saying so (`upgrade.data-move-return` in the audit log):
+
+1. **Check.** The new cluster has to answer, and the [room](#room) has to fit the kept dump too. A
+   refusal here touches nothing.
+2. **Keep.** After the usual stop and dump, and only once the foreign-target guard has passed, every
+   moved database that holds tables is dumped to
+   `/var/lib/sneakers/backup/data-move/replaced-<UTC stamp>/`, with the roles, checksums and row counts
+   a normal dump has, and every file is read back and compared. Until that's on disk and in the journal
+   the target isn't touched: a failure or a power loss here ends like any other failure, with the
+   target as it was. The next attempt removes the unfinished dump and starts over.
+3. **Move.** The target is cleared and restored from the old cluster as usual. An attempt cut off here
+   leaves the target part way, so the next attempt never keeps it again: the journal's `kept` names
+   the dump that holds the real data.
+
+Both sides' writes exist afterwards: the old side's are live, the new side's are in the dump, and
+`upgrade.data-move-kept` says where. The target's volume is a host path that outlives the old pins,
+so the target usually comes back with its data. If the volume is gone the target is empty: there's
+nothing to keep, and the audit entry says `nothing`. Only a target this move's journal says it filled
+may be replaced; any other is still refused and left alone.
+
+A later revert and return repeat all of this and add another dump.
+
+While a return is owed, from the revert until the box has moved again, an apply looks at the staged
+bundle before anything changes. A bundle that declares `data_move` goes ahead and returns. So does one
+without it that still has the old cluster, in its phases or its stacks, such as an older bundle: the
+box stays on that cluster. A bundle with neither would start on the new cluster with no move and
+strand what was written on the old one, so it's refused with `DATA_MOVE_BUNDLE`, the product keeps
+running and the bundle stays staged. That holds for a failed return too, and for an update window's
+apply.
+
+A move that found nothing to move never filled the target, so its journal can't vouch for what the
+services later wrote there. If the old cluster then holds tables too, the return is refused as a
+foreign target, and nothing is lost.
+
+## Kept dumps
+
+The box never removes a kept dump itself, because that would be a silent loss. They stay until an
+owner removes them or `sneakers reset` runs, and they count against the room of the next return.
+
+```sh
+sneakers dumps list
+sneakers dumps remove replaced-20261101T120000Z
+```
+
+`dumps remove` is an owner's, over SSH, with the name typed again and a new authenticator code, and is
+audited as `product.kept-dump.remove`. Until the box has settled on the new cluster, the dump of that
+return is refused with `DATA_MOVE_DUMP`, since it's the only copy of what it holds.
+
+To read one, restore a database next to the live data from the root shell, with `new-db` the target's
+name, and drop it when you're done:
+
+```sh
+cd /var/lib/sneakers/backup/data-move/replaced-20261101T120000Z
+k0s kubectl exec -i -n app new-db-0 -- sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U postgres -d postgres -c "CREATE DATABASE kept_app_one"'
+k0s kubectl exec -i -n app new-db-0 -- sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_restore -h 127.0.0.1 -U postgres --no-owner --dbname=kept_app_one' < app_one.dump
+```
+
+`manifest.json` lists each file's SHA-256 and every table's row count, and `roles.sql` holds the roles
+with their password verifiers.
 
 ## Room
 
@@ -104,6 +176,12 @@ refuses to start if they won't fit, with `DATA_MOVE_ROOM`, before anything stops
 size of the databases, and asks for 35% of that for the dump on the backup partition, plus the data
 and 1 GiB of write-ahead log on the data volume. Measured dumps came to 30%. When both are on one
 filesystem they count together. The refusal says how much it needs and where.
+
+A return also needs 35% of the target's databases for the kept dump, when there's one to write. The
+target's own files go as each database is replaced, so the data volume needs only what the restore
+grows past that at its fullest, plus the 1 GiB of write-ahead log. Kept dumps from earlier returns
+stay where they are and take their room: a return that won't fit is refused with `DATA_MOVE_ROOM`
+rather than dropping one, and [`dumps remove`](#kept-dumps) is how an owner makes room.
 
 ## How long it takes
 
@@ -135,4 +213,7 @@ They move six databases and compare every row, and check TLS and password logins
 They kill `pg_dump` and `pg_restore` with SIGKILL mid-stream, lose the target just before the
 switch, and SIGKILL the moving process itself at each of those points, as a power loss would. Each
 time the old cluster must hold exactly what it held and still take writes, and the next attempt must
-succeed. `DATAMOVE_POSTGRES_IMAGE` picks the image.
+succeed. They then go through a settle, a revert, a write on each side and a return: the old side's
+write is live, the new side's restores from the kept dump, and that holds with no room, with the
+kept dump or the second restore killed, and with the box dying in either. `DATAMOVE_POSTGRES_IMAGE`
+picks the image.
