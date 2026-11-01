@@ -63,6 +63,9 @@ const (
 	// ProductImport holds the import Job template a product.yaml's import
 	// names (docs/import.md).
 	ProductImport = "import"
+	// ProductDataMove holds the checks a product.yaml's data move names
+	// (docs/data-move.md).
+	ProductDataMove = "datamove"
 )
 
 // Release is the part of release.yaml the bundle check reads. The file is
@@ -325,7 +328,7 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	}
 	for _, e := range top {
 		switch e.Name() {
-		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec, ProductImport:
+		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec, ProductImport, ProductDataMove:
 		default:
 			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
 		}
@@ -412,6 +415,13 @@ func checkSpec(fsys fs.FS, rel *Release) error {
 	}
 	if err := checkPhaseStacks(fsys, spec); err != nil {
 		return err
+	}
+	if m := spec.DataMove; m != nil {
+		for _, c := range m.Checks {
+			if _, err := fs.Stat(fsys, c.File); err != nil {
+				return codes.New(codes.KitBundleMismatch, "the product bundle has no %s, which its data move checks with", c.File)
+			}
+		}
 	}
 	if im := spec.Import; im != nil {
 		job, err := fs.ReadFile(fsys, im.Job)

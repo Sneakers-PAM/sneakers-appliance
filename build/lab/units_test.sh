@@ -45,7 +45,9 @@ mkdir -p "$work/brand"
 echo 'format: 2' > "$work/product.yaml"
 echo 'kind: Job' > "$work/import-job.yaml"
 echo 'name: Lab' > "$work/brand/brand.yaml"
-full() { RELEASE="$work/release.yaml" STACKS="$work/stacks" PRODUCT_YAML="$work/product.yaml" IMPORT_JOB="$work/import-job.yaml" BRAND="$work/brand" bash "$here/units.sh" inputs product; }
+mkdir -p "$work/datamove"
+echo "SELECT 'ok';" > "$work/datamove/check.sql"
+full() { RELEASE="$work/release.yaml" STACKS="$work/stacks" PRODUCT_YAML="$work/product.yaml" IMPORT_JOB="$work/import-job.yaml" BRAND="$work/brand" DATAMOVE="$work/datamove" bash "$here/units.sh" inputs product; }
 o2="$(os)" w2="$(web)" f1="$(full)"
 hex "$f1" product
 [ "$f1" = "$(full)" ] || { echo "FAIL: the full product digest isn't stable" >&2; exit 1; }
@@ -60,8 +62,12 @@ moved() { # what file
 moved product.yaml "$work/product.yaml"
 moved "import Job" "$work/import-job.yaml"
 moved brand "$work/brand/brand.yaml"
+moved "data-move check" "$work/datamove/check.sql"
 echo 'logo' > "$work/brand/logo.svg"
 [ "$(full)" != "$f1" ] || { echo "FAIL: a new brand file didn't change the product digest" >&2; exit 1; }
+if RELEASE="$work/release.yaml" STACKS="$work/stacks" DATAMOVE="$work/nothing" bash "$here/units.sh" inputs product >/dev/null 2>&1; then
+  echo "FAIL: missing data-move checks passed" >&2; exit 1
+fi
 # The same bytes under another role are another input: product.yaml's
 # content as the import Job isn't the same bundle.
 cp "$work/product.yaml" "$work/swap.yaml"

@@ -15,6 +15,8 @@
 #                      workflow's lab job packs one)
 #   OUT/product-12.bin the real Sneakers product without phases (.12)
 #   OUT/product-13.bin the first one with phases (.13)
+#   OUT/product-mrc6.bin rc.6, the last product on the old database cluster,
+#                      for the move leg (the label sorts before next)
 #   OUT/product-next.bin the product under test (UNDER_TEST, version
 #                      0.1.0-lab.realci.next, newer than .13)
 #   OUT/bin/sneakers-migrate, OUT/bin/synth
@@ -218,6 +220,7 @@ product() {
 }
 product 12 "$P12_APPLIANCE_COMMIT" "$P12_RELEASE_COMMIT"
 product 13 "$P13_APPLIANCE_COMMIT" "$P13_RELEASE_COMMIT"
+product mrc6 "$RC6_APPLIANCE_COMMIT" "$RC6_RELEASE_COMMIT"
 product next "$under" "$next_release"
 
 # The import leg's source (build/realci/source.sh), built for the runner:
@@ -242,6 +245,7 @@ SNEAKERS_REAL_NEW_VERSION=$new_version
 SNEAKERS_REAL_NEW_IMAGE=$(ls "$OUT"/base-new/disk/*.raw)
 SNEAKERS_REAL_P12=$OUT/product-12.bin
 SNEAKERS_REAL_P13=$OUT/product-13.bin
+SNEAKERS_REAL_RC6=$OUT/product-mrc6.bin
 SNEAKERS_REAL_NEXT=$OUT/product-next.bin
 SNEAKERS_REAL_RELEASE_SRC=$rel_next
 SNEAKERS_REAL_MIGRATE=$bin_dir/sneakers-migrate

@@ -204,12 +204,15 @@ box's check.
 `helm template` runs of sneakers-release's `charts/sneakers` (its own `scripts/build-deps.sh`
 resolves the dependencies), over `charts/sneakers/examples/values-small-box.yaml` with
 `build/product/sneakers/values.yaml`, the MCP switch off and then on
-(`values-mcp-on.yaml`). `build/tools/stack` turns them into the stacks:
+(`values-mcp-on.yaml`). The database the services run on, helm-postgres-ha, is its own Helm release:
+sneakers-release's `scripts/pull-postgres-ha.sh` fetches the chart by the digest `release.yaml` pins
+and a third `helm template` adds it to both, with its `deploy/postgres-ha` values and
+`build/product/sneakers/values-postgres-ha.yaml`. `build/tools/stack` turns them into the stacks:
 
 | Stack | Holds |
 |---|---|
 | `sneakers` | always on: the `sneakers` namespace and everything of the product that isn't a workload (Services, ConfigMaps, NetworkPolicies, RBAC, Ingresses) |
-| `sneakers-data` | the data phase: PostgreSQL and Valkey |
+| `sneakers-data` | the data phase: the old PostgreSQL, which stays as the way back from the [data move](data-move.md), the new one, and Valkey |
 | `sneakers-identity` | the identity phase: Kratos, the identity service and the vault |
 | `sneakers-services` | the services phase: workflow, audit, notify, connector and the SSH broker |
 | `sneakers-front` | the front phase: the gateway and the two web apps |
@@ -463,6 +466,24 @@ box_secrets:
 
 A key is either generated (`password`, `key32` or `token`) or a `value`, which may name generated
 keys as `{key}` (the same Secret's) or `{secret/key}` (another box secret's in the same namespace).
+A Secret can hold a **certificate** instead of keys. No cert-manager runs on the box, so the box
+issues the certificate for a workload inside it, with `tls.crt`, `tls.key` and `ca.crt`:
+
+```yaml
+  - secret: sneakers/sneakers-pgha-tls
+    certificate:
+      common_name: sneakers-pgha-primary.sneakers.svc
+      dns_names: [sneakers-pgha-primary, "*.sneakers-pgha-headless.sneakers.svc"]
+```
+
+It's a self-signed ECDSA P-256 certificate, good for ten years as server and client, and its own
+CA. accessd issues it at the apply that first declares it and keeps it with the generated values. It
+issues a new one at the first apply or revert in its last year, or when a bundle names other hosts.
+Sneakers' services connect with `sslmode=require`, which encrypts and doesn't check the certificate,
+so a box that sits unpatched past the ten years keeps working. PostgreSQL reads a renewed certificate
+when it next starts. A key takes the certificate's place, never both, and a name that isn't a DNS
+name is refused. The section is new in this release, so the base goes first.
+
 The box refuses a key that's both or neither, an unknown generator, a key or a Secret twice, a
 reference to a key that isn't generated, a brace that isn't closed, and the appliance's own
 namespace. At each product apply and revert, after the slots switch and before k0s restarts,
@@ -518,7 +539,7 @@ support:
     timeout: 30s               # up to 60s; 15s by default
     redact: ['acct-[0-9]+']    # more patterns to mask; adds to the base's
   - title: The database's size
-    command: du -s -h /var/lib/sneakers-data/postgres
+    command: du -s -h /var/lib/sneakers-data/pgha
 ```
 
 The box refuses a section that isn't read-only, bounded and busybox-safe: a command other than the

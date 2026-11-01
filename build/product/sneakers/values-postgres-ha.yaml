@@ -1,0 +1,53 @@
+# Copyright 2026 The Sneakers-PAM Authors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The box's sneakers-pgha, layered over sneakers-release's
+# deploy/postgres-ha/values.yaml and values-small-box.yaml by render.sh.
+postgresql:
+  # k0s's default pod network, and the only one a box runs.
+  allowedCIDRs:
+    - 10.244.0.0/16  # scrub:allow=private-ip -- k0s's default pod network
+# Every Secret is a box secret: no helm hook runs on a box.
+credentials:
+  replication:
+    existingSecret: sneakers-bundled
+    passwordKey: replication-password
+  rewind:
+    existingSecret: sneakers-bundled
+    passwordKey: rewind-password
+tls:
+  # No cert-manager runs on the box; product.yaml declares this certificate.
+  certManager:
+    enabled: false
+  existingSecret: sneakers-pgha-tls
+networkPolicy:
+  allowedClients:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/component: identity
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/component: vault
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/component: workflow
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/component: audit
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/name: kratos
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/name: hydra
+    # The Import page's Job, while an import is open.
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/part-of: sneakers
+          app.kubernetes.io/component: migrate

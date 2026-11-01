@@ -34,13 +34,16 @@ migrate="$(awk '$1 ~ /\/sneakers-migrate$/ { print $1 "@" $2 }' "$b/images.txt")
 # The checkout may be a pinned commit from before the bundle had a brand.
 brand=build/product/sneakers/brand
 [ -d "$brand" ] || brand=
+# So may one from before the data move.
+datamove=build/product/sneakers/datamove
+[ -d "$datamove" ] || datamove=
 inputs="$(RELEASE="$b/release.yaml" STACKS="$b/stacks" PRODUCT_YAML=build/product/sneakers/product.yaml \
-  IMPORT_JOB=build/product/sneakers/import-job.yaml BRAND="$brand" bash build/lab/units.sh inputs product)"
+  IMPORT_JOB=build/product/sneakers/import-job.yaml BRAND="$brand" DATAMOVE="$datamove" bash build/lab/units.sh inputs product)"
 # The bundle carries helm only where release.yaml pins it.
 helm=()
 if [ -n "$(go run ./build/tools/k0spin "$b/release.yaml" amd64 helm)" ]; then helm=(HELM="$HELM"); fi
 env -u HELM "${helm[@]}" INPUTS="$inputs" VERSION="$VERSION" ARCH=amd64 CHANNEL=lab MIN_BASE="$MIN_BASE" RELEASE="$b/release.yaml" \
   RELEASE_KEY="$KEYS/cosign.pub" SIGNATURES="$b/sigs" LAYOUTS="$LAYOUTS" K0S="$K0S" \
   RECIPIENT="$KEYS/update.pub" STACKS="$b/stacks" PRODUCT_YAML=build/product/sneakers/product.yaml \
-  IMPORT_JOB=build/product/sneakers/import-job.yaml BRAND="$brand" MIGRATE_IMAGE="$migrate" OUT="$b/work" \
+  IMPORT_JOB=build/product/sneakers/import-job.yaml BRAND="$brand" DATAMOVE="$datamove" MIGRATE_IMAGE="$migrate" OUT="$b/work" \
   bash build/product/build.sh

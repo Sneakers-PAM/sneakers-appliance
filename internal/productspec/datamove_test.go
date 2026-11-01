@@ -36,6 +36,24 @@ data_move:
   timeout: 3h
 `
 
+func TestADataMoveCanReachItsTargetOverTheLocalSocket(t *testing.T) {
+	y := strings.Replace(dataMoveYAML, "host: new-db-primary.app.svc", "host: /var/run/postgresql", 1)
+	y = strings.Replace(y, "    sslmode: require\n    user: postgres\n    password_env: POSTGRES_PASSWORD\n", "    user: postgres\n", 1)
+	s, err := parseDataMove(t, y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.DataMove.Target.Host != "/var/run/postgresql" || s.DataMove.Target.PasswordEnv != "" {
+		t.Fatalf("%+v", s.DataMove.Target)
+	}
+	if _, err := parseDataMove(t, strings.Replace(y, "host: /var/run/postgresql", "host: /var/run/../etc", 1)); err == nil {
+		t.Fatal("a socket path that climbs out was taken")
+	}
+	if _, err := parseDataMove(t, strings.Replace(y, "    name: new-db\n    host: /var/run/postgresql\n", "    name: new-db\n    host: /var/run/postgresql\n    sslmode: require\n", 1)); err == nil {
+		t.Fatal("a TLS mode on a local socket was taken: libpq ignores it")
+	}
+}
+
 func parseDataMove(t *testing.T, y string) (Spec, error) {
 	t.Helper()
 	return Parse([]byte(y))

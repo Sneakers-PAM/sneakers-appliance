@@ -5,7 +5,9 @@
 # render.sh: the Sneakers product bundle's stacks, rendered from
 # sneakers-release's charts/sneakers, the same way for every channel: two
 # helm renders (the MCP switch off and on) over the small-box example with
-# values.yaml, turned into k0s stacks by build/tools/stack, plus the edge.
+# values.yaml, and the helm-postgres-ha cluster, its own release pinned by
+# digest in release.yaml, in both, turned into k0s stacks by build/tools/stack,
+# plus the edge.
 # Pass OUT to build/product/build.sh as STACKS, with product.yaml as
 # PRODUCT_YAML.
 #
@@ -71,6 +73,12 @@ values+=(--set-string "gateway.env.SNEAKERS_PRODUCT_VERSION=$product_version")
 echo "render: product version $product_version"
 "$helm" template sneakers "$chart" -n sneakers --skip-tests "${values[@]}" > "$work/off.yaml"
 "$helm" template sneakers "$chart" -n sneakers --skip-tests "${values[@]}" -f "$here/values-mcp-on.yaml" > "$work/on.yaml"
+# The cluster the data move goes to, beside the old one (product.yaml data_move).
+HELM="$helm" bash "$CHARTS/scripts/pull-postgres-ha.sh" "$work/pgha" >/dev/null
+"$helm" template sneakers-pgha "$work/pgha/postgres-ha" -n sneakers --skip-tests \
+  -f "$CHARTS/deploy/postgres-ha/values.yaml" -f "$CHARTS/deploy/postgres-ha/values-small-box.yaml" \
+  -f "$here/values-postgres-ha.yaml" > "$work/pgha.yaml"
+for r in off on; do printf -- '---\n' >> "$work/$r.yaml"; cat "$work/pgha.yaml" >> "$work/$r.yaml"; done
 mkdir -p "$OUT"
 go run "$root/build/tools/stack" --release "$RELEASE" --product-yaml "$here/product.yaml" \
   --off "$work/off.yaml" --on "$work/on.yaml" --out "$OUT" \
