@@ -97,6 +97,11 @@ for w in sneakers-postgres sneakers-pgha; do
 done
 grep -q 'path: /var/lib/sneakers-data/postgres$' "$data" || fail "the old cluster lost its volume"
 grep -q 'path: /var/lib/sneakers-data/pgha$' "$data" || fail "the new cluster has no volume of its own"
+# The backups are on the encrypted backup partition, for the members and the
+# restore check alike, and no pod writes them to the data volume.
+grep -q 'path: /var/lib/sneakers/backup/postgres$' "$data" || fail "the cluster's backups aren't on the backup partition"
+grep -q 'path: /var/lib/sneakers/backup/postgres$' "$out/sneakers/sneakers.yaml" || fail "the restore check doesn't read the backup partition"
+if grep -rq 'path: /var/lib/sneakers-data/pgha-backup' "$out"; then fail "a backup claim went to the data volume"; fi
 dsns="$(grep -h 'postgres://' "$out"/*/*.yaml || true)"
 [ -n "$dsns" ] || fail "no stack names a database"
 if grep -v '@sneakers-pgha-primary:5432/[a-z_]*?sslmode=require' <<<"$dsns" | grep -q .; then

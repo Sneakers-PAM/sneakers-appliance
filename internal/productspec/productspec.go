@@ -117,6 +117,9 @@ type Spec struct {
 	// DataMove, when set, moves the product's databases to a new cluster
 	// once, as the product comes up (datamove.go, docs/data-move.md).
 	DataMove *DataMove `yaml:"data_move"`
+	// Backups, when set, is how the box backs up and restores the product's
+	// database (docs/backups.md).
+	Backups *Backups `yaml:"backups"`
 	// Support are the sections the product adds to the box's support
 	// bundle (support.go, docs/support-bundle.md).
 	Support []Support `yaml:"support"`
@@ -621,6 +624,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkDataMove(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkBackups(); err != nil {
 		return Spec{}, err
 	}
 	if err := s.checkSupport(); err != nil {

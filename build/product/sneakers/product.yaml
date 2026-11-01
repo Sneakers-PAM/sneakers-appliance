@@ -284,6 +284,53 @@ data_move:
       database: sneakers_audit
       file: datamove/audit-chain.sql
 
+# Backups of the database (docs/backups.md). WAL-G archives to the box's
+# encrypted backup partition from inside the cluster: the render's backup claim
+# becomes /var/lib/sneakers/backup/postgres there, for the members and the
+# restore check alike. The box cuts sets from that archive and restores one
+# through the chart's own restore bootstrap, whose settings are these. The
+# chart keeps the cluster's identity on its Lease, and a restored cluster takes
+# a new one.
+backups:
+  label: Restoring the database
+  after: data
+  cluster:
+    namespace: sneakers
+    name: sneakers-pgha
+    host: /var/run/postgresql
+    user: postgres
+  claim: sneakers-pgha-backup
+  dir: postgres
+  mount: /backup
+  store: walg
+  data: database
+  pgdata: pgdata
+  databases: [sneakers_audit]
+  command: [/pgha/bin/pgha, backup]
+  status:
+    lease: sneakers-pgha-backup
+    success: postgres-ha/last-success
+    failure: postgres-ha/last-failure
+    verify: postgres-ha/last-verify
+    verify_result: postgres-ha/last-verify-result
+    verify_ok: ok
+  restore:
+    env:
+      PGHA_BOOTSTRAP_MODE: restore
+      PGHA_RESTORE_STORAGE: file
+      PGHA_RESTORE_BACKUP: LATEST
+      PGHA_RESTORE_PREFIX: "{set}"
+      PGHA_RESTORE_TARGET_NAME: "{point}"
+    identity_lease: sneakers-pgha
+    identity_annotations:
+      - postgres-ha/system-identifier
+      - postgres-ha/timeline
+      - postgres-ha/lsn
+  checks:
+    - name: the audit chain
+      database: sneakers_audit
+      file: datamove/audit-chain.sql
+
 # The order the product comes up in (docs/upgrades.md#the-phases): on every
 # boot, update and revert the box quiesces what an earlier run left, waits
 # for the cluster's DNS, network and edge, then places each phase's stacks
