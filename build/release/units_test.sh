@@ -81,7 +81,7 @@ has ovaproof 'go test -tags image .*-run TestFreshOVAFirstBoot .*\./test/image/o
 has publish 'needs: \[guard, sign, ovaproof\]' "wait for the fresh OVA's first boot"
 has lab "python3-virt-firmware" "install virt-fw-vars for the boot"
 has lab "BUILD_STAMP: n" "stamp the build without a build time, which the name check refuses"
-has lab "svcchecklist --release \"\\$lab/work/release.yaml\"" "read the release.yaml the lab build wrote"
+has lab 'svcchecklist --release "\$lab/work/release\.yaml"' "read the release.yaml the lab build wrote"
 has lab 'SNEAKERS_OVA="\$ova"' "boot the lab OVA"
 
 for id in build sign publish; do
