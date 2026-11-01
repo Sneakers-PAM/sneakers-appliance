@@ -347,14 +347,16 @@ func (s *Server) boxHost(ctx context.Context) string {
 	return host
 }
 
-// writeAtomic writes b through a tmp file, fsyncs it and renames it into
-// place.
+// writeAtomic writes b through its own tmp file, fsyncs it and renames it
+// into place. The console and :8443 both write setup's done marker, so two
+// calls can overlap on one path.
 func writeAtomic(p string, b []byte) error {
-	tmp := p + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- a path under the state volume
+	f, err := os.CreateTemp(filepath.Dir(p), filepath.Base(p)+".tmp*")
 	if err != nil {
 		return fmt.Errorf("write %s: %w", filepath.Base(p), err)
 	}
+	tmp := f.Name()
+	defer func() { _ = os.Remove(tmp) }()
 	if _, err := f.Write(b); err != nil {
 		_ = f.Close()
 		return fmt.Errorf("write %s: %w", filepath.Base(p), err)
