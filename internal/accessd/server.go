@@ -200,6 +200,8 @@ var shellMethods = map[string]bool{
 	accessapi.SupportBundlePath:                                 true,
 	accessv1connect.AccessServiceResetProductProcedure:          true,
 	accessv1connect.AccessServiceReinstallProductProcedure:      true,
+	accessv1connect.AccessServiceListKeptDumpsProcedure:         true,
+	accessv1connect.AccessServiceRemoveKeptDumpProcedure:        true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:           true,
 	accessv1connect.NetworkServiceSetNetworkProcedure:           true,
 	accessv1connect.NetworkServiceStageNetworkProcedure:         true,

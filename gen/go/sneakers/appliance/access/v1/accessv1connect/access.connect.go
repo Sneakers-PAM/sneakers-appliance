@@ -106,6 +106,12 @@ const (
 	// AccessServiceReinstallProductProcedure is the fully-qualified name of the AccessService's
 	// ReinstallProduct RPC.
 	AccessServiceReinstallProductProcedure = "/sneakers.appliance.access.v1.AccessService/ReinstallProduct"
+	// AccessServiceListKeptDumpsProcedure is the fully-qualified name of the AccessService's
+	// ListKeptDumps RPC.
+	AccessServiceListKeptDumpsProcedure = "/sneakers.appliance.access.v1.AccessService/ListKeptDumps"
+	// AccessServiceRemoveKeptDumpProcedure is the fully-qualified name of the AccessService's
+	// RemoveKeptDump RPC.
+	AccessServiceRemoveKeptDumpProcedure = "/sneakers.appliance.access.v1.AccessService/RemoveKeptDump"
 	// NetworkServiceGetNetworkProcedure is the fully-qualified name of the NetworkService's GetNetwork
 	// RPC.
 	NetworkServiceGetNetworkProcedure = "/sneakers.appliance.access.v1.NetworkService/GetNetwork"
@@ -271,6 +277,13 @@ type AccessServiceClient interface {
 	// UpgradeService method run as the login's admin (an owner, with a new
 	// authenticator code for the apply). The data is kept.
 	ReinstallProduct(context.Context, *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error)
+	// ListKeptDumps is the closed shell's "<product> dumps list": osadmin's
+	// ProductService.ListKeptDumps run as the login's admin.
+	ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error)
+	// RemoveKeptDump is the closed shell's "<product> dumps remove":
+	// osadmin's ProductService.RemoveKeptDump run as the login's admin, which
+	// must be an owner and give a new authenticator code.
+	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
 }
 
 // NewAccessServiceClient constructs a client for the sneakers.appliance.access.v1.AccessService
@@ -385,6 +398,18 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("ReinstallProduct")),
 			connect.WithClientOptions(opts...),
 		),
+		listKeptDumps: connect.NewClient[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse](
+			httpClient,
+			baseURL+AccessServiceListKeptDumpsProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("ListKeptDumps")),
+			connect.WithClientOptions(opts...),
+		),
+		removeKeptDump: connect.NewClient[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse](
+			httpClient,
+			baseURL+AccessServiceRemoveKeptDumpProcedure,
+			connect.WithSchema(accessServiceMethods.ByName("RemoveKeptDump")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -406,6 +431,8 @@ type accessServiceClient struct {
 	cleanUpDisk      *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
 	resetProduct     *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
 	reinstallProduct *connect.Client[v1.ReinstallProductRequest, v1.ReinstallProductResponse]
+	listKeptDumps    *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
+	removeKeptDump   *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -490,6 +517,16 @@ func (c *accessServiceClient) ReinstallProduct(ctx context.Context, req *connect
 	return c.reinstallProduct.CallUnary(ctx, req)
 }
 
+// ListKeptDumps calls sneakers.appliance.access.v1.AccessService.ListKeptDumps.
+func (c *accessServiceClient) ListKeptDumps(ctx context.Context, req *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error) {
+	return c.listKeptDumps.CallUnary(ctx, req)
+}
+
+// RemoveKeptDump calls sneakers.appliance.access.v1.AccessService.RemoveKeptDump.
+func (c *accessServiceClient) RemoveKeptDump(ctx context.Context, req *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
+	return c.removeKeptDump.CallUnary(ctx, req)
+}
+
 // AccessServiceHandler is an implementation of the sneakers.appliance.access.v1.AccessService
 // service.
 type AccessServiceHandler interface {
@@ -542,6 +579,13 @@ type AccessServiceHandler interface {
 	// UpgradeService method run as the login's admin (an owner, with a new
 	// authenticator code for the apply). The data is kept.
 	ReinstallProduct(context.Context, *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error)
+	// ListKeptDumps is the closed shell's "<product> dumps list": osadmin's
+	// ProductService.ListKeptDumps run as the login's admin.
+	ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error)
+	// RemoveKeptDump is the closed shell's "<product> dumps remove":
+	// osadmin's ProductService.RemoveKeptDump run as the login's admin, which
+	// must be an owner and give a new authenticator code.
+	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
 }
 
 // NewAccessServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -652,6 +696,18 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("ReinstallProduct")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessServiceListKeptDumpsHandler := connect.NewUnaryHandler(
+		AccessServiceListKeptDumpsProcedure,
+		svc.ListKeptDumps,
+		connect.WithSchema(accessServiceMethods.ByName("ListKeptDumps")),
+		connect.WithHandlerOptions(opts...),
+	)
+	accessServiceRemoveKeptDumpHandler := connect.NewUnaryHandler(
+		AccessServiceRemoveKeptDumpProcedure,
+		svc.RemoveKeptDump,
+		connect.WithSchema(accessServiceMethods.ByName("RemoveKeptDump")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.access.v1.AccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AccessServiceGetStatusProcedure:
@@ -686,6 +742,10 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceResetProductHandler.ServeHTTP(w, r)
 		case AccessServiceReinstallProductProcedure:
 			accessServiceReinstallProductHandler.ServeHTTP(w, r)
+		case AccessServiceListKeptDumpsProcedure:
+			accessServiceListKeptDumpsHandler.ServeHTTP(w, r)
+		case AccessServiceRemoveKeptDumpProcedure:
+			accessServiceRemoveKeptDumpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -757,6 +817,14 @@ func (UnimplementedAccessServiceHandler) ResetProduct(context.Context, *connect.
 
 func (UnimplementedAccessServiceHandler) ReinstallProduct(context.Context, *connect.Request[v1.ReinstallProductRequest]) (*connect.Response[v1.ReinstallProductResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.ReinstallProduct is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.ListKeptDumps is not implemented"))
+}
+
+func (UnimplementedAccessServiceHandler) RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.RemoveKeptDump is not implemented"))
 }
 
 // NetworkServiceClient is a client for the sneakers.appliance.access.v1.NetworkService service.

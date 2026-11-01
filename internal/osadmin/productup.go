@@ -12,6 +12,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 )
@@ -28,6 +29,9 @@ type moveFollower interface {
 	MoveFailed(why string) error
 	SettleMove() error
 	MoveAgain()
+	RecordMoveRevert() (bool, error)
+	TidyMove()
+	CheckMoveApply(slot string) error
 }
 
 // ProductUpBound is how long a product may take to be ready after its
@@ -129,6 +133,13 @@ func (s *Server) startProductUp() {
 func (s *Server) ResumeProductUp() {
 	if s.o.ProductUp == nil {
 		return
+	}
+	// A switch cut off before its revert was recorded leaves the box on the
+	// old cluster with a journal that says otherwise. This runs before
+	// anything can apply again.
+	s.moveReverted()
+	if m, ok := s.o.ProductUp.(moveFollower); ok {
+		m.TidyMove()
 	}
 	r := s.progressSnapshot()
 	if r == nil || !isProductUpStep(r.active()) {
@@ -407,7 +418,11 @@ func (s *Server) returnFromMove(why string) {
 // ready. Until then a failure goes back to the old cluster.
 func (s *Server) settleMove() {
 	m, ok := s.o.ProductUp.(moveFollower)
-	if !ok || !m.MoveUnsettled() {
+	if !ok {
+		return
+	}
+	defer m.TidyMove()
+	if !m.MoveUnsettled() {
 		return
 	}
 	if err := m.SettleMove(); err != nil {
@@ -415,6 +430,26 @@ func (s *Server) settleMove() {
 		return
 	}
 	s.o.Logger.Info("osadmin: the product is healthy on its new database")
+}
+
+// moveReverted records a slot switch that went back over a data move, by
+// asking the slot now current, and answers what that means for the data, or
+// "". A failure to record is tried again at the next start.
+func (s *Server) moveReverted() string {
+	m, ok := s.o.ProductUp.(moveFollower)
+	if !ok {
+		return ""
+	}
+	reverted, err := m.RecordMoveRevert()
+	if err != nil {
+		s.o.Logger.Error(err, "osadmin: a revert over the data move isn't recorded; the next start tries again")
+		return ""
+	}
+	if !reverted {
+		return ""
+	}
+	s.o.Logger.Warn("osadmin: the box went back over the data move", log.F("note", datamove.RevertNote))
+	return datamove.RevertNote
 }
 
 // productHistory records a product apply's or revert's outcome. One that

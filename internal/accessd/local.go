@@ -141,6 +141,24 @@ func (h *accessH) ResetProduct(ctx context.Context, r *connect.Request[accessv1.
 	return connect.NewResponse(&accessv1.ResetProductResponse{Result: out}), nil
 }
 
+// ListKeptDumps is the closed shell's "<product> dumps list".
+func (h *accessH) ListKeptDumps(ctx context.Context, r *connect.Request[accessv1.ListKeptDumpsRequest]) (*connect.Response[accessv1.ListKeptDumpsResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceListKeptDumpsProcedure, osadminv1connect.ProductServiceListKeptDumpsProcedure, h.s.h.Product.ListKeptDumps, &osadminv1.ListKeptDumpsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.ListKeptDumpsResponse{Dumps: out.GetDumps()}), nil
+}
+
+// RemoveKeptDump is the closed shell's "<product> dumps remove".
+func (h *accessH) RemoveKeptDump(ctx context.Context, r *connect.Request[accessv1.RemoveKeptDumpRequest]) (*connect.Response[accessv1.RemoveKeptDumpResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceRemoveKeptDumpProcedure, osadminv1connect.ProductServiceRemoveKeptDumpProcedure, h.s.h.Product.RemoveKeptDump,
+		&osadminv1.RemoveKeptDumpRequest{TotpCode: r.Msg.GetTotpCode(), Name: r.Msg.GetName()}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.RemoveKeptDumpResponse{}), nil
+}
+
 // ReinstallProduct is the closed shell's "<product> reinstall": the
 // installed version again, keeping the data. A staged bundle of that
 // version is used as it is; otherwise the box's update source must offer

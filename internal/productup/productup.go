@@ -414,11 +414,16 @@ func (p *Probe) onStacks() ([]string, error) {
 // slot's stacks hold, read from their files with the box's own values put
 // in, as k0s-interim and productswitch hand them to k0s.
 func (p *Probe) wantedWorkloads(stacks []string) ([]wanted, error) {
+	return p.workloadsIn(p.Slot, stacks)
+}
+
+// workloadsIn is wantedWorkloads for any slot.
+func (p *Probe) workloadsIn(slot string, stacks []string) ([]wanted, error) {
 	kernel, _ := os.Hostname()
-	values := boxvalues.Table(p.Slot, boxvalues.Read(p.SwitchDir), kernel)
+	values := boxvalues.Table(slot, boxvalues.Read(p.SwitchDir), kernel)
 	var out []wanted
 	for _, st := range stacks {
-		files, err := filepath.Glob(filepath.Join(p.Slot, "manifests", st, "*.y*ml"))
+		files, err := filepath.Glob(filepath.Join(slot, "manifests", st, "*.y*ml"))
 		if err != nil {
 			return nil, err
 		}

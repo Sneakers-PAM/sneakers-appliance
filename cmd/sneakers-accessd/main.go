@@ -276,7 +276,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Network:  netd,
 		// accessd is root, so it may ask the installed bundle's k0s how
 		// far the product has come up after an apply (docs/upgrades.md).
-		ProductUp: followingProbe(c, lg),
+		ProductUp: followingProbe(c, lg, audit),
 		// edgefall's push socket: the box state goes to every open product
 		// tab before an update, a reboot or a shutdown stops anything
 		// (docs/edge-fallback.md#the-event-stream).

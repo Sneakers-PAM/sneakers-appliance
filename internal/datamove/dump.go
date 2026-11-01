@@ -15,6 +15,8 @@ import (
 	"path/filepath"
 
 	log "github.com/Bugs5382/go-log"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
 const (
@@ -50,26 +52,32 @@ func (m *Move) dump(ctx context.Context) (*manifest, error) {
 	if err := os.RemoveAll(dir); err != nil {
 		return nil, fmt.Errorf("clearing the last dump: %w", err)
 	}
+	return m.writeDump(ctx, m.Spec.Source, dir, m.Spec.Databases, "Saving")
+}
+
+// writeDump writes c's roles and dbs to the new directory dir, each with its
+// checksum and row counts. The manifest goes last, so a dump that has one is
+// whole.
+func (m *Move) writeDump(ctx context.Context, c productspec.DataCluster, dir string, dbs []string, verb string) (*manifest, error) {
 	// The roles file holds password verifiers, so nothing here is for
 	// anyone but root, even on the encrypted partition.
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("making the dump's directory: %w", err)
 	}
-	src := m.Spec.Source
 	man := &manifest{}
-	m.say("Saving the roles")
-	p, err := m.toFile(rolesFile, func(w io.Writer) error { return m.Engine.DumpRoles(ctx, src, w) })
+	m.say("%s the roles", verb)
+	p, err := m.toFile(dir, rolesFile, func(w io.Writer) error { return m.Engine.DumpRoles(ctx, c, w) })
 	if err != nil {
 		return nil, fmt.Errorf("saving the roles: %w", err)
 	}
 	man.Roles = p
-	for i, db := range m.Spec.Databases {
-		m.say("Saving %s (%d of %d)", db, i+1, len(m.Spec.Databases))
-		p, err := m.toFile(db+".dump", func(w io.Writer) error { return m.Engine.DumpDatabase(ctx, src, db, w) })
+	for i, db := range dbs {
+		m.say("%s %s (%d of %d)", verb, db, i+1, len(dbs))
+		p, err := m.toFile(dir, db+".dump", func(w io.Writer) error { return m.Engine.DumpDatabase(ctx, c, db, w) })
 		if err != nil {
 			return nil, fmt.Errorf("saving %s: %w", db, err)
 		}
-		rows, err := m.Engine.Counts(ctx, src, db)
+		rows, err := m.Engine.Counts(ctx, c, db)
 		if err != nil {
 			return nil, fmt.Errorf("counting %s: %w", db, err)
 		}
@@ -86,8 +94,8 @@ func (m *Move) dump(ctx context.Context) (*manifest, error) {
 	return man, syncDir(dir)
 }
 
-func (m *Move) toFile(name string, write func(io.Writer) error) (p Part, err error) {
-	f, err := os.OpenFile(filepath.Join(m.dumpDir(), name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- the move's own dump
+func (m *Move) toFile(dir, name string, write func(io.Writer) error) (p Part, err error) {
+	f, err := os.OpenFile(filepath.Join(dir, name), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) // #nosec G304 -- the move's own dump
 	if err != nil {
 		return Part{}, err
 	}
@@ -122,14 +130,14 @@ func (c *counter) Write(b []byte) (int, error) {
 
 // verifyDump reads every file back from the partition and compares its
 // checksum, so what's restored is what was dumped.
-func (m *Move) verifyDump(man *manifest) error {
+func (m *Move) verifyDump(dir string, man *manifest) error {
 	m.say("Checking the dump")
 	parts := []Part{man.Roles}
 	for _, db := range man.Databases {
 		parts = append(parts, db.Part)
 	}
 	for _, p := range parts {
-		sum, err := sumFile(filepath.Join(m.dumpDir(), p.File))
+		sum, err := sumFile(filepath.Join(dir, p.File))
 		if err != nil {
 			return fmt.Errorf("reading the dump: %w", err)
 		}
