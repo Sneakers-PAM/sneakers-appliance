@@ -57,6 +57,7 @@ var stepLabels = map[string]string{
 	StepEdge:      "Opening the product on 443",
 	StepQuiesce:   "Stopping what was left running",
 	StepCluster:   "Starting the cluster's network, DNS and edge",
+	StepDataMove:  "Moving the database",
 }
 
 // PhaseStep is the step id of the phase name.
@@ -82,6 +83,9 @@ func (p *Probe) Steps() []Step {
 	out := []Step{{StepK0s, stepLabels[StepK0s]}, {StepImages, stepLabels[StepImages]}, {StepQuiesce, stepLabels[StepQuiesce]}, {StepCluster, stepLabels[StepCluster]}}
 	for _, ph := range spec.Phases {
 		out = append(out, Step{ID: PhaseStep(ph.Name), Label: ph.Label})
+		if spec.DataMove != nil && ph.Name == spec.DataMove.After {
+			out = append(out, Step{StepDataMove, spec.DataMove.Label})
+		}
 	}
 	return append(out, Step{StepHealth, stepLabels[StepHealth]}, Step{StepEdge, stepLabels[StepEdge]})
 }
@@ -171,6 +175,11 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 	for i, ph := range spec.Phases {
 		if r, done, err := p.phase(ctx, ph, on, live, pods); err != nil || !done {
 			return r, err
+		}
+		if spec.DataMove != nil && ph.Name == spec.DataMove.After {
+			if r, done, err := p.dataMove(spec); err != nil || !done {
+				return r, err
+			}
 		}
 		if importOpen && ph.Name == spec.Import.After && i+1 < len(spec.Phases) {
 			return p.hold(ctx, spec.Phases[i+1:], live)

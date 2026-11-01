@@ -149,3 +149,5 @@ shell, the console and :8443 show the same sentence.
 | 2532 | `UPGRADE_WEB_LOAD` | a Base Web slot failed its load checks (the signature, a file's SHA-256 or size, a file or link that isn't listed); a switch puts the links back and the pages it would replace keep serving, and at start the built-in pages serve ([upgrades.md](upgrades.md#base-web)) |
 | 2533 | `UPGRADE_PATCH_RESULT` | a patch didn't rebuild the release byte for byte; nothing was staged, and a fetched patch falls back to the full `.bin` ([upgrades.md](upgrades.md#base-os-patches)) |
 | 2534 | `PRODUCT_NOT_INSTALLED` | no product is installed, so there's nothing to remove; install it from the Product card on Updates ([upgrades.md](upgrades.md#removing-the-product)) |
+| 2535 | `DATA_MOVE` | moving the product's databases to a new cluster failed: the reason says at which step, and the box goes back to the previous product slot and the old cluster, whose data the move never changes ([data-move.md](data-move.md)) |
+| 2536 | `DATA_MOVE_ROOM` | the database move won't fit on the box, so it didn't start; the refusal says how much room it needs and where ([data-move.md](data-move.md#room)) |

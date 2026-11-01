@@ -140,6 +140,7 @@ func newFixture(t *testing.T) *fixture {
 	write(t, filepath.Join(f.data, "postgres", "pgdata", "PG_VERSION"), "18\n")
 	write(t, filepath.Join(f.data, "valkey", "dump.rdb"), strings.Repeat("v", 1000))
 	write(t, filepath.Join(f.platform, "phase-placed"), "sneakers-data\n")
+	write(t, filepath.Join(f.platform, "data-move.json"), `{"state":"done"}`)
 	if err := os.MkdirAll(f.images, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -186,6 +187,9 @@ func TestTheClusterStepQuiescesThenRemovesTheProductsObjects(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.platform, "phase-placed")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the phase-placed list is still there: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(f.platform, "data-move.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the data move's journal is still there: %v", err)
 	}
 	// 3 namespaces; 6 objects in them, 2 cluster-wide, 1 volume, and the
 	// namespaces themselves.

@@ -81,6 +81,11 @@ const (
 	UpgradeEpoch       = 2531
 	UpgradeWebLoad     = 2532
 	UpgradePatchResult = 2533
+	// DataMove: moving the product's databases to a new cluster failed; the
+	// old cluster and its volume are as they were (docs/data-move.md).
+	DataMove = 2535
+	// DataMoveRoom: the move won't fit on the box, so it never started.
+	DataMoveRoom = 2536
 	// ProductNotInstalled: there's no installed product to act on.
 	ProductNotInstalled = 2534
 )
@@ -123,6 +128,8 @@ var Entries = []apperr.Entry{
 	{Code: KeyCustodyNoTPM, Symbol: "KEYCUSTODY_NO_TPM", Title: "keycustody", Cause: "TPM mode was chosen on a box without a TPM"},
 	{Code: KeyCustodyInvalid, Symbol: "KEYCUSTODY_INVALID", Title: "keycustody", Cause: "an unknown mode or choice, a second Initialize, or a disk too small for first boot"},
 	{Code: KeyCustodyNotInitialized, Symbol: "KEYCUSTODY_NOT_INITIALIZED", Title: "keycustody", Cause: "the state volume has no custody header yet"},
+	{Code: DataMove, Symbol: "DATA_MOVE", Title: "upgrade", Cause: "moving the product's databases to a new cluster failed, and the box goes back to the old cluster"},
+	{Code: DataMoveRoom, Symbol: "DATA_MOVE_ROOM", Title: "upgrade", Cause: "the database move won't fit on the box, so it didn't start"},
 	{Code: UpgradeDowngrade, Symbol: "UPGRADE_DOWNGRADE", Title: "upgrade", Cause: "the release isn't newer than the running one"},
 	{Code: UpgradeUnpredictable, Symbol: "UPGRADE_UNPREDICTABLE", Title: "upgrade", Cause: "the release's UKI isn't one whose PCR 11 the box can predict"},
 	{Code: UpgradeNoPrevious, Symbol: "UPGRADE_NO_PREVIOUS", Title: "upgrade", Cause: "there's no previous release to roll back to"},

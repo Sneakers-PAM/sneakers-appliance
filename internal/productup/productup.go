@@ -64,6 +64,9 @@ type Result struct {
 	// while an import is open (productspec.Import.After): the phases
 	// through it run, the later ones wait, and the box says maintenance.
 	Held bool
+	// Unbounded is a step the product's ready timeout doesn't cover: a
+	// data move takes as long as the data, under its own timeout.
+	Unbounded bool
 }
 
 // StackLabel is the label k0s's manifest applier puts on every object of a
@@ -101,6 +104,9 @@ type Probe struct {
 	Manifests string
 	// AskTimeout bounds each command and the edge request; 0 is 10 s.
 	AskTimeout time.Duration
+	// Move runs a data move the slot declares; nil can't run one. Only the
+	// process that follows the product sets it.
+	Move DataMover
 }
 
 // defaultAskTimeout bounds each command and the edge request.

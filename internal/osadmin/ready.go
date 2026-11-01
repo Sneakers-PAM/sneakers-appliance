@@ -135,6 +135,7 @@ func (s *Server) askReady(since time.Time, every time.Duration) {
 		return
 	case res.Step == "":
 		r.ready, r.held = true, false
+		s.settleMove()
 		defer s.boxChanged()
 		s.o.Logger.Info("osadmin: the product is ready; the box says running", log.F("seconds", int(now.Sub(since).Seconds())))
 		return
@@ -165,6 +166,7 @@ func (s *Server) askReady(since time.Time, every time.Duration) {
 	r.failedStep = res.Step
 	defer s.boxChanged()
 	s.o.Logger.Warn("osadmin: a phase of the product failed; the box says failed", log.F("step", res.Step), log.F("why", r.failed))
+	s.returnFromMove(r.failed)
 }
 
 // productWaitsAgain is a product restart: the product must be ready again

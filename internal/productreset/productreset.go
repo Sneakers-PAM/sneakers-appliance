@@ -30,6 +30,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -317,6 +318,11 @@ func (r *Reset) Cluster(ctx context.Context, removing func() error) (Counts, err
 		}
 	}
 	if err := os.Remove(filepath.Join(r.Platform, productup.PlacedFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return n, codes.Wrap(codes.ProductReset, err)
+	}
+	// The data goes below, so what the journal says about it goes too: a
+	// later install moves its own data instead of trusting an old move.
+	if err := os.Remove(filepath.Join(r.Platform, datamove.JournalFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return n, codes.Wrap(codes.ProductReset, err)
 	}
 	lg.Info("productreset: the product's stacks are out of k0s's manifests", log.F("stacks", len(stacks)))

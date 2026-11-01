@@ -114,6 +114,9 @@ type Spec struct {
 	// Phases, when set, are the order the product comes up in, each
 	// gated on Ready before the next (phases.go, docs/upgrades.md).
 	Phases []Phase `yaml:"phases"`
+	// DataMove, when set, moves the product's databases to a new cluster
+	// once, as the product comes up (datamove.go, docs/data-move.md).
+	DataMove *DataMove `yaml:"data_move"`
 	// Support are the sections the product adds to the box's support
 	// bundle (support.go, docs/support-bundle.md).
 	Support []Support `yaml:"support"`
@@ -586,6 +589,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkPhases(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkDataMove(); err != nil {
 		return Spec{}, err
 	}
 	if err := s.checkSupport(); err != nil {

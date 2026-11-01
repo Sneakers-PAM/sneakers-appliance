@@ -368,6 +368,10 @@ a switch stack no switch gates (or the import's), and a timeout outside 1m to 1h
 its phase stacks in `phase-stacks` for k0s-interim, which leaves them to the phase loop. Without
 `phases` the product comes up as before: every stack at once.
 
+It may declare a **data move**, a one-time move of its databases to a new PostgreSQL cluster as the
+product comes up, whose failure takes the box back to the previous slot and the old cluster
+([data-move.md](data-move.md)).
+
 It may also declare an **import**: the product takes an export of an earlier install from the
 Import page before its own first-run setup ([import.md](import.md)):
 
