@@ -21,32 +21,28 @@ k() { kubectl -n "$ns" "$@"; }
 web=()
 if [ "${SKIP_WEB:-}" = 1 ]; then web=(--set web-staff.enabled=false --set web-admin.enabled=false); fi
 
-helm -n "$ns" uninstall sneakers-pgha sneakers --wait 2>/dev/null || true
+helm -n "$ns" uninstall sneakers --wait 2>/dev/null || true
 kubectl delete namespace "$ns" --wait --ignore-not-found
 
 (cd "$root" && CGO_ENABLED=0 go build -o "$work/mover" ./test/datamove/mover)
 cp "$root/build/product/sneakers/product.yaml" "$work/slot/product.yaml"
 cp "$root/build/product/sneakers/datamove/"*.sql "$work/slot/datamove/"
 
-helm upgrade --install sneakers "$CHARTS/charts/sneakers" -n "$ns" --create-namespace \
-  -f "$CHARTS/charts/sneakers/examples/values-small-box.yaml" -f "$CHARTS/test/kind/values.yaml" "${web[@]}" \
-  --set global.database.host=sneakers-pgha-primary --set global.database.sslmode=require --no-hooks
-chart="$(HELM="${HELM:-helm}" bash "$CHARTS/scripts/pull-postgres-ha.sh" "$work/pgha")"
+values=(-f "$CHARTS/charts/sneakers/examples/values-small-box.yaml" -f "$CHARTS/test/kind/values.yaml" "${web[@]}"
+  -f "$root/build/product/sneakers/values-postgres-ha.yaml" --set postgres-ha.storage.size=1Gi
+  --set global.database.host=sneakers-pgha-primary --set global.database.sslmode=require)
+helm upgrade --install sneakers "$CHARTS/charts/sneakers" -n "$ns" --create-namespace "${values[@]}" --no-hooks
 "$work/mover" cert --slot "$work/slot" --secret sneakers-pgha-tls --state "$work/state" | k apply -f -
 pw() { head -c 24 /dev/urandom | base64 | tr -dc a-zA-Z0-9; }
 k patch secret sneakers-bundled --type merge -p "{\"stringData\":{\"replication-password\":\"$(pw)\",\"rewind-password\":\"$(pw)\"}}"
-helm upgrade --install sneakers-pgha "$chart" -n "$ns" \
-  -f "$CHARTS/deploy/postgres-ha/values.yaml" -f "$CHARTS/deploy/postgres-ha/values-small-box.yaml" \
-  -f "$root/build/product/sneakers/values-postgres-ha.yaml" --set storage.size=1Gi --wait --timeout 5m
+k rollout status statefulset/sneakers-pgha --timeout=5m
 
 "$work/mover" move --slot "$work/slot" --dir "$work/state" --stop ""
 [ "$(jq -r '.state + " " + (.nothing | tostring)' "$work/state/data-move.json")" = "done true" ] ||
   fail "the journal says $(cat "$work/state/data-move.json")"
 # Kratos and Hydra's migrations are hooks, skipped above while the database
 # wasn't there; a plain upgrade runs them.
-helm upgrade sneakers "$CHARTS/charts/sneakers" -n "$ns" \
-  -f "$CHARTS/charts/sneakers/examples/values-small-box.yaml" -f "$CHARTS/test/kind/values.yaml" "${web[@]}" \
-  --set global.database.host=sneakers-pgha-primary --set global.database.sslmode=require --wait --timeout 10m
+helm upgrade sneakers "$CHARTS/charts/sneakers" -n "$ns" "${values[@]}" --wait --timeout 10m
 tables="$(k exec -i sneakers-pgha-0 -c postgres -- psql -U postgres -d sneakers_audit -qtAX -c "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'")"
 [ "$tables" -gt 0 ] || fail "the audit service made no tables on the new cluster"
 none="$(k exec -i sneakers-postgres-0 -- psql -U postgres -d sneakers_audit -qtAX -c "SELECT count(*) FROM pg_tables WHERE schemaname = 'public'")"

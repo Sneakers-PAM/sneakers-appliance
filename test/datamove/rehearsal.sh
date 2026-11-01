@@ -4,8 +4,9 @@
 #
 # rehearsal.sh: the data move against the real charts on a throwaway kind
 # cluster (docs/data-move.md#testing-it). The old cluster, with the real
-# services on it, is seeded; sneakers-pgha comes up beside it, as a bundle
-# places it, with the box's own values and the certificate the box issues;
+# services on it, is seeded; sneakers-pgha comes up beside it in the same
+# release, as a bundle places it, with the box's own values and the certificate
+# the box issues;
 # then the real internal/datamove is SIGKILLed mid-dump, mid-restore and just
 # before the switch. Each time the old cluster has to hold exactly what it held
 # and the services have to start on it. The last run goes through, every table
@@ -135,13 +136,18 @@ got="$(psql_in sneakers-postgres-0 sneakers_audit < "$slot/datamove/audit-chain.
 [ "$got" = ok ] || fail "the seeded chain doesn't pass its check: $got"
 
 step "the new cluster, beside the old one"
-chart="$(HELM="${HELM:-helm}" bash "$CHARTS/scripts/pull-postgres-ha.sh" "$work/pgha")"
 "$work/mover" cert --slot "$slot" --secret sneakers-pgha-tls --state "$state" | k apply -f -
 k patch secret sneakers-bundled --type merge -p "{\"stringData\":{\"replication-password\":\"$(head -c 24 /dev/urandom | base64 | tr -dc a-zA-Z0-9)\",\"rewind-password\":\"$(head -c 24 /dev/urandom | base64 | tr -dc a-zA-Z0-9)\"}}"
-helm upgrade --install sneakers-pgha "$chart" -n "$ns" \
-  -f "$CHARTS/deploy/postgres-ha/values.yaml" -f "$CHARTS/deploy/postgres-ha/values-small-box.yaml" \
-  -f "$root/build/product/sneakers/values-postgres-ha.yaml" --set storage.size=2Gi --wait --timeout 5m
+pgha=(-f "$root/build/product/sneakers/values-postgres-ha.yaml" --set postgres-ha.storage.size=2Gi)
+services_before="$(k get deployments -o jsonpath='{range .items[*]}{.metadata.name}={.metadata.generation} {end}')"
+helm upgrade sneakers "$CHARTS/charts/sneakers" -n "$ns" "${base[@]}" "${pgha[@]}" --wait --timeout 5m
 k rollout status statefulset/sneakers-pgha --timeout=5m
+# It joins the release without touching what's running.
+[ "$(k get deployments -o jsonpath='{range .items[*]}{.metadata.name}={.metadata.generation} {end}')" = "$services_before" ] ||
+  fail "turning the new cluster on changed a service"
+[ "$(k get statefulset sneakers-postgres -o jsonpath='{.status.currentRevision}')" = "$(k get statefulset sneakers-postgres -o jsonpath='{.status.updateRevision}')" ] ||
+  fail "turning the new cluster on rolled the old one"
+note "ok: the new cluster joined the release, and no service or the old cluster changed"
 [ "$(psql_in sneakers-pgha-0 postgres <<<"SHOW ssl;")" = on ] || fail "the new cluster doesn't serve TLS"
 got="$(psql_in sneakers-pgha-0 postgres <<<"SELECT datcollate FROM pg_database WHERE datname = 'postgres';")"
 [ "$got" = en_US.UTF-8 ] || fail "the new cluster's locale is $got"
@@ -185,8 +191,16 @@ got="$(psql_in sneakers-pgha-0 sneakers_audit < "$slot/datamove/audit-chain.sql"
 note "ok: the audit chain holds on the new cluster"
 
 step "the services, on the new cluster"
-helm upgrade sneakers "$CHARTS/charts/sneakers" -n "$ns" "${base[@]}" \
+# One release now, so the upgrade that moves the services goes over the cluster
+# they move to. It has to leave it running and leave its Lease with its holder.
+pgha_pod="$(k get pod sneakers-pgha-0 -o jsonpath='{.metadata.uid}')"
+pgha_lease="$(k get lease sneakers-pgha -o jsonpath='{.spec.holderIdentity}')"
+[ -n "$pgha_lease" ] || fail "the new cluster's Lease has no holder"
+helm upgrade sneakers "$CHARTS/charts/sneakers" -n "$ns" "${base[@]}" "${pgha[@]}" \
   --set global.database.host=sneakers-pgha-primary --set global.database.sslmode=require
+[ "$(k get pod sneakers-pgha-0 -o jsonpath='{.metadata.uid}')" = "$pgha_pod" ] || fail "the upgrade restarted the new cluster"
+[ "$(k get lease sneakers-pgha -o jsonpath='{.spec.holderIdentity}')" = "$pgha_lease" ] || fail "the upgrade took the Lease from its holder"
+note "ok: an upgrade of the release leaves the new cluster running, and its Lease held"
 start_services
 "$work/mover" move --slot "$slot" --dir "$state" --settle
 [ "$(jq -r .state "$state/data-move.json")" = "done" ] || fail "the move didn't settle"

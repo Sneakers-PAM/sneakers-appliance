@@ -17,8 +17,8 @@
 #   - every workload is in its phase's own stack, labelled with the phase,
 #     and the always-on stack holds none;
 #   - the services reach the helm-postgres-ha cluster over TLS, it runs beside
-#     the old cluster on its own volume, and nothing but the old cluster's own
-#     objects names the old address;
+#     the old cluster on its own volume, at the chart version release.yaml pins,
+#     and nothing but the old cluster's own objects names the old address;
 #   - every wait-phase init container runs with arguments the release's own
 #     sneakers-migrate wait takes, and exits 0 once its DNS and targets
 #     answer (the DNS-only waits too);
@@ -113,6 +113,9 @@ fi
 for f in "$here/product.yaml" "$here/import-job.yaml"; do
   if grep -v '^ *#' "$f" | grep -q 'sneakers-postgres:5432\|sslmode=disable'; then fail "$f still names the old address"; fi
 done
+# One render: the cluster comes from the umbrella, at the version release.yaml pins.
+pgha_version="$(awk '/^    postgres-ha:$/ { on = 1 } on && /^ *version: / { print $2; exit }' "$work/release.yaml")"
+grep -q "helm.sh/chart: postgres-ha-$pgha_version\$" "$data" || fail "the cluster isn't the chart at $pgha_version"
 echo "ok: both clusters in the data phase, every connection on the new one over TLS"
 
 # Each phased workload waits for the cluster's DNS and its needs first,

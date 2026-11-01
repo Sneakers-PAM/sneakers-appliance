@@ -204,10 +204,10 @@ box's check.
 `helm template` runs of sneakers-release's `charts/sneakers` (its own `scripts/build-deps.sh`
 resolves the dependencies), over `charts/sneakers/examples/values-small-box.yaml` with
 `build/product/sneakers/values.yaml`, the MCP switch off and then on
-(`values-mcp-on.yaml`). The database the services run on, helm-postgres-ha, is its own Helm release:
-sneakers-release's `scripts/pull-postgres-ha.sh` fetches the chart by the digest `release.yaml` pins
-and a third `helm template` adds it to both, with its `deploy/postgres-ha` values and
-`build/product/sneakers/values-postgres-ha.yaml`. `build/tools/stack` turns them into the stacks:
+(`values-mcp-on.yaml`). The database the services run on, helm-postgres-ha, is a dependency of the
+umbrella, in both renders: `build/product/sneakers/values-postgres-ha.yaml` turns it on beside the old
+cluster, and sneakers-release's `scripts/check-chart-digest.sh` holds the chart to the digest
+`release.yaml` pins. `build/tools/stack` turns them into the stacks:
 
 | Stack | Holds |
 |---|---|
