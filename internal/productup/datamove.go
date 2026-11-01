@@ -7,9 +7,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
@@ -32,6 +35,7 @@ type DataMover interface {
 	Tidy(holds func(string) bool)
 	KeptDumps() ([]datamove.KeptDump, error)
 	RemoveKept(name string) error
+	OwedSource() (string, error)
 }
 
 // dataMove moves the phase loop on past the move: done once the data is on
@@ -136,17 +140,43 @@ func (p *Probe) MoveAgain() {
 // with no slot or an unreadable one: that says nothing about where the box
 // is.
 func (p *Probe) holds() (func(string) bool, bool) {
-	if _, err := os.Stat(p.Slot); err != nil {
+	return p.holdsIn(p.Slot)
+}
+
+// holdsIn reads a slot's workloads from its stacks as well as its phases: a
+// slot without phases names them nowhere else.
+func (p *Probe) holdsIn(slot string) (func(string) bool, bool) {
+	if _, err := os.Stat(slot); err != nil {
 		return nil, false
 	}
-	spec, err := productspec.Load(p.Slot)
+	spec, err := productspec.Load(slot)
 	if err != nil {
 		return nil, false
 	}
-	return func(name string) bool {
-		_, ok := spec.PhaseOf(name)
-		return ok
-	}, true
+	names := map[string]bool{}
+	for _, ph := range spec.Phases {
+		for _, w := range ph.Workloads {
+			names[w] = true
+		}
+	}
+	dirs, err := os.ReadDir(filepath.Join(slot, "manifests"))
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, false
+	}
+	var stacks []string
+	for _, d := range dirs {
+		if d.IsDir() {
+			stacks = append(stacks, d.Name())
+		}
+	}
+	ws, err := p.workloadsIn(slot, stacks)
+	if err != nil {
+		return nil, false
+	}
+	for _, w := range ws {
+		names[w.name] = true
+	}
+	return func(name string) bool { return names[name] }, true
 }
 
 // RecordMoveRevert records a slot switch that went back over a data move,
@@ -181,4 +211,34 @@ func (p *Probe) RemoveKeptDump(name string) error {
 		return errors.New("productup: this probe has no data move")
 	}
 	return p.Move.RemoveKept(name)
+}
+
+// CheckMoveApply refuses the bundle in slot while a return to the new cluster
+// is owed, if it would land the box on the new cluster with no move: it
+// doesn't declare the move, and the old cluster the services write to isn't in
+// it. Those writes would be stranded with no word to anyone. A bundle it can't
+// read is refused too, since nothing proves it safe.
+func (p *Probe) CheckMoveApply(slot string) error {
+	if p.Move == nil {
+		return nil
+	}
+	source, err := p.Move.OwedSource()
+	if err != nil {
+		return codes.Wrap(codes.DataMoveBundle, err)
+	}
+	if source == "" {
+		return nil
+	}
+	holds, ok := p.holdsIn(slot)
+	if !ok {
+		return codes.New(codes.DataMoveBundle, "the box reverted over a data move and runs on %s, and this bundle can't be read to see whether it keeps that database; nothing was changed", source)
+	}
+	spec, err := productspec.Load(slot)
+	if err != nil {
+		return codes.Wrap(codes.DataMoveBundle, err)
+	}
+	if spec.DataMove != nil || holds(source) {
+		return nil
+	}
+	return codes.New(codes.DataMoveBundle, "the box reverted over a data move and runs on %s, and this bundle has neither a data_move nor that database, so what was written there since would be stranded; nothing was changed. Apply a bundle that declares data_move, or one that still has %s", source, source)
 }

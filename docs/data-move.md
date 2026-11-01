@@ -131,8 +131,13 @@ may be replaced; any other is still refused and left alone.
 
 A later revert and return repeat all of this and add another dump.
 
-A bundle applied over a reverted box has to go on declaring `data_move`. The appliance doesn't check:
-one that dropped the declaration starts on the target without moving anything.
+While a return is owed, from the revert until the box has moved again, an apply looks at the staged
+bundle before anything changes. A bundle that declares `data_move` goes ahead and returns. So does one
+without it that still has the old cluster, in its phases or its stacks, such as an older bundle: the
+box stays on that cluster. A bundle with neither would start on the new cluster with no move and
+strand what was written on the old one, so it's refused with `DATA_MOVE_BUNDLE`, the product keeps
+running and the bundle stays staged. That holds for a failed return too, and for an update window's
+apply.
 
 A move that found nothing to move never filled the target, so its journal can't vouch for what the
 services later wrote there. If the old cluster then holds tables too, the return is refused as a

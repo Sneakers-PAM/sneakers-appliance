@@ -88,6 +88,9 @@ const (
 	DataMoveRoom = 2536
 	// DataMoveDump: that kept dump isn't there, or a return still needs it.
 	DataMoveDump = 2537
+	// DataMoveBundle: a return to the new cluster is owed, and that bundle
+	// would land the box on it without one.
+	DataMoveBundle = 2538
 	// ProductNotInstalled: there's no installed product to act on.
 	ProductNotInstalled = 2534
 )
@@ -132,6 +135,7 @@ var Entries = []apperr.Entry{
 	{Code: KeyCustodyNotInitialized, Symbol: "KEYCUSTODY_NOT_INITIALIZED", Title: "keycustody", Cause: "the state volume has no custody header yet"},
 	{Code: DataMove, Symbol: "DATA_MOVE", Title: "upgrade", Cause: "moving the product's databases to a new cluster failed, and the box goes back to the old cluster"},
 	{Code: DataMoveRoom, Symbol: "DATA_MOVE_ROOM", Title: "upgrade", Cause: "the database move won't fit on the box, so it didn't start"},
+	{Code: DataMoveBundle, Symbol: "DATA_MOVE_BUNDLE", Title: "upgrade", Cause: "the box reverted over a data move, and that bundle neither declares the move nor keeps the old database, so it isn't applied"},
 	{Code: DataMoveDump, Symbol: "DATA_MOVE_DUMP", Title: "upgrade", Cause: "that kept dump isn't there, or the box's return to the new database still needs it"},
 	{Code: UpgradeDowngrade, Symbol: "UPGRADE_DOWNGRADE", Title: "upgrade", Cause: "the release isn't newer than the running one"},
 	{Code: UpgradeUnpredictable, Symbol: "UPGRADE_UNPREDICTABLE", Title: "upgrade", Cause: "the release's UKI isn't one whose PCR 11 the box can predict"},

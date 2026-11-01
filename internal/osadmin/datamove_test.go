@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect" // scrub:allow=fqdn -- a Go module path
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osadmin"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -32,6 +33,16 @@ type movingProbe struct {
 	tidied   int
 	dumps    []datamove.KeptDump
 	removed  []string
+	// refuse is what the next apply's check answers.
+	refuse error
+	seen   []string
+}
+
+func (m *movingProbe) CheckMoveApply(slot string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.seen = append(m.seen, slot)
+	return m.refuse
 }
 
 func (m *movingProbe) RecordMoveRevert() (bool, error) {
@@ -317,5 +328,40 @@ func TestAProductThatComesUpTidiesTheMove(t *testing.T) {
 			t.Fatal("never tidied")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// An apply a return is owed from is refused before anything changes: the
+// product doesn't stop, the slots don't move and the bundle stays staged.
+func TestAnApplyTheMoveRefusesChangesNothing(t *testing.T) {
+	p := &movingProbe{phasedProbe: &phasedProbe{}}
+	b, alice := applyProductOpts(t, withMoving(p))
+	waitReady(t, alice)
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.3.0", "0.1.0"))
+	if err := stage(alice, id); err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	p.refuse = codes.New(codes.DataMoveBundle, "that bundle would strand old-db")
+	p.mu.Unlock()
+	_, _, again := p.counts()
+	_, err := alice.upgrade().ApplyUpdate(context.Background(), connect.NewRequest(&osadminv1.ApplyUpdateRequest{Target: product, TotpCode: b.code("alice")}))
+	if !strings.Contains(err.Error(), "DATA_MOVE_BUNDLE") {
+		t.Fatalf("%v", err)
+	}
+	up := alice.upgrades(t)
+	if up.GetProduct().GetInstalledVersion() != "0.2.0" || up.GetProduct().GetStagedVersion() != "0.3.0" {
+		t.Fatalf("%+v", up.GetProduct())
+	}
+	if up.GetUpgradeProgress().GetInProgress() {
+		t.Fatalf("%+v", up.GetUpgradeProgress())
+	}
+	if _, _, a := p.counts(); a != again {
+		t.Fatal("the product was switched")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.seen) == 0 || p.seen[len(p.seen)-1] == "" {
+		t.Fatalf("%v", p.seen)
 	}
 }

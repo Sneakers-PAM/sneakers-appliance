@@ -273,6 +273,9 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 	if v == "" {
 		err = codes.New(codes.UpgradeNotStaged, "no product bundle is staged; upload or fetch one and stage it first")
 	}
+	if m, ok := s.o.ProductUp.(moveFollower); ok && err == nil {
+		err = m.CheckMoveApply(s.slots().Staged())
+	}
 	overrode, note := "", ""
 	if err == nil {
 		overrode, err = s.beginMaintenance(ctx, "product update applies", edgefall.KindProductApply, by, o)

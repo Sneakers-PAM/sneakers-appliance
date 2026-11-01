@@ -574,3 +574,52 @@ func TestTheRunnerAnswersWithoutASlotThatDeclaresAMove(t *testing.T) {
 		t.Fatal("the return didn't run")
 	}
 }
+
+func TestAReturnIsOwedFromARevertUntilTheBoxSettles(t *testing.T) {
+	f, _ := settled(t)
+	if got, err := f.m.OwedSource(); got != "" || err != nil {
+		t.Fatalf("settled: %q %v", got, err)
+	}
+	if _, err := f.m.RecordRevert(onOld); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.m.OwedSource(); got != srcName || err != nil {
+		t.Fatalf("reverted: %q %v", got, err)
+	}
+
+	f.e.fail["restore:app_two new-db"] = errors.New("boom")
+	if err := f.m.Run(context.Background()); err == nil {
+		t.Fatal("no error")
+	}
+	if got, err := f.m.OwedSource(); got != srcName || err != nil {
+		t.Fatalf("a failed return: %q %v", got, err)
+	}
+
+	delete(f.e.fail, "restore:app_two new-db")
+	if err := f.m.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.m.OwedSource(); got != "" || err != nil {
+		t.Fatalf("switched: %q %v", got, err)
+	}
+	if err := f.m.Settle(); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.m.OwedSource(); got != "" || err != nil {
+		t.Fatalf("settled again: %q %v", got, err)
+	}
+}
+
+func TestAFirstFailedMoveOwesNoReturn(t *testing.T) {
+	f := newFixture(t)
+	f.e.fail["restore:app_two new-db"] = errors.New("boom")
+	if err := f.m.Run(context.Background()); err == nil {
+		t.Fatal("no error")
+	}
+	if got, err := f.m.OwedSource(); got != "" || err != nil {
+		t.Fatalf("%q %v", got, err)
+	}
+	if got, err := runner(f).OwedSource(); got != "" || err != nil {
+		t.Fatalf("%q %v", got, err)
+	}
+}

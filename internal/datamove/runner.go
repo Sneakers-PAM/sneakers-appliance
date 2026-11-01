@@ -117,6 +117,11 @@ func (r *Runner) RemoveKept(name string) error {
 	return r.New(productspec.DataMove{}, nil, nil).RemoveKept(name)
 }
 
+// OwedSource is the old cluster a return is owed from, or "".
+func (r *Runner) OwedSource() (string, error) {
+	return r.New(productspec.DataMove{}, nil, nil).OwedSource()
+}
+
 // Again lets a new apply try a failed move again.
 func (r *Runner) Again() {
 	r.mu.Lock()

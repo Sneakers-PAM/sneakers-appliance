@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -44,6 +45,7 @@ type fakeMover struct {
 	onNew     bool
 	tidied    int
 	removed   string
+	owed      string
 }
 
 func (f *fakeMover) Ask(_ productspec.DataMove, svc datamove.Services) datamove.Status {
@@ -67,6 +69,7 @@ func (f *fakeMover) KeptDumps() ([]datamove.KeptDump, error) {
 	return []datamove.KeptDump{{Name: "replaced-20261101T120000Z"}}, nil
 }
 func (f *fakeMover) RemoveKept(name string) error { f.removed = name; return nil }
+func (f *fakeMover) OwedSource() (string, error)  { return f.owed, nil }
 
 func movingProbe(t *testing.T, c *fakeCluster, m productup.DataMover) (*productup.Probe, string) {
 	t.Helper()
@@ -299,5 +302,97 @@ func TestTheProbePassesKeptDumpsOnToTheMove(t *testing.T) {
 	}
 	if err := p.RemoveKeptDump("replaced-20261101T120000Z"); err != nil || m.removed == "" {
 		t.Fatalf("%v %+v", err, m)
+	}
+}
+
+// bundle is a staged slot with the given product.yaml and, in its stack
+// app-data, a StatefulSet of each name.
+func bundle(t *testing.T, yaml string, workloads ...string) string {
+	t.Helper()
+	slot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(slot, productspec.File), []byte(yaml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(slot, "manifests", "app-data")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var m strings.Builder
+	for _, w := range workloads {
+		m.WriteString("---\napiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: " + w + "\n  namespace: app\nspec:\n  replicas: 1\n")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stack.yaml"), []byte(m.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return slot
+}
+
+const noMoveNewOnly = `format: 2
+phases:
+  - {name: data, label: Starting the database, stack: app-data, workloads: [app-db-new], timeout: 3m}
+`
+
+const noMoveOldToo = `format: 2
+phases:
+  - {name: data, label: Starting the database, stack: app-data, workloads: [app-db], timeout: 3m}
+`
+
+func TestAnApplyThatWouldStrandTheOldClustersWritesIsRefused(t *testing.T) {
+	m := &fakeMover{owed: "app-db"}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+
+	err := p.CheckMoveApply(bundle(t, noMoveNewOnly, "app-db-new"))
+	if !codes.Is(err, codes.DataMoveBundle) || !strings.Contains(err.Error(), "app-db") || !strings.Contains(err.Error(), "data_move") {
+		t.Fatalf("%v", err)
+	}
+}
+
+func TestAnOlderBundleThatKeepsTheOldClusterMayApply(t *testing.T) {
+	m := &fakeMover{owed: "app-db"}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	if err := p.CheckMoveApply(bundle(t, noMoveOldToo, "app-db")); err != nil {
+		t.Fatalf("phased: %v", err)
+	}
+	// A bundle without phases names its workloads only in its stacks.
+	if err := p.CheckMoveApply(bundle(t, "format: 2\n", "app-db")); err != nil {
+		t.Fatalf("no phases: %v", err)
+	}
+}
+
+func TestABundleThatDeclaresTheMoveMayApply(t *testing.T) {
+	m := &fakeMover{owed: "app-db"}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	if err := p.CheckMoveApply(bundle(t, movingProduct, "app-db", "app-db-new")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWithNoReturnOwedAnyBundleMayApply(t *testing.T) {
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = &fakeMover{}
+	if err := p.CheckMoveApply(bundle(t, noMoveNewOnly, "app-db-new")); err != nil {
+		t.Fatal(err)
+	}
+	p.Move = nil
+	if err := p.CheckMoveApply(bundle(t, noMoveNewOnly, "app-db-new")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// What only the stacks name still counts as the slot holding it: a slot
+// without phases can run the target, so going to one isn't a revert.
+func TestASlotWithoutPhasesHoldsWhatItsStacksHold(t *testing.T) {
+	m := &fakeMover{reverted: true}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	p.Slot = bundle(t, "format: 2\n", "app-db-new")
+	if _, err := p.RecordMoveRevert(); err != nil {
+		t.Fatal(err)
+	}
+	if !m.onNew || m.onOld {
+		t.Fatalf("%+v", m)
 	}
 }

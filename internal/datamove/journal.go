@@ -64,6 +64,9 @@ type Journal struct {
 	// Target is the new cluster's name: a slot without that workload isn't
 	// on the target, whatever the journal last said.
 	Target string `json:"target,omitempty"`
+	// Source is the old cluster's name: while a return is owed it's what the
+	// services write to, so a bundle has to move it or keep it.
+	Source string `json:"source,omitempty"`
 	// TargetTouched: an attempt wrote to the target, so a later one may
 	// clear it. It's what stops a move dropping data it didn't write.
 	TargetTouched bool `json:"target_touched"`

@@ -67,6 +67,19 @@ func (m *Move) RecordRevert(holds func(string) bool) (bool, error) {
 	return true, nil
 }
 
+// OwedSource is the old cluster a return is owed from, or "": the box went
+// back over a move and hasn't moved again, whether or not it has tried.
+func (m *Move) OwedSource() (string, error) {
+	j, err := m.Read()
+	if err != nil {
+		return "", err
+	}
+	if !j.Returning || (j.State != StateReverted && j.State != StateFailed) {
+		return "", nil
+	}
+	return j.Source, nil
+}
+
 // room refuses a move that won't fit. A return reads the target too, which
 // has to answer here: nothing has stopped yet.
 func (m *Move) room(ctx context.Context, j *Journal) error {

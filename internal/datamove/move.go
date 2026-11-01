@@ -149,7 +149,7 @@ func (m *Move) Run(ctx context.Context) error {
 		return codes.Wrap(codes.DataMove, ctx.Err())
 	}
 	j.State, j.Step, j.Reason, j.Started, j.Finished, j.Nothing = StateRunning, StepPrepare, "", m.now(), time.Time{}, false
-	j.Target = m.Spec.Target.Name
+	j.Target, j.Source = m.Spec.Target.Name, m.Spec.Source.Name
 	j.Attempt++
 	if err := m.save(j); err != nil {
 		return codes.Wrap(codes.DataMove, err)

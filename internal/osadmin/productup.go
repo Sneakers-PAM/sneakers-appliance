@@ -31,6 +31,7 @@ type moveFollower interface {
 	MoveAgain()
 	RecordMoveRevert() (bool, error)
 	TidyMove()
+	CheckMoveApply(slot string) error
 }
 
 // ProductUpBound is how long a product may take to be ready after its
