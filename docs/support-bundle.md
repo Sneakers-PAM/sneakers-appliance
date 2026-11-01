@@ -13,16 +13,29 @@ own in `product.yaml`, and the base names none of them. The code is `internal/su
 | SSH, short form | `support-bundle` | the key sections, with tails of about 50 lines, to copy out of the terminal |
 | SSH, full form | `support-bundle full` | every section, with tails of 2000 lines |
 | SSH, to a file | `ssh admin@box1.sneakers.example.org support-bundle full > support-bundle.txt` | the full form, plain |
-| :8443 | `GET /export/support-bundle` (the Logs page's **Download support bundle**) | the full form, as `support-bundle-<host>-<UTC time>.txt` |
+| :8443 | `GET /export/support-bundle` (the Logs page's **Download support bundle**) | the full form, as `support-bundle-<host>-<UTC time>.zip`, a zip holding the one file `support-bundle-<host>-<UTC time>.txt` |
 
 Any admin may take one, and each is audited as `support.bundle`
 ([os-audit.md](os-audit.md)). One runs at a time; a second is refused until the first ends, so a
 box in trouble isn't asked to do it twice.
 
-The text is plain: labelled sections, no pager, no binary or tar stream, so it selects and copies
-cleanly in PuTTY, MobaXterm and OpenSSH. On a terminal the headings, errors and warnings are in
-colour, and copying a selection leaves the colour behind; `--no-color` turns it off. Anything that
+Over SSH the text is plain: labelled sections, no pager, no binary or tar stream, so it selects and
+copies cleanly in PuTTY, MobaXterm and OpenSSH. On a terminal the headings, errors and warnings are
+in colour, and copying a selection leaves the colour behind; `--no-color` turns it off. Anything that
 isn't a terminal, and every :8443 download, has no escape codes at all.
+
+The :8443 download is a `.zip` because macOS and Windows both open one with no extra tools. It's
+Deflate at the best compression, and it isn't encrypted, since every line is already redacted. The
+text inside is the same format as over SSH.
+
+The zip is streamed as the bundle is written, a section at a time, and it's always closed, so a
+bundle stopped by its time or size limit, or by its request ending, still opens, with what was
+written and without the rest. Read the text's last line to tell: a file with no `##### end` line was
+cut off. A connection that drops part way is different: the end of the zip never arrives, so the
+browser reports a failed download, and any partial file it keeps won't open. Take the bundle again,
+or over SSH.
+
+A bundle that's refused, because another is running, is a plain-text `503` with no zip.
 
 ## The format
 
