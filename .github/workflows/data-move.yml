@@ -13,11 +13,13 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'internal/datamove/**'
+      - 'internal/backupset/**'
       - 'internal/boxsecrets/**'
       - 'internal/productspec/**'
       - 'build/product/sneakers/**'
       - 'build/realci/pins.env'
       - 'test/datamove/**'
+      - 'test/backups/**'
       - '.github/workflows/data-move.yml'
   workflow_dispatch:
 permissions:
@@ -26,6 +28,43 @@ concurrency:
   group: data-move-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
+  backups:
+    name: 💾 Backups on kind
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      KIND_NODE_IMAGE: kindest/node:v1.36.4@sha256:099e049362a1526b2db71494e1947aae99bd16290d7c895f2b7ea312e3cbfaed
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Read the sneakers-release commit
+        id: pins
+        run: |
+          # shellcheck source=build/realci/pins.env
+          source build/realci/pins.env
+          echo "release=${NEXT_RELEASE_COMMIT:-main}" >> "$GITHUB_OUTPUT"
+      - name: Checkout sneakers-release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: Sneakers-PAM/sneakers-release
+          ref: ${{ steps.pins.outputs.release }}
+          path: sneakers-release
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install tools
+        run: |
+          sneakers-release/scripts/install-tools.sh "$RUNNER_TEMP/bin" helm kind kubectl
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Create the cluster
+        run: kind create cluster --name sneakers --image "$KIND_NODE_IMAGE" --wait 180s
+      - name: Rehearse
+        env:
+          CHARTS: ${{ github.workspace }}/sneakers-release
+          WORK_DIR: ${{ runner.temp }}/backups
+        run: bash test/backups/rehearsal.sh
   rehearsal:
     name: 🚚 Data move on kind (${{ matrix.arch }})
     if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false

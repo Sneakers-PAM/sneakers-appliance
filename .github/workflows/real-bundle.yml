@@ -18,6 +18,9 @@ name: Real bundle upgrades
 #   takes an earlier install with a 727,000-record audit chain through the
 #   Import page (review, convert, check, import, verify), with the box's
 #   memory read at each step.
+# - backup: a box running the product under test cuts a backup set, takes a
+#   later write, restores the set and has to come back without it, every other
+#   row there, and stay so through a power loss.
 # - move: a box on the base under test running rc.6, the last product on
 #   the old database cluster, takes the product under test through the normal
 #   update path. The data move runs as one step of it; every row has to be on
@@ -72,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control","import","move"]' || '["upgrade","recover","import","move"]') }}
+        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control","import","move","backup"]' || '["upgrade","recover","import","move","backup"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -266,6 +269,7 @@ jobs:
             recover) run='^TestTheRealBundlesRecoverFromAStuckUpdate$' ;;
             import) run='^TestTheRealBundleImportsALargeAuditChain$' ;;
             move) run='^TestTheRealBundleMovesTheDatabase$' ;;
+            backup) run='^TestTheRealBundleRestoresABackup$' ;;
           esac
           start="$(date +%s)"
           status=0

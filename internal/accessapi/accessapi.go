@@ -33,6 +33,10 @@ const StatusFile = "/run/sneakers/access/status.json"
 // asks for every section.
 const SupportBundlePath = "/support-bundle"
 
+// BackupExportPath is accessd's route for the closed shell's backup export:
+// the encrypted set as a response body, for the ticket in the query.
+const BackupExportPath = "/backup-export"
+
 // The headers a closed-shell login sends with each call. Both are only
 // for the audit entry: the identity is the peer uid, and a fingerprint
 // that isn't one of that admin's keys is refused.

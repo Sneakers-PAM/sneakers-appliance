@@ -181,6 +181,8 @@ size of the databases, and asks for 35% of that for the dump on the backup parti
 and 1 GiB of write-ahead log on the data volume. Measured dumps came to 30%. When both are on one
 filesystem they count together. The refusal says how much it needs and where.
 
+The new cluster archives what the restore writes, so the backup partition takes that WAL too. It's left out of this sum: a partition that fills warns and never stops the move ([backups.md](backups.md#a-full-backup-partition)).
+
 A return also needs 35% of the target's databases for the kept dump, when there's one to write. The
 target's own files go as each database is replaced, so the data volume needs only what the restore
 grows past that at its fullest, plus the 1 GiB of write-ahead log. Kept dumps from earlier returns

@@ -262,6 +262,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	// The disk guard: the volumes' alerts and the cleanup that runs every
 	// hour and when a volume passes 80% (docs/disk-layout.md).
 	guard := diskGuard(c.state, paths, audit, func() bool { return api != nil && api.UpdateBusy() }, lg)
+	backups := boxBackups(c, store, guard, lg, audit)
 	secrets := &boxsecrets.Store{Dir: filepath.Join(c.state, "platform"), Manifests: "/var/lib/k0s/manifests", Settings: settings, Logger: lg, Restore: escrowRestore(custody)}
 	api = osadmin.New(osadmin.Options{
 		Access: store, Audit: audit, Clock: clock.Real{}, Disk: guard,
@@ -276,7 +277,8 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Network:  netd,
 		// accessd is root, so it may ask the installed bundle's k0s how
 		// far the product has come up after an apply (docs/upgrades.md).
-		ProductUp: followingProbe(c, lg, audit),
+		ProductUp: followingProbe(c, lg, audit, backups),
+		Backups:   backups,
 		// edgefall's push socket: the box state goes to every open product
 		// tab before an update, a reboot or a shutdown stops anything
 		// (docs/edge-fallback.md#the-event-stream).
@@ -401,6 +403,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	lg.Info("accessd: ready", log.F("socket", c.socket))
 
 	go runDiskGuard(ctx, guard)
+	go runBackupGuard(ctx, backups.Guard)
 	d.RefreshStatus(ctx)
 	api.ResumeProductUp()
 	// A cut-off reset can take minutes to finish; this loop keeps its beat.
