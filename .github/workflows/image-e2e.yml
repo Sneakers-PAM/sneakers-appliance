@@ -139,7 +139,7 @@ jobs:
           KERNELRELEASE="$(cat build/out/kernel/amd64/kernelrelease)" \
           VERITYSETUP=build/out/veritysetup-amd64 STATIC=build/out \
           OPENSSH=out/static BUSYBOX=out/static/busybox \
-          KEYS="$keys" OUT="$RUNNER_TEMP/lab" DURABILITY=1 bash build/lab/build.sh
+          NO_PAGES=1 KEYS="$keys" OUT="$RUNNER_TEMP/lab" DURABILITY=1 bash build/lab/build.sh
           {
             echo "### Lab release"
             echo "- root image: $(stat -c %s "$RUNNER_TEMP"/lab/work/root/root-*.img) bytes (SquashFS zstd with the verity tree)"
@@ -156,6 +156,14 @@ jobs:
           q="$(find "$lab/qcow2" -maxdepth 1 -name 'sneakers-appliance-lab-*-amd64.qcow2')"
           [ -n "$q" ] && [ -f "$lab/qcow2/proxmox-vm.md" ] || { ls -l "$lab/qcow2"; echo "the lab kit wrote no qcow2 and proxmox-vm.md" >&2; exit 1; }
           echo "- qcow2: $(basename "$q") $(stat -c %s "$q") bytes" >> "$GITHUB_STEP_SUMMARY"
+      # The OVA, written the same way; the suite's ova package boots its disk.
+      - name: Write the OVA
+        run: |
+          lab="$RUNNER_TEMP/lab"
+          "$lab/sneakers-kit" build "$lab/artifact" --format ova --arch amd64 --out "$lab/ova"
+          o="$(find "$lab/ova" -maxdepth 1 -name 'sneakers-appliance-lab-*-amd64.ova')"
+          [ -n "$o" ] || { ls -l "$lab/ova"; echo "the lab kit wrote no OVA" >&2; exit 1; }
+          echo "- OVA: $(basename "$o") $(stat -c %s "$o") bytes" >> "$GITHUB_STEP_SUMMARY"
       - name: Image suite
         if: github.event_name != 'pull_request'
         env:
@@ -165,11 +173,12 @@ jobs:
           export SNEAKERS_KERNEL="$PWD/build/out/kernel/amd64/bzImage"
           SNEAKERS_IMAGE="$(ls "$RUNNER_TEMP"/lab/disk/*.raw)"
           SNEAKERS_QCOW2="$(ls "$RUNNER_TEMP"/lab/qcow2/*.qcow2)"
+          SNEAKERS_OVA="$(ls "$RUNNER_TEMP"/lab/ova/*.ova)"
           SNEAKERS_PRODUCT="$(ls "$RUNNER_TEMP"/lab/product/sneakers-product-*.bin)"
           SNEAKERS_PRODUCT_UNPHASED="$(ls "$RUNNER_TEMP"/lab/product-unphased/sneakers-product-*.bin)"
           SNEAKERS_DURABILITY_PHASELESS="$(ls "$RUNNER_TEMP"/lab/durability/phaseless/sneakers-product-*.bin)"
           SNEAKERS_DURABILITY_PHASED="$(ls "$RUNNER_TEMP"/lab/durability/phased/sneakers-product-*.bin)"
-          export SNEAKERS_IMAGE SNEAKERS_QCOW2 SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED SNEAKERS_DURABILITY_PHASELESS SNEAKERS_DURABILITY_PHASED
+          export SNEAKERS_IMAGE SNEAKERS_QCOW2 SNEAKERS_OVA SNEAKERS_PRODUCT SNEAKERS_PRODUCT_UNPHASED SNEAKERS_DURABILITY_PHASELESS SNEAKERS_DURABILITY_PHASED
           go test -tags image -timeout 60m -v ./test/image/...
       - name: Wipe the lab keys
         if: always()

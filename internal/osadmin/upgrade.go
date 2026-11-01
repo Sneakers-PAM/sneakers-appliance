@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"crypto/x509"
 	"encoding/hex"
@@ -1022,7 +1023,13 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 		return nil, nil, err
 	}
 	h := p.Header
-	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: h.Payload.SHA256, Size: h.Payload.Size,
+	// The page shows this as the file's SHA-256, so it's what sha256sum gives
+	// for the .bin, not the payload digest the header signs.
+	fileSum := sha256.New()
+	if _, err := io.Copy(fileSum, io.NewSectionReader(f, 0, st.Size())); err != nil {
+		return nil, nil, codes.Wrap(codes.UpgradeUpload, err)
+	}
+	pkg := &osadminv1.UpdatePackage{UploadId: id, Version: h.Version, Arch: h.Arch, Kind: string(h.Kind), Bases: h.Bases, Channel: h.Channel, Sha256: hex.EncodeToString(fileSum.Sum(nil)), Size: h.Payload.Size,
 		Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, MinBase: h.MinBase, MaxBase: h.MaxBase, Source: s.uploadSource(id)}
 	if h.Target != nil {
 		pkg.FullBin = h.Target.FullBin

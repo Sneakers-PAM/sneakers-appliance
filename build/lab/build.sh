@@ -39,9 +39,12 @@
 #                (spec.kitMin; default 0.0.0-0, any)
 #   WEB          a sneakers-web checkout: the :8443 pages are built from it
 #                by pages.sh, stamped with this version and its commit, and
-#                go into the root. Without it, OSADMIN_ASSETS may name pages
-#                built elsewhere (unstamped unless that build set APP_VERSION
-#                and APP_COMMIT), or the root ships with none.
+#                go into the root. Required, so a lab image can't carry pages
+#                that read 0.0.0 (unknown). OSADMIN_ASSETS is refused: only
+#                pages.sh's stamped pages go into a lab root.
+#   NO_PAGES     1 builds a root with no :8443 pages instead of WEB, for a
+#                test job that never serves them (the image suite and the
+#                real-bundle job); such a build is never handed to anyone
 #   PRODUCT_MIN_BASE, PRODUCT_MAX_BASE
 #                the product bundle's base range (default: this build's
 #                version, no maximum)
@@ -78,6 +81,16 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 : "${KERNEL:?}" "${KERNELRELEASE:?}" "${VERITYSETUP:?}" "${OPENSSH:?}" "${BUSYBOX:?}" "${STATIC:?}" "${KEYS:?}" "${OUT:?}"
+if [ -n "${OSADMIN_ASSETS:-}" ]; then
+  echo "lab: OSADMIN_ASSETS is refused: pages built elsewhere can't be checked against this build's version; set WEB to a sneakers-web checkout" >&2
+  exit 1
+fi
+case "${WEB:+web}:${NO_PAGES:-}" in
+  web:) ;;
+  :1) echo "lab: NO_PAGES=1: this root has no :8443 pages" ;;
+  web:*) echo "lab: WEB and NO_PAGES=${NO_PAGES} are both set; pick one" >&2; exit 1 ;;
+  *) echo "lab: set WEB to a sneakers-web checkout (NO_PAGES=1 only for a test that never serves the pages)" >&2; exit 1 ;;
+esac
 version="${VERSION:-0.0.1}"
 # Every lab artifact's name carries when it was built and the commit it was
 # built from, so a rebuild of the same commit never shares a version (and a
