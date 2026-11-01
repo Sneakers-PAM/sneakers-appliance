@@ -4,6 +4,8 @@
 package osadmin
 
 import (
+	"archive/zip"
+	"compress/flate"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -150,9 +152,63 @@ func (s *Server) bundleAudit(_ context.Context, w io.Writer, n int) error {
 	return nil
 }
 
-// exportSupportBundle streams the full bundle as a text file, to any
-// signed-in admin. A file left on a laptop can't say more than the box's
-// own logs say, and they're redacted, so it asks no step-up.
+// bundleArchive is the :8443 download's zip, holding the bundle's text as
+// one entry. Nothing of it is written until the bundle's first byte, so a
+// refused bundle still leaves the response free for a plain 503.
+type bundleArchive struct {
+	w       http.ResponseWriter
+	header  zip.FileHeader
+	zip     *zip.Writer
+	deflate *flate.Writer
+	entry   io.Writer
+}
+
+func (a *bundleArchive) Write(p []byte) (int, error) {
+	if a.zip == nil {
+		a.zip = zip.NewWriter(a.w)
+		a.zip.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
+			var err error
+			a.deflate, err = flate.NewWriter(out, flate.BestCompression)
+			return a.deflate, err
+		})
+		var err error
+		if a.entry, err = a.zip.CreateHeader(&a.header); err != nil {
+			return 0, err
+		}
+	}
+	return a.entry.Write(p)
+}
+
+// Flush passes the bundle's flush at each section's end through deflate
+// and on to the client. Deflate would otherwise hold megabytes back, and
+// the forwarder gives up on an answer that hasn't started in two minutes.
+// A failure here comes back from the next Write.
+func (a *bundleArchive) Flush() {
+	if a.zip == nil {
+		return
+	}
+	if a.deflate.Flush() != nil || a.zip.Flush() != nil {
+		return
+	}
+	_ = http.NewResponseController(a.w).Flush()
+}
+
+// started says the response has been written to.
+func (a *bundleArchive) started() bool { return a.zip != nil }
+
+// Close ends the entry and writes the zip's directory, which is what makes
+// the file open at all.
+func (a *bundleArchive) Close() error {
+	if a.zip == nil {
+		return nil
+	}
+	return a.zip.Close()
+}
+
+// exportSupportBundle streams the full bundle as a zip of its one text
+// file, to any signed-in admin. A file left on a laptop can't say more
+// than the box's own logs say, and they're redacted, so it asks no step-up
+// and isn't encrypted.
 func (s *Server) exportSupportBundle(w http.ResponseWriter, r *http.Request) {
 	entry := osaudit.Entry{Source: hostOf(r.RemoteAddr), Action: "support.bundle", Target: "support bundle", Detail: map[string]string{"surface": osaudit.SurfaceAdmin}}
 	sess, err := s.session(r.Header)
@@ -166,11 +222,17 @@ func (s *Server) exportSupportBundle(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, codes.Describe(err), http.StatusUnauthorized)
 		return
 	}
-	name := "support-bundle-" + firstLabel(s.boxName(r.Context())) + "-" + s.o.Clock.Now().UTC().Format("20060102T150405Z") + ".txt"
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	now := s.o.Clock.Now().UTC()
+	name := "support-bundle-" + firstLabel(s.boxName(r.Context())) + "-" + now.Format("20060102T150405Z")
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`.zip"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if err := s.writeBundle(r.Context(), w, supportbundle.Full, entry); err != nil && codes.Is(err, codes.NotAvailable) {
+	archive := &bundleArchive{w: w, header: zip.FileHeader{Name: name + ".txt", Method: zip.Deflate, Modified: now}}
+	err = s.writeBundle(r.Context(), archive, supportbundle.Full, entry)
+	if cerr := archive.Close(); cerr != nil {
+		s.o.Logger.Warn("osadmin: a support bundle's zip didn't close: the client has gone", log.F("name", name), log.F("error", cerr.Error()))
+	}
+	if err != nil && !archive.started() && codes.Is(err, codes.NotAvailable) {
 		w.Header().Del("Content-Disposition")
 		http.Error(w, codes.Describe(err), http.StatusServiceUnavailable)
 	}
