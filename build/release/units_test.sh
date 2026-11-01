@@ -74,10 +74,12 @@ has publish 'check-names\.sh --channel production "\$\{files\[@\]\}"' "check eve
 has lab 'check-names\.sh --channel lab' "check the lab files' names"
 # A fresh OVA boots through first boot before any OVA ships.
 has ovaproof 'needs: \[guard, sign\]' "wait for the signed OVA"
+has ovaproof "python3-virt-firmware" "install virt-fw-vars for the boot"
 has ovaproof 'SNEAKERS_REQUIRE_TOOLS: "1"' "fail, not skip, without the boot tools"
 has ovaproof 'SNEAKERS_OVA=.*/ova/sneakers-appliance-\$VERSION-amd64\.ova' "boot the production OVA"
 has ovaproof 'go test -tags image .*-run TestFreshOVAFirstBoot .*\./test/image/ova' "run the first-boot test"
 has publish 'needs: \[guard, sign, ovaproof\]' "wait for the fresh OVA's first boot"
+has lab "python3-virt-firmware" "install virt-fw-vars for the boot"
 has lab 'SNEAKERS_OVA="\$ova"' "boot the lab OVA"
 
 for id in build sign publish; do
