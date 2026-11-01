@@ -151,3 +151,4 @@ shell, the console and :8443 show the same sentence.
 | 2534 | `PRODUCT_NOT_INSTALLED` | no product is installed, so there's nothing to remove; install it from the Product card on Updates ([upgrades.md](upgrades.md#removing-the-product)) |
 | 2535 | `DATA_MOVE` | moving the product's databases to a new cluster failed: the reason says at which step, and the box goes back to the previous product slot and the old cluster, whose data the move never changes ([data-move.md](data-move.md)) |
 | 2536 | `DATA_MOVE_ROOM` | the database move won't fit on the box, so it didn't start; the refusal says how much room it needs and where ([data-move.md](data-move.md#room)) |
+| 2537 | `DATA_MOVE_DUMP` | that kept dump isn't there, or the box hasn't settled on the new database yet and may still need it; `<product> dumps list` shows the kept dumps ([data-move.md](data-move.md#kept-dumps)) |

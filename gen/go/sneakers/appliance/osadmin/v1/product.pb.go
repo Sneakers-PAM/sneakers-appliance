@@ -476,6 +476,257 @@ func (x *ResetProductResponse) GetStagedVersion() string {
 	return ""
 }
 
+// KeptDump is one dump of the data a return replaced.
+type KeptDump struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// name is the dump's directory name, path where it is on the box.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// taken is when it was written, in RFC 3339.
+	Taken string `protobuf:"bytes,3,opt,name=taken,proto3" json:"taken,omitempty"`
+	Bytes uint64 `protobuf:"varint,4,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	// whole: every file is there. One that isn't was cut off before it counted.
+	Whole         bool `protobuf:"varint,5,opt,name=whole,proto3" json:"whole,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeptDump) Reset() {
+	*x = KeptDump{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeptDump) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeptDump) ProtoMessage() {}
+
+func (x *KeptDump) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeptDump.ProtoReflect.Descriptor instead.
+func (*KeptDump) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *KeptDump) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *KeptDump) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *KeptDump) GetTaken() string {
+	if x != nil {
+		return x.Taken
+	}
+	return ""
+}
+
+func (x *KeptDump) GetBytes() uint64 {
+	if x != nil {
+		return x.Bytes
+	}
+	return 0
+}
+
+func (x *KeptDump) GetWhole() bool {
+	if x != nil {
+		return x.Whole
+	}
+	return false
+}
+
+type ListKeptDumpsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListKeptDumpsRequest) Reset() {
+	*x = ListKeptDumpsRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListKeptDumpsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListKeptDumpsRequest) ProtoMessage() {}
+
+func (x *ListKeptDumpsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListKeptDumpsRequest.ProtoReflect.Descriptor instead.
+func (*ListKeptDumpsRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{8}
+}
+
+type ListKeptDumpsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Dumps         []*KeptDump            `protobuf:"bytes,1,rep,name=dumps,proto3" json:"dumps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListKeptDumpsResponse) Reset() {
+	*x = ListKeptDumpsResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListKeptDumpsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListKeptDumpsResponse) ProtoMessage() {}
+
+func (x *ListKeptDumpsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListKeptDumpsResponse.ProtoReflect.Descriptor instead.
+func (*ListKeptDumpsResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListKeptDumpsResponse) GetDumps() []*KeptDump {
+	if x != nil {
+		return x.Dumps
+	}
+	return nil
+}
+
+type RemoveKeptDumpRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// totp_code is a new code from the owner's authenticator, on top of the
+	// one the login took.
+	TotpCode string `protobuf:"bytes,1,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	// name is the dump's name, as typed.
+	Name          string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveKeptDumpRequest) Reset() {
+	*x = RemoveKeptDumpRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveKeptDumpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveKeptDumpRequest) ProtoMessage() {}
+
+func (x *RemoveKeptDumpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveKeptDumpRequest.ProtoReflect.Descriptor instead.
+func (*RemoveKeptDumpRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RemoveKeptDumpRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+func (x *RemoveKeptDumpRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type RemoveKeptDumpResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveKeptDumpResponse) Reset() {
+	*x = RemoveKeptDumpResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveKeptDumpResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveKeptDumpResponse) ProtoMessage() {}
+
+func (x *RemoveKeptDumpResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_product_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveKeptDumpResponse.ProtoReflect.Descriptor instead.
+func (*RemoveKeptDumpResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP(), []int{11}
+}
+
 var File_sneakers_appliance_osadmin_v1_product_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_product_proto_rawDesc = "" +
@@ -511,11 +762,26 @@ const file_sneakers_appliance_osadmin_v1_product_proto_rawDesc = "" +
 	"namespaces\x12\x18\n" +
 	"\aobjects\x18\x05 \x01(\rR\aobjects\x12#\n" +
 	"\rbytes_removed\x18\x06 \x01(\x04R\fbytesRemoved\x12%\n" +
-	"\x0estaged_version\x18\a \x01(\tR\rstagedVersion2\xd8\x03\n" +
+	"\x0estaged_version\x18\a \x01(\tR\rstagedVersion\"t\n" +
+	"\bKeptDump\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x14\n" +
+	"\x05taken\x18\x03 \x01(\tR\x05taken\x12\x14\n" +
+	"\x05bytes\x18\x04 \x01(\x04R\x05bytes\x12\x14\n" +
+	"\x05whole\x18\x05 \x01(\bR\x05whole\"\x16\n" +
+	"\x14ListKeptDumpsRequest\"V\n" +
+	"\x15ListKeptDumpsResponse\x12=\n" +
+	"\x05dumps\x18\x01 \x03(\v2'.sneakers.appliance.osadmin.v1.KeptDumpR\x05dumps\"H\n" +
+	"\x15RemoveKeptDumpRequest\x12\x1b\n" +
+	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x18\n" +
+	"\x16RemoveKeptDumpResponse2\x86\x06\n" +
 	"\x0eProductService\x12\x91\x01\n" +
 	"\x11ListExposedValues\x127.sneakers.appliance.osadmin.v1.ListExposedValuesRequest\x1a8.sneakers.appliance.osadmin.v1.ListExposedValuesResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x9c\x01\n" +
 	"\x0fGetExposedValue\x125.sneakers.appliance.osadmin.v1.GetExposedValueRequest\x1a6.sneakers.appliance.osadmin.v1.GetExposedValueResponse\"\x1a\xc2\xf3\x18\x16\x10\x01\"\x12product.value.read\x12\x92\x01\n" +
-	"\fResetProduct\x122.sneakers.appliance.osadmin.v1.ResetProductRequest\x1a3.sneakers.appliance.osadmin.v1.ResetProductResponse\"\x19\xc2\xf3\x18\x15\x10\x02\"\rproduct.reset8\x01@\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\fResetProduct\x122.sneakers.appliance.osadmin.v1.ResetProductRequest\x1a3.sneakers.appliance.osadmin.v1.ResetProductResponse\"\x19\xc2\xf3\x18\x15\x10\x02\"\rproduct.reset8\x01@\x01\x12\x85\x01\n" +
+	"\rListKeptDumps\x123.sneakers.appliance.osadmin.v1.ListKeptDumpsRequest\x1a4.sneakers.appliance.osadmin.v1.ListKeptDumpsResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\xa3\x01\n" +
+	"\x0eRemoveKeptDump\x124.sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest\x1a5.sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse\"$\xc2\xf3\x18 \x10\x02\"\x18product.kept-dump.remove8\x01@\x01B[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_product_proto_rawDescOnce sync.Once
@@ -529,7 +795,7 @@ func file_sneakers_appliance_osadmin_v1_product_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_product_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_sneakers_appliance_osadmin_v1_product_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_sneakers_appliance_osadmin_v1_product_proto_goTypes = []any{
 	(*ExposedValue)(nil),              // 0: sneakers.appliance.osadmin.v1.ExposedValue
 	(*ListExposedValuesRequest)(nil),  // 1: sneakers.appliance.osadmin.v1.ListExposedValuesRequest
@@ -538,23 +804,33 @@ var file_sneakers_appliance_osadmin_v1_product_proto_goTypes = []any{
 	(*GetExposedValueResponse)(nil),   // 4: sneakers.appliance.osadmin.v1.GetExposedValueResponse
 	(*ResetProductRequest)(nil),       // 5: sneakers.appliance.osadmin.v1.ResetProductRequest
 	(*ResetProductResponse)(nil),      // 6: sneakers.appliance.osadmin.v1.ResetProductResponse
-	(Role)(0),                         // 7: sneakers.appliance.osadmin.v1.Role
+	(*KeptDump)(nil),                  // 7: sneakers.appliance.osadmin.v1.KeptDump
+	(*ListKeptDumpsRequest)(nil),      // 8: sneakers.appliance.osadmin.v1.ListKeptDumpsRequest
+	(*ListKeptDumpsResponse)(nil),     // 9: sneakers.appliance.osadmin.v1.ListKeptDumpsResponse
+	(*RemoveKeptDumpRequest)(nil),     // 10: sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest
+	(*RemoveKeptDumpResponse)(nil),    // 11: sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse
+	(Role)(0),                         // 12: sneakers.appliance.osadmin.v1.Role
 }
 var file_sneakers_appliance_osadmin_v1_product_proto_depIdxs = []int32{
-	7, // 0: sneakers.appliance.osadmin.v1.ExposedValue.roles:type_name -> sneakers.appliance.osadmin.v1.Role
-	0, // 1: sneakers.appliance.osadmin.v1.ListExposedValuesResponse.values:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
-	0, // 2: sneakers.appliance.osadmin.v1.GetExposedValueResponse.entry:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
-	1, // 3: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:input_type -> sneakers.appliance.osadmin.v1.ListExposedValuesRequest
-	3, // 4: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:input_type -> sneakers.appliance.osadmin.v1.GetExposedValueRequest
-	5, // 5: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:input_type -> sneakers.appliance.osadmin.v1.ResetProductRequest
-	2, // 6: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:output_type -> sneakers.appliance.osadmin.v1.ListExposedValuesResponse
-	4, // 7: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:output_type -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
-	6, // 8: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:output_type -> sneakers.appliance.osadmin.v1.ResetProductResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	12, // 0: sneakers.appliance.osadmin.v1.ExposedValue.roles:type_name -> sneakers.appliance.osadmin.v1.Role
+	0,  // 1: sneakers.appliance.osadmin.v1.ListExposedValuesResponse.values:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
+	0,  // 2: sneakers.appliance.osadmin.v1.GetExposedValueResponse.entry:type_name -> sneakers.appliance.osadmin.v1.ExposedValue
+	7,  // 3: sneakers.appliance.osadmin.v1.ListKeptDumpsResponse.dumps:type_name -> sneakers.appliance.osadmin.v1.KeptDump
+	1,  // 4: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:input_type -> sneakers.appliance.osadmin.v1.ListExposedValuesRequest
+	3,  // 5: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:input_type -> sneakers.appliance.osadmin.v1.GetExposedValueRequest
+	5,  // 6: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:input_type -> sneakers.appliance.osadmin.v1.ResetProductRequest
+	8,  // 7: sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps:input_type -> sneakers.appliance.osadmin.v1.ListKeptDumpsRequest
+	10, // 8: sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump:input_type -> sneakers.appliance.osadmin.v1.RemoveKeptDumpRequest
+	2,  // 9: sneakers.appliance.osadmin.v1.ProductService.ListExposedValues:output_type -> sneakers.appliance.osadmin.v1.ListExposedValuesResponse
+	4,  // 10: sneakers.appliance.osadmin.v1.ProductService.GetExposedValue:output_type -> sneakers.appliance.osadmin.v1.GetExposedValueResponse
+	6,  // 11: sneakers.appliance.osadmin.v1.ProductService.ResetProduct:output_type -> sneakers.appliance.osadmin.v1.ResetProductResponse
+	9,  // 12: sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps:output_type -> sneakers.appliance.osadmin.v1.ListKeptDumpsResponse
+	11, // 13: sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump:output_type -> sneakers.appliance.osadmin.v1.RemoveKeptDumpResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_product_proto_init() }
@@ -569,7 +845,7 @@ func file_sneakers_appliance_osadmin_v1_product_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_product_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_product_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

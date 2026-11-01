@@ -44,9 +44,11 @@ type fakeEngine struct {
 	roles   string
 	tgtRole string
 	size    int64
-	fail    map[string]error
-	before  map[string]func()
-	check   string
+	// sizes overrides size per "cluster db".
+	sizes  map[string]int64
+	fail   map[string]error
+	before map[string]func()
+	check  string
 }
 
 func newEngine(t *testing.T) *fakeEngine {
@@ -82,8 +84,12 @@ func (f *fakeEngine) WaitReady(_ context.Context, c productspec.DataCluster) err
 	return f.step("ready", c, false)
 }
 
-func (f *fakeEngine) Size(_ context.Context, c productspec.DataCluster, _ []string) (int64, error) {
-	return f.size, f.step("size", c, false)
+func (f *fakeEngine) Size(_ context.Context, c productspec.DataCluster, dbs []string) (int64, error) {
+	n := f.size
+	if len(dbs) == 1 && f.sizes != nil {
+		n = f.sizes[c.Name+" "+dbs[0]]
+	}
+	return n, f.step("size", c, false)
 }
 
 func (f *fakeEngine) of(c productspec.DataCluster) map[string]fakeDB {
@@ -109,7 +115,7 @@ func (f *fakeEngine) DumpDatabase(_ context.Context, c productspec.DataCluster, 
 	if err := f.step("dump:"+db, c, false); err != nil {
 		return err
 	}
-	_, err := io.WriteString(w, f.source[db].dump)
+	_, err := io.WriteString(w, f.of(c)[db].dump)
 	return err
 }
 
@@ -486,13 +492,13 @@ func TestRoomCountsOneVolumeOnce(t *testing.T) {
 		}
 		return Usage{Avail: volume, Device: 2}, nil
 	}
-	if err := checkRoom(apart, "/backup", "/volumes", data); err != nil {
+	if err := checkRoom(apart, "/backup", "/volumes", dump, volume, ""); err != nil {
 		t.Fatal(err)
 	}
 	shared := func(string) (Usage, error) {
 		return Usage{Avail: dump + volume - 1, Device: 1}, nil
 	}
-	if err := checkRoom(shared, "/backup", "/volumes", data); !codes.Is(err, codes.DataMoveRoom) {
+	if err := checkRoom(shared, "/backup", "/volumes", dump, volume, ""); !codes.Is(err, codes.DataMoveRoom) {
 		t.Fatalf("%v", err)
 	}
 }

@@ -27,6 +27,7 @@ Offered over: SSH and console.
 Its commands:
 
 - `<product> <value>`: <Value label> (shown to the roles the product names)
+- `<product> dumps`: dumps commands
 - `<product> mcp`: Show or set the MCP switch, the one the MCP card on :8443 sets
 - `<product> reinstall`: Install the installed version again, keeping its data (an owner, with a new authenticator code)
 - `<product> reset`: Remove the installed product and its data (an owner, with a new authenticator code)
@@ -35,6 +36,7 @@ Example:
 
 ```text
   <product> <value>
+  <product> dumps list
   <product> mcp
   <product> reinstall
   <product> reset
@@ -56,6 +58,67 @@ Example:
 
 ```text
   <product> <value>
+```
+
+## `<product> dumps`
+
+dumps commands.
+
+dumps commands.
+
+Offered over: SSH and console.
+
+```text
+<product> dumps <command>
+```
+
+Its commands:
+
+- `<product> dumps list`: List the dumps the data move kept of what it replaced
+- `<product> dumps remove`: Remove a kept dump for good (an owner, with a new authenticator code)
+
+Example:
+
+```text
+  <product> dumps list
+  <product> dumps remove replaced-20261101T120000Z
+```
+
+## `<product> dumps list`
+
+List the dumps the data move kept of what it replaced.
+
+Lists the dumps the box kept when it returned to the new database after a revert: each holds the new database as it stood before that return replaced it, with the checksums of its files. The box never removes one itself; each stays until dumps remove or a product reset takes it. docs/data-move.md says how to restore from one.
+
+Offered over: SSH.
+
+```text
+<product> dumps list
+```
+
+Example:
+
+```text
+  <product> dumps list
+  <product> dumps list -o json
+```
+
+## `<product> dumps remove`
+
+Remove a kept dump for good (an owner, with a new authenticator code).
+
+Removes one dump dumps list shows, to make room or once its data isn't wanted. One the box's return still needs, until the box has settled on the new database, is refused with DATA_MOVE_DUMP. Type the dump's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.kept-dump.remove. There's no undo.
+
+Offered over: SSH.
+
+```text
+<product> dumps remove <name>
+```
+
+Example:
+
+```text
+  <product> dumps remove replaced-20261101T120000Z
 ```
 
 ## `<product> mcp`

@@ -62,6 +62,9 @@ type Reset struct {
 	// DataRoot is where the product's volumes live
 	// (productspec.DataRoot).
 	DataRoot string
+	// MoveDumps is the data move's directory on the backup partition, whose
+	// dumps hold the product's data.
+	MoveDumps string
 	// Images is where k0s takes the airgap images from
 	// (/var/lib/k0s/images); Products is the slots' directory, which the
 	// links there point into.
@@ -400,7 +403,7 @@ func (r *Reset) count(ctx context.Context, namespaces []string, selector string)
 }
 
 // Data removes, with k0s stopped, everything under DataRoot (the root
-// itself stays), each of remove whole (a path that isn't there is
+// itself stays), the data move's dumps, each of remove whole (a path that isn't there is
 // skipped), and k0s's links to the product's images, which k0s-interim
 // links again from the slot at k0s's next start. It answers the bytes the
 // removed files held.
@@ -413,6 +416,9 @@ func (r *Reset) Data(remove ...string) (int64, error) {
 	}
 	for _, e := range ents {
 		remove = append(remove, filepath.Join(r.DataRoot, e.Name()))
+	}
+	if r.MoveDumps != "" {
+		remove = append(remove, r.MoveDumps)
 	}
 	for _, p := range remove {
 		n, err := product.DirBytes(p)

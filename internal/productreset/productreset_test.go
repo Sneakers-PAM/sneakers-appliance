@@ -294,6 +294,19 @@ func TestTheDataStepRemovesTheProductsDataAndRecords(t *testing.T) {
 	}
 }
 
+// The kept dumps hold the product's data, so the reset takes them with it.
+func TestTheDataStepRemovesTheMovesDumps(t *testing.T) {
+	f := newFixture(t)
+	f.r.MoveDumps = filepath.Join(f.root, "backup", "data-move")
+	write(t, filepath.Join(f.r.MoveDumps, "replaced-20261101T120000Z", "app_one.dump"), "kept")
+	if _, err := f.r.Data(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(f.r.MoveDumps); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the dumps stayed: %v", err)
+	}
+}
+
 // Nothing leaves k0s until the reset has said so on the disk, and only
 // once the product has stopped: a reset cut off before that lost nothing.
 func TestClusterSaysSoBeforeItRemovesAnything(t *testing.T) {

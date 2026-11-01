@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package datamove moves a product's databases to a new PostgreSQL cluster
-// once, as one step of an upgrade (docs/data-move.md). It dumps the
+// as one step of an upgrade (docs/data-move.md), once unless a revert goes
+// back over it (return.go). It dumps the
 // databases and roles to the backup partition with a checksum each,
 // restores them into the target product.yaml names, compares every table's
 // row count, runs the product's checks and only then lets the services
@@ -20,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -85,7 +87,12 @@ type Move struct {
 	Now func() time.Time
 	// Progress hears what the move is doing, for the update's step.
 	Progress func(string)
-	Logger   log.Logger
+	// Audit hears what the OS audit log records of a move; nil records
+	// nothing.
+	Audit func(action string, detail map[string]string)
+	// Remove takes a dump away; nil is os.RemoveAll.
+	Remove func(string) error
+	Logger log.Logger
 }
 
 func (m *Move) logger() log.Logger {
@@ -107,6 +114,12 @@ func (m *Move) say(format string, args ...any) {
 	m.logger().Info("datamove: "+s, log.F("source", m.Spec.Source.Name), log.F("target", m.Spec.Target.Name))
 	if m.Progress != nil {
 		m.Progress(s)
+	}
+}
+
+func (m *Move) audit(action string, detail map[string]string) {
+	if m.Audit != nil {
+		m.Audit(action, detail)
 	}
 }
 
@@ -136,9 +149,13 @@ func (m *Move) Run(ctx context.Context) error {
 		return codes.Wrap(codes.DataMove, ctx.Err())
 	}
 	j.State, j.Step, j.Reason, j.Started, j.Finished, j.Nothing = StateRunning, StepPrepare, "", m.now(), time.Time{}, false
+	j.Target = m.Spec.Target.Name
 	j.Attempt++
 	if err := m.save(j); err != nil {
 		return codes.Wrap(codes.DataMove, err)
+	}
+	if j.Returning {
+		m.audit(ActionReturn, map[string]string{"attempt": strconv.Itoa(j.Attempt), "target": j.Target})
 	}
 	ctx, cancel := context.WithTimeout(ctx, m.Spec.TimeoutOrDefault())
 	defer cancel()
@@ -178,11 +195,13 @@ func (m *Move) steps(ctx context.Context, j *Journal) error {
 	if err := m.Engine.WaitReady(ctx, src); err != nil {
 		return fmt.Errorf("the old database: %w", err)
 	}
-	size, err := m.Engine.Size(ctx, src, m.Spec.Databases)
-	if err != nil {
-		return err
+	if j.Returning {
+		m.say("Moving the old database again, because the box went back to it")
+		if err := m.dropPartial(j); err != nil {
+			return err
+		}
 	}
-	if err := checkRoom(m.Disk, m.BackupDir, m.Volumes, size); err != nil {
+	if err := m.room(ctx, j); err != nil {
 		return err
 	}
 	empty, err := m.sourceEmpty(ctx)
@@ -191,7 +210,7 @@ func (m *Move) steps(ctx context.Context, j *Journal) error {
 	}
 	if empty {
 		m.logger().Info("datamove: the old databases hold no tables; nothing to move")
-		j.State, j.Nothing, j.Finished = StateDone, true, m.now()
+		j.State, j.Nothing, j.Returning, j.Finished = StateDone, true, false, m.now()
 		return m.save(j)
 	}
 	if err := m.step(j, StepStop); err != nil {
@@ -215,7 +234,11 @@ func (m *Move) steps(ctx context.Context, j *Journal) error {
 	if err := m.Engine.WaitReady(ctx, tgt); err != nil {
 		return fmt.Errorf("the new database: %w", err)
 	}
-	if err := m.clearable(ctx, j); err != nil {
+	full, err := m.clearable(ctx, j)
+	if err != nil {
+		return err
+	}
+	if err := m.keep(ctx, j, full); err != nil {
 		return err
 	}
 	// On disk before the first write: a move cut off mid-restore has to
@@ -287,30 +310,31 @@ func (m *Move) sourceEmpty(ctx context.Context) (bool, error) {
 }
 
 // clearable refuses a target that holds tables this move didn't put there:
-// a move only ever drops what an earlier attempt of its own wrote.
-func (m *Move) clearable(ctx context.Context, j *Journal) error {
+// a move only ever drops what an earlier attempt of its own wrote. It
+// answers the databases that hold tables.
+func (m *Move) clearable(ctx context.Context, j *Journal) ([]string, error) {
 	var full []string
 	for _, db := range m.Spec.Databases {
 		n, err := m.Engine.Tables(ctx, m.Spec.Target, db)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if n > 0 {
 			full = append(full, db)
 		}
 	}
 	if len(full) > 0 && !j.TargetTouched {
-		return fmt.Errorf("the new database already holds %s, and this move didn't put it there", strings.Join(full, ", "))
+		return nil, fmt.Errorf("the new database already holds %s, and this move didn't put it there", strings.Join(full, ", "))
 	}
 	if len(full) > 0 {
 		m.logger().Info("datamove: clearing an earlier attempt from the new database", log.F("databases", strings.Join(full, ",")))
 	}
-	return nil
+	return full, nil
 }
 
 func (m *Move) restore(ctx context.Context, j *Journal, man *manifest) error {
 	tgt := m.Spec.Target
-	if err := m.verifyDump(man); err != nil {
+	if err := m.verifyDump(m.dumpDir(), man); err != nil {
 		return err
 	}
 	m.say("Restoring the roles")
@@ -378,9 +402,13 @@ func (m *Move) Settle() error {
 	case StateDone:
 		return nil
 	case StateSwitched:
-		j.State, j.Finished = StateDone, m.now()
+		j.State, j.Returning, j.Finished = StateDone, false, m.now()
 		m.logger().Info("datamove: settled; the box is healthy on the new database")
-		return m.save(j)
+		if err := m.save(j); err != nil {
+			return err
+		}
+		m.removeDump(j)
+		return nil
 	}
 	return fmt.Errorf("datamove: a move in state %q can't settle", j.State)
 }

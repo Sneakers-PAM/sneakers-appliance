@@ -96,6 +96,27 @@ func (r *Runner) Fail(spec productspec.DataMove, why string) error {
 	return r.New(spec, nil, nil).Fail(why)
 }
 
+// RecordRevert records a slot switch that went back over the move; the slot
+// it landed on may declare no move at all, so this needs no spec.
+func (r *Runner) RecordRevert(holds func(string) bool) (bool, error) {
+	return r.New(productspec.DataMove{}, nil, nil).RecordRevert(holds)
+}
+
+// Tidy removes the dumps nothing needs any more.
+func (r *Runner) Tidy(holds func(string) bool) {
+	r.New(productspec.DataMove{}, nil, nil).Tidy(holds)
+}
+
+// KeptDumps lists the kept dumps.
+func (r *Runner) KeptDumps() ([]KeptDump, error) {
+	return r.New(productspec.DataMove{}, nil, nil).KeptDumps()
+}
+
+// RemoveKept removes one kept dump.
+func (r *Runner) RemoveKept(name string) error {
+	return r.New(productspec.DataMove{}, nil, nil).RemoveKept(name)
+}
+
 // Again lets a new apply try a failed move again.
 func (r *Runner) Again() {
 	r.mu.Lock()

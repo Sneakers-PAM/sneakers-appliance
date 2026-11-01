@@ -39,6 +39,11 @@ type fakeMover struct {
 	settled   int
 	failed    []string
 	again     int
+	reverted  bool
+	onOld     bool
+	onNew     bool
+	tidied    int
+	removed   string
 }
 
 func (f *fakeMover) Ask(_ productspec.DataMove, svc datamove.Services) datamove.Status {
@@ -53,6 +58,15 @@ func (f *fakeMover) Fail(_ productspec.DataMove, why string) error {
 	return nil
 }
 func (f *fakeMover) Again() { f.again++ }
+func (f *fakeMover) RecordRevert(holds func(string) bool) (bool, error) {
+	f.onOld, f.onNew = holds("app-db"), holds("app-db-new")
+	return f.reverted, nil
+}
+func (f *fakeMover) Tidy(holds func(string) bool) { f.tidied++; f.onNew = holds("app-db-new") }
+func (f *fakeMover) KeptDumps() ([]datamove.KeptDump, error) {
+	return []datamove.KeptDump{{Name: "replaced-20261101T120000Z"}}, nil
+}
+func (f *fakeMover) RemoveKept(name string) error { f.removed = name; return nil }
 
 func movingProbe(t *testing.T, c *fakeCluster, m productup.DataMover) (*productup.Probe, string) {
 	t.Helper()
@@ -232,5 +246,58 @@ func TestASlotWithoutAMoveHasNothingToSettle(t *testing.T) {
 	}
 	if m.settled != 0 || len(m.failed) != 0 {
 		t.Fatalf("%+v", m)
+	}
+}
+
+// What's recorded of a revert is judged by the slot now current, whether it
+// declares a move or not: the slot gone back to usually doesn't.
+func TestTheProbeAsksTheCurrentSlotWhetherItHoldsTheTarget(t *testing.T) {
+	m := &fakeMover{reverted: true}
+	p, _ := movingProbe(t, newCluster(), m)
+	if ok, err := p.RecordMoveRevert(); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if !m.onNew || !m.onOld {
+		t.Fatalf("%+v", m)
+	}
+	p, _ = phasedProbe(t, newCluster())
+	p.Move = m
+	if ok, err := p.RecordMoveRevert(); !ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if m.onNew {
+		t.Fatal("a slot without the target holds it")
+	}
+	p.TidyMove()
+	if m.tidied != 1 || m.onNew {
+		t.Fatalf("%+v", m)
+	}
+}
+
+// A slot that can't be read says nothing about where the box is.
+func TestASlotThatCannotBeReadRecordsNothing(t *testing.T) {
+	m := &fakeMover{reverted: true}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	p.Slot = filepath.Join(t.TempDir(), "gone")
+	if ok, err := p.RecordMoveRevert(); ok || err != nil {
+		t.Fatalf("%v %v", ok, err)
+	}
+	p.TidyMove()
+	if m.tidied != 0 {
+		t.Fatalf("%+v", m)
+	}
+}
+
+func TestTheProbePassesKeptDumpsOnToTheMove(t *testing.T) {
+	m := &fakeMover{}
+	p, _ := phasedProbe(t, newCluster())
+	p.Move = m
+	list, err := p.KeptDumps()
+	if err != nil || len(list) != 1 {
+		t.Fatalf("%+v %v", list, err)
+	}
+	if err := p.RemoveKeptDump("replaced-20261101T120000Z"); err != nil || m.removed == "" {
+		t.Fatalf("%v %+v", err, m)
 	}
 }

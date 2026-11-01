@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
@@ -27,6 +28,10 @@ type DataMover interface {
 	Settle(spec productspec.DataMove) error
 	Fail(spec productspec.DataMove, why string) error
 	Again()
+	RecordRevert(holds func(string) bool) (bool, error)
+	Tidy(holds func(string) bool)
+	KeptDumps() ([]datamove.KeptDump, error)
+	RemoveKept(name string) error
 }
 
 // dataMove moves the phase loop on past the move: done once the data is on
@@ -125,4 +130,55 @@ func (p *Probe) MoveAgain() {
 	if p.Move != nil {
 		p.Move.Again()
 	}
+}
+
+// holds is whether the current slot has a workload of that name, or false
+// with no slot or an unreadable one: that says nothing about where the box
+// is.
+func (p *Probe) holds() (func(string) bool, bool) {
+	if _, err := os.Stat(p.Slot); err != nil {
+		return nil, false
+	}
+	spec, err := productspec.Load(p.Slot)
+	if err != nil {
+		return nil, false
+	}
+	return func(name string) bool {
+		_, ok := spec.PhaseOf(name)
+		return ok
+	}, true
+}
+
+// RecordMoveRevert records a slot switch that went back over a data move,
+// and says whether it did. It asks the slot now current, which may declare
+// no move at all.
+func (p *Probe) RecordMoveRevert() (bool, error) {
+	holds, ok := p.holds()
+	if p.Move == nil || !ok {
+		return false, nil
+	}
+	return p.Move.RecordRevert(holds)
+}
+
+// TidyMove removes the dumps of a data move that nothing needs any more.
+func (p *Probe) TidyMove() {
+	if holds, ok := p.holds(); p.Move != nil && ok {
+		p.Move.Tidy(holds)
+	}
+}
+
+// KeptDumps lists the dumps data moves kept of what they replaced.
+func (p *Probe) KeptDumps() ([]datamove.KeptDump, error) {
+	if p.Move == nil {
+		return nil, nil
+	}
+	return p.Move.KeptDumps()
+}
+
+// RemoveKeptDump removes one kept dump.
+func (p *Probe) RemoveKeptDump(name string) error {
+	if p.Move == nil {
+		return errors.New("productup: this probe has no data move")
+	}
+	return p.Move.RemoveKept(name)
 }

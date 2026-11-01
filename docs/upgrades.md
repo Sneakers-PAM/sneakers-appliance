@@ -133,7 +133,7 @@ has switched:
 | `phase:identity` | Starting sign-in, identity and the vault | Kratos (with its migration), the identity service and the vault, whose root key preflight runs in the vault itself, so it's Ready only once the preflight passed |
 | `phase:services` | Starting the services | workflow, audit, notify, connector and the SSH broker |
 | `phase:front` | Starting the gateway and the web apps | the MCP switch's stack (when it's on), then the gateway and the two web apps |
-| `data_move` | The product's own label | only for a product that declares a `data_move`, right after its phase, and only until the move is done ([data-move.md](data-move.md)): the databases are on the new cluster, every table's row count matches and the product's checks pass |
+| `data_move` | The product's own label | only for a product that declares a `data_move`, right after its phase, and only until the move is done and again after a revert goes back over it ([data-move.md](data-move.md)): the databases are on the new cluster, every table's row count matches and the product's checks pass |
 | `product_health` | Checking the product's health | as above |
 | `edge` | Opening the product on 443 | as above; the box says running and the gate opens |
 
