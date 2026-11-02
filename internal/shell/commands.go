@@ -214,6 +214,27 @@ var specs = []spec{
 	{path: "reinstall", owner: true, short: "Install the installed version again, keeping its data (an owner, with a new authenticator code)", action: "product.reinstall", origins: []Origin{OriginSSH}, product: true, run: runReinstall,
 		long:    "Installs the version that's installed again, from a fresh copy of its bundle, and keeps all of the product's data: for a broken install or a damaged product slot. A staged bundle of the installed version is used as it is; otherwise the box fetches it from its update source and verifies it (signature, channel, SHA-256), as Updates on :8443 does. It's then applied like an update: the product stops in order and comes up phase by phase, and Revert on Updates goes back to the copy it replaced. Type the installed version to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.reinstall.",
 		example: "  {product} reinstall"},
+	{path: "backup list", short: "List the backup sets on the box", action: "product.backup.list", origins: []Origin{OriginSSH}, product: true,
+		long:    "Lists the backup sets: each is a base backup and the WAL up to a named restore point, on the encrypted backup partition. docs/backups.md has the rest.",
+		example: "  {product} backup list\n  {product} backup list -o json"},
+	{path: "backup create", use: "create [name]", short: "Cut a backup set now, with the product running", action: "product.backup.create", origins: []Origin{OriginSSH}, nargs: [2]int{0, 1}, product: true,
+		long:    "Makes a named restore point, sends its WAL to the archive and links a base backup and the WAL up to the point into a new set. The set outlives the archive's own retention and costs no copy. The product keeps running. Without a name, the set is named after the time.",
+		example: "  {product} backup create\n  {product} backup create before-the-change"},
+	{path: "backup remove", use: "remove <name>", owner: true, short: "Remove a backup set for good (an owner, with a new authenticator code)", action: "product.backup.remove", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}, product: true, run: runBackupRemove,
+		long:    "Removes one set backup list shows. Type the set's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.backup.remove. There's no undo.",
+		example: "  {product} backup remove before-the-change"},
+	{path: "backup restore", use: "restore <name>", owner: true, short: "Bring the database back at a set's restore point (an owner, with a new authenticator code)", action: "product.backup.restore", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}, product: true, run: runBackupRestore,
+		long:    "Takes the product offline, keeps the data the box has, and brings the database back at the set's restore point: what was written after it is gone once the box settles. The box checks the data before the services start, and any failure puts the data it had back. A set made on a box holding other keys is refused with BACKUP_OTHER_BOX. Type the set's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited.",
+		example: "  {product} backup restore before-the-change"},
+	{path: "backup export", use: "export <name>", owner: true, short: "Write a backup set to the terminal, encrypted to the recovery keys (an owner, with a new authenticator code)", action: "product.backup.export", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}, product: true, flags: []flagSpec{{"code", "a new code from your authenticator", ""}}, run: runBackupExport,
+		long:    "Writes the set as one tar encrypted with age to the box's recovery keys, for a redirect to a file on your own machine. The box can't read it back; any one recovery key opens it. Because the output is the file, the code goes in --code. Owners only, over SSH; audited as product.backup.export.",
+		example: "  ssh owner@box1.sneakers.example.org {product} backup export before-the-change --code 123456 > before-the-change.age"},
+	{path: "dumps list", short: "List the dumps the data move kept of what it replaced", action: "product.dumps.list", origins: []Origin{OriginSSH}, product: true,
+		long:    "Lists the dumps the box kept when it returned to the new database after a revert: each holds the new database as it stood before that return replaced it, with the checksums of its files. The box never removes one itself; each stays until dumps remove or a product reset takes it. docs/data-move.md says how to restore from one.",
+		example: "  {product} dumps list\n  {product} dumps list -o json"},
+	{path: "dumps remove", use: "remove <name>", owner: true, short: "Remove a kept dump for good (an owner, with a new authenticator code)", action: "product.dumps.remove", origins: []Origin{OriginSSH}, nargs: [2]int{1, 1}, product: true, run: runDumpsRemove,
+		long:    "Removes one dump dumps list shows, to make room or once its data isn't wanted. One the box's return still needs, until the box has settled on the new database, is refused with DATA_MOVE_DUMP. Type the dump's name again to confirm, then a new code from your authenticator. Owners only, over SSH; audited as product.kept-dump.remove. There's no undo.",
+		example: "  {product} dumps remove replaced-20261101T120000Z"},
 	{path: "resources", use: "resources [...]", short: "Resource settings", action: "resources", origins: both, nargs: [2]int{0, -1}, later: true,
 		long:    "Shows and sets the resources the product may use. Not available in this release.",
 		example: "  resources"},
@@ -593,6 +614,8 @@ var groupDoc = map[string][2]string{
 	"setup":              {"First boot setup", "The steps of first boot that are done over SSH."},
 	"tls":                {"TLS certificates", "The TLS certificates the box serves."},
 	"logs":               {"Logs", "The box's logs."},
+	"backup":             {"Backup sets", "The backup sets the box keeps of the product's database, and restoring one."},
+	"dumps":              {"Kept dumps", "The dumps the box kept of the new database's data when it returned to it after a revert."},
 	"disk":               {"Disk space", "The box's disk: it cleans up after itself every hour and when a volume passes 80%; Status shows each volume's use."},
 }
 
@@ -910,6 +933,63 @@ func runReset(ctx context.Context, e *Env, _ *Command, _ []string, _ map[string]
 	}
 	e.Product, e.Values, e.Switches = productinfo.Info{}, nil, nil
 	return res, nil
+}
+
+// confirmSet reads a set's name again and a new authenticator code, without
+// echo and out of recall.
+func confirmSet(e *Env, name string) (string, error) {
+	in := &lineReader{e: e}
+	if confirm := in.read(fmt.Sprintf("Type %s to confirm: ", name), false); confirm != name {
+		return "", codes.New(codes.AccessConfirm, "not confirmed; nothing changed")
+	}
+	code := in.read("New authenticator code: ", true)
+	if code == "" {
+		return "", codes.New(codes.AccessConfirm, "no authenticator code; nothing changed")
+	}
+	return code, nil
+}
+
+func runBackupRemove(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
+	name := args[0]
+	_, _ = fmt.Fprintf(e.Out, "This removes the backup set %s for good, and it can't be undone.\n", name)
+	code, err := confirmSet(e, name)
+	if err != nil {
+		return Result{}, err
+	}
+	return e.Backend.Call(ctx, Request{Action: "product.backup.remove", Args: []string{name, code}})
+}
+
+func runBackupRestore(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
+	name := args[0]
+	_, _ = fmt.Fprintf(e.Out, "This takes the product offline and brings the database back at the restore point of %s. Everything written after that point is gone once the box settles.\n", name)
+	code, err := confirmSet(e, name)
+	if err != nil {
+		return Result{}, err
+	}
+	return e.Backend.Call(ctx, Request{Action: "product.backup.restore", Args: []string{name, code}})
+}
+
+func runBackupExport(ctx context.Context, e *Env, _ *Command, args []string, flags map[string]string) (Result, error) {
+	if flags["code"] == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "the output is the file, so the authenticator code goes in --code; nothing was exported")
+	}
+	return e.Backend.Call(ctx, Request{Action: "product.backup.export", Args: []string{args[0], flags["code"]}})
+}
+
+// runDumpsRemove removes a kept dump: it reads the name again and a new
+// authenticator code, without echo and out of recall.
+func runDumpsRemove(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
+	name := args[0]
+	_, _ = fmt.Fprintf(e.Out, "This removes the kept dump %s for good. What it holds exists nowhere else, and it can't be undone.\n", name)
+	in := &lineReader{e: e}
+	if confirm := in.read(fmt.Sprintf("Type %s to confirm: ", name), false); confirm != name {
+		return Result{}, codes.New(codes.AccessConfirm, "not confirmed; nothing was removed")
+	}
+	code := in.read("New authenticator code: ", true)
+	if code == "" {
+		return Result{}, codes.New(codes.AccessConfirm, "no authenticator code; nothing was removed")
+	}
+	return e.Backend.Call(ctx, Request{Action: "product.dumps.remove", Args: []string{name, code}})
 }
 
 // runReinstall installs the installed version again: it reads the version

@@ -50,7 +50,7 @@
 #              (the components aren't there when the units are sealed)
 #   STACKS     the product's stacks, for its input digest (default the lab
 #              stacks, build/lab/stacks)
-#   PRODUCT_YAML, IMPORT_JOB, BRAND
+#   PRODUCT_YAML, IMPORT_JOB, BRAND, DATAMOVE
 #              the rest of what the product bundle is built from, for
 #              `inputs product`, as build/product/build.sh takes them
 #              (PRODUCT_YAML defaults to the lab's build/lab/product.yaml;
@@ -118,21 +118,23 @@ inputs_baseweb() { # pages
 # inputs_product: every file build/product/build.sh makes the bundle
 # from: the release's pins (k0s, helm and every image digest, the migrate
 # image among them), the stacks it applies, product.yaml, the import Job's
-# template and the brand. The image countersignatures aren't inputs: they
+# template, the brand and the data move's checks. The image countersignatures aren't inputs: they
 # sign the digests release.yaml already pins. A file named but missing is
 # refused, so it's never silently left out.
-inputs_product() { # release.yaml stacks product.yaml import-job brand
+inputs_product() { # release.yaml stacks product.yaml import-job brand datamove
   local f
   for f in "$1" "$3" "$4"; do
     [ -z "$f" ] || [ -f "$f" ] || { echo "units: $f, a product input, isn't there" >&2; return 1; }
   done
   [ -z "$5" ] || [ -d "$5" ] || { echo "units: the brand $5 isn't a directory" >&2; return 1; }
+  [ -z "${6:-}" ] || [ -d "$6" ] || { echo "units: the data move's checks $6 aren't a directory" >&2; return 1; }
   {
     printf 'release %s\n' "$(sha256sum < "$1" | cut -d' ' -f1)"
     files "$2" | sed 's|^|stacks/|'
     if [ -n "$3" ]; then printf 'product.yaml %s\n' "$(sha256sum < "$3" | cut -d' ' -f1)"; fi
     if [ -n "$4" ]; then printf 'import-job %s\n' "$(sha256sum < "$4" | cut -d' ' -f1)"; fi
     if [ -n "$5" ]; then files "$5" | sed 's|^|brand/|'; fi
+    if [ -n "${6:-}" ]; then files "$6" | sed 's|^|datamove/|'; fi
   } | digest
 }
 
@@ -142,7 +144,7 @@ if [ "${1:-}" = inputs ]; then
     baseWeb) : "${PAGES:?PAGES is the built pages}"; inputs_baseweb "$PAGES" ;;
     product)
       : "${RELEASE:?RELEASE is the release.yaml}"
-      inputs_product "$RELEASE" "${STACKS:-$here/stacks}" "${PRODUCT_YAML-$here/product.yaml}" "${IMPORT_JOB:-}" "${BRAND:-}" ;;
+      inputs_product "$RELEASE" "${STACKS:-$here/stacks}" "${PRODUCT_YAML-$here/product.yaml}" "${IMPORT_JOB:-}" "${BRAND:-}" "${DATAMOVE:-}" ;;
     *) echo "units: inputs takes baseOS, baseWeb or product" >&2; exit 2 ;;
   esac
   exit 0

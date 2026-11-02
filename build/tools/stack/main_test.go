@@ -231,6 +231,7 @@ func TestRenderRefuses(t *testing.T) {
 		"a Secret read that no box makes":   {strings.Replace(off, "name: sneakers-box, key: KEK", "name: sneakers-lab-secrets, key: KEK", 1), productYAML, "sneakers-lab-secrets"},
 		"a box secret key not declared":     {strings.Replace(off, "name: sneakers-box, key: KEK", "name: sneakers-box, key: TOTP", 1), productYAML, "sneakers-box"},
 		"the relay password in a ConfigMap": {off + "---\napiVersion: v1\nkind: ConfigMap\nmetadata: {name: sneakers-identity}\ndata: {SMTP_PASS: x}\n", emailProductYAML, "SMTP_PASS"},
+		"a pod repeating a container name":  {off + "---\napiVersion: apps/v1\nkind: Deployment\nmetadata: {name: sneakers-dup}\nspec:\n  template:\n    spec:\n      initContainers:\n        - {name: dup-step, image: \"postgres:18.6\"}\n      containers:\n        - {name: dup-step, image: \"postgres:18.6\"}\n", productYAML, "dup-step"},
 		"a ConfigMap the box writes":        {off + "---\napiVersion: v1\nkind: ConfigMap\nmetadata: {name: sneakers-email}\ndata: {SMTP_HOST: smtp.example.org}\n", emailProductYAML, "sneakers-email"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -291,5 +292,100 @@ func TestRenderWithoutASwitch(t *testing.T) {
 	}
 	if _, ok := m["ConfigMap/"]; ok {
 		t.Fatal("a switch ConfigMap without a switch")
+	}
+}
+
+// A claim the product declares for its backups is the backup partition's,
+// whichever workload mounts it, and every other claim stays on the data
+// directory.
+func TestTheBackupClaimGoesToTheBackupPartition(t *testing.T) {
+	pins := map[string]string{"docker.io/library/postgres": "sha256:3333333333333333333333333333333333333333333333333333333333333333"}
+	const src = `apiVersion: batch/v1
+kind: CronJob
+metadata: {name: sneakers-pgha-backup-verify}
+spec:
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          securityContext: {runAsUser: 999}
+          containers:
+            - name: verify
+              image: "postgres:18.6"
+          volumes:
+            - name: backup
+              persistentVolumeClaim: {claimName: sneakers-pgha-backup, readOnly: true}
+            - name: other
+              persistentVolumeClaim: {claimName: another}
+`
+	var d doc
+	if err := yaml.Unmarshal([]byte(src), &d); err != nil {
+		t.Fatal(err)
+	}
+	o := options{Namespace: "sneakers", Data: "/var/lib/sneakers-data", backupClaim: "sneakers-pgha-backup", backupDir: "/var/lib/sneakers/backup/postgres"}
+	if err := pod(o, d, "CronJob", "sneakers-pgha-backup-verify", pins, nil, map[string]bool{}); err != nil {
+		t.Fatal(err)
+	}
+	ps := dig(d, "spec", "jobTemplate", "spec", "template", "spec")
+	vols := ps["volumes"].([]any)
+	if got := dig(vols[0].(doc), "hostPath")["path"]; got != "/var/lib/sneakers/backup/postgres" {
+		t.Fatalf("the backup claim went to %v", got)
+	}
+	if got := dig(vols[1].(doc), "hostPath")["path"]; got != "/var/lib/sneakers-data/pgha-backup-verify" {
+		t.Fatalf("another claim went to %v", got)
+	}
+	if len(ps["initContainers"].([]any)) != 2 {
+		t.Fatalf("each volume needs its owner set: %v", ps["initContainers"])
+	}
+}
+
+// A pod with two claims gets an owner step for each, and each step has its
+// own name: the API server refuses a pod whose containers share one, so k0s
+// never creates the workload.
+func TestEachOwnerStepHasItsOwnName(t *testing.T) {
+	pins := map[string]string{"docker.io/library/postgres": "sha256:3333333333333333333333333333333333333333333333333333333333333333"}
+	const src = `apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: sneakers-pgha}
+spec:
+  template:
+    spec:
+      securityContext: {runAsUser: 999}
+      initContainers:
+        - name: tools
+          image: "postgres:18.6"
+      containers:
+        - name: postgres
+          image: "postgres:18.6"
+      volumes:
+        - name: backup
+          persistentVolumeClaim: {claimName: sneakers-pgha-backup}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+`
+	var d doc
+	if err := yaml.Unmarshal([]byte(src), &d); err != nil {
+		t.Fatal(err)
+	}
+	o := options{Namespace: "sneakers", Data: "/var/lib/sneakers-data", backupClaim: "sneakers-pgha-backup", backupDir: "/var/lib/sneakers/backup/postgres"}
+	if err := pod(o, d, "StatefulSet", "sneakers-pgha", pins, nil, map[string]bool{}); err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	mounts := map[string]bool{}
+	for _, c := range dig(d, "spec", "template", "spec")["initContainers"].([]any) {
+		cm := c.(doc)
+		name, _ := cm["name"].(string)
+		if seen[name] {
+			t.Fatalf("two init containers are named %s", name)
+		}
+		seen[name] = true
+		if name == "tools" {
+			continue
+		}
+		mounts[cm["volumeMounts"].([]any)[0].(doc)["name"].(string)] = true
+	}
+	if !mounts["data"] || !mounts["backup"] {
+		t.Fatalf("each claim needs its owner step: %v", mounts)
 	}
 }

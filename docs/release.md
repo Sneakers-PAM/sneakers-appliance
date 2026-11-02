@@ -204,12 +204,15 @@ box's check.
 `helm template` runs of sneakers-release's `charts/sneakers` (its own `scripts/build-deps.sh`
 resolves the dependencies), over `charts/sneakers/examples/values-small-box.yaml` with
 `build/product/sneakers/values.yaml`, the MCP switch off and then on
-(`values-mcp-on.yaml`). `build/tools/stack` turns them into the stacks:
+(`values-mcp-on.yaml`). The database the services run on, helm-postgres-ha, is a dependency of the
+umbrella, in both renders: `build/product/sneakers/values-postgres-ha.yaml` turns it on beside the old
+cluster, and sneakers-release's `scripts/check-chart-digest.sh` holds the chart to the digest
+`release.yaml` pins. `build/tools/stack` turns them into the stacks:
 
 | Stack | Holds |
 |---|---|
 | `sneakers` | always on: the `sneakers` namespace and everything of the product that isn't a workload (Services, ConfigMaps, NetworkPolicies, RBAC, Ingresses) |
-| `sneakers-data` | the data phase: PostgreSQL and Valkey |
+| `sneakers-data` | the data phase: the old PostgreSQL, which stays as the way back from the [data move](data-move.md), the new one, and Valkey |
 | `sneakers-identity` | the identity phase: Kratos, the identity service and the vault |
 | `sneakers-services` | the services phase: workflow, audit, notify, connector and the SSH broker |
 | `sneakers-front` | the front phase: the gateway and the two web apps |
@@ -222,7 +225,10 @@ Each workload goes in its phase's own stack (`product.yaml` `phases`, below), la
 tool refuses a workload no phase names, or a switch's workload whose phase doesn't place the
 switch's stack. The bundle check refuses a bundle without a phase's stack, with a workload in
 it that its phase doesn't name or that lacks the labels, or with a switch's stack that runs a
-workload and that no phase places (`switch_stacks`).
+workload and that no phase places (`switch_stacks`). The tool also refuses a pod that repeats a
+container name: the API server would refuse the workload, and the box would wait for one k0s never
+creates. A claim's owner step is named for its volume (`data-owner`, `backup-owner`), so a pod with
+two claims has two.
 
 The renders layer sneakers-release's `migrate/deploy/migrate-callers-values.yaml`, so the vault
 and audit list the migrate caller and the NetworkPolicies admit it; the import's
@@ -368,6 +374,10 @@ a switch stack no switch gates (or the import's), and a timeout outside 1m to 1h
 its phase stacks in `phase-stacks` for k0s-interim, which leaves them to the phase loop. Without
 `phases` the product comes up as before: every stack at once.
 
+It may declare a **data move**, a one-time move of its databases to a new PostgreSQL cluster as the
+product comes up, whose failure takes the box back to the previous slot and the old cluster
+([data-move.md](data-move.md)).
+
 It may also declare an **import**: the product takes an export of an earlier install from the
 Import page before its own first-run setup ([import.md](import.md)):
 
@@ -459,6 +469,24 @@ box_secrets:
 
 A key is either generated (`password`, `key32` or `token`) or a `value`, which may name generated
 keys as `{key}` (the same Secret's) or `{secret/key}` (another box secret's in the same namespace).
+A Secret can hold a **certificate** instead of keys. No cert-manager runs on the box, so the box
+issues the certificate for a workload inside it, with `tls.crt`, `tls.key` and `ca.crt`:
+
+```yaml
+  - secret: sneakers/sneakers-pgha-tls
+    certificate:
+      common_name: sneakers-pgha-primary.sneakers.svc
+      dns_names: [sneakers-pgha-primary, "*.sneakers-pgha-headless.sneakers.svc"]
+```
+
+It's a self-signed ECDSA P-256 certificate, good for ten years as server and client, and its own
+CA. accessd issues it at the apply that first declares it and keeps it with the generated values. It
+issues a new one at the first apply or revert in its last year, or when a bundle names other hosts.
+Sneakers' services connect with `sslmode=require`, which encrypts and doesn't check the certificate,
+so a box that sits unpatched past the ten years keeps working. PostgreSQL reads a renewed certificate
+when it next starts. A key takes the certificate's place, never both, and a name that isn't a DNS
+name is refused. The section is new in this release, so the base goes first.
+
 The box refuses a key that's both or neither, an unknown generator, a key or a Secret twice, a
 reference to a key that isn't generated, a brace that isn't closed, and the appliance's own
 namespace. At each product apply and revert, after the slots switch and before k0s restarts,
@@ -514,7 +542,7 @@ support:
     timeout: 30s               # up to 60s; 15s by default
     redact: ['acct-[0-9]+']    # more patterns to mask; adds to the base's
   - title: The database's size
-    command: du -s -h /var/lib/sneakers-data/postgres
+    command: du -s -h /var/lib/sneakers-data/pgha
 ```
 
 The box refuses a section that isn't read-only, bounded and busybox-safe: a command other than the
@@ -543,6 +571,9 @@ key and TOTP key (`sneakers-box`) and the setup token it exposes. Its data path 
 - **A lab build:** `build/lab/build.sh` writes `product/sneakers-product-lab-<label>-amd64.bin` and
   its index next to the disk, for the base it built and newer (`PRODUCT_MIN_BASE` and
   `PRODUCT_MAX_BASE` set another range, as a test of the refusal does), and checks it with the key in its signed UKI.
+
+`backups` declares how the box backs up and restores the product's database, with `escrow` to tie a
+set to the box that holds its keys ([backups.md](backups.md)).
 
 ## Lab and production keys
 

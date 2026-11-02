@@ -12,7 +12,12 @@
 //     never pulled (the box is airgapped);
 //   - a PersistentVolumeClaim goes, and the volume that used it (or a
 //     StatefulSet's volume claim template) becomes a hostPath under the
-//     data directory, owned by the pod's user;
+//     data directory, owned by the pod's user through an init container
+//     named for the volume, and the claim product.yaml's backups name
+//     becomes their directory on the backup partition;
+//   - a pod that repeats a container name is refused: the API server
+//     would refuse it, and the box would wait for a workload k0s never
+//     creates;
 //   - an Ingress loses its host and TLS: the box's edge serves every name
 //     on 443 with the box's certificate;
 //   - no Secret value is carried: a Secret the chart renders must be one
@@ -64,6 +69,9 @@ type options struct {
 	SwitchFrom          []string
 	// Data is the directory the hostPath volumes go under.
 	Data string
+	// backupClaim is the claim of product.yaml's backups, which becomes
+	// backupDir on the backup partition wherever a pod mounts it.
+	backupClaim, backupDir string
 	// WaitJob names the release's Job image (spec.jobs) whose `wait`
 	// command each phased workload's init container runs; empty adds none.
 	WaitJob string
@@ -118,14 +126,17 @@ func render(o options, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if spec.Backups != nil {
+		o.backupClaim, o.backupDir = spec.Backups.Claim, spec.Backups.HostDir()
+	}
 	box := map[string]map[string]bool{}
 	for _, b := range spec.BoxSecrets {
 		if b.Namespace() != o.Namespace {
 			continue
 		}
 		box[b.SecretName()] = map[string]bool{}
-		for _, k := range b.Keys {
-			box[b.SecretName()][k.Key] = true
+		for _, k := range b.KeyNames() {
+			box[b.SecretName()][k] = true
 		}
 	}
 	o.secretKeys, o.boxMaps = map[string]bool{}, map[string]bool{}
@@ -352,9 +363,11 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 			uid = u
 		}
 	}
-	hostPath := func(vol doc) {
-		vol["hostPath"] = doc{"path": path.Join(o.Data, strings.TrimPrefix(name, o.Namespace+"-")), "type": "DirectoryOrCreate"}
-		init := doc{"name": "data-owner", "image": mainImage, "imagePullPolicy": "Never",
+	hostPath := func(vol doc, dir string) {
+		vol["hostPath"] = doc{"path": dir, "type": "DirectoryOrCreate"}
+		// Named for its volume: a pod may have two, and the API server refuses
+		// a pod whose containers share a name.
+		init := doc{"name": fmt.Sprintf("%v-owner", vol["name"]), "image": mainImage, "imagePullPolicy": "Never",
 			"command": []any{"sh", "-c", fmt.Sprintf("chown %d:%d /data && chmod 0700 /data", uid, uid)},
 			"securityContext": doc{"runAsUser": 0, "runAsNonRoot": false, "allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true,
 				"capabilities": doc{"drop": []any{"ALL"}, "add": []any{"CHOWN", "FOWNER"}}},
@@ -363,21 +376,29 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 		inits, _ := ps["initContainers"].([]any)
 		ps["initContainers"] = append([]any{init}, inits...)
 	}
+	data := path.Join(o.Data, strings.TrimPrefix(name, o.Namespace+"-"))
 	vols, _ := ps["volumes"].([]any)
 	for _, v := range vols {
 		vm, _ := v.(doc)
 		if vm == nil {
 			continue
 		}
-		if _, ok := vm["persistentVolumeClaim"]; ok {
+		if pvc, ok := vm["persistentVolumeClaim"].(doc); ok {
 			delete(vm, "persistentVolumeClaim")
-			hostPath(vm)
+			if claim, _ := pvc["claimName"].(string); claim != "" && claim == o.backupClaim {
+				hostPath(vm, o.backupDir)
+			} else {
+				hostPath(vm, data)
+			}
 		}
 		if sv := dig(vm, "secret"); sv != nil {
 			sn, _ := sv["secretName"].(string)
 			if opt, _ := sv["optional"].(bool); !opt && box[sn] == nil {
 				return fmt.Errorf("it mounts the Secret %s, which product.yaml doesn't declare as a box secret", sn)
 			}
+		}
+		if err := projectedSecrets(vm, box); err != nil {
+			return err
 		}
 	}
 	if sts != nil {
@@ -387,10 +408,55 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 				tm, _ := t.(doc)
 				vname, _ := dig(tm, "metadata")["name"].(string)
 				vol := doc{"name": vname}
-				hostPath(vol)
+				hostPath(vol, data)
 				vols = append(vols, vol)
 			}
 			ps["volumes"] = vols
+		}
+	}
+	return containerNames(ps)
+}
+
+// containerNames refuses a pod that repeats a container name: the API server
+// would refuse the workload, and the stack would come up without it.
+func containerNames(ps doc) error {
+	seen := map[any]bool{}
+	for _, key := range []string{"initContainers", "containers"} {
+		list, _ := ps[key].([]any)
+		for _, c := range list {
+			cm, _ := c.(doc)
+			if seen[cm["name"]] {
+				return fmt.Errorf("two containers are named %v, which the API server refuses", cm["name"])
+			}
+			seen[cm["name"]] = true
+		}
+	}
+	return nil
+}
+
+// projectedSecrets checks every Secret a projected volume reads is a box
+// secret, key and all.
+func projectedSecrets(vol doc, box map[string]map[string]bool) error {
+	sources, _ := dig(vol, "projected")["sources"].([]any)
+	for _, src := range sources {
+		sm, _ := src.(doc)
+		sec := dig(sm, "secret")
+		if sec == nil {
+			continue
+		}
+		name, _ := sec["name"].(string)
+		if opt, _ := sec["optional"].(bool); opt {
+			continue
+		}
+		if box[name] == nil {
+			return fmt.Errorf("it mounts the Secret %s, which product.yaml doesn't declare as a box secret", name)
+		}
+		items, _ := sec["items"].([]any)
+		for _, it := range items {
+			im, _ := it.(doc)
+			if key, _ := im["key"].(string); !box[name][key] {
+				return fmt.Errorf("it mounts %s from the Secret %s, which product.yaml doesn't declare as a box secret key", key, name)
+			}
 		}
 	}
 	return nil

@@ -239,6 +239,9 @@ enum WarningKind {
   // WARNING_KIND_PRODUCT_RESET_CUT_OFF: a product reset was cut off part-way:
   // the box is finishing it, or the product stays stopped until it's finished.
   WARNING_KIND_PRODUCT_RESET_CUT_OFF = 18;
+  // WARNING_KIND_BACKUP: something is wrong with the backups. The product
+  // runs on; this is degraded, never down (docs/backups.md).
+  WARNING_KIND_BACKUP = 19;
 }
 
 message Warning {

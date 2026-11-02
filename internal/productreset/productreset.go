@@ -30,6 +30,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
@@ -61,6 +62,13 @@ type Reset struct {
 	// DataRoot is where the product's volumes live
 	// (productspec.DataRoot).
 	DataRoot string
+	// MoveDumps is the data move's directory on the backup partition, whose
+	// dumps hold the product's data.
+	MoveDumps string
+	// Backups lists what else of the product's data the box holds outside
+	// DataRoot: its archive, its backup sets and their records. A new install
+	// won't start on another cluster's archive.
+	Backups func() []string
 	// Images is where k0s takes the airgap images from
 	// (/var/lib/k0s/images); Products is the slots' directory, which the
 	// links there point into.
@@ -319,6 +327,11 @@ func (r *Reset) Cluster(ctx context.Context, removing func() error) (Counts, err
 	if err := os.Remove(filepath.Join(r.Platform, productup.PlacedFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return n, codes.Wrap(codes.ProductReset, err)
 	}
+	// The data goes below, so what the journal says about it goes too: a
+	// later install moves its own data instead of trusting an old move.
+	if err := os.Remove(filepath.Join(r.Platform, datamove.JournalFile)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return n, codes.Wrap(codes.ProductReset, err)
+	}
 	lg.Info("productreset: the product's stacks are out of k0s's manifests", log.F("stacks", len(stacks)))
 	timeout := "--timeout=" + DeleteTimeout.String()
 	steps := [][]string{}
@@ -394,7 +407,7 @@ func (r *Reset) count(ctx context.Context, namespaces []string, selector string)
 }
 
 // Data removes, with k0s stopped, everything under DataRoot (the root
-// itself stays), each of remove whole (a path that isn't there is
+// itself stays), the data move's dumps, each of remove whole (a path that isn't there is
 // skipped), and k0s's links to the product's images, which k0s-interim
 // links again from the slot at k0s's next start. It answers the bytes the
 // removed files held.
@@ -407,6 +420,12 @@ func (r *Reset) Data(remove ...string) (int64, error) {
 	}
 	for _, e := range ents {
 		remove = append(remove, filepath.Join(r.DataRoot, e.Name()))
+	}
+	if r.MoveDumps != "" {
+		remove = append(remove, r.MoveDumps)
+	}
+	if r.Backups != nil {
+		remove = append(remove, r.Backups()...)
 	}
 	for _, p := range remove {
 		n, err := product.DirBytes(p)

@@ -49,6 +49,27 @@ const (
 	// ProductServiceResetProductProcedure is the fully-qualified name of the ProductService's
 	// ResetProduct RPC.
 	ProductServiceResetProductProcedure = "/sneakers.appliance.osadmin.v1.ProductService/ResetProduct"
+	// ProductServiceListKeptDumpsProcedure is the fully-qualified name of the ProductService's
+	// ListKeptDumps RPC.
+	ProductServiceListKeptDumpsProcedure = "/sneakers.appliance.osadmin.v1.ProductService/ListKeptDumps"
+	// ProductServiceListBackupsProcedure is the fully-qualified name of the ProductService's
+	// ListBackups RPC.
+	ProductServiceListBackupsProcedure = "/sneakers.appliance.osadmin.v1.ProductService/ListBackups"
+	// ProductServiceCreateBackupProcedure is the fully-qualified name of the ProductService's
+	// CreateBackup RPC.
+	ProductServiceCreateBackupProcedure = "/sneakers.appliance.osadmin.v1.ProductService/CreateBackup"
+	// ProductServiceRemoveBackupProcedure is the fully-qualified name of the ProductService's
+	// RemoveBackup RPC.
+	ProductServiceRemoveBackupProcedure = "/sneakers.appliance.osadmin.v1.ProductService/RemoveBackup"
+	// ProductServiceRestoreBackupProcedure is the fully-qualified name of the ProductService's
+	// RestoreBackup RPC.
+	ProductServiceRestoreBackupProcedure = "/sneakers.appliance.osadmin.v1.ProductService/RestoreBackup"
+	// ProductServicePrepareBackupExportProcedure is the fully-qualified name of the ProductService's
+	// PrepareBackupExport RPC.
+	ProductServicePrepareBackupExportProcedure = "/sneakers.appliance.osadmin.v1.ProductService/PrepareBackupExport"
+	// ProductServiceRemoveKeptDumpProcedure is the fully-qualified name of the ProductService's
+	// RemoveKeptDump RPC.
+	ProductServiceRemoveKeptDumpProcedure = "/sneakers.appliance.osadmin.v1.ProductService/RemoveKeptDump"
 )
 
 // ProductServiceClient is a client for the sneakers.appliance.osadmin.v1.ProductService service.
@@ -74,6 +95,34 @@ type ProductServiceClient interface {
 	// an owner, with a new authenticator code and the product's name or the
 	// box's host name typed to confirm (docs/upgrades.md#removing-the-product).
 	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
+	// ListKeptDumps lists the dumps a data move kept of the data it replaced
+	// when the box returned to the new cluster (docs/data-move.md). The box
+	// never removes them itself.
+	ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error)
+	// ListBackups lists the backup sets on the box (docs/backups.md).
+	ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error)
+	// CreateBackup cuts a backup set: a base backup and the WAL up to a new
+	// named restore point. The product keeps running. BACKUP_BUSY while
+	// another runs.
+	CreateBackup(context.Context, *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error)
+	// RemoveBackup removes one set for good. The closed shell's
+	// "<product> backup remove" only, by an owner, with a new authenticator
+	// code and the set's name typed to confirm.
+	RemoveBackup(context.Context, *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error)
+	// RestoreBackup takes the product offline and brings the database back at
+	// the set's restore point. It answers once it has started; a failure at
+	// any step leaves the box on the data it had. A set made on a box holding
+	// other keys is refused (BACKUP_OTHER_BOX).
+	RestoreBackup(context.Context, *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error)
+	// PrepareBackupExport authorises one export of a set, which leaves the box
+	// encrypted to its recovery keys: the ticket it answers opens the stream
+	// once, for a minute.
+	PrepareBackupExport(context.Context, *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error)
+	// RemoveKeptDump removes one kept dump for good. The closed shell's
+	// "<product> dumps remove" only, by an owner, with a new authenticator
+	// code and the dump's name typed to confirm. One a return still needs is
+	// refused (DATA_MOVE_DUMP).
+	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
 }
 
 // NewProductServiceClient constructs a client for the sneakers.appliance.osadmin.v1.ProductService
@@ -106,14 +155,65 @@ func NewProductServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(productServiceMethods.ByName("ResetProduct")),
 			connect.WithClientOptions(opts...),
 		),
+		listKeptDumps: connect.NewClient[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse](
+			httpClient,
+			baseURL+ProductServiceListKeptDumpsProcedure,
+			connect.WithSchema(productServiceMethods.ByName("ListKeptDumps")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listBackups: connect.NewClient[v1.ListBackupsRequest, v1.ListBackupsResponse](
+			httpClient,
+			baseURL+ProductServiceListBackupsProcedure,
+			connect.WithSchema(productServiceMethods.ByName("ListBackups")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		createBackup: connect.NewClient[v1.CreateBackupRequest, v1.CreateBackupResponse](
+			httpClient,
+			baseURL+ProductServiceCreateBackupProcedure,
+			connect.WithSchema(productServiceMethods.ByName("CreateBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		removeBackup: connect.NewClient[v1.RemoveBackupRequest, v1.RemoveBackupResponse](
+			httpClient,
+			baseURL+ProductServiceRemoveBackupProcedure,
+			connect.WithSchema(productServiceMethods.ByName("RemoveBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		restoreBackup: connect.NewClient[v1.RestoreBackupRequest, v1.RestoreBackupResponse](
+			httpClient,
+			baseURL+ProductServiceRestoreBackupProcedure,
+			connect.WithSchema(productServiceMethods.ByName("RestoreBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		prepareBackupExport: connect.NewClient[v1.PrepareBackupExportRequest, v1.PrepareBackupExportResponse](
+			httpClient,
+			baseURL+ProductServicePrepareBackupExportProcedure,
+			connect.WithSchema(productServiceMethods.ByName("PrepareBackupExport")),
+			connect.WithClientOptions(opts...),
+		),
+		removeKeptDump: connect.NewClient[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse](
+			httpClient,
+			baseURL+ProductServiceRemoveKeptDumpProcedure,
+			connect.WithSchema(productServiceMethods.ByName("RemoveKeptDump")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // productServiceClient implements ProductServiceClient.
 type productServiceClient struct {
-	listExposedValues *connect.Client[v1.ListExposedValuesRequest, v1.ListExposedValuesResponse]
-	getExposedValue   *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
-	resetProduct      *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
+	listExposedValues   *connect.Client[v1.ListExposedValuesRequest, v1.ListExposedValuesResponse]
+	getExposedValue     *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
+	resetProduct        *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
+	listKeptDumps       *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
+	listBackups         *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
+	createBackup        *connect.Client[v1.CreateBackupRequest, v1.CreateBackupResponse]
+	removeBackup        *connect.Client[v1.RemoveBackupRequest, v1.RemoveBackupResponse]
+	restoreBackup       *connect.Client[v1.RestoreBackupRequest, v1.RestoreBackupResponse]
+	prepareBackupExport *connect.Client[v1.PrepareBackupExportRequest, v1.PrepareBackupExportResponse]
+	removeKeptDump      *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
 }
 
 // ListExposedValues calls sneakers.appliance.osadmin.v1.ProductService.ListExposedValues.
@@ -129,6 +229,41 @@ func (c *productServiceClient) GetExposedValue(ctx context.Context, req *connect
 // ResetProduct calls sneakers.appliance.osadmin.v1.ProductService.ResetProduct.
 func (c *productServiceClient) ResetProduct(ctx context.Context, req *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
 	return c.resetProduct.CallUnary(ctx, req)
+}
+
+// ListKeptDumps calls sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps.
+func (c *productServiceClient) ListKeptDumps(ctx context.Context, req *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error) {
+	return c.listKeptDumps.CallUnary(ctx, req)
+}
+
+// ListBackups calls sneakers.appliance.osadmin.v1.ProductService.ListBackups.
+func (c *productServiceClient) ListBackups(ctx context.Context, req *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error) {
+	return c.listBackups.CallUnary(ctx, req)
+}
+
+// CreateBackup calls sneakers.appliance.osadmin.v1.ProductService.CreateBackup.
+func (c *productServiceClient) CreateBackup(ctx context.Context, req *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error) {
+	return c.createBackup.CallUnary(ctx, req)
+}
+
+// RemoveBackup calls sneakers.appliance.osadmin.v1.ProductService.RemoveBackup.
+func (c *productServiceClient) RemoveBackup(ctx context.Context, req *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error) {
+	return c.removeBackup.CallUnary(ctx, req)
+}
+
+// RestoreBackup calls sneakers.appliance.osadmin.v1.ProductService.RestoreBackup.
+func (c *productServiceClient) RestoreBackup(ctx context.Context, req *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error) {
+	return c.restoreBackup.CallUnary(ctx, req)
+}
+
+// PrepareBackupExport calls sneakers.appliance.osadmin.v1.ProductService.PrepareBackupExport.
+func (c *productServiceClient) PrepareBackupExport(ctx context.Context, req *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error) {
+	return c.prepareBackupExport.CallUnary(ctx, req)
+}
+
+// RemoveKeptDump calls sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump.
+func (c *productServiceClient) RemoveKeptDump(ctx context.Context, req *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
+	return c.removeKeptDump.CallUnary(ctx, req)
 }
 
 // ProductServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.ProductService
@@ -155,6 +290,34 @@ type ProductServiceHandler interface {
 	// an owner, with a new authenticator code and the product's name or the
 	// box's host name typed to confirm (docs/upgrades.md#removing-the-product).
 	ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error)
+	// ListKeptDumps lists the dumps a data move kept of the data it replaced
+	// when the box returned to the new cluster (docs/data-move.md). The box
+	// never removes them itself.
+	ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error)
+	// ListBackups lists the backup sets on the box (docs/backups.md).
+	ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error)
+	// CreateBackup cuts a backup set: a base backup and the WAL up to a new
+	// named restore point. The product keeps running. BACKUP_BUSY while
+	// another runs.
+	CreateBackup(context.Context, *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error)
+	// RemoveBackup removes one set for good. The closed shell's
+	// "<product> backup remove" only, by an owner, with a new authenticator
+	// code and the set's name typed to confirm.
+	RemoveBackup(context.Context, *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error)
+	// RestoreBackup takes the product offline and brings the database back at
+	// the set's restore point. It answers once it has started; a failure at
+	// any step leaves the box on the data it had. A set made on a box holding
+	// other keys is refused (BACKUP_OTHER_BOX).
+	RestoreBackup(context.Context, *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error)
+	// PrepareBackupExport authorises one export of a set, which leaves the box
+	// encrypted to its recovery keys: the ticket it answers opens the stream
+	// once, for a minute.
+	PrepareBackupExport(context.Context, *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error)
+	// RemoveKeptDump removes one kept dump for good. The closed shell's
+	// "<product> dumps remove" only, by an owner, with a new authenticator
+	// code and the dump's name typed to confirm. One a return still needs is
+	// refused (DATA_MOVE_DUMP).
+	RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error)
 }
 
 // NewProductServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -183,6 +346,50 @@ func NewProductServiceHandler(svc ProductServiceHandler, opts ...connect.Handler
 		connect.WithSchema(productServiceMethods.ByName("ResetProduct")),
 		connect.WithHandlerOptions(opts...),
 	)
+	productServiceListKeptDumpsHandler := connect.NewUnaryHandler(
+		ProductServiceListKeptDumpsProcedure,
+		svc.ListKeptDumps,
+		connect.WithSchema(productServiceMethods.ByName("ListKeptDumps")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServiceListBackupsHandler := connect.NewUnaryHandler(
+		ProductServiceListBackupsProcedure,
+		svc.ListBackups,
+		connect.WithSchema(productServiceMethods.ByName("ListBackups")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServiceCreateBackupHandler := connect.NewUnaryHandler(
+		ProductServiceCreateBackupProcedure,
+		svc.CreateBackup,
+		connect.WithSchema(productServiceMethods.ByName("CreateBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServiceRemoveBackupHandler := connect.NewUnaryHandler(
+		ProductServiceRemoveBackupProcedure,
+		svc.RemoveBackup,
+		connect.WithSchema(productServiceMethods.ByName("RemoveBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServiceRestoreBackupHandler := connect.NewUnaryHandler(
+		ProductServiceRestoreBackupProcedure,
+		svc.RestoreBackup,
+		connect.WithSchema(productServiceMethods.ByName("RestoreBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServicePrepareBackupExportHandler := connect.NewUnaryHandler(
+		ProductServicePrepareBackupExportProcedure,
+		svc.PrepareBackupExport,
+		connect.WithSchema(productServiceMethods.ByName("PrepareBackupExport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	productServiceRemoveKeptDumpHandler := connect.NewUnaryHandler(
+		ProductServiceRemoveKeptDumpProcedure,
+		svc.RemoveKeptDump,
+		connect.WithSchema(productServiceMethods.ByName("RemoveKeptDump")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.ProductService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProductServiceListExposedValuesProcedure:
@@ -191,6 +398,20 @@ func NewProductServiceHandler(svc ProductServiceHandler, opts ...connect.Handler
 			productServiceGetExposedValueHandler.ServeHTTP(w, r)
 		case ProductServiceResetProductProcedure:
 			productServiceResetProductHandler.ServeHTTP(w, r)
+		case ProductServiceListKeptDumpsProcedure:
+			productServiceListKeptDumpsHandler.ServeHTTP(w, r)
+		case ProductServiceListBackupsProcedure:
+			productServiceListBackupsHandler.ServeHTTP(w, r)
+		case ProductServiceCreateBackupProcedure:
+			productServiceCreateBackupHandler.ServeHTTP(w, r)
+		case ProductServiceRemoveBackupProcedure:
+			productServiceRemoveBackupHandler.ServeHTTP(w, r)
+		case ProductServiceRestoreBackupProcedure:
+			productServiceRestoreBackupHandler.ServeHTTP(w, r)
+		case ProductServicePrepareBackupExportProcedure:
+			productServicePrepareBackupExportHandler.ServeHTTP(w, r)
+		case ProductServiceRemoveKeptDumpProcedure:
+			productServiceRemoveKeptDumpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -210,4 +431,32 @@ func (UnimplementedProductServiceHandler) GetExposedValue(context.Context, *conn
 
 func (UnimplementedProductServiceHandler) ResetProduct(context.Context, *connect.Request[v1.ResetProductRequest]) (*connect.Response[v1.ResetProductResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.ResetProduct is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) ListKeptDumps(context.Context, *connect.Request[v1.ListKeptDumpsRequest]) (*connect.Response[v1.ListKeptDumpsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.ListKeptDumps is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) ListBackups(context.Context, *connect.Request[v1.ListBackupsRequest]) (*connect.Response[v1.ListBackupsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.ListBackups is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) CreateBackup(context.Context, *connect.Request[v1.CreateBackupRequest]) (*connect.Response[v1.CreateBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.CreateBackup is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) RemoveBackup(context.Context, *connect.Request[v1.RemoveBackupRequest]) (*connect.Response[v1.RemoveBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.RemoveBackup is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) RestoreBackup(context.Context, *connect.Request[v1.RestoreBackupRequest]) (*connect.Response[v1.RestoreBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.RestoreBackup is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) PrepareBackupExport(context.Context, *connect.Request[v1.PrepareBackupExportRequest]) (*connect.Response[v1.PrepareBackupExportResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.PrepareBackupExport is not implemented"))
+}
+
+func (UnimplementedProductServiceHandler) RemoveKeptDump(context.Context, *connect.Request[v1.RemoveKeptDumpRequest]) (*connect.Response[v1.RemoveKeptDumpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.ProductService.RemoveKeptDump is not implemented"))
 }

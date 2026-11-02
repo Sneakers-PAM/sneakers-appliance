@@ -1288,6 +1288,9 @@ func (h *upgradeSvc) DiscardUpdate(ctx context.Context, r *connect.Request[osadm
 
 func (h *upgradeSvc) ApplyUpdate(ctx context.Context, r *connect.Request[osadminv1.ApplyUpdateRequest]) (*connect.Response[osadminv1.ApplyUpdateResponse], error) {
 	c := callFrom(ctx)
+	if b := h.s.o.Backups; b != nil && b.Restore != nil && b.Restore.Active() {
+		return nil, codes.New(codes.BackupBusy, "a restore is under way")
+	}
 	if r.Msg.GetTarget() == osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB {
 		v, err := h.s.applyWeb(ctx, c.by("upgrade.apply"))
 		c.note("web", "version", v)

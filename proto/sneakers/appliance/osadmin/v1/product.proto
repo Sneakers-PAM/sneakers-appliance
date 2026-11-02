@@ -52,6 +52,73 @@ service ProductService {
       audit: "product.reset"
     };
   }
+  // ListKeptDumps lists the dumps a data move kept of the data it replaced
+  // when the box returned to the new cluster (docs/data-move.md). The box
+  // never removes them itself.
+  rpc ListKeptDumps(ListKeptDumpsRequest) returns (ListKeptDumpsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // ListBackups lists the backup sets on the box (docs/backups.md).
+  rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // CreateBackup cuts a backup set: a base backup and the WAL up to a new
+  // named restore point. The product keeps running. BACKUP_BUSY while
+  // another runs.
+  rpc CreateBackup(CreateBackupRequest) returns (CreateBackupResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      audit: "product.backup.request"
+    };
+  }
+  // RemoveBackup removes one set for good. The closed shell's
+  // "<product> backup remove" only, by an owner, with a new authenticator
+  // code and the set's name typed to confirm.
+  rpc RemoveBackup(RemoveBackupRequest) returns (RemoveBackupResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      code_each_call: true
+      ssh_only: true
+      audit: "product.backup.remove-request"
+    };
+  }
+  // RestoreBackup takes the product offline and brings the database back at
+  // the set's restore point. It answers once it has started; a failure at
+  // any step leaves the box on the data it had. A set made on a box holding
+  // other keys is refused (BACKUP_OTHER_BOX).
+  rpc RestoreBackup(RestoreBackupRequest) returns (RestoreBackupResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      code_each_call: true
+      ssh_only: true
+      audit: "product.backup.restore"
+    };
+  }
+  // PrepareBackupExport authorises one export of a set, which leaves the box
+  // encrypted to its recovery keys: the ticket it answers opens the stream
+  // once, for a minute.
+  rpc PrepareBackupExport(PrepareBackupExportRequest) returns (PrepareBackupExportResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      code_each_call: true
+      ssh_only: true
+      audit: "product.backup.export-request"
+    };
+  }
+  // RemoveKeptDump removes one kept dump for good. The closed shell's
+  // "<product> dumps remove" only, by an owner, with a new authenticator
+  // code and the dump's name typed to confirm. One a return still needs is
+  // refused (DATA_MOVE_DUMP).
+  rpc RemoveKeptDump(RemoveKeptDumpRequest) returns (RemoveKeptDumpResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      code_each_call: true
+      ssh_only: true
+      audit: "product.kept-dump.remove"
+    };
+  }
 }
 
 // ExposedValue describes one declared value.
@@ -114,4 +181,87 @@ message ResetProductResponse {
   // staged_version is the bundle kept as the staged one, which Apply
   // installs again.
   string staged_version = 7;
+}
+
+// KeptDump is one dump of the data a return replaced.
+message KeptDump {
+  // name is the dump's directory name, path where it is on the box.
+  string name = 1;
+  string path = 2;
+  // taken is when it was written, in RFC 3339.
+  string taken = 3;
+  uint64 bytes = 4;
+  // whole: every file is there. One that isn't was cut off before it counted.
+  bool whole = 5;
+}
+
+message ListKeptDumpsRequest {}
+
+message ListKeptDumpsResponse {
+  repeated KeptDump dumps = 1;
+}
+
+message RemoveKeptDumpRequest {
+  // totp_code is a new code from the owner's authenticator, on top of the
+  // one the login took.
+  string totp_code = 1;
+  // name is the dump's name, as typed.
+  string name = 2;
+}
+
+message RemoveKeptDumpResponse {}
+
+// BoxBackupSet is one backup set on the box.
+message BoxBackupSet {
+  string name = 1;
+  // point is the named restore point it restores to.
+  string point = 2;
+  // taken is when it was cut, in RFC 3339.
+  string taken = 3;
+  uint64 bytes = 4;
+}
+
+message ListBackupsRequest {}
+
+message ListBackupsResponse {
+  repeated BoxBackupSet sets = 1;
+}
+
+message CreateBackupRequest {
+  // name is the set's name; empty makes one from the time.
+  string name = 1;
+}
+
+message CreateBackupResponse {
+  BoxBackupSet set = 1;
+}
+
+message RemoveBackupRequest {
+  // totp_code is a new code from the owner's authenticator.
+  string totp_code = 1;
+  // name is the set's name, as typed.
+  string name = 2;
+}
+
+message RemoveBackupResponse {}
+
+message RestoreBackupRequest {
+  // totp_code is a new code from the owner's authenticator.
+  string totp_code = 1;
+  // name is the set's name, as typed.
+  string name = 2;
+}
+
+message RestoreBackupResponse {}
+
+message PrepareBackupExportRequest {
+  // totp_code is a new code from the owner's authenticator.
+  string totp_code = 1;
+  // name is the set's name, as typed.
+  string name = 2;
+}
+
+message PrepareBackupExportResponse {
+  // ticket opens the export's stream once.
+  string ticket = 1;
 }

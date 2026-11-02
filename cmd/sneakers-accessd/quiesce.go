@@ -54,7 +54,9 @@ func productReset(c config, lg log.Logger) *productreset.Reset {
 	return &productreset.Reset{
 		Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s", Manifests: "/var/lib/k0s/manifests",
 		Platform: filepath.Join(c.state, "platform"), DataRoot: productspec.DataRoot,
-		Images: "/var/lib/k0s/images", Products: product.Dir,
+		MoveDumps: moveDumps(),
+		Backups:   func() []string { return backupData(c) },
+		Images:    "/var/lib/k0s/images", Products: product.Dir,
 		Quiesce: func(ctx context.Context) error {
 			ctx, cancel := context.WithTimeout(ctx, resetQuiesceBound)
 			defer cancel()

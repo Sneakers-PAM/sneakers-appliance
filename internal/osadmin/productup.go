@@ -12,6 +12,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/datamove"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 )
@@ -19,6 +20,18 @@ import (
 // ProductProbe tells how far the product has come up.
 type ProductProbe interface {
 	Check(ctx context.Context) (productup.Result, error)
+}
+
+// moveFollower is a probe whose slot may declare a data move
+// (docs/data-move.md), which a failure of the product goes back from.
+type moveFollower interface {
+	MoveUnsettled() bool
+	MoveFailed(why string) error
+	SettleMove() error
+	MoveAgain()
+	RecordMoveRevert() (bool, error)
+	TidyMove()
+	CheckMoveApply(slot string) error
 }
 
 // ProductUpBound is how long a product may take to be ready after its
@@ -107,6 +120,9 @@ func (s *Server) stepLabel(id string) string {
 // answers while Updates and the console show the product coming up.
 func (s *Server) startProductUp() {
 	s.productWaitsAgain()
+	if m, ok := s.o.ProductUp.(moveFollower); ok {
+		m.MoveAgain()
+	}
 	s.useSlotSteps()
 	s.setStep(productup.StepK0s, "")
 	s.followProductUp()
@@ -117,6 +133,13 @@ func (s *Server) startProductUp() {
 func (s *Server) ResumeProductUp() {
 	if s.o.ProductUp == nil {
 		return
+	}
+	// A switch cut off before its revert was recorded leaves the box on the
+	// old cluster with a journal that says otherwise. This runs before
+	// anything can apply again.
+	s.moveReverted()
+	if m, ok := s.o.ProductUp.(moveFollower); ok {
+		m.TidyMove()
 	}
 	r := s.progressSnapshot()
 	if r == nil || !isProductUpStep(r.active()) {
@@ -290,6 +313,7 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 				s.productHeld(res)
 				s.o.Logger.Info("osadmin: the product is held while an import is open", log.F("step", res.Step))
 			} else {
+				s.settleMove()
 				s.productIsReady()
 			}
 			s.finishSteps(productup.StepEdge)
@@ -303,6 +327,9 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 				stepSince = now
 				s.o.Logger.Info("osadmin: the product is at a new step", log.F("step", res.Step), log.F("detail", res.Detail))
 			}
+			if last.Unbounded && !res.Unbounded {
+				since = now
+			}
 			last, lastErr = res, ""
 			at = res.Step
 			s.setStep(res.Step, res.Detail)
@@ -315,7 +342,7 @@ func (s *Server) productUpLoop(started time.Time, stop <-chan struct{}) {
 			why = fmt.Sprintf("it isn't ready after %s: %s", res.Timeout, res.Detail)
 		case err != nil && last.Timeout > 0 && last.Step == at && now.Sub(stepSince) > last.Timeout:
 			why = fmt.Sprintf("it isn't ready after %s: %s%s", last.Timeout, unreadable, lastErr)
-		case now.Sub(since) > s.productUpBound():
+		case !last.Unbounded && now.Sub(since) > s.productUpBound():
 			waiting := last.Detail
 			if lastErr != "" {
 				waiting = unreadable + lastErr
@@ -354,6 +381,75 @@ func (s *Server) productUpFailed(r *progressRecord, started time.Time, at, why s
 	s.o.Logger.Warn("osadmin: the product didn't come up; the update failed", log.F("action", r.Action), log.F("version", r.Version), log.F("step", at), log.F("why", why))
 	s.productFailed(at, label+": "+why)
 	s.consoleChanged()
+	s.returnFromMove(label + ": " + why)
+}
+
+// returnFromMove takes the box back to the previous product slot, and with
+// it the old cluster and its volume, when the product failed on a data move
+// that hasn't settled. It runs on its own: the follower that called it is
+// replaced by the revert's. With no previous slot, or with an elevated
+// shell in the way, the box stays failed and an owner reverts by hand; the
+// old cluster is untouched either way.
+func (s *Server) returnFromMove(why string) {
+	m, ok := s.o.ProductUp.(moveFollower)
+	if !ok || !m.MoveUnsettled() {
+		return
+	}
+	if err := m.MoveFailed(why); err != nil {
+		s.o.Logger.Error(err, "osadmin: the data move's failure isn't recorded")
+	}
+	prev := s.slots().Status().Previous
+	s.o.Logger.Warn("osadmin: the product failed on a data move; going back to the old cluster", log.F("why", why), log.F("to", prev))
+	if prev == "" {
+		s.o.Logger.Warn("osadmin: there's no previous product slot to go back to; the box stays failed")
+		return
+	}
+	go func() {
+		e := osaudit.Entry{Actor: "osadmin", Action: "upgrade.data-move-revert", Target: "product", Detail: map[string]string{"version": prev, "why": why}}
+		_, _, err := s.revertProduct(context.Background(), e, nil)
+		s.write(e, err)
+		if err != nil {
+			s.o.Logger.Error(err, "osadmin: going back from the data move failed; the box stays failed, and an owner can revert", log.F("to", prev))
+		}
+	}()
+}
+
+// settleMove records the box healthy on a data move, once the product is
+// ready. Until then a failure goes back to the old cluster.
+func (s *Server) settleMove() {
+	m, ok := s.o.ProductUp.(moveFollower)
+	if !ok {
+		return
+	}
+	defer m.TidyMove()
+	if !m.MoveUnsettled() {
+		return
+	}
+	if err := m.SettleMove(); err != nil {
+		s.o.Logger.Error(err, "osadmin: the data move isn't settled; the next ready check tries again")
+		return
+	}
+	s.o.Logger.Info("osadmin: the product is healthy on its new database")
+}
+
+// moveReverted records a slot switch that went back over a data move, by
+// asking the slot now current, and answers what that means for the data, or
+// "". A failure to record is tried again at the next start.
+func (s *Server) moveReverted() string {
+	m, ok := s.o.ProductUp.(moveFollower)
+	if !ok {
+		return ""
+	}
+	reverted, err := m.RecordMoveRevert()
+	if err != nil {
+		s.o.Logger.Error(err, "osadmin: a revert over the data move isn't recorded; the next start tries again")
+		return ""
+	}
+	if !reverted {
+		return ""
+	}
+	s.o.Logger.Warn("osadmin: the box went back over the data move", log.F("note", datamove.RevertNote))
+	return datamove.RevertNote
 }
 
 // productHistory records a product apply's or revert's outcome. One that
