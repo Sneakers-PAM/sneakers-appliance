@@ -1,0 +1,15 @@
+# Reviewed scrub allowlist: `<class> <exact value> <path glob>`, with a reason on the line or
+# the line above. The org CI scrub reads it at the PR base and the local pre-push gate at the
+# remote's default branch, so a new entry counts only once its own PR is merged. Format:
+# Sneakers-PAM/.github, .github/scripts/README.md, "The allowlist file".
+#
+# protoc-gen-connect-go writes this phrase into the version check of every generated client.
+ai-tell generated%20with gen/*.go
+# The Connect module path in hand-written Go imports and go.mod. Host names in generated
+# files (the "Code generated ... DO NOT EDIT." header) are already warnings in the scanner.
+fqdn connectrpc.com internal/*.go
+fqdn connectrpc.com cmd/*.go  # Connect imports
+fqdn connectrpc.com go.mod  # the Connect requirement
+fqdn connectrpc.com go.sum  # the Connect checksums
+# QEMU's user-network address for the host, how the image tests reach a listener on the host.
+private-ip 10.0.2.2 test/image/*
