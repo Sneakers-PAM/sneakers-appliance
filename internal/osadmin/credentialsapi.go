@@ -25,6 +25,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/credentials"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/netdapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/ppk"
@@ -294,7 +295,10 @@ func (h *accessSvc) UnlockAdmin(ctx context.Context, r *connect.Request[osadminv
 func (h *accessSvc) SetAccessPolicy(ctx context.Context, r *connect.Request[osadminv1.SetAccessPolicyRequest]) (*connect.Response[osadminv1.SetAccessPolicyResponse], error) {
 	c := callFrom(ctx)
 	w := r.Msg.GetPolicy()
-	p := access.Policy{RootCodeMinutes: int(w.GetRootCodeMinutes()), RootSessionMinutes: int(w.GetRootSessionMinutes()), SSHKeyValidDays: int(w.GetSshKeyValidDays())}
+	p := access.Policy{LockoutMaxFailures: int(w.GetLockoutMaxFailures()), RootCodeMinutes: int(w.GetRootCodeMinutes()), RootSessionMinutes: int(w.GetRootSessionMinutes()), SSHKeyValidDays: int(w.GetSshKeyValidDays())}
+	if p.LockoutMaxFailures == 0 {
+		p.LockoutMaxFailures = lockout.DefaultMaxFailures
+	}
 	switch w.GetLockoutMode() {
 	case osadminv1.LockoutMode_LOCKOUT_MODE_TIMED:
 		p.LockoutMode = access.LockoutTimed
@@ -303,7 +307,7 @@ func (h *accessSvc) SetAccessPolicy(ctx context.Context, r *connect.Request[osad
 	default:
 		return nil, codes.New(codes.AccessPolicy, "choose a lockout mode")
 	}
-	c.note("access-policy", "lockoutMode", p.LockoutMode, "rootCodeMinutes", itoa(p.RootCodeMinutes), "rootSessionMinutes", itoa(p.RootSessionMinutes), "sshKeyValidDays", itoa(p.SSHKeyValidDays))
+	c.note("access-policy", "lockoutMode", p.LockoutMode, "lockoutMaxFailures", itoa(p.LockoutMaxFailures), "rootCodeMinutes", itoa(p.RootCodeMinutes), "rootSessionMinutes", itoa(p.RootSessionMinutes), "sshKeyValidDays", itoa(p.SSHKeyValidDays))
 	if p.RootCodeMinutes == 0 || p.RootSessionMinutes == 0 || p.SSHKeyValidDays == 0 {
 		return nil, codes.New(codes.AccessPolicy, "give every setting: the root-shell code and session lifetimes and the SSH key validity")
 	}
@@ -313,7 +317,7 @@ func (h *accessSvc) SetAccessPolicy(ctx context.Context, r *connect.Request[osad
 	}); err != nil {
 		return nil, err
 	}
-	h.s.o.Logger.Info("osadmin: access policy set", log.F("by", c.session.Admin))
+	h.s.o.Logger.Info("osadmin: access policy set", log.F("by", c.session.Admin), log.F("lockoutMode", p.LockoutMode), log.F("lockoutMaxFailures", p.LockoutMaxFailures))
 	return connect.NewResponse(&osadminv1.SetAccessPolicyResponse{}), nil
 }
 
@@ -324,6 +328,7 @@ func policyToWireAccess(p access.Policy) *osadminv1.AccessPolicy {
 	}
 	return &osadminv1.AccessPolicy{
 		LockoutMode: mode, RootCodeMinutes: int32(min(p.RootCodeMinutes, 1<<30)), RootSessionMinutes: int32(min(p.RootSessionMinutes, 1<<30)), // #nosec G115 -- clamped
-		SshKeyValidDays: int32(min(p.SSHKeyValidDays, 1<<30)), // #nosec G115 -- clamped
+		SshKeyValidDays:    int32(min(p.SSHKeyValidDays, 1<<30)),    // #nosec G115 -- clamped
+		LockoutMaxFailures: int32(min(p.LockoutMaxFailures, 1<<30)), // #nosec G115 -- clamped
 	}
 }

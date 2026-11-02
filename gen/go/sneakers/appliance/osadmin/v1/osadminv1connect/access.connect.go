@@ -136,8 +136,8 @@ type AccessServiceClient interface {
 	ReinviteAdmin(context.Context, *connect.Request[v1.ReinviteAdminRequest]) (*connect.Response[v1.ReinviteAdminResponse], error)
 	// UnlockAdmin ends an admin's lockout.
 	UnlockAdmin(context.Context, *connect.Request[v1.UnlockAdminRequest]) (*connect.Response[v1.UnlockAdminResponse], error)
-	// SetAccessPolicy sets the lockout mode, the root-shell code and session
-	// lifetimes and the default SSH key validity.
+	// SetAccessPolicy sets the lockout mode and limit, the root-shell code
+	// and session lifetimes and the default SSH key validity.
 	SetAccessPolicy(context.Context, *connect.Request[v1.SetAccessPolicyRequest]) (*connect.Response[v1.SetAccessPolicyResponse], error)
 }
 
@@ -409,8 +409,8 @@ type AccessServiceHandler interface {
 	ReinviteAdmin(context.Context, *connect.Request[v1.ReinviteAdminRequest]) (*connect.Response[v1.ReinviteAdminResponse], error)
 	// UnlockAdmin ends an admin's lockout.
 	UnlockAdmin(context.Context, *connect.Request[v1.UnlockAdminRequest]) (*connect.Response[v1.UnlockAdminResponse], error)
-	// SetAccessPolicy sets the lockout mode, the root-shell code and session
-	// lifetimes and the default SSH key validity.
+	// SetAccessPolicy sets the lockout mode and limit, the root-shell code
+	// and session lifetimes and the default SSH key validity.
 	SetAccessPolicy(context.Context, *connect.Request[v1.SetAccessPolicyRequest]) (*connect.Response[v1.SetAccessPolicyResponse], error)
 }
 

@@ -4,9 +4,9 @@
 // Package lockout is the sign-in lockout and throttling every surface
 // shares (spec 2, Section 2.6): :8443 sign-in and step-up, the closed
 // shell's TOTP check, the root-shell code page and the one-time codes.
-// Per account (NIST SP 800-53 AC-7, the DoD SRG and STIG values): 3
-// consecutive failures within 15 minutes lock it for 15 minutes, or until
-// an owner unlocks it. Per source (NIST SP 800-63B rate limiting): 10
+// Per account (NIST SP 800-53 AC-7): the owner's limit of consecutive
+// failures (3, 4 or 5, default 5) within 15 minutes locks it for 15
+// minutes, or until an owner unlocks it. Per source (NIST SP 800-63B rate limiting): 10
 // failures within 15 minutes, whatever names were tried, hold that address
 // off for 15 minutes. The book also keeps each admin's last TOTP step, so
 // a code is never taken twice. It is kept on the state volume, so a restart
@@ -29,12 +29,17 @@ import (
 
 // The limits.
 const (
-	MaxFailures  = 3
-	Window       = 15 * time.Minute
-	LockFor      = 15 * time.Minute
-	SourceMax    = 10
-	SourceWindow = 15 * time.Minute
-	SourceHold   = 15 * time.Minute
+	// DefaultMaxFailures is the failures that lock an account when the
+	// access policy sets no limit.
+	DefaultMaxFailures = 5
+	// legacyMaxFailures is the fixed limit a lock written before the
+	// limit was a setting came from.
+	legacyMaxFailures = 3
+	Window            = 15 * time.Minute
+	LockFor           = 15 * time.Minute
+	SourceMax         = 10
+	SourceWindow      = 15 * time.Minute
+	SourceHold        = 15 * time.Minute
 )
 
 // Mode is what a lock lasts for.
@@ -47,6 +52,20 @@ const (
 	// UntilUnlocked locks until an owner unlocks.
 	UntilUnlocked Mode = "until-unlocked"
 )
+
+// Rule is how a failure counts: the lock it leads to, and the consecutive
+// failures that lock (zero means DefaultMaxFailures).
+type Rule struct {
+	Mode        Mode
+	MaxFailures int
+}
+
+func (r Rule) limit() int {
+	if r.MaxFailures <= 0 {
+		return DefaultMaxFailures
+	}
+	return r.MaxFailures
+}
 
 // Refusal is what a refused try tells the caller.
 type Refusal struct {
@@ -81,7 +100,10 @@ type account struct {
 	Failures      []time.Time `json:"failures,omitempty"`
 	LockedUntil   *time.Time  `json:"lockedUntil,omitempty"`
 	UntilUnlocked bool        `json:"untilUnlocked,omitempty"`
-	LastStep      uint64      `json:"lastStep,omitempty"`
+	// LockedAfter is the failures the lock came from, so its message
+	// still says so after the owner changes the limit.
+	LockedAfter int    `json:"lockedAfter,omitempty"`
+	LastStep    uint64 `json:"lastStep,omitempty"`
 }
 
 type source struct {
@@ -139,17 +161,26 @@ func (b *Book) Check(admin, src string, now time.Time) error {
 		return nil
 	}
 	if a.UntilUnlocked {
-		return WithRefusal(codes.New(codes.AccessLocked, "%s is locked after %d failed tries; an owner must unlock it", admin, MaxFailures), Refusal{UntilUnlocked: true})
+		return WithRefusal(codes.New(codes.AccessLocked, "%s is locked after %d failed tries; an owner must unlock it", admin, a.lockedAfter()), Refusal{UntilUnlocked: true})
 	}
 	if a.LockedUntil != nil && now.Before(*a.LockedUntil) {
-		return WithRefusal(codes.New(codes.AccessLocked, "%s is locked after %d failed tries until %s", admin, MaxFailures, a.LockedUntil.UTC().Format(time.RFC3339)), Refusal{LockedUntil: *a.LockedUntil})
+		return WithRefusal(codes.New(codes.AccessLocked, "%s is locked after %d failed tries until %s", admin, a.lockedAfter(), a.LockedUntil.UTC().Format(time.RFC3339)), Refusal{LockedUntil: *a.LockedUntil})
 	}
 	return nil
 }
 
-// Fail records a failed try and returns what it leaves: the tries left, or
-// the lock it caused.
-func (b *Book) Fail(admin, src string, now time.Time, mode Mode) Refusal {
+func (a *account) lockedAfter() int {
+	if a.LockedAfter > 0 {
+		return a.LockedAfter
+	}
+	return legacyMaxFailures
+}
+
+// Fail records a failed try under rule and returns what it leaves: the
+// tries left, or the lock it caused. The limit is the rule's at this
+// failure, so a lowered limit applies from the next failure and never
+// locks anyone by itself.
+func (b *Book) Fail(admin, src string, now time.Time, rule Rule) Refusal {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var r Refusal
@@ -173,10 +204,11 @@ func (b *Book) Fail(admin, src string, now time.Time, mode Mode) Refusal {
 			b.f.Accounts[admin] = a
 		}
 		a.Failures = append(within(a.Failures, now, Window), now)
-		r.AttemptsLeft = max(MaxFailures-len(a.Failures), 0)
-		if len(a.Failures) >= MaxFailures {
-			a.Failures = nil
-			if mode == UntilUnlocked {
+		limit := rule.limit()
+		r.AttemptsLeft = max(limit-len(a.Failures), 0)
+		if len(a.Failures) >= limit {
+			a.Failures, a.LockedAfter = nil, limit
+			if rule.Mode == UntilUnlocked {
 				a.UntilUnlocked, r.UntilUnlocked = true, true
 			} else {
 				until := now.Add(LockFor)
@@ -206,7 +238,7 @@ func (b *Book) Unlock(admin string) bool {
 	if a == nil || (!a.UntilUnlocked && a.LockedUntil == nil && len(a.Failures) == 0) {
 		return false
 	}
-	a.UntilUnlocked, a.LockedUntil, a.Failures = false, nil, nil
+	a.UntilUnlocked, a.LockedUntil, a.Failures, a.LockedAfter = false, nil, nil, 0
 	b.save()
 	return true
 }
@@ -263,7 +295,7 @@ func (b *Book) State(admin string, now time.Time) AccountState {
 	st := AccountState{Failures: len(within(a.Failures, now, Window)), UntilUnlocked: a.UntilUnlocked}
 	if a.LockedUntil != nil && now.Before(*a.LockedUntil) {
 		st.LockedUntil = *a.LockedUntil
-		st.Failures = MaxFailures
+		st.Failures = a.lockedAfter()
 	}
 	return st
 }

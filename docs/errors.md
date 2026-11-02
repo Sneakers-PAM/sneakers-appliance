@@ -27,7 +27,7 @@ shell, the console and :8443 show the same sentence.
 | 3015 | `ACCESS_KEY_REVOKED` | the key was removed and is on the revocation list; an owner un-revokes it first |
 | 3016 | `ACCESS_PASSWORD` | the password is shorter than 12 characters, on the breached-password list, or the admin's name |
 | 3017 | `ACCESS_CREDENTIALS` | the name, password or TOTP code is wrong, or the TOTP code was used already |
-| 3018 | `ACCESS_LOCKED` | the account is locked after 3 failures in 15 minutes, for 15 minutes or until an owner unlocks it |
+| 3018 | `ACCESS_LOCKED` | the account is locked after the owner's limit of failures (3, 4 or 5, default 5) in 15 minutes, for 15 minutes or until an owner unlocks it |
 | 3019 | `ACCESS_THROTTLED` | this source failed too often; it may try again after the time given |
 | 3020 | `ACCESS_NO_ADMIN` | sshd was asked to start while no admin has a password and a TOTP secret |
 | 3021 | `ACCESS_POLICY` | an access setting is out of its bounds |

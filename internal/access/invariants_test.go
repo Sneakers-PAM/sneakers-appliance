@@ -28,6 +28,12 @@ func TestInvariants(t *testing.T) {
 		{"a root session of 60 minutes", func(s *access.State) { s.AccessPolicy.RootSessionMinutes = 60 }, ""},
 		{"a key valid for six years", func(s *access.State) { s.AccessPolicy.SSHKeyValidDays = 6 * 365 }, "ACCESS_POLICY"},
 		{"an unknown lockout mode", func(s *access.State) { s.AccessPolicy.LockoutMode = "never" }, "ACCESS_POLICY"},
+		{"a lockout after 3 failures", func(s *access.State) { s.AccessPolicy.LockoutMaxFailures = 3 }, ""},
+		{"a lockout after 4 failures", func(s *access.State) { s.AccessPolicy.LockoutMaxFailures = 4 }, ""},
+		{"a lockout after 2 failures", func(s *access.State) { s.AccessPolicy.LockoutMaxFailures = 2 }, "ACCESS_POLICY"},
+		{"a lockout after 6 failures", func(s *access.State) { s.AccessPolicy.LockoutMaxFailures = 6 }, "ACCESS_POLICY"},
+		{"a lockout after -1 failures", func(s *access.State) { s.AccessPolicy.LockoutMaxFailures = -1 }, "ACCESS_POLICY"},
+		{"a policy saved before the lockout limit", func(s *access.State) { s.AccessPolicy.LockoutMaxFailures = 0 }, ""},
 		{"demote last owner", func(s *access.State) { s.Admins[0].Role = access.RoleAdmin }, "ACCESS_LAST_OWNER"},
 		{"login equals recovery", func(s *access.State) {
 			s.RecoveryKeys = []access.RecoveryKey{{Key: s.Admins[0].Keys[0].Key}}
@@ -76,4 +82,21 @@ func TestInvariantsBeforeTheirSteps(t *testing.T) {
 	assertCode(t, access.Check(s, true, false), "")
 	assertCode(t, access.Check(s, true, true), "ACCESS_LAST_RECOVERY_KEY")
 	assertCode(t, access.Check(access.State{}, true, false), "ACCESS_LAST_OWNER")
+}
+
+// A new box locks after 5 failures, and a policy saved before the limit
+// was a setting reads as 5.
+func TestTheLockoutLimitDefaultsToFive(t *testing.T) {
+	if got := access.DefaultPolicy().LockoutMaxFailures; got != 5 {
+		t.Fatalf("a new box's limit is %d", got)
+	}
+	old := access.Policy{LockoutMode: access.LockoutTimed, RootCodeMinutes: 10, RootSessionMinutes: 10, SSHKeyValidDays: 365}
+	if got := old.Effective().LockoutMaxFailures; got != 5 {
+		t.Fatalf("a saved policy with no limit reads as %d", got)
+	}
+	four := old
+	four.LockoutMaxFailures = 4
+	if got := four.Effective().LockoutMaxFailures; got != 4 {
+		t.Fatalf("a limit of 4 reads as %d", got)
+	}
 }

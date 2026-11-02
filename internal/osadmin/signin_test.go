@@ -117,11 +117,12 @@ func TestEveryWrongSignInLooksTheSame(t *testing.T) {
 	}
 }
 
-// Three failures within 15 minutes lock the account for 15 minutes, even
-// with the right password and code, and the lock is audited (NIST SP
-// 800-53 AC-7).
+// With the limit at 3, three failures within 15 minutes lock the account
+// for 15 minutes, even with the right password and code, and the lock is
+// audited (NIST SP 800-53 AC-7).
 func TestThreeFailedSignInsLockForFifteenMinutes(t *testing.T) {
 	b := newBox(t, false)
+	lockAfterThree(t, b)
 	br := b.browser()
 	for i, left := range []int32{2, 1} {
 		_, err := trySignIn(br, "alice", "not the password", b.code("alice"))
@@ -183,7 +184,7 @@ func TestTheLockCanWaitForAnOwner(t *testing.T) {
 	alice.signIn("alice")
 	ctx := context.Background()
 	if _, err := alice.access().SetAccessPolicy(ctx, connect.NewRequest(&osadminv1.SetAccessPolicyRequest{Policy: &osadminv1.AccessPolicy{
-		LockoutMode: osadminv1.LockoutMode_LOCKOUT_MODE_UNTIL_UNLOCKED, RootCodeMinutes: 10, RootSessionMinutes: 10, SshKeyValidDays: 365,
+		LockoutMode: osadminv1.LockoutMode_LOCKOUT_MODE_UNTIL_UNLOCKED, LockoutMaxFailures: 3, RootCodeMinutes: 10, RootSessionMinutes: 10, SshKeyValidDays: 365,
 	}})); err != nil {
 		t.Fatal(err)
 	}

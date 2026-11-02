@@ -203,11 +203,15 @@ func (s *Server) newInvite() (string, *access.Invite) {
 	return code, &access.Invite{CodeHash: codeHash(code), Expires: s.o.Clock.Now().UTC().Add(InviteLifetime)}
 }
 
-func (s *Server) lockoutMode() lockout.Mode {
-	if s.o.Access.Read().AccessPolicy.Effective().LockoutMode == access.LockoutUntilUnlocked {
-		return lockout.UntilUnlocked
+// lockoutRule is how a failure counts under the access policy: the lock
+// it leads to and the owner's limit, read at each failure.
+func (s *Server) lockoutRule() lockout.Rule {
+	p := s.o.Access.Read().AccessPolicy.Effective()
+	r := lockout.Rule{Mode: lockout.Timed, MaxFailures: p.LockoutMaxFailures}
+	if p.LockoutMode == access.LockoutUntilUnlocked {
+		r.Mode = lockout.UntilUnlocked
 	}
-	return lockout.Timed
+	return r
 }
 
 // checkTOTP checks a fresh TOTP code of admin's against the lockout. Every
@@ -238,7 +242,7 @@ const wrongCode = "the authenticator code is wrong or was used already"
 // failed records a failed try of admin's (empty for an unknown name) from
 // source, audits the lock or throttle it causes, and returns the refusal.
 func (s *Server) failed(admin, source, surface, why string) error {
-	r := s.o.Lockout.Fail(admin, source, s.o.Clock.Now(), s.lockoutMode())
+	r := s.o.Lockout.Fail(admin, source, s.o.Clock.Now(), s.lockoutRule())
 	detail := map[string]string{"surface": surface, "attemptsLeft": itoa(r.AttemptsLeft)}
 	switch {
 	case r.UntilUnlocked || !r.LockedUntil.IsZero():

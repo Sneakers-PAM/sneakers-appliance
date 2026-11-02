@@ -48,11 +48,12 @@ func TestTheSSHLoginChecksTheTOTPCode(t *testing.T) {
 	}
 }
 
-// The SSH TOTP check shares the :8443 lockout: three failures across both
-// lock the account for both for 15 minutes; a success resets the count;
-// the lock is audited.
+// The SSH TOTP check shares the :8443 lockout: with the limit at 3, three
+// failures across both lock the account for both for 15 minutes; a success
+// resets the count; the lock is audited.
 func TestTheSSHAndWebLockoutIsOne(t *testing.T) {
 	b := newBox(t, false)
+	lockAfterThree(t, b)
 	l := b.sshLoginOf("alice")
 	_, _ = b.srv.VerifyLoginTotp(l, "000000")
 	if _, err := b.srv.VerifyLoginTotp(l, b.code("alice")); err != nil {
@@ -80,7 +81,10 @@ func TestTheSSHAndWebLockoutIsOne(t *testing.T) {
 
 func TestTheSSHLockCanWaitForAnOwner(t *testing.T) {
 	b := newBox(t, true)
-	if err := b.store.Update(func(st *access.State) error { st.AccessPolicy.LockoutMode = "until-unlocked"; return nil }); err != nil {
+	if err := b.store.Update(func(st *access.State) error {
+		st.AccessPolicy.LockoutMode, st.AccessPolicy.LockoutMaxFailures = "until-unlocked", 3
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 	l := b.sshLoginOf("bob")
@@ -151,6 +155,7 @@ func TestTheRootShellCodePage(t *testing.T) {
 // Wrong root-shell codes count toward the operator's lockout.
 func TestWrongRootShellCodesCountTowardTheLockout(t *testing.T) {
 	b := newBox(t, false)
+	lockAfterThree(t, b)
 	ch, err := b.srv.BeginRootShell(b.sshLoginOf("alice"), "")
 	if err != nil {
 		t.Fatal(err)

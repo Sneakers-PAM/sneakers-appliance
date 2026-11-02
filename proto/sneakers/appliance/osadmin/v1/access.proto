@@ -151,8 +151,8 @@ service AccessService {
       audit: "access.admin.unlock"
     };
   }
-  // SetAccessPolicy sets the lockout mode, the root-shell code and session
-  // lifetimes and the default SSH key validity.
+  // SetAccessPolicy sets the lockout mode and limit, the root-shell code
+  // and session lifetimes and the default SSH key validity.
   rpc SetAccessPolicy(SetAccessPolicyRequest) returns (SetAccessPolicyResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -245,8 +245,8 @@ message Quorum {
   bool configured = 3;
 }
 
-// LockoutMode is what happens after 3 consecutive failures within 15
-// minutes (NIST SP 800-53 AC-7).
+// LockoutMode is what happens after the policy's lockout_max_failures
+// consecutive failures within 15 minutes (NIST SP 800-53 AC-7).
 enum LockoutMode {
   LOCKOUT_MODE_UNSPECIFIED = 0;
   // LOCKOUT_MODE_TIMED: locked for 15 minutes (the default).
@@ -267,6 +267,13 @@ message AccessPolicy {
   // ssh_key_valid_days is an issued SSH key's default validity (1 to
   // 1825, default 365).
   int32 ssh_key_valid_days = 4;
+  // lockout_max_failures is the consecutive failures within 15 minutes
+  // that lock an account: 3, 4 or 5 (default 5). A wrong password and a
+  // wrong authenticator code count toward the same limit. SetAccessPolicy
+  // takes 0 as the default; any other value is refused (ACCESS_POLICY).
+  // A lower limit applies from the next failure and locks no one by
+  // itself.
+  int32 lockout_max_failures = 5;
 }
 
 message ListAdminsRequest {}

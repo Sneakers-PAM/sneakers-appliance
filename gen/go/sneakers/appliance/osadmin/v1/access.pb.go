@@ -29,8 +29,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// LockoutMode is what happens after 3 consecutive failures within 15
-// minutes (NIST SP 800-53 AC-7).
+// LockoutMode is what happens after the policy's lockout_max_failures
+// consecutive failures within 15 minutes (NIST SP 800-53 AC-7).
 type LockoutMode int32
 
 const (
@@ -646,8 +646,15 @@ type AccessPolicy struct {
 	// ssh_key_valid_days is an issued SSH key's default validity (1 to
 	// 1825, default 365).
 	SshKeyValidDays int32 `protobuf:"varint,4,opt,name=ssh_key_valid_days,json=sshKeyValidDays,proto3" json:"ssh_key_valid_days,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// lockout_max_failures is the consecutive failures within 15 minutes
+	// that lock an account: 3, 4 or 5 (default 5). A wrong password and a
+	// wrong authenticator code count toward the same limit. SetAccessPolicy
+	// takes 0 as the default; any other value is refused (ACCESS_POLICY).
+	// A lower limit applies from the next failure and locks no one by
+	// itself.
+	LockoutMaxFailures int32 `protobuf:"varint,5,opt,name=lockout_max_failures,json=lockoutMaxFailures,proto3" json:"lockout_max_failures,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *AccessPolicy) Reset() {
@@ -704,6 +711,13 @@ func (x *AccessPolicy) GetRootSessionMinutes() int32 {
 func (x *AccessPolicy) GetSshKeyValidDays() int32 {
 	if x != nil {
 		return x.SshKeyValidDays
+	}
+	return 0
+}
+
+func (x *AccessPolicy) GetLockoutMaxFailures() int32 {
+	if x != nil {
+		return x.LockoutMaxFailures
 	}
 	return 0
 }
@@ -2469,12 +2483,13 @@ const file_sneakers_appliance_osadmin_v1_access_proto_rawDesc = "" +
 	"\brequired\x18\x02 \x01(\x05R\brequired\x12\x1e\n" +
 	"\n" +
 	"configured\x18\x03 \x01(\bR\n" +
-	"configured\"\xe8\x01\n" +
+	"configured\"\x9a\x02\n" +
 	"\fAccessPolicy\x12M\n" +
 	"\flockout_mode\x18\x01 \x01(\x0e2*.sneakers.appliance.osadmin.v1.LockoutModeR\vlockoutMode\x12*\n" +
 	"\x11root_code_minutes\x18\x02 \x01(\x05R\x0frootCodeMinutes\x120\n" +
 	"\x14root_session_minutes\x18\x03 \x01(\x05R\x12rootSessionMinutes\x12+\n" +
-	"\x12ssh_key_valid_days\x18\x04 \x01(\x05R\x0fsshKeyValidDays\"\x13\n" +
+	"\x12ssh_key_valid_days\x18\x04 \x01(\x05R\x0fsshKeyValidDays\x120\n" +
+	"\x14lockout_max_failures\x18\x05 \x01(\x05R\x12lockoutMaxFailures\"\x13\n" +
 	"\x11ListAdminsRequest\"\xa7\x05\n" +
 	"\x12ListAdminsResponse\x12<\n" +
 	"\x06admins\x18\x01 \x03(\v2$.sneakers.appliance.osadmin.v1.AdminR\x06admins\x12C\n" +

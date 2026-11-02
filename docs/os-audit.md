@@ -82,7 +82,7 @@ than a chunk of unlogged bytes, or bytes after its end, doesn't. Only owners can
 |---|---|---|
 | `signin.password` | accessd | a :8443 sign-in with the name, password and TOTP code (or a refusal) |
 | `signin.step-up` | accessd | a fresh TOTP code for a sensitive action |
-| `access.lockout`, `access.throttle` | accessd | an account locks after 3 failures, or a source is held off after 10 |
+| `access.lockout`, `access.throttle` | accessd | an account locks after the owner's limit of failures (3, 4 or 5, default 5), or a source is held off after 10 |
 | `access.admin.unlock` | accessd | an owner unlocks an account |
 | `ssh.login`, `ssh.logout` | accessd | the closed shell's TOTP check, and its end |
 | `ssh.login` (`refused`, `ACCESS_KEY_NO_CERTIFICATE`) | sneakers-sshd-run | a box-issued key sent without its certificate, read from sshd's log ([ssh-and-elevation.md](ssh-and-elevation.md#a-key-without-its-certificate)) |

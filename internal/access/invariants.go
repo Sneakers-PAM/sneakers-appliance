@@ -93,6 +93,9 @@ func checkPolicy(p Policy) error {
 	default:
 		return codes.New(codes.AccessPolicy, "the lockout mode is %s or %s, not %q", LockoutTimed, LockoutUntilUnlocked, p.LockoutMode)
 	}
+	if p.LockoutMaxFailures != 0 && (p.LockoutMaxFailures < MinLockoutFailures || p.LockoutMaxFailures > MaxLockoutFailures) {
+		return codes.New(codes.AccessPolicy, "an account locks after %d to %d failures, not %d", MinLockoutFailures, MaxLockoutFailures, p.LockoutMaxFailures)
+	}
 	if p.RootCodeMinutes < MinRootMinutes || p.RootCodeMinutes > MaxRootMinutes {
 		return codes.New(codes.AccessPolicy, "a root-shell code lasts %d to %d minutes", MinRootMinutes, MaxRootMinutes)
 	}

@@ -34,7 +34,7 @@ discarded when the store opens.
       "label": "offline safe", "set": "...", "setBy": "alice" }
   ],
   "quorum": { "members": ["alice"], "required": 1 },
-  "accessPolicy": { "lockoutMode": "timed", "rootCodeMinutes": 10, "rootSessionMinutes": 10, "sshKeyValidDays": 365 },
+  "accessPolicy": { "lockoutMode": "timed", "lockoutMaxFailures": 5, "rootCodeMinutes": 10, "rootSessionMinutes": 10, "sshKeyValidDays": 365 },
   "nextSerial": 4,
   "revokedKeys": [
     { "fingerprint": "SHA256:...", "publicKey": "ssh-ed25519 AAAA...", "admin": "bob", "revoked": "...",
@@ -75,10 +75,17 @@ only the box's host certificates
 The same book (`/var/lib/sneakers/access/lockout.json`) covers :8443 sign-in, step-up, the closed
 shell's TOTP check, the root-shell code page and wrong root-shell codes:
 
-- 3 consecutive failures within 15 minutes lock the account for 15 minutes (NIST SP 800-53 AC-7),
-  or, with the owner's `LOCKOUT_MODE_UNTIL_UNLOCKED`, until an owner unlocks it
-  (`AccessService.UnlockAdmin`). A success resets the count. A locked account refuses even the right
-  credentials (`ACCESS_LOCKED`).
+- The owner's limit of consecutive failures within 15 minutes locks the account for 15 minutes (NIST
+  SP 800-53 AC-7), or, with the owner's `LOCKOUT_MODE_UNTIL_UNLOCKED`, until an owner unlocks it
+  (`AccessService.UnlockAdmin`). The limit is the access policy's `lockout_max_failures`: 3, 4 or 5,
+  default 5 (`SetAccessPolicy` takes 0 as the default and refuses anything else with
+  `ACCESS_POLICY`); a store saved before the setting existed reads as 5. A wrong password, a wrong or
+  reused authenticator code and a wrong root-shell code all count toward the same limit, so a wrong
+  password then a wrong code is two failures. Each failure is judged by the limit in force when it
+  happens: lowering the limit locks no one by itself, and applies from the next failure. A success
+  resets the count. A locked account refuses even the right credentials (`ACCESS_LOCKED`), and the
+  refusal says how many failures caused the lock. Changing the limit is audited with the rest of the
+  policy (`access.policy.set`, detail `lockoutMaxFailures`).
 - 10 failures from one address within 15 minutes, whatever names were tried, hold that address off
   for 15 minutes (`ACCESS_THROTTLED`).
 - Every lock (`access.lockout`), throttle (`access.throttle`) and unlock (`access.admin.unlock`) is
