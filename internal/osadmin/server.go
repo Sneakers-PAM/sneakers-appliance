@@ -329,7 +329,6 @@ type Handlers struct {
 	Elevation osadminv1connect.ElevationServiceHandler
 	Product   osadminv1connect.ProductServiceHandler
 	Mcp       osadminv1connect.McpServiceHandler
-	Telemetry osadminv1connect.TelemetryServiceHandler
 	Upgrade   osadminv1connect.UpgradeServiceHandler
 }
 
@@ -337,7 +336,7 @@ type Handlers struct {
 func (s *Server) Handlers() Handlers {
 	return Handlers{
 		Status: &status{s: s}, Setup: &setup{s: s}, Access: &accessSvc{s: s}, Network: &networkSvc{s: s},
-		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s}, Mcp: &mcpSvc{s: s}, Telemetry: &telemetrySvc{s: s}, Upgrade: &upgradeSvc{s: s},
+		Elevation: &elevationSvc{s: s}, Product: &productSvc{s: s}, Mcp: &mcpSvc{s: s}, Upgrade: &upgradeSvc{s: s},
 	}
 }
 

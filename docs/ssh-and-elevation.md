@@ -254,7 +254,6 @@ naming it anyway answers `NOT_AVAILABLE`. The switches are the ones the
 product's `product.yaml` declares (`mcp` and `machine-api`), the same ones the MCP card on :8443
 sets: accessd runs `McpService.GetMcp` and `McpService.SetMcp` as the login's admin, so the role
 is the same (admin) and a change writes the same `mcp.set` audit entry, with the `ssh` surface.
-`<product> telemetry` does the same for the collector ([product-telemetry.md](product-telemetry.md)).
 
 The card and the command share one queue. One change runs at a time, and a request made during one
 replaces any that was waiting, so on, off and on in quick succession end on, with one `mcp.set`

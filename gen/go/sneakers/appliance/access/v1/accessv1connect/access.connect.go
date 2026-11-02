@@ -91,15 +91,6 @@ const (
 	AccessServiceGetMcpProcedure = "/sneakers.appliance.access.v1.AccessService/GetMcp"
 	// AccessServiceSetMcpProcedure is the fully-qualified name of the AccessService's SetMcp RPC.
 	AccessServiceSetMcpProcedure = "/sneakers.appliance.access.v1.AccessService/SetMcp"
-	// AccessServiceGetTelemetryProcedure is the fully-qualified name of the AccessService's
-	// GetTelemetry RPC.
-	AccessServiceGetTelemetryProcedure = "/sneakers.appliance.access.v1.AccessService/GetTelemetry"
-	// AccessServiceSetTelemetryProcedure is the fully-qualified name of the AccessService's
-	// SetTelemetry RPC.
-	AccessServiceSetTelemetryProcedure = "/sneakers.appliance.access.v1.AccessService/SetTelemetry"
-	// AccessServiceRetryTelemetryRestartProcedure is the fully-qualified name of the AccessService's
-	// RetryTelemetryRestart RPC.
-	AccessServiceRetryTelemetryRestartProcedure = "/sneakers.appliance.access.v1.AccessService/RetryTelemetryRestart"
 	// AccessServiceGetUpdateChannelProcedure is the fully-qualified name of the AccessService's
 	// GetUpdateChannel RPC.
 	AccessServiceGetUpdateChannelProcedure = "/sneakers.appliance.access.v1.AccessService/GetUpdateChannel"
@@ -280,11 +271,6 @@ type AccessServiceClient interface {
 	// and audit.
 	GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error)
 	SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error)
-	// GetTelemetry, SetTelemetry and RetryTelemetryRestart are the closed
-	// shell's "<product> telemetry": osadmin's, run as the login's admin.
-	GetTelemetry(context.Context, *connect.Request[v1.GetTelemetryRequest]) (*connect.Response[v1.GetTelemetryResponse], error)
-	SetTelemetry(context.Context, *connect.Request[v1.SetTelemetryRequest]) (*connect.Response[v1.SetTelemetryResponse], error)
-	RetryTelemetryRestart(context.Context, *connect.Request[v1.RetryTelemetryRestartRequest]) (*connect.Response[v1.RetryTelemetryRestartResponse], error)
 	// GetUpdateChannel and SetUpdateChannel are the closed shell's "updates":
 	// osadmin's UpgradeService.GetUpgrades and SetUpgradePolicy run as the
 	// login's admin, so the shell shows and sets the same channel (and, on a
@@ -404,25 +390,6 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(accessServiceMethods.ByName("SetMcp")),
 			connect.WithClientOptions(opts...),
 		),
-		getTelemetry: connect.NewClient[v1.GetTelemetryRequest, v1.GetTelemetryResponse](
-			httpClient,
-			baseURL+AccessServiceGetTelemetryProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("GetTelemetry")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		setTelemetry: connect.NewClient[v1.SetTelemetryRequest, v1.SetTelemetryResponse](
-			httpClient,
-			baseURL+AccessServiceSetTelemetryProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("SetTelemetry")),
-			connect.WithClientOptions(opts...),
-		),
-		retryTelemetryRestart: connect.NewClient[v1.RetryTelemetryRestartRequest, v1.RetryTelemetryRestartResponse](
-			httpClient,
-			baseURL+AccessServiceRetryTelemetryRestartProcedure,
-			connect.WithSchema(accessServiceMethods.ByName("RetryTelemetryRestart")),
-			connect.WithClientOptions(opts...),
-		),
 		getUpdateChannel: connect.NewClient[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse](
 			httpClient,
 			baseURL+AccessServiceGetUpdateChannelProcedure,
@@ -501,32 +468,29 @@ func NewAccessServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // accessServiceClient implements AccessServiceClient.
 type accessServiceClient struct {
-	getStatus             *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
-	listAdmins            *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
-	addAdmin              *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
-	removeAdmin           *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
-	listKeys              *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
-	addKey                *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
-	removeKey             *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
-	addRecoveryKey        *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
-	getExposedValue       *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
-	getMcp                *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
-	setMcp                *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
-	getTelemetry          *connect.Client[v1.GetTelemetryRequest, v1.GetTelemetryResponse]
-	setTelemetry          *connect.Client[v1.SetTelemetryRequest, v1.SetTelemetryResponse]
-	retryTelemetryRestart *connect.Client[v1.RetryTelemetryRestartRequest, v1.RetryTelemetryRestartResponse]
-	getUpdateChannel      *connect.Client[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse]
-	setUpdateChannel      *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
-	cleanUpDisk           *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
-	resetProduct          *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
-	reinstallProduct      *connect.Client[v1.ReinstallProductRequest, v1.ReinstallProductResponse]
-	listKeptDumps         *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
-	removeKeptDump        *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
-	listBackups           *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
-	createBackup          *connect.Client[v1.CreateBackupRequest, v1.CreateBackupResponse]
-	removeBackup          *connect.Client[v1.RemoveBackupRequest, v1.RemoveBackupResponse]
-	restoreBackup         *connect.Client[v1.RestoreBackupRequest, v1.RestoreBackupResponse]
-	prepareBackupExport   *connect.Client[v1.PrepareBackupExportRequest, v1.PrepareBackupExportResponse]
+	getStatus           *connect.Client[v1.GetStatusRequest, v1.GetStatusResponse]
+	listAdmins          *connect.Client[v1.ListAdminsRequest, v1.ListAdminsResponse]
+	addAdmin            *connect.Client[v1.AddAdminRequest, v1.AddAdminResponse]
+	removeAdmin         *connect.Client[v1.RemoveAdminRequest, v1.RemoveAdminResponse]
+	listKeys            *connect.Client[v1.ListKeysRequest, v1.ListKeysResponse]
+	addKey              *connect.Client[v1.AddKeyRequest, v1.AddKeyResponse]
+	removeKey           *connect.Client[v1.RemoveKeyRequest, v1.RemoveKeyResponse]
+	addRecoveryKey      *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	getExposedValue     *connect.Client[v1.GetExposedValueRequest, v1.GetExposedValueResponse]
+	getMcp              *connect.Client[v1.GetMcpRequest, v1.GetMcpResponse]
+	setMcp              *connect.Client[v1.SetMcpRequest, v1.SetMcpResponse]
+	getUpdateChannel    *connect.Client[v1.GetUpdateChannelRequest, v1.GetUpdateChannelResponse]
+	setUpdateChannel    *connect.Client[v1.SetUpdateChannelRequest, v1.SetUpdateChannelResponse]
+	cleanUpDisk         *connect.Client[v1.CleanUpDiskRequest, v1.CleanUpDiskResponse]
+	resetProduct        *connect.Client[v1.ResetProductRequest, v1.ResetProductResponse]
+	reinstallProduct    *connect.Client[v1.ReinstallProductRequest, v1.ReinstallProductResponse]
+	listKeptDumps       *connect.Client[v1.ListKeptDumpsRequest, v1.ListKeptDumpsResponse]
+	removeKeptDump      *connect.Client[v1.RemoveKeptDumpRequest, v1.RemoveKeptDumpResponse]
+	listBackups         *connect.Client[v1.ListBackupsRequest, v1.ListBackupsResponse]
+	createBackup        *connect.Client[v1.CreateBackupRequest, v1.CreateBackupResponse]
+	removeBackup        *connect.Client[v1.RemoveBackupRequest, v1.RemoveBackupResponse]
+	restoreBackup       *connect.Client[v1.RestoreBackupRequest, v1.RestoreBackupResponse]
+	prepareBackupExport *connect.Client[v1.PrepareBackupExportRequest, v1.PrepareBackupExportResponse]
 }
 
 // GetStatus calls sneakers.appliance.access.v1.AccessService.GetStatus.
@@ -584,21 +548,6 @@ func (c *accessServiceClient) GetMcp(ctx context.Context, req *connect.Request[v
 // SetMcp calls sneakers.appliance.access.v1.AccessService.SetMcp.
 func (c *accessServiceClient) SetMcp(ctx context.Context, req *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error) {
 	return c.setMcp.CallUnary(ctx, req)
-}
-
-// GetTelemetry calls sneakers.appliance.access.v1.AccessService.GetTelemetry.
-func (c *accessServiceClient) GetTelemetry(ctx context.Context, req *connect.Request[v1.GetTelemetryRequest]) (*connect.Response[v1.GetTelemetryResponse], error) {
-	return c.getTelemetry.CallUnary(ctx, req)
-}
-
-// SetTelemetry calls sneakers.appliance.access.v1.AccessService.SetTelemetry.
-func (c *accessServiceClient) SetTelemetry(ctx context.Context, req *connect.Request[v1.SetTelemetryRequest]) (*connect.Response[v1.SetTelemetryResponse], error) {
-	return c.setTelemetry.CallUnary(ctx, req)
-}
-
-// RetryTelemetryRestart calls sneakers.appliance.access.v1.AccessService.RetryTelemetryRestart.
-func (c *accessServiceClient) RetryTelemetryRestart(ctx context.Context, req *connect.Request[v1.RetryTelemetryRestartRequest]) (*connect.Response[v1.RetryTelemetryRestartResponse], error) {
-	return c.retryTelemetryRestart.CallUnary(ctx, req)
 }
 
 // GetUpdateChannel calls sneakers.appliance.access.v1.AccessService.GetUpdateChannel.
@@ -692,11 +641,6 @@ type AccessServiceHandler interface {
 	// and audit.
 	GetMcp(context.Context, *connect.Request[v1.GetMcpRequest]) (*connect.Response[v1.GetMcpResponse], error)
 	SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error)
-	// GetTelemetry, SetTelemetry and RetryTelemetryRestart are the closed
-	// shell's "<product> telemetry": osadmin's, run as the login's admin.
-	GetTelemetry(context.Context, *connect.Request[v1.GetTelemetryRequest]) (*connect.Response[v1.GetTelemetryResponse], error)
-	SetTelemetry(context.Context, *connect.Request[v1.SetTelemetryRequest]) (*connect.Response[v1.SetTelemetryResponse], error)
-	RetryTelemetryRestart(context.Context, *connect.Request[v1.RetryTelemetryRestartRequest]) (*connect.Response[v1.RetryTelemetryRestartResponse], error)
 	// GetUpdateChannel and SetUpdateChannel are the closed shell's "updates":
 	// osadmin's UpgradeService.GetUpgrades and SetUpgradePolicy run as the
 	// login's admin, so the shell shows and sets the same channel (and, on a
@@ -812,25 +756,6 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(accessServiceMethods.ByName("SetMcp")),
 		connect.WithHandlerOptions(opts...),
 	)
-	accessServiceGetTelemetryHandler := connect.NewUnaryHandler(
-		AccessServiceGetTelemetryProcedure,
-		svc.GetTelemetry,
-		connect.WithSchema(accessServiceMethods.ByName("GetTelemetry")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceSetTelemetryHandler := connect.NewUnaryHandler(
-		AccessServiceSetTelemetryProcedure,
-		svc.SetTelemetry,
-		connect.WithSchema(accessServiceMethods.ByName("SetTelemetry")),
-		connect.WithHandlerOptions(opts...),
-	)
-	accessServiceRetryTelemetryRestartHandler := connect.NewUnaryHandler(
-		AccessServiceRetryTelemetryRestartProcedure,
-		svc.RetryTelemetryRestart,
-		connect.WithSchema(accessServiceMethods.ByName("RetryTelemetryRestart")),
-		connect.WithHandlerOptions(opts...),
-	)
 	accessServiceGetUpdateChannelHandler := connect.NewUnaryHandler(
 		AccessServiceGetUpdateChannelProcedure,
 		svc.GetUpdateChannel,
@@ -928,12 +853,6 @@ func NewAccessServiceHandler(svc AccessServiceHandler, opts ...connect.HandlerOp
 			accessServiceGetMcpHandler.ServeHTTP(w, r)
 		case AccessServiceSetMcpProcedure:
 			accessServiceSetMcpHandler.ServeHTTP(w, r)
-		case AccessServiceGetTelemetryProcedure:
-			accessServiceGetTelemetryHandler.ServeHTTP(w, r)
-		case AccessServiceSetTelemetryProcedure:
-			accessServiceSetTelemetryHandler.ServeHTTP(w, r)
-		case AccessServiceRetryTelemetryRestartProcedure:
-			accessServiceRetryTelemetryRestartHandler.ServeHTTP(w, r)
 		case AccessServiceGetUpdateChannelProcedure:
 			accessServiceGetUpdateChannelHandler.ServeHTTP(w, r)
 		case AccessServiceSetUpdateChannelProcedure:
@@ -1009,18 +928,6 @@ func (UnimplementedAccessServiceHandler) GetMcp(context.Context, *connect.Reques
 
 func (UnimplementedAccessServiceHandler) SetMcp(context.Context, *connect.Request[v1.SetMcpRequest]) (*connect.Response[v1.SetMcpResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.SetMcp is not implemented"))
-}
-
-func (UnimplementedAccessServiceHandler) GetTelemetry(context.Context, *connect.Request[v1.GetTelemetryRequest]) (*connect.Response[v1.GetTelemetryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.GetTelemetry is not implemented"))
-}
-
-func (UnimplementedAccessServiceHandler) SetTelemetry(context.Context, *connect.Request[v1.SetTelemetryRequest]) (*connect.Response[v1.SetTelemetryResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.SetTelemetry is not implemented"))
-}
-
-func (UnimplementedAccessServiceHandler) RetryTelemetryRestart(context.Context, *connect.Request[v1.RetryTelemetryRestartRequest]) (*connect.Response[v1.RetryTelemetryRestartResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.AccessService.RetryTelemetryRestart is not implemented"))
 }
 
 func (UnimplementedAccessServiceHandler) GetUpdateChannel(context.Context, *connect.Request[v1.GetUpdateChannelRequest]) (*connect.Response[v1.GetUpdateChannelResponse], error) {

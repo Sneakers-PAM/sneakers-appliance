@@ -32,7 +32,6 @@ Its commands:
 - `<product> mcp`: Show or set the MCP switch, the one the MCP card on :8443 sets
 - `<product> reinstall`: Install the installed version again, keeping its data (an owner, with a new authenticator code)
 - `<product> reset`: Remove the installed product and its data (an owner, with a new authenticator code)
-- `<product> telemetry`: Show or set the OTLP collector the services export to
 
 Example:
 
@@ -43,7 +42,6 @@ Example:
   <product> mcp
   <product> reinstall
   <product> reset
-  <product> telemetry
 ```
 
 ## `<product> <value>`
@@ -305,28 +303,6 @@ Example:
 
 ```text
   <product> reset
-```
-
-## `<product> telemetry`
-
-Show or set the OTLP collector the services export to.
-
-Without arguments it shows the collector, each service's export state and the last restart. on sends traces, metrics and logs to an https endpoint, off stops them and keeps the endpoint, and either restarts the services phase by phase. retry carries a failed restart on from the phase it stopped at. No logs leave while verify is off.
-
-Offered over: SSH and console.
-
-```text
-<product> telemetry [on [<endpoint>]|off|retry] [logs=on|off] [verify=on|off]
-```
-
-Example:
-
-```text
-  <product> telemetry
-  <product> telemetry on https://collector.example.com:4317
-  <product> telemetry on logs=off
-  <product> telemetry off
-  <product> telemetry retry
 ```
 
 ## `admins`

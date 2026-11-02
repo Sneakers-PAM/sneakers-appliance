@@ -1,8 +1,8 @@
 # Product telemetry
 
 The product's services export traces, metrics and logs over OTLP to a collector an admin sets on the
-box, on :8443's **Telemetry** page in the product's section, or with `<product> telemetry` in the
-closed shell. No bundle carries a collector: the box keeps the settings on its encrypted state
+box, on :8443's **Telemetry** page in the product's section, the only place it's set: the closed
+shell has no command for it. No bundle carries a collector: the box keeps the settings on its encrypted state
 volume and hands them to the product. Export is off until an admin turns it on.
 
 > **Warning:** with **Verify the certificate** off, traces and metrics go to a collector whose
@@ -53,7 +53,7 @@ endpoint while export is off, saves without a restart.
 
 ## What each service is doing
 
-The page and `<product> telemetry` show each service as `sending`, `issue`, `off` or `unknown`. The
+The page shows each service as `sending`, `issue`, `off` or `unknown`. The
 box reads them from the gateway's `GET /telemetry-status` through the API server's service proxy, so
 they can't be read while the gateway is down, and that's all that means. A collector that's down
 shows as `issue` and doesn't fail the product's readiness.

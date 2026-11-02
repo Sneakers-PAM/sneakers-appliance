@@ -208,9 +208,6 @@ var specs = []spec{
 	{path: "mcp", use: "mcp [on|off] [machine-api=on|off]", short: "Show or set the MCP switch, the one the MCP card on :8443 sets", action: "mcp.set", origins: both, nargs: [2]int{0, 2}, product: true, run: runMcp, complete: completeMcp,
 		long:    "Without arguments it shows the installed product's MCP switch and its machine API switch. on or off sets the MCP switch; the machine API keeps its setting unless the line names it with machine-api=on or machine-api=off. The switches are the ones the product declares, the same ones the MCP card on :8443 sets, under the same role and audit. With MCP on it also shows how far the product has come up with it: starting (with what it waits for), ready, or failed. on or off answers once the product is ready with the change, or fails within about 90 seconds with what it still waits for. A request made while another is applied replaces any that was waiting: one change runs at a time, and the box ends on the last one asked for.",
 		example: "  {product} mcp\n  {product} mcp on\n  {product} mcp off machine-api=off"},
-	{path: "telemetry", use: "telemetry [on [<endpoint>]|off|retry] [logs=on|off] [verify=on|off]", short: "Show or set the OTLP collector the services export to", action: "product.telemetry.set", origins: both, nargs: [2]int{0, 4}, product: true, run: runTelemetry,
-		long:    "Without arguments it shows the collector, each service's export state and the last restart. on sends traces, metrics and logs to an https endpoint, off stops them and keeps the endpoint, and either restarts the services phase by phase. retry carries a failed restart on from the phase it stopped at. No logs leave while verify is off.",
-		example: "  {product} telemetry\n  {product} telemetry on https://collector.example.com:4317\n  {product} telemetry on logs=off\n  {product} telemetry off\n  {product} telemetry retry"},
 	{path: "reset", owner: true, short: "Remove the installed product and its data (an owner, with a new authenticator code)", action: "product.reset", origins: []Origin{OriginSSH}, product: true, run: runReset,
 		long:    "Removes the installed product and everything it holds: it stops the product in order (the database last, cleanly), removes its objects from k0s (its stacks, namespaces and volumes), stops k0s and removes its data and the secrets the box made for it. The box keeps its admins, keys, certificates, network settings, Base OS and Base Web and the OS audit log, and keeps the product's bundle as the staged one: Apply on the Product card on :8443 installs it again, and it starts with a new setup token and its own first-admin setup. Type the product's name or the box's host name to confirm, then a new code from your authenticator. Owners only, over SSH only; it takes a few minutes and is audited as product.reset. There's no undo.",
 		example: "  {product} reset"},
@@ -879,40 +876,6 @@ func runMcp(ctx context.Context, e *Env, _ *Command, args []string, _ map[string
 		api = v
 	}
 	return e.Backend.Call(ctx, Request{Action: "mcp.set", Args: []string{map[bool]string{true: "on", false: "off"}[on]}, Flags: map[string]string{"machine-api": api}})
-}
-
-// runTelemetry parses "telemetry": show, retry, on or off, with the endpoint
-// and the switches after on or off; what the line leaves out stays as saved.
-func runTelemetry(ctx context.Context, e *Env, _ *Command, args []string, _ map[string]string) (Result, error) {
-	if len(args) == 0 {
-		return e.Backend.Call(ctx, Request{Action: "telemetry.show"})
-	}
-	if args[0] == "retry" {
-		if len(args) > 1 {
-			return Result{}, codes.New(codes.ShellParse, "telemetry retry takes nothing more")
-		}
-		return e.Backend.Call(ctx, Request{Action: "telemetry.retry"})
-	}
-	on, ok := onOff(args[0])
-	if !ok {
-		return Result{}, codes.New(codes.ShellParse, "telemetry takes on, off or retry, not %q", Printable(args[0]))
-	}
-	endpoint, flags := "", map[string]string{}
-	for i, a := range args[1:] {
-		k, v, isKey := strings.Cut(a, "=")
-		switch {
-		case !isKey && i == 0 && on:
-			endpoint = a
-		case isKey && (k == "logs" || k == "verify"):
-			if _, ok := onOff(v); !ok {
-				return Result{}, codes.New(codes.ShellParse, "%s is on or off, not %q", k, Printable(v))
-			}
-			flags[k] = v
-		default:
-			return Result{}, codes.New(codes.ShellParse, "telemetry doesn't take %q there", Printable(a))
-		}
-	}
-	return e.Backend.Call(ctx, Request{Action: "telemetry.set", Args: []string{args[0], endpoint}, Flags: flags})
 }
 
 // lineReader reads the answers to a command's prompts: on the interactive
