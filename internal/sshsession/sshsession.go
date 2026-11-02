@@ -56,6 +56,9 @@ type Proc struct {
 	// Wait is how long End lets a shell go after the hang-up before it
 	// kills it; the default is five seconds.
 	Wait time.Duration
+	// EnvWait is how long a shell's empty environment is read again before
+	// it's taken as having none; the default is a second.
+	EnvWait time.Duration
 }
 
 func (p *Proc) root() string {
@@ -310,12 +313,30 @@ func (p *Proc) uid(pid int) (int, error) {
 
 // source is the client address from the SSH_CONNECTION sshd gave the
 // shell; empty when it's missing.
+//
+// Right after the exec the kernel already shows the new exe, but
+// /proc/<pid>/environ reads empty until the new image's environment is
+// set up, so an empty environ is read again, for up to EnvWait, while the
+// process is alive. sshd never starts a shell with no environment.
 func (p *Proc) source(pid int) string {
-	b, err := os.ReadFile(p.path(pid, "environ")) // #nosec G304 -- a procfs file
-	if err != nil {
-		return ""
+	deadline := time.Now().Add(p.envWait())
+	for {
+		b, err := os.ReadFile(p.path(pid, "environ")) // #nosec G304 -- a procfs file
+		if err != nil {
+			return ""
+		}
+		if len(b) > 0 {
+			return sourceIn(b)
+		}
+		if st, err := p.stat(pid); err != nil || st.state == 'Z' || st.state == 'X' || time.Now().After(deadline) {
+			return ""
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
-	for kv := range bytes.SplitSeq(b, []byte{0}) {
+}
+
+func sourceIn(environ []byte) string {
+	for kv := range bytes.SplitSeq(environ, []byte{0}) {
 		if v, ok := bytes.CutPrefix(kv, []byte("SSH_CONNECTION=")); ok {
 			if f := strings.Fields(string(v)); len(f) > 0 {
 				return f[0]
@@ -323,6 +344,13 @@ func (p *Proc) source(pid int) string {
 		}
 	}
 	return ""
+}
+
+func (p *Proc) envWait() time.Duration {
+	if p.EnvWait <= 0 {
+		return time.Second
+	}
+	return p.EnvWait
 }
 
 func (p *Proc) bootTime() (time.Time, error) {
