@@ -372,6 +372,23 @@ grep -A4 -- '- name: SMTP_PASS' "$ident" | grep -q 'name: sneakers-email' || fai
 if grep -nE 'smtp\.example\.org|smtp-[a-z]+\.box\.invalid' "$out"/*/*.yaml "$here/values.yaml" "$here/product.yaml"; then fail "an SMTP placeholder or example relay is left"; fi
 echo "ok: the mail relay comes only from the box, and the password never from a ConfigMap"
 
+# The collector's CA reaches every service that exports: each of the nine
+# Deployments mounts the sneakers-telemetry ConfigMap's OTLP_CA_PEM, read
+# only and optional, where OTEL_EXPORTER_OTLP_CERTIFICATE points
+# (boxsettings.TelemetryCAFile).
+for svc in identity vault workflow audit notify connector sshbroker gateway mcp; do
+  dep=""
+  for f in "$work"/docs/*.yaml; do
+    if grep -q '^kind: Deployment$' "$f" && grep -q "^    name: sneakers-$svc\$" "$f"; then dep="$f"; fi
+  done
+  [ -n "$dep" ] || fail "no sneakers-$svc Deployment"
+  grep -q 'mountPath: /etc/sneakers/otlp$' "$dep" || fail "sneakers-$svc doesn't mount the collector CA"
+  vol="$(grep -B8 '^ *name: otlp-ca$' "$dep")"
+  grep -q 'key: OTLP_CA_PEM' <<< "$vol" && grep -q 'name: sneakers-telemetry' <<< "$vol" || fail "sneakers-$svc's otlp-ca volume isn't the CA key of sneakers-telemetry"
+  grep -q 'optional: true' <<< "$vol" || fail "sneakers-$svc's otlp-ca volume isn't optional"
+done
+echo "ok: every service mounts the collector's CA"
+
 # Refusals.
 if CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > /dev/null 2>&1; then
   fail "rendered into a non-empty OUT"

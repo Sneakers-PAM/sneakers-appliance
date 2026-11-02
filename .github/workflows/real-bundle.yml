@@ -28,7 +28,9 @@ name: Real bundle upgrades
 # - telemetry: the box exports to a collector set on the :8443 page: a restart
 #   the lab hook makes fail stops at its phase and a retry carries on, the
 #   services restart in the order of the phases, the product stays up, and
-#   canary values sent through the gateway never reach the collector.
+#   canary values sent through the gateway never reach the collector; then,
+#   with the collector's CA set and verification on, logs arrive too, still
+#   without the canaries.
 # - control: the upgrade leg with the base from before the quiesce fixes
 #   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
 #   the run. Pull requests and runs by hand only.

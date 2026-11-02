@@ -135,10 +135,28 @@ func (e Email) Check() error {
 
 // pool is the system roots and the relay's CA.
 func (e Email) pool() (*x509.CertPool, error) {
-	if len(e.CA) > maxCA {
-		return nil, refused("the relay CA is over %d KiB", maxCA>>10)
+	certs, err := parseCA(e.CA, "relay", refused)
+	if err != nil {
+		return nil, err
 	}
-	rest := []byte(e.CA)
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	for _, c := range certs {
+		pool.AddCert(c)
+	}
+	return pool, nil
+}
+
+// parseCA is the PEM certificates of a CA setting (what names whose),
+// refused through fail when it's too big, holds none, or one doesn't
+// parse.
+func parseCA(text, what string, fail func(string, ...any) error) ([]*x509.Certificate, error) {
+	if len(text) > maxCA {
+		return nil, fail("the %s CA is over %d KiB", what, maxCA>>10)
+	}
+	rest := []byte(text)
 	var certs []*x509.Certificate
 	for {
 		var b *pem.Block
@@ -151,21 +169,14 @@ func (e Email) pool() (*x509.CertPool, error) {
 		}
 		c, err := x509.ParseCertificate(b.Bytes)
 		if err != nil {
-			return nil, refused("the relay CA has a certificate that doesn't parse: %v", err)
+			return nil, fail("the %s CA has a certificate that doesn't parse: %v", what, err)
 		}
 		certs = append(certs, c)
 	}
 	if len(certs) == 0 {
-		return nil, refused("the relay CA holds no PEM certificate")
+		return nil, fail("the %s CA holds no PEM certificate", what)
 	}
-	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		pool = x509.NewCertPool()
-	}
-	for _, c := range certs {
-		pool.AddCert(c)
-	}
-	return pool, nil
+	return certs, nil
 }
 
 // URI is the relay as one URI, in the form Ory's courier reads:

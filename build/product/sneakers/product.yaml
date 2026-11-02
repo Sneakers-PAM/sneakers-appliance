@@ -185,9 +185,10 @@ email:
 # The services export traces, metrics and logs to the collector set on
 # :8443's Telemetry page (docs/product-telemetry.md). The box writes the
 # settings as the sneakers-telemetry ConfigMap, which every service loads
-# whole. A change restarts the services, phase by phase, without stopping
-# the product. The MCP server's own NetworkPolicy doesn't reach a collector,
-# so while export is on the box writes one that opens the collector's port.
+# whole and whose CA key it mounts as a file. A change restarts the
+# services, phase by phase, without stopping the product. The MCP server's
+# own NetworkPolicy doesn't reach a collector, so while export is on the
+# box writes one that opens the collector's port.
 telemetry:
   label: Traces, metrics and logs from every service
   status: sneakers/sneakers-gateway:9100
@@ -217,6 +218,11 @@ box_settings:
       - {key: OTEL_EXPORTER_OTLP_ENDPOINT, setting: telemetry.endpoint}
       - {key: OTLP_INSECURE_SKIP_VERIFY, setting: telemetry.skip_verify}
       - {key: OTLP_LOGS_ENABLED, setting: telemetry.logs}
+      # The collector's CA: the PEM, which every service mounts as a file
+      # (values.yaml), and the path its OTLP exporters read it from, empty
+      # while there's no CA or the collector isn't verified.
+      - {key: OTLP_CA_PEM, setting: telemetry.ca_pem}
+      - {key: OTEL_EXPORTER_OTLP_CERTIFICATE, setting: telemetry.ca_file}
 
 # The data paths the box's disk guard watches for growth (docs/disk-layout.md
 # "Keeping the disk from filling"), under /var/lib/sneakers-data, where each

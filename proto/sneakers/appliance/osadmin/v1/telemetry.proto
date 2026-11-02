@@ -51,6 +51,12 @@ message TelemetrySettings {
   bool skip_verify = 3;
   // logs exports logs as well as traces and metrics.
   bool logs = 4;
+  // ca_pem is the collector's CA, PEM (one or more certificates, at most
+  // 64 KiB); empty for none. Set, the save's handshake and every service's
+  // export check the collector's certificate against it in place of the
+  // system roots. Unused while skip_verify is on. A CA that doesn't parse
+  // is refused with TELEMETRY_INVALID.
+  string ca_pem = 5;
 }
 
 // TelemetryWorkload is one service's export state.
