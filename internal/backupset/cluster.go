@@ -151,6 +151,47 @@ func (c *Cluster) UnsetEnv(ctx context.Context, b productspec.Backups, names []s
 	return nil
 }
 
+// Env implements Kube.
+func (c *Cluster) Env(ctx context.Context, b productspec.Backups, names []string) (map[string]string, error) {
+	out, err := c.Kubectl(ctx, "get", "--namespace", b.Cluster.Namespace, c.workload(b), "-o", "json")
+	if err != nil {
+		if notFound(err) {
+			return map[string]string{}, nil
+		}
+		return nil, err
+	}
+	var w struct {
+		Spec struct {
+			Template struct {
+				Spec struct {
+					Containers []struct {
+						Name string `json:"name"`
+						Env  []struct {
+							Name  string `json:"name"`
+							Value string `json:"value"`
+						} `json:"env"`
+					} `json:"containers"`
+				} `json:"spec"`
+			} `json:"template"`
+		} `json:"spec"`
+	}
+	if err := json.Unmarshal(out, &w); err != nil {
+		return nil, fmt.Errorf("%s doesn't read: %w", c.workload(b), err)
+	}
+	got := map[string]string{}
+	for _, ct := range w.Spec.Template.Spec.Containers {
+		if ct.Name != b.Cluster.ContainerOrDefault() {
+			continue
+		}
+		for _, e := range ct.Env {
+			if slices.Contains(names, e.Name) {
+				got[e.Name] = e.Value
+			}
+		}
+	}
+	return got, nil
+}
+
 // ClearIdentity implements Kube.
 func (c *Cluster) ClearIdentity(ctx context.Context, b productspec.Backups) error {
 	args := []string{"annotate", "--namespace", b.Cluster.Namespace, "lease", b.Restore.IdentityLease}

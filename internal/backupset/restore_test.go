@@ -6,6 +6,7 @@ package backupset
 import (
 	"context"
 	"errors"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,15 +50,34 @@ func (k *fakeKube) Start(context.Context, productspec.Backups) error {
 }
 func (k *fakeKube) SetEnv(_ context.Context, _ productspec.Backups, env map[string]string) error {
 	k.mu.Lock()
-	k.env = env
+	if k.env == nil {
+		k.env = map[string]string{}
+	}
+	maps.Copy(k.env, env)
 	k.mu.Unlock()
 	return k.call("env")
 }
-func (k *fakeKube) UnsetEnv(context.Context, productspec.Backups, []string) error {
+func (k *fakeKube) UnsetEnv(_ context.Context, _ productspec.Backups, names []string) error {
 	k.mu.Lock()
-	k.env = nil
+	for _, n := range names {
+		delete(k.env, n)
+	}
+	if len(k.env) == 0 {
+		k.env = nil
+	}
 	k.mu.Unlock()
 	return k.call("unset")
+}
+func (k *fakeKube) Env(_ context.Context, _ productspec.Backups, names []string) (map[string]string, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	out := map[string]string{}
+	for _, n := range names {
+		if v, ok := k.env[n]; ok {
+			out[n] = v
+		}
+	}
+	return out, nil
 }
 func (k *fakeKube) ClearIdentity(context.Context, productspec.Backups) error {
 	return k.call("identity")
@@ -306,5 +326,52 @@ func TestOneRestoreAtATime(t *testing.T) {
 	}
 	if err := b.r.Request(context.Background(), "s1", "owner"); err == nil {
 		t.Fatal("a second restore was taken")
+	}
+}
+
+// The chart declares FROM itself, and the phase loop only starts a workload
+// at the template it declared, so a restore has to leave the value there.
+func TestARestorePutsBackTheEnvironmentTheClusterDeclared(t *testing.T) {
+	b := newBox(t)
+	b.k.env = map[string]string{"FROM": "declared", "KEPT": "declared"}
+	want := map[string]string{"FROM": "declared", "KEPT": "declared"}
+	if err := b.r.Request(context.Background(), "s1", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	b.settle(t)
+	if !maps.Equal(b.k.env, want) {
+		t.Fatalf("env %v, want %v", b.k.env, want)
+	}
+}
+
+func TestGoingBackPutsBackTheEnvironmentTheClusterDeclared(t *testing.T) {
+	b := newBox(t)
+	b.k.env = map[string]string{"FROM": "declared"}
+	b.k.failAt = "check"
+	if err := b.r.Request(context.Background(), "s1", "alice"); err != nil {
+		t.Fatal(err)
+	}
+	st := b.r.Ask(b.svc)
+	for i := 0; st.Busy && i < 500; i++ {
+		time.Sleep(10 * time.Millisecond)
+		st = b.r.Ask(b.svc)
+	}
+	if want := map[string]string{"FROM": "declared"}; !maps.Equal(b.k.env, want) {
+		t.Fatalf("env %v, want %v", b.k.env, want)
+	}
+}
+
+func TestClusterEnvReadsWhatTheContainerDeclares(t *testing.T) {
+	c := &Cluster{Kubectl: func(context.Context, ...string) ([]byte, error) {
+		return []byte(`{"spec":{"template":{"spec":{"containers":[
+			{"name":"sidecar","env":[{"name":"MODE","value":"other"}]},
+			{"name":"postgres","env":[{"name":"MODE","value":"init"},{"name":"OTHER","value":"x"}]}]}}}}`), nil
+	}}
+	got, err := c.Env(context.Background(), productspec.Backups{Cluster: productspec.DataCluster{Name: "db", Container: "postgres"}}, []string{"MODE", "ABSENT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"MODE": "init"}; !maps.Equal(got, want) {
+		t.Fatalf("env %v, want %v", got, want)
 	}
 }

@@ -66,6 +66,10 @@ type Journal struct {
 	Deadline time.Time `json:"deadline,omitzero"`
 	Finished time.Time `json:"finished,omitzero"`
 	Why      string    `json:"why,omitempty"`
+	// EnvRead: EnvBefore holds what the cluster declared for the restore's
+	// variables, so anything that ends the restore can put it back.
+	EnvRead   bool              `json:"env_read,omitempty"`
+	EnvBefore map[string]string `json:"env_before,omitempty"`
 }
 
 func (j Journal) active() bool {
@@ -83,6 +87,9 @@ type Kube interface {
 	// UnsetEnv removes the restore's variables. A workload that isn't
 	// there isn't an error: the phase loop places it as declared.
 	UnsetEnv(ctx context.Context, b productspec.Backups, names []string) error
+	// Env answers the values the workload declares for those of names it
+	// has.
+	Env(ctx context.Context, b productspec.Backups, names []string) (map[string]string, error)
 	// ClearIdentity removes the annotations that tie the cluster to the
 	// data moved aside.
 	ClearIdentity(ctx context.Context, b productspec.Backups) error
@@ -385,6 +392,14 @@ func (r *Restorer) restore(ctx context.Context, j *Journal, svc Services) error 
 	if err := r.Kube.ClearIdentity(ctx, b); err != nil {
 		return err
 	}
+	before, err := r.Kube.Env(ctx, b, envNames(b))
+	if err != nil {
+		return err
+	}
+	j.EnvRead, j.EnvBefore = true, before
+	if err := r.save(*j); err != nil {
+		return err
+	}
 	if err := r.Kube.SetEnv(ctx, b, b.RestoreEnv(j.Set, j.Point)); err != nil {
 		return err
 	}
@@ -416,7 +431,34 @@ func (r *Restorer) restore(ctx context.Context, j *Journal, svc Services) error 
 	if err := r.Kube.Stop(ctx, b); err != nil {
 		return err
 	}
-	return r.Kube.UnsetEnv(ctx, b, envNames(b))
+	return r.putEnvBack(ctx, b, *j)
+}
+
+// putEnvBack leaves the workload at the template it declared: the phase loop
+// only starts a workload that matches it. A declared variable is set rather
+// than removed and added, which would move it in the list.
+func (r *Restorer) putEnvBack(ctx context.Context, b productspec.Backups, j Journal) error {
+	if !j.EnvRead {
+		return nil
+	}
+	var added []string
+	for _, n := range envNames(b) {
+		if _, ok := j.EnvBefore[n]; !ok {
+			added = append(added, n)
+		}
+	}
+	if len(added) > 0 {
+		if err := r.Kube.UnsetEnv(ctx, b, added); err != nil {
+			return err
+		}
+	}
+	if len(j.EnvBefore) == 0 {
+		return nil
+	}
+	if err := r.Kube.SetEnv(ctx, b, j.EnvBefore); err != nil && !notFound(err) {
+		return err
+	}
+	return nil
 }
 
 func envNames(b productspec.Backups) []string {
@@ -439,7 +481,7 @@ func (r *Restorer) goBack(j Journal, svc Services) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), restoreBound)
 	defer cancel()
-	if err := r.back(ctx, svc); err != nil {
+	if err := r.back(ctx, svc, j); err != nil {
 		r.logger().Error(err, "backupset: going back didn't finish; the next ask tries again")
 		time.Sleep(time.Second)
 		return
@@ -453,7 +495,7 @@ func (r *Restorer) goBack(j Journal, svc Services) {
 	r.audit("product.backup.restore.failed", map[string]string{"set": j.Set, "point": j.Point, "why": j.Why})
 }
 
-func (r *Restorer) back(ctx context.Context, svc Services) error {
+func (r *Restorer) back(ctx context.Context, svc Services, j Journal) error {
 	s, err := r.Spec()
 	if err != nil {
 		return err
@@ -468,7 +510,7 @@ func (r *Restorer) back(ctx context.Context, svc Services) error {
 	if err := r.Kube.Stop(ctx, b); err != nil {
 		return err
 	}
-	if err := r.Kube.UnsetEnv(ctx, b, envNames(b)); err != nil {
+	if err := r.putEnvBack(ctx, b, j); err != nil {
 		return err
 	}
 	data, err := r.pgdata(s)
