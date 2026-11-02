@@ -28,17 +28,20 @@ import (
 // fakeSys is the box's kernel as netd sees it: links, addresses and
 // routes in memory, and a record of what netd asked for.
 type fakeSys struct {
-	mu        sync.Mutex
-	links     []netd.Link
-	addrs     map[string][]netlink.Addr
-	routes    map[string][]netlink.Route
-	ipv6      map[string]network.Mode6
-	hostname  string
-	tables    []firewall.Table
-	up        []string
-	reachErr  error
-	dnsErr    map[netip.Addr]error
-	dnsAsked  []string
+	mu       sync.Mutex
+	links    []netd.Link
+	addrs    map[string][]netlink.Addr
+	routes   map[string][]netlink.Route
+	ipv6     map[string]network.Mode6
+	hostname string
+	tables   []firewall.Table
+	up       []string
+	reachErr error
+	dnsErr   map[netip.Addr]error
+	dnsAsked []string
+	// dnsNames are the A and AAAA records LookupDNS answers with; a name
+	// that isn't there is answered as not found.
+	dnsNames  map[string][]netip.Addr
 	notices   chan struct{}
 	subscribe int
 	// linkGate, when set, holds the next LinkUp until it is released.
@@ -192,6 +195,20 @@ func (f *fakeSys) QueryDNS(_ context.Context, server netip.Addr, name string) er
 	defer f.mu.Unlock()
 	f.dnsAsked = append(f.dnsAsked, server.String()+" "+name)
 	return f.dnsErr[server]
+}
+
+func (f *fakeSys) LookupDNS(_ context.Context, server netip.Addr, name string) ([]netip.Addr, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dnsAsked = append(f.dnsAsked, server.String()+" lookup "+name)
+	if err := f.dnsErr[server]; err != nil {
+		return nil, err
+	}
+	a, ok := f.dnsNames[name]
+	if !ok || len(a) == 0 {
+		return nil, netd.ErrNoSuchName
+	}
+	return slices.Clone(a), nil
 }
 
 func (f *fakeSys) Subscribe(ctx context.Context) (<-chan struct{}, error) {

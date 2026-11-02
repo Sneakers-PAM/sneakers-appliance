@@ -157,6 +157,68 @@ func (CodeKind) EnumDescriptor() ([]byte, []int) {
 	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{1}
 }
 
+// HostnameCheck is what the box's DNS servers say about a host name.
+type HostnameCheck int32
+
+const (
+	HostnameCheck_HOSTNAME_CHECK_UNSPECIFIED HostnameCheck = 0
+	// HOSTNAME_CHECK_MATCH: one of the addresses is the box's management
+	// address.
+	HostnameCheck_HOSTNAME_CHECK_MATCH HostnameCheck = 1
+	// HOSTNAME_CHECK_ELSEWHERE: the name points at other addresses only.
+	HostnameCheck_HOSTNAME_CHECK_ELSEWHERE HostnameCheck = 2
+	// HOSTNAME_CHECK_NOT_FOUND: the name isn't in DNS, or has no A or AAAA
+	// record.
+	HostnameCheck_HOSTNAME_CHECK_NOT_FOUND HostnameCheck = 3
+	// HOSTNAME_CHECK_DNS_DOWN: none of the box's DNS servers answered.
+	HostnameCheck_HOSTNAME_CHECK_DNS_DOWN HostnameCheck = 4
+)
+
+// Enum value maps for HostnameCheck.
+var (
+	HostnameCheck_name = map[int32]string{
+		0: "HOSTNAME_CHECK_UNSPECIFIED",
+		1: "HOSTNAME_CHECK_MATCH",
+		2: "HOSTNAME_CHECK_ELSEWHERE",
+		3: "HOSTNAME_CHECK_NOT_FOUND",
+		4: "HOSTNAME_CHECK_DNS_DOWN",
+	}
+	HostnameCheck_value = map[string]int32{
+		"HOSTNAME_CHECK_UNSPECIFIED": 0,
+		"HOSTNAME_CHECK_MATCH":       1,
+		"HOSTNAME_CHECK_ELSEWHERE":   2,
+		"HOSTNAME_CHECK_NOT_FOUND":   3,
+		"HOSTNAME_CHECK_DNS_DOWN":    4,
+	}
+)
+
+func (x HostnameCheck) Enum() *HostnameCheck {
+	p := new(HostnameCheck)
+	*p = x
+	return p
+}
+
+func (x HostnameCheck) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HostnameCheck) Descriptor() protoreflect.EnumDescriptor {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_enumTypes[2].Descriptor()
+}
+
+func (HostnameCheck) Type() protoreflect.EnumType {
+	return &file_sneakers_appliance_osadmin_v1_setup_proto_enumTypes[2]
+}
+
+func (x HostnameCheck) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HostnameCheck.Descriptor instead.
+func (HostnameCheck) EnumDescriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{2}
+}
+
 type RecoveryKey struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Fingerprint   string                 `protobuf:"bytes,1,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
@@ -300,7 +362,10 @@ type GetSetupResponse struct {
 	// code_session_expires is when the code session ends unless used.
 	CodeSessionExpires *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=code_session_expires,json=codeSessionExpires,proto3" json:"code_session_expires,omitempty"`
 	// first_admin is set once the first admin exists.
-	FirstAdmin    string `protobuf:"bytes,15,opt,name=first_admin,json=firstAdmin,proto3" json:"first_admin,omitempty"`
+	FirstAdmin string `protobuf:"bytes,15,opt,name=first_admin,json=firstAdmin,proto3" json:"first_admin,omitempty"`
+	// hostname is the box's host name now: the one set, or the one DHCP
+	// gave; empty when it has none. The network step starts with it.
+	Hostname      string `protobuf:"bytes,16,opt,name=hostname,proto3" json:"hostname,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -436,6 +501,13 @@ func (x *GetSetupResponse) GetCodeSessionExpires() *timestamppb.Timestamp {
 func (x *GetSetupResponse) GetFirstAdmin() string {
 	if x != nil {
 		return x.FirstAdmin
+	}
+	return ""
+}
+
+func (x *GetSetupResponse) GetHostname() string {
+	if x != nil {
+		return x.Hostname
 	}
 	return ""
 }
@@ -1690,6 +1762,338 @@ func (x *FinishResponse) GetProductSetupUrl() string {
 	return ""
 }
 
+type CheckHostnameRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hostname      string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckHostnameRequest) Reset() {
+	*x = CheckHostnameRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckHostnameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckHostnameRequest) ProtoMessage() {}
+
+func (x *CheckHostnameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckHostnameRequest.ProtoReflect.Descriptor instead.
+func (*CheckHostnameRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *CheckHostnameRequest) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+// HostnameAddress is one address a host name resolves to.
+type HostnameAddress struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Address string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	// this_box: it's one of the box's management addresses.
+	ThisBox       bool `protobuf:"varint,2,opt,name=this_box,json=thisBox,proto3" json:"this_box,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HostnameAddress) Reset() {
+	*x = HostnameAddress{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HostnameAddress) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HostnameAddress) ProtoMessage() {}
+
+func (x *HostnameAddress) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HostnameAddress.ProtoReflect.Descriptor instead.
+func (*HostnameAddress) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *HostnameAddress) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *HostnameAddress) GetThisBox() bool {
+	if x != nil {
+		return x.ThisBox
+	}
+	return false
+}
+
+type CheckHostnameResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// hostname is the name as the box keeps it: lower case, no final dot.
+	Hostname string        `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Result   HostnameCheck `protobuf:"varint,2,opt,name=result,proto3,enum=sneakers.appliance.osadmin.v1.HostnameCheck" json:"result,omitempty"`
+	// addresses are every address the name resolves to.
+	Addresses []*HostnameAddress `protobuf:"bytes,3,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	// management_addresses are the box's own, which a match needs one of.
+	ManagementAddresses []string `protobuf:"bytes,4,rep,name=management_addresses,json=managementAddresses,proto3" json:"management_addresses,omitempty"`
+	// code is the NET_* symbol when the result isn't a match.
+	Code string `protobuf:"bytes,5,opt,name=code,proto3" json:"code,omitempty"`
+	// message is one plain sentence about the result.
+	Message       string `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckHostnameResponse) Reset() {
+	*x = CheckHostnameResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckHostnameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckHostnameResponse) ProtoMessage() {}
+
+func (x *CheckHostnameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckHostnameResponse.ProtoReflect.Descriptor instead.
+func (*CheckHostnameResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *CheckHostnameResponse) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *CheckHostnameResponse) GetResult() HostnameCheck {
+	if x != nil {
+		return x.Result
+	}
+	return HostnameCheck_HOSTNAME_CHECK_UNSPECIFIED
+}
+
+func (x *CheckHostnameResponse) GetAddresses() []*HostnameAddress {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+func (x *CheckHostnameResponse) GetManagementAddresses() []string {
+	if x != nil {
+		return x.ManagementAddresses
+	}
+	return nil
+}
+
+func (x *CheckHostnameResponse) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *CheckHostnameResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+type SetHostnameRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Hostname string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	// totp_code is a fresh 6-digit code from the owner's authenticator.
+	TotpCode      string `protobuf:"bytes,2,opt,name=totp_code,json=totpCode,proto3" json:"totp_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetHostnameRequest) Reset() {
+	*x = SetHostnameRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetHostnameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetHostnameRequest) ProtoMessage() {}
+
+func (x *SetHostnameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetHostnameRequest.ProtoReflect.Descriptor instead.
+func (*SetHostnameRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SetHostnameRequest) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *SetHostnameRequest) GetTotpCode() string {
+	if x != nil {
+		return x.TotpCode
+	}
+	return ""
+}
+
+type SetHostnameResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Hostname string                 `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	// previous is the host name the settings held before; empty when DHCP
+	// or nothing named the box.
+	Previous string `protobuf:"bytes,2,opt,name=previous,proto3" json:"previous,omitempty"`
+	// handoff_code goes to SignInService.RedeemHandoff from the new name.
+	HandoffCode    string                 `protobuf:"bytes,3,opt,name=handoff_code,json=handoffCode,proto3" json:"handoff_code,omitempty"`
+	HandoffExpires *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=handoff_expires,json=handoffExpires,proto3" json:"handoff_expires,omitempty"`
+	// url is where the page goes: https://<hostname>:8443/setup with the
+	// code in the fragment (#handoff=<code>), so it's never sent in a
+	// request line or a Referer.
+	Url string `protobuf:"bytes,5,opt,name=url,proto3" json:"url,omitempty"`
+	// fingerprint is the SHA-256 fingerprint of the certificate :8443
+	// serves now, made for the name; the browser asks about it once.
+	Fingerprint   string `protobuf:"bytes,6,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetHostnameResponse) Reset() {
+	*x = SetHostnameResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetHostnameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetHostnameResponse) ProtoMessage() {}
+
+func (x *SetHostnameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetHostnameResponse.ProtoReflect.Descriptor instead.
+func (*SetHostnameResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *SetHostnameResponse) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+func (x *SetHostnameResponse) GetPrevious() string {
+	if x != nil {
+		return x.Previous
+	}
+	return ""
+}
+
+func (x *SetHostnameResponse) GetHandoffCode() string {
+	if x != nil {
+		return x.HandoffCode
+	}
+	return ""
+}
+
+func (x *SetHostnameResponse) GetHandoffExpires() *timestamppb.Timestamp {
+	if x != nil {
+		return x.HandoffExpires
+	}
+	return nil
+}
+
+func (x *SetHostnameResponse) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *SetHostnameResponse) GetFingerprint() string {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return ""
+}
+
 var File_sneakers_appliance_osadmin_v1_setup_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
@@ -1701,7 +2105,7 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12,\n" +
 	"\x03set\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x03set\x12\x15\n" +
 	"\x06set_by\x18\x05 \x01(\tR\x05setBy\"\x11\n" +
-	"\x0fGetSetupRequest\"\xca\x05\n" +
+	"\x0fGetSetupRequest\"\xe6\x05\n" +
 	"\x10GetSetupResponse\x12\x12\n" +
 	"\x04done\x18\x01 \x01(\bR\x04done\x12O\n" +
 	"\rrecovery_keys\x18\x02 \x03(\v2*.sneakers.appliance.osadmin.v1.RecoveryKeyR\frecoveryKeys\x12*\n" +
@@ -1722,7 +2126,8 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"code_admin\x18\r \x01(\tR\tcodeAdmin\x12L\n" +
 	"\x14code_session_expires\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x12codeSessionExpires\x12\x1f\n" +
 	"\vfirst_admin\x18\x0f \x01(\tR\n" +
-	"firstAdmin\"\x95\x01\n" +
+	"firstAdmin\x12\x1a\n" +
+	"\bhostname\x18\x10 \x01(\tR\bhostname\"\x95\x01\n" +
 	"\tSetupStep\x12\x16\n" +
 	"\x06number\x18\x01 \x01(\x05R\x06number\x12@\n" +
 	"\x04kind\x18\x02 \x01(\x0e2,.sneakers.appliance.osadmin.v1.SetupStepKindR\x04kind\x12\x12\n" +
@@ -1796,7 +2201,29 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x1eAcknowledgeSingleAdminResponse\"\x0f\n" +
 	"\rFinishRequest\"<\n" +
 	"\x0eFinishResponse\x12*\n" +
-	"\x11product_setup_url\x18\x01 \x01(\tR\x0fproductSetupUrl*\xe2\x01\n" +
+	"\x11product_setup_url\x18\x01 \x01(\tR\x0fproductSetupUrl\"2\n" +
+	"\x14CheckHostnameRequest\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\"F\n" +
+	"\x0fHostnameAddress\x12\x18\n" +
+	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x19\n" +
+	"\bthis_box\x18\x02 \x01(\bR\athisBox\"\xa8\x02\n" +
+	"\x15CheckHostnameResponse\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12D\n" +
+	"\x06result\x18\x02 \x01(\x0e2,.sneakers.appliance.osadmin.v1.HostnameCheckR\x06result\x12L\n" +
+	"\taddresses\x18\x03 \x03(\v2..sneakers.appliance.osadmin.v1.HostnameAddressR\taddresses\x121\n" +
+	"\x14management_addresses\x18\x04 \x03(\tR\x13managementAddresses\x12\x12\n" +
+	"\x04code\x18\x05 \x01(\tR\x04code\x12\x18\n" +
+	"\amessage\x18\x06 \x01(\tR\amessage\"M\n" +
+	"\x12SetHostnameRequest\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1b\n" +
+	"\ttotp_code\x18\x02 \x01(\tR\btotpCode\"\xe9\x01\n" +
+	"\x13SetHostnameResponse\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1a\n" +
+	"\bprevious\x18\x02 \x01(\tR\bprevious\x12!\n" +
+	"\fhandoff_code\x18\x03 \x01(\tR\vhandoffCode\x12C\n" +
+	"\x0fhandoff_expires\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x0ehandoffExpires\x12\x10\n" +
+	"\x03url\x18\x05 \x01(\tR\x03url\x12 \n" +
+	"\vfingerprint\x18\x06 \x01(\tR\vfingerprint*\xe2\x01\n" +
 	"\rSetupStepKind\x12\x1f\n" +
 	"\x1bSETUP_STEP_KIND_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14SETUP_STEP_KIND_CODE\x10\x01\x12\x19\n" +
@@ -1809,7 +2236,13 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x15CODE_KIND_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fCODE_KIND_SETUP\x10\x01\x12\x14\n" +
 	"\x10CODE_KIND_INVITE\x10\x02\x12\x15\n" +
-	"\x11CODE_KIND_RECOVER\x10\x032\x86\x0f\n" +
+	"\x11CODE_KIND_RECOVER\x10\x03*\xa2\x01\n" +
+	"\rHostnameCheck\x12\x1e\n" +
+	"\x1aHOSTNAME_CHECK_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14HOSTNAME_CHECK_MATCH\x10\x01\x12\x1c\n" +
+	"\x18HOSTNAME_CHECK_ELSEWHERE\x10\x02\x12\x1c\n" +
+	"\x18HOSTNAME_CHECK_NOT_FOUND\x10\x03\x12\x1b\n" +
+	"\x17HOSTNAME_CHECK_DNS_DOWN\x10\x042\xba\x11\n" +
 	"\fSetupService\x12x\n" +
 	"\bGetSetup\x12..sneakers.appliance.osadmin.v1.GetSetupRequest\x1a/.sneakers.appliance.osadmin.v1.GetSetupResponse\"\v\xc2\xf3\x18\x04\x10\x01(\x01\x90\x02\x01\x12\x8c\x01\n" +
 	"\n" +
@@ -1817,7 +2250,9 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\rCheckPassword\x123.sneakers.appliance.osadmin.v1.CheckPasswordRequest\x1a4.sneakers.appliance.osadmin.v1.CheckPasswordResponse\"\v\xc2\xf3\x18\x04\x10\x01(\x01\x90\x02\x01\x12\xa4\x01\n" +
 	"\x10BeginCredentials\x126.sneakers.appliance.osadmin.v1.BeginCredentialsRequest\x1a7.sneakers.appliance.osadmin.v1.BeginCredentialsResponse\"\x1f\xc2\xf3\x18\x1b\"\x17setup.credentials.begin(\x01\x12\xb0\x01\n" +
 	"\x13CompleteCredentials\x129.sneakers.appliance.osadmin.v1.CompleteCredentialsRequest\x1a:.sneakers.appliance.osadmin.v1.CompleteCredentialsResponse\"\"\xc2\xf3\x18\x1e\"\x1asetup.credentials.complete(\x01\x12\xa2\x01\n" +
-	"\x0fAcknowledgeStep\x125.sneakers.appliance.osadmin.v1.AcknowledgeStepRequest\x1a6.sneakers.appliance.osadmin.v1.AcknowledgeStepResponse\" \xc2\xf3\x18\x1c\x10\x02\"\x16setup.step.acknowledge0\x01\x12\x9f\x01\n" +
+	"\x0fAcknowledgeStep\x125.sneakers.appliance.osadmin.v1.AcknowledgeStepRequest\x1a6.sneakers.appliance.osadmin.v1.AcknowledgeStepResponse\" \xc2\xf3\x18\x1c\x10\x02\"\x16setup.step.acknowledge0\x01\x12\x9a\x01\n" +
+	"\rCheckHostname\x123.sneakers.appliance.osadmin.v1.CheckHostnameRequest\x1a4.sneakers.appliance.osadmin.v1.CheckHostnameResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x14setup.hostname.check0\x01\x12\x94\x01\n" +
+	"\vSetHostname\x121.sneakers.appliance.osadmin.v1.SetHostnameRequest\x1a2.sneakers.appliance.osadmin.v1.SetHostnameResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x12setup.hostname.set0\x018\x01\x12\x9f\x01\n" +
 	"\x0eAddRecoveryKey\x124.sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest\x1a5.sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16setup.recovery-key.add\x12\xb3\x01\n" +
 	"\x13GenerateRecoveryKey\x129.sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest\x1a:.sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse\"%\xc2\xf3\x18!\x10\x02\x18\x01\"\x1bsetup.recovery-key.generate\x12\xab\x01\n" +
 	"\x11RemoveRecoveryKey\x127.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest\x1a8.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19setup.recovery-key.remove\x12\x9c\x01\n" +
@@ -1837,85 +2272,98 @@ func file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP() []byte {
 	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescData
 }
 
-var file_sneakers_appliance_osadmin_v1_setup_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_sneakers_appliance_osadmin_v1_setup_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_sneakers_appliance_osadmin_v1_setup_proto_goTypes = []any{
 	(SetupStepKind)(0),                     // 0: sneakers.appliance.osadmin.v1.SetupStepKind
 	(CodeKind)(0),                          // 1: sneakers.appliance.osadmin.v1.CodeKind
-	(*RecoveryKey)(nil),                    // 2: sneakers.appliance.osadmin.v1.RecoveryKey
-	(*GetSetupRequest)(nil),                // 3: sneakers.appliance.osadmin.v1.GetSetupRequest
-	(*GetSetupResponse)(nil),               // 4: sneakers.appliance.osadmin.v1.GetSetupResponse
-	(*SetupStep)(nil),                      // 5: sneakers.appliance.osadmin.v1.SetupStep
-	(*RedeemCodeRequest)(nil),              // 6: sneakers.appliance.osadmin.v1.RedeemCodeRequest
-	(*RedeemCodeResponse)(nil),             // 7: sneakers.appliance.osadmin.v1.RedeemCodeResponse
-	(*CheckPasswordRequest)(nil),           // 8: sneakers.appliance.osadmin.v1.CheckPasswordRequest
-	(*CheckPasswordResponse)(nil),          // 9: sneakers.appliance.osadmin.v1.CheckPasswordResponse
-	(*BeginCredentialsRequest)(nil),        // 10: sneakers.appliance.osadmin.v1.BeginCredentialsRequest
-	(*TotpEnrolment)(nil),                  // 11: sneakers.appliance.osadmin.v1.TotpEnrolment
-	(*BeginCredentialsResponse)(nil),       // 12: sneakers.appliance.osadmin.v1.BeginCredentialsResponse
-	(*CompleteCredentialsRequest)(nil),     // 13: sneakers.appliance.osadmin.v1.CompleteCredentialsRequest
-	(*CompleteCredentialsResponse)(nil),    // 14: sneakers.appliance.osadmin.v1.CompleteCredentialsResponse
-	(*AcknowledgeStepRequest)(nil),         // 15: sneakers.appliance.osadmin.v1.AcknowledgeStepRequest
-	(*AcknowledgeStepResponse)(nil),        // 16: sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
-	(*AddRecoveryKeyRequest)(nil),          // 17: sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest
-	(*AddRecoveryKeyResponse)(nil),         // 18: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
-	(*GenerateRecoveryKeyRequest)(nil),     // 19: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
-	(*GenerateRecoveryKeyResponse)(nil),    // 20: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
-	(*RemoveRecoveryKeyRequest)(nil),       // 21: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
-	(*RemoveRecoveryKeyResponse)(nil),      // 22: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
-	(*DownloadEscrowRequest)(nil),          // 23: sneakers.appliance.osadmin.v1.DownloadEscrowRequest
-	(*DownloadEscrowResponse)(nil),         // 24: sneakers.appliance.osadmin.v1.DownloadEscrowResponse
-	(*AcknowledgeSingleAdminRequest)(nil),  // 25: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
-	(*AcknowledgeSingleAdminResponse)(nil), // 26: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
-	(*FinishRequest)(nil),                  // 27: sneakers.appliance.osadmin.v1.FinishRequest
-	(*FinishResponse)(nil),                 // 28: sneakers.appliance.osadmin.v1.FinishResponse
-	(*timestamppb.Timestamp)(nil),          // 29: google.protobuf.Timestamp
-	(*Session)(nil),                        // 30: sneakers.appliance.osadmin.v1.Session
+	(HostnameCheck)(0),                     // 2: sneakers.appliance.osadmin.v1.HostnameCheck
+	(*RecoveryKey)(nil),                    // 3: sneakers.appliance.osadmin.v1.RecoveryKey
+	(*GetSetupRequest)(nil),                // 4: sneakers.appliance.osadmin.v1.GetSetupRequest
+	(*GetSetupResponse)(nil),               // 5: sneakers.appliance.osadmin.v1.GetSetupResponse
+	(*SetupStep)(nil),                      // 6: sneakers.appliance.osadmin.v1.SetupStep
+	(*RedeemCodeRequest)(nil),              // 7: sneakers.appliance.osadmin.v1.RedeemCodeRequest
+	(*RedeemCodeResponse)(nil),             // 8: sneakers.appliance.osadmin.v1.RedeemCodeResponse
+	(*CheckPasswordRequest)(nil),           // 9: sneakers.appliance.osadmin.v1.CheckPasswordRequest
+	(*CheckPasswordResponse)(nil),          // 10: sneakers.appliance.osadmin.v1.CheckPasswordResponse
+	(*BeginCredentialsRequest)(nil),        // 11: sneakers.appliance.osadmin.v1.BeginCredentialsRequest
+	(*TotpEnrolment)(nil),                  // 12: sneakers.appliance.osadmin.v1.TotpEnrolment
+	(*BeginCredentialsResponse)(nil),       // 13: sneakers.appliance.osadmin.v1.BeginCredentialsResponse
+	(*CompleteCredentialsRequest)(nil),     // 14: sneakers.appliance.osadmin.v1.CompleteCredentialsRequest
+	(*CompleteCredentialsResponse)(nil),    // 15: sneakers.appliance.osadmin.v1.CompleteCredentialsResponse
+	(*AcknowledgeStepRequest)(nil),         // 16: sneakers.appliance.osadmin.v1.AcknowledgeStepRequest
+	(*AcknowledgeStepResponse)(nil),        // 17: sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
+	(*AddRecoveryKeyRequest)(nil),          // 18: sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest
+	(*AddRecoveryKeyResponse)(nil),         // 19: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
+	(*GenerateRecoveryKeyRequest)(nil),     // 20: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
+	(*GenerateRecoveryKeyResponse)(nil),    // 21: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
+	(*RemoveRecoveryKeyRequest)(nil),       // 22: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
+	(*RemoveRecoveryKeyResponse)(nil),      // 23: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
+	(*DownloadEscrowRequest)(nil),          // 24: sneakers.appliance.osadmin.v1.DownloadEscrowRequest
+	(*DownloadEscrowResponse)(nil),         // 25: sneakers.appliance.osadmin.v1.DownloadEscrowResponse
+	(*AcknowledgeSingleAdminRequest)(nil),  // 26: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
+	(*AcknowledgeSingleAdminResponse)(nil), // 27: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
+	(*FinishRequest)(nil),                  // 28: sneakers.appliance.osadmin.v1.FinishRequest
+	(*FinishResponse)(nil),                 // 29: sneakers.appliance.osadmin.v1.FinishResponse
+	(*CheckHostnameRequest)(nil),           // 30: sneakers.appliance.osadmin.v1.CheckHostnameRequest
+	(*HostnameAddress)(nil),                // 31: sneakers.appliance.osadmin.v1.HostnameAddress
+	(*CheckHostnameResponse)(nil),          // 32: sneakers.appliance.osadmin.v1.CheckHostnameResponse
+	(*SetHostnameRequest)(nil),             // 33: sneakers.appliance.osadmin.v1.SetHostnameRequest
+	(*SetHostnameResponse)(nil),            // 34: sneakers.appliance.osadmin.v1.SetHostnameResponse
+	(*timestamppb.Timestamp)(nil),          // 35: google.protobuf.Timestamp
+	(*Session)(nil),                        // 36: sneakers.appliance.osadmin.v1.Session
 }
 var file_sneakers_appliance_osadmin_v1_setup_proto_depIdxs = []int32{
-	29, // 0: sneakers.appliance.osadmin.v1.RecoveryKey.set:type_name -> google.protobuf.Timestamp
-	2,  // 1: sneakers.appliance.osadmin.v1.GetSetupResponse.recovery_keys:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	5,  // 2: sneakers.appliance.osadmin.v1.GetSetupResponse.steps:type_name -> sneakers.appliance.osadmin.v1.SetupStep
+	35, // 0: sneakers.appliance.osadmin.v1.RecoveryKey.set:type_name -> google.protobuf.Timestamp
+	3,  // 1: sneakers.appliance.osadmin.v1.GetSetupResponse.recovery_keys:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	6,  // 2: sneakers.appliance.osadmin.v1.GetSetupResponse.steps:type_name -> sneakers.appliance.osadmin.v1.SetupStep
 	1,  // 3: sneakers.appliance.osadmin.v1.GetSetupResponse.code_kind:type_name -> sneakers.appliance.osadmin.v1.CodeKind
-	29, // 4: sneakers.appliance.osadmin.v1.GetSetupResponse.code_session_expires:type_name -> google.protobuf.Timestamp
+	35, // 4: sneakers.appliance.osadmin.v1.GetSetupResponse.code_session_expires:type_name -> google.protobuf.Timestamp
 	0,  // 5: sneakers.appliance.osadmin.v1.SetupStep.kind:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
 	1,  // 6: sneakers.appliance.osadmin.v1.RedeemCodeResponse.kind:type_name -> sneakers.appliance.osadmin.v1.CodeKind
-	29, // 7: sneakers.appliance.osadmin.v1.RedeemCodeResponse.expires:type_name -> google.protobuf.Timestamp
-	29, // 8: sneakers.appliance.osadmin.v1.TotpEnrolment.expires:type_name -> google.protobuf.Timestamp
-	11, // 9: sneakers.appliance.osadmin.v1.BeginCredentialsResponse.totp:type_name -> sneakers.appliance.osadmin.v1.TotpEnrolment
-	30, // 10: sneakers.appliance.osadmin.v1.CompleteCredentialsResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	35, // 7: sneakers.appliance.osadmin.v1.RedeemCodeResponse.expires:type_name -> google.protobuf.Timestamp
+	35, // 8: sneakers.appliance.osadmin.v1.TotpEnrolment.expires:type_name -> google.protobuf.Timestamp
+	12, // 9: sneakers.appliance.osadmin.v1.BeginCredentialsResponse.totp:type_name -> sneakers.appliance.osadmin.v1.TotpEnrolment
+	36, // 10: sneakers.appliance.osadmin.v1.CompleteCredentialsResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
 	0,  // 11: sneakers.appliance.osadmin.v1.AcknowledgeStepRequest.step:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
-	2,  // 12: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	2,  // 13: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
-	3,  // 14: sneakers.appliance.osadmin.v1.SetupService.GetSetup:input_type -> sneakers.appliance.osadmin.v1.GetSetupRequest
-	6,  // 15: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:input_type -> sneakers.appliance.osadmin.v1.RedeemCodeRequest
-	8,  // 16: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:input_type -> sneakers.appliance.osadmin.v1.CheckPasswordRequest
-	10, // 17: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:input_type -> sneakers.appliance.osadmin.v1.BeginCredentialsRequest
-	13, // 18: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:input_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsRequest
-	15, // 19: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepRequest
-	17, // 20: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest
-	19, // 21: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
-	21, // 22: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
-	23, // 23: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:input_type -> sneakers.appliance.osadmin.v1.DownloadEscrowRequest
-	25, // 24: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
-	27, // 25: sneakers.appliance.osadmin.v1.SetupService.Finish:input_type -> sneakers.appliance.osadmin.v1.FinishRequest
-	4,  // 26: sneakers.appliance.osadmin.v1.SetupService.GetSetup:output_type -> sneakers.appliance.osadmin.v1.GetSetupResponse
-	7,  // 27: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:output_type -> sneakers.appliance.osadmin.v1.RedeemCodeResponse
-	9,  // 28: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:output_type -> sneakers.appliance.osadmin.v1.CheckPasswordResponse
-	12, // 29: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:output_type -> sneakers.appliance.osadmin.v1.BeginCredentialsResponse
-	14, // 30: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:output_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsResponse
-	16, // 31: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
-	18, // 32: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
-	20, // 33: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
-	22, // 34: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
-	24, // 35: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:output_type -> sneakers.appliance.osadmin.v1.DownloadEscrowResponse
-	26, // 36: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
-	28, // 37: sneakers.appliance.osadmin.v1.SetupService.Finish:output_type -> sneakers.appliance.osadmin.v1.FinishResponse
-	26, // [26:38] is the sub-list for method output_type
-	14, // [14:26] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	3,  // 12: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	3,  // 13: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
+	2,  // 14: sneakers.appliance.osadmin.v1.CheckHostnameResponse.result:type_name -> sneakers.appliance.osadmin.v1.HostnameCheck
+	31, // 15: sneakers.appliance.osadmin.v1.CheckHostnameResponse.addresses:type_name -> sneakers.appliance.osadmin.v1.HostnameAddress
+	35, // 16: sneakers.appliance.osadmin.v1.SetHostnameResponse.handoff_expires:type_name -> google.protobuf.Timestamp
+	4,  // 17: sneakers.appliance.osadmin.v1.SetupService.GetSetup:input_type -> sneakers.appliance.osadmin.v1.GetSetupRequest
+	7,  // 18: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:input_type -> sneakers.appliance.osadmin.v1.RedeemCodeRequest
+	9,  // 19: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:input_type -> sneakers.appliance.osadmin.v1.CheckPasswordRequest
+	11, // 20: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:input_type -> sneakers.appliance.osadmin.v1.BeginCredentialsRequest
+	14, // 21: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:input_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsRequest
+	16, // 22: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepRequest
+	30, // 23: sneakers.appliance.osadmin.v1.SetupService.CheckHostname:input_type -> sneakers.appliance.osadmin.v1.CheckHostnameRequest
+	33, // 24: sneakers.appliance.osadmin.v1.SetupService.SetHostname:input_type -> sneakers.appliance.osadmin.v1.SetHostnameRequest
+	18, // 25: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest
+	20, // 26: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
+	22, // 27: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
+	24, // 28: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:input_type -> sneakers.appliance.osadmin.v1.DownloadEscrowRequest
+	26, // 29: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
+	28, // 30: sneakers.appliance.osadmin.v1.SetupService.Finish:input_type -> sneakers.appliance.osadmin.v1.FinishRequest
+	5,  // 31: sneakers.appliance.osadmin.v1.SetupService.GetSetup:output_type -> sneakers.appliance.osadmin.v1.GetSetupResponse
+	8,  // 32: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:output_type -> sneakers.appliance.osadmin.v1.RedeemCodeResponse
+	10, // 33: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:output_type -> sneakers.appliance.osadmin.v1.CheckPasswordResponse
+	13, // 34: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:output_type -> sneakers.appliance.osadmin.v1.BeginCredentialsResponse
+	15, // 35: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:output_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsResponse
+	17, // 36: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
+	32, // 37: sneakers.appliance.osadmin.v1.SetupService.CheckHostname:output_type -> sneakers.appliance.osadmin.v1.CheckHostnameResponse
+	34, // 38: sneakers.appliance.osadmin.v1.SetupService.SetHostname:output_type -> sneakers.appliance.osadmin.v1.SetHostnameResponse
+	19, // 39: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
+	21, // 40: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
+	23, // 41: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
+	25, // 42: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:output_type -> sneakers.appliance.osadmin.v1.DownloadEscrowResponse
+	27, // 43: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
+	29, // 44: sneakers.appliance.osadmin.v1.SetupService.Finish:output_type -> sneakers.appliance.osadmin.v1.FinishResponse
+	31, // [31:45] is the sub-list for method output_type
+	17, // [17:31] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_setup_proto_init() }
@@ -1930,8 +2378,8 @@ func file_sneakers_appliance_osadmin_v1_setup_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   27,
+			NumEnums:      3,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

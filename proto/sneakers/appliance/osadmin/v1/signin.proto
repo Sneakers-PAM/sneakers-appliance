@@ -36,6 +36,17 @@ service SignInService {
       audit: "signin.step-up"
     };
   }
+  // RedeemHandoff swaps a handoff code from SetupService.SetHostname for a
+  // new session for the same admin, with its cookie, on the name the page
+  // moved to. The code works once, for 2 minutes, while the session that
+  // got it lives; a box that restarted has forgotten it. A refusal is
+  // SETUP_HANDOFF: sign in again. It confirms nothing else.
+  rpc RedeemHandoff(RedeemHandoffRequest) returns (RedeemHandoffResponse) {
+    option (rule) = {
+      public: true
+      audit: "signin.handoff.redeem"
+    };
+  }
   // BeginSignIn is no longer served: SignIn replaced the sign-in code
   // approved over SSH. It answers Not available.
   rpc BeginSignIn(BeginSignInRequest) returns (BeginSignInResponse) {
@@ -94,6 +105,15 @@ message StepUpRequest {
 }
 
 message StepUpResponse {
+  Session session = 1;
+}
+
+message RedeemHandoffRequest {
+  string code = 1;
+}
+
+message RedeemHandoffResponse {
+  // session is the new browser session (the cookie is set too).
   Session session = 1;
 }
 

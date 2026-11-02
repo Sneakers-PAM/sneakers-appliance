@@ -210,5 +210,10 @@ func (Linux) QueryDNS(ctx context.Context, server netip.Addr, name string) error
 	return err
 }
 
+// LookupDNS asks server for name's addresses on port 53 (Lookup).
+func (Linux) LookupDNS(ctx context.Context, server netip.Addr, name string) ([]netip.Addr, error) {
+	return Lookup(ctx, netip.AddrPortFrom(server, 53), name)
+}
+
 // Subscribe watches the kernel's change notices.
 func (Linux) Subscribe(ctx context.Context) (<-chan struct{}, error) { return netlink.Subscribe(ctx) }

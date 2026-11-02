@@ -46,9 +46,13 @@ shell, the console and :8443 show the same sentence.
 | 3405 | `NET_DNS` | a DNS server didn't answer |
 | 3406 | `NET_NTP` | no NTP server gave a usable time |
 | 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
+| 3408 | `NET_NAME_NOT_FOUND` | the host name isn't in the box's DNS, or has no A or AAAA record |
+| 3409 | `NET_NAME_ELSEWHERE` | the host name points at other addresses, not the box's management address |
 | 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
 | 3502 | `SETUP_CODE` | a wrong, used or expired one-time code (setup, invitation or Recover access) |
 | 3503 | `SETUP_DONE` | setup is done: a setup-only call, or a call with a setup code's session |
+| 3504 | `SETUP_STEP_DONE` | that setup step is done already; change it on its own page (the network step's host name on Network) |
+| 3505 | `SETUP_HANDOFF` | the handoff link from setting the host name is expired, used, unknown or its session ended; sign in to carry on |
 | 3601 | `RESET_UNAVAILABLE` | no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress |
 | 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
 | 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |

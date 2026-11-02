@@ -355,6 +355,95 @@ func (x *StepUpResponse) GetSession() *Session {
 	return nil
 }
 
+type RedeemHandoffRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RedeemHandoffRequest) Reset() {
+	*x = RedeemHandoffRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RedeemHandoffRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RedeemHandoffRequest) ProtoMessage() {}
+
+func (x *RedeemHandoffRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RedeemHandoffRequest.ProtoReflect.Descriptor instead.
+func (*RedeemHandoffRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RedeemHandoffRequest) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+type RedeemHandoffResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// session is the new browser session (the cookie is set too).
+	Session       *Session `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RedeemHandoffResponse) Reset() {
+	*x = RedeemHandoffResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RedeemHandoffResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RedeemHandoffResponse) ProtoMessage() {}
+
+func (x *RedeemHandoffResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RedeemHandoffResponse.ProtoReflect.Descriptor instead.
+func (*RedeemHandoffResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RedeemHandoffResponse) GetSession() *Session {
+	if x != nil {
+		return x.Session
+	}
+	return nil
+}
+
 // Deprecated: Marked as deprecated in sneakers/appliance/osadmin/v1/signin.proto.
 type BeginSignInRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -364,7 +453,7 @@ type BeginSignInRequest struct {
 
 func (x *BeginSignInRequest) Reset() {
 	*x = BeginSignInRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -376,7 +465,7 @@ func (x *BeginSignInRequest) String() string {
 func (*BeginSignInRequest) ProtoMessage() {}
 
 func (x *BeginSignInRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -389,7 +478,7 @@ func (x *BeginSignInRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginSignInRequest.ProtoReflect.Descriptor instead.
 func (*BeginSignInRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{5}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{7}
 }
 
 // Deprecated: Marked as deprecated in sneakers/appliance/osadmin/v1/signin.proto.
@@ -406,7 +495,7 @@ type BeginSignInResponse struct {
 
 func (x *BeginSignInResponse) Reset() {
 	*x = BeginSignInResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -418,7 +507,7 @@ func (x *BeginSignInResponse) String() string {
 func (*BeginSignInResponse) ProtoMessage() {}
 
 func (x *BeginSignInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -431,7 +520,7 @@ func (x *BeginSignInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginSignInResponse.ProtoReflect.Descriptor instead.
 func (*BeginSignInResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{6}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *BeginSignInResponse) GetCode() string {
@@ -479,7 +568,7 @@ type PollSignInRequest struct {
 
 func (x *PollSignInRequest) Reset() {
 	*x = PollSignInRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -491,7 +580,7 @@ func (x *PollSignInRequest) String() string {
 func (*PollSignInRequest) ProtoMessage() {}
 
 func (x *PollSignInRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[7]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -504,7 +593,7 @@ func (x *PollSignInRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollSignInRequest.ProtoReflect.Descriptor instead.
 func (*PollSignInRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{7}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PollSignInRequest) GetPollToken() string {
@@ -525,7 +614,7 @@ type PollSignInResponse struct {
 
 func (x *PollSignInResponse) Reset() {
 	*x = PollSignInResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -537,7 +626,7 @@ func (x *PollSignInResponse) String() string {
 func (*PollSignInResponse) ProtoMessage() {}
 
 func (x *PollSignInResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[8]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -550,7 +639,7 @@ func (x *PollSignInResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollSignInResponse.ProtoReflect.Descriptor instead.
 func (*PollSignInResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{8}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PollSignInResponse) GetState() SignInState {
@@ -598,7 +687,7 @@ type Session struct {
 
 func (x *Session) Reset() {
 	*x = Session{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -610,7 +699,7 @@ func (x *Session) String() string {
 func (*Session) ProtoMessage() {}
 
 func (x *Session) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[9]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -623,7 +712,7 @@ func (x *Session) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Session.ProtoReflect.Descriptor instead.
 func (*Session) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{9}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Session) GetAdmin() string {
@@ -705,7 +794,7 @@ type GetSessionRequest struct {
 
 func (x *GetSessionRequest) Reset() {
 	*x = GetSessionRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -717,7 +806,7 @@ func (x *GetSessionRequest) String() string {
 func (*GetSessionRequest) ProtoMessage() {}
 
 func (x *GetSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[10]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -730,7 +819,7 @@ func (x *GetSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionRequest.ProtoReflect.Descriptor instead.
 func (*GetSessionRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{10}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{12}
 }
 
 type GetSessionResponse struct {
@@ -742,7 +831,7 @@ type GetSessionResponse struct {
 
 func (x *GetSessionResponse) Reset() {
 	*x = GetSessionResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -754,7 +843,7 @@ func (x *GetSessionResponse) String() string {
 func (*GetSessionResponse) ProtoMessage() {}
 
 func (x *GetSessionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[11]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -767,7 +856,7 @@ func (x *GetSessionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSessionResponse.ProtoReflect.Descriptor instead.
 func (*GetSessionResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{11}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetSessionResponse) GetSession() *Session {
@@ -785,7 +874,7 @@ type SignOutRequest struct {
 
 func (x *SignOutRequest) Reset() {
 	*x = SignOutRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +886,7 @@ func (x *SignOutRequest) String() string {
 func (*SignOutRequest) ProtoMessage() {}
 
 func (x *SignOutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[12]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +899,7 @@ func (x *SignOutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignOutRequest.ProtoReflect.Descriptor instead.
 func (*SignOutRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{12}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{14}
 }
 
 type SignOutResponse struct {
@@ -821,7 +910,7 @@ type SignOutResponse struct {
 
 func (x *SignOutResponse) Reset() {
 	*x = SignOutResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -833,7 +922,7 @@ func (x *SignOutResponse) String() string {
 func (*SignOutResponse) ProtoMessage() {}
 
 func (x *SignOutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[13]
+	mi := &file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +935,7 @@ func (x *SignOutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SignOutResponse.ProtoReflect.Descriptor instead.
 func (*SignOutResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{13}
+	return file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP(), []int{15}
 }
 
 var File_sneakers_appliance_osadmin_v1_signin_proto protoreflect.FileDescriptor
@@ -869,6 +958,10 @@ const file_sneakers_appliance_osadmin_v1_signin_proto_rawDesc = "" +
 	"\rStepUpRequest\x12\x1b\n" +
 	"\ttotp_code\x18\x01 \x01(\tR\btotpCode\"R\n" +
 	"\x0eStepUpResponse\x12@\n" +
+	"\asession\x18\x01 \x01(\v2&.sneakers.appliance.osadmin.v1.SessionR\asession\"*\n" +
+	"\x14RedeemHandoffRequest\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\"Y\n" +
+	"\x15RedeemHandoffResponse\x12@\n" +
 	"\asession\x18\x01 \x01(\v2&.sneakers.appliance.osadmin.v1.SessionR\asession\"\x18\n" +
 	"\x12BeginSignInRequest:\x02\x18\x01\"\xc8\x01\n" +
 	"\x13BeginSignInResponse\x12\x12\n" +
@@ -907,10 +1000,11 @@ const file_sneakers_appliance_osadmin_v1_signin_proto_rawDesc = "" +
 	"\x19SIGN_IN_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15SIGN_IN_STATE_PENDING\x10\x01\x12\x1a\n" +
 	"\x16SIGN_IN_STATE_APPROVED\x10\x02\x12\x19\n" +
-	"\x15SIGN_IN_STATE_EXPIRED\x10\x03\x1a\x02\x18\x012\x8e\x06\n" +
+	"\x15SIGN_IN_STATE_EXPIRED\x10\x03\x1a\x02\x18\x012\xaa\a\n" +
 	"\rSignInService\x12~\n" +
 	"\x06SignIn\x12,.sneakers.appliance.osadmin.v1.SignInRequest\x1a-.sneakers.appliance.osadmin.v1.SignInResponse\"\x17\xc2\xf3\x18\x13\b\x01\"\x0fsignin.password\x12}\n" +
-	"\x06StepUp\x12,.sneakers.appliance.osadmin.v1.StepUpRequest\x1a-.sneakers.appliance.osadmin.v1.StepUpResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0esignin.step-up\x12\x7f\n" +
+	"\x06StepUp\x12,.sneakers.appliance.osadmin.v1.StepUpRequest\x1a-.sneakers.appliance.osadmin.v1.StepUpResponse\"\x16\xc2\xf3\x18\x12\x10\x01\"\x0esignin.step-up\x12\x99\x01\n" +
+	"\rRedeemHandoff\x123.sneakers.appliance.osadmin.v1.RedeemHandoffRequest\x1a4.sneakers.appliance.osadmin.v1.RedeemHandoffResponse\"\x1d\xc2\xf3\x18\x19\b\x01\"\x15signin.handoff.redeem\x12\x7f\n" +
 	"\vBeginSignIn\x121.sneakers.appliance.osadmin.v1.BeginSignInRequest\x1a2.sneakers.appliance.osadmin.v1.BeginSignInResponse\"\t\xc2\xf3\x18\x02\b\x01\x88\x02\x01\x12|\n" +
 	"\n" +
 	"PollSignIn\x120.sneakers.appliance.osadmin.v1.PollSignInRequest\x1a1.sneakers.appliance.osadmin.v1.PollSignInResponse\"\t\xc2\xf3\x18\x02\b\x01\x88\x02\x01\x12|\n" +
@@ -931,7 +1025,7 @@ func file_sneakers_appliance_osadmin_v1_signin_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_signin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_sneakers_appliance_osadmin_v1_signin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_sneakers_appliance_osadmin_v1_signin_proto_goTypes = []any{
 	(SignInState)(0),              // 0: sneakers.appliance.osadmin.v1.SignInState
 	(*SignInRequest)(nil),         // 1: sneakers.appliance.osadmin.v1.SignInRequest
@@ -939,49 +1033,54 @@ var file_sneakers_appliance_osadmin_v1_signin_proto_goTypes = []any{
 	(*SignInRefusal)(nil),         // 3: sneakers.appliance.osadmin.v1.SignInRefusal
 	(*StepUpRequest)(nil),         // 4: sneakers.appliance.osadmin.v1.StepUpRequest
 	(*StepUpResponse)(nil),        // 5: sneakers.appliance.osadmin.v1.StepUpResponse
-	(*BeginSignInRequest)(nil),    // 6: sneakers.appliance.osadmin.v1.BeginSignInRequest
-	(*BeginSignInResponse)(nil),   // 7: sneakers.appliance.osadmin.v1.BeginSignInResponse
-	(*PollSignInRequest)(nil),     // 8: sneakers.appliance.osadmin.v1.PollSignInRequest
-	(*PollSignInResponse)(nil),    // 9: sneakers.appliance.osadmin.v1.PollSignInResponse
-	(*Session)(nil),               // 10: sneakers.appliance.osadmin.v1.Session
-	(*GetSessionRequest)(nil),     // 11: sneakers.appliance.osadmin.v1.GetSessionRequest
-	(*GetSessionResponse)(nil),    // 12: sneakers.appliance.osadmin.v1.GetSessionResponse
-	(*SignOutRequest)(nil),        // 13: sneakers.appliance.osadmin.v1.SignOutRequest
-	(*SignOutResponse)(nil),       // 14: sneakers.appliance.osadmin.v1.SignOutResponse
-	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
-	(Role)(0),                     // 16: sneakers.appliance.osadmin.v1.Role
+	(*RedeemHandoffRequest)(nil),  // 6: sneakers.appliance.osadmin.v1.RedeemHandoffRequest
+	(*RedeemHandoffResponse)(nil), // 7: sneakers.appliance.osadmin.v1.RedeemHandoffResponse
+	(*BeginSignInRequest)(nil),    // 8: sneakers.appliance.osadmin.v1.BeginSignInRequest
+	(*BeginSignInResponse)(nil),   // 9: sneakers.appliance.osadmin.v1.BeginSignInResponse
+	(*PollSignInRequest)(nil),     // 10: sneakers.appliance.osadmin.v1.PollSignInRequest
+	(*PollSignInResponse)(nil),    // 11: sneakers.appliance.osadmin.v1.PollSignInResponse
+	(*Session)(nil),               // 12: sneakers.appliance.osadmin.v1.Session
+	(*GetSessionRequest)(nil),     // 13: sneakers.appliance.osadmin.v1.GetSessionRequest
+	(*GetSessionResponse)(nil),    // 14: sneakers.appliance.osadmin.v1.GetSessionResponse
+	(*SignOutRequest)(nil),        // 15: sneakers.appliance.osadmin.v1.SignOutRequest
+	(*SignOutResponse)(nil),       // 16: sneakers.appliance.osadmin.v1.SignOutResponse
+	(*timestamppb.Timestamp)(nil), // 17: google.protobuf.Timestamp
+	(Role)(0),                     // 18: sneakers.appliance.osadmin.v1.Role
 }
 var file_sneakers_appliance_osadmin_v1_signin_proto_depIdxs = []int32{
-	10, // 0: sneakers.appliance.osadmin.v1.SignInResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
-	15, // 1: sneakers.appliance.osadmin.v1.SignInRefusal.locked_until:type_name -> google.protobuf.Timestamp
-	15, // 2: sneakers.appliance.osadmin.v1.SignInRefusal.retry_after:type_name -> google.protobuf.Timestamp
-	10, // 3: sneakers.appliance.osadmin.v1.StepUpResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
-	15, // 4: sneakers.appliance.osadmin.v1.BeginSignInResponse.expires:type_name -> google.protobuf.Timestamp
-	0,  // 5: sneakers.appliance.osadmin.v1.PollSignInResponse.state:type_name -> sneakers.appliance.osadmin.v1.SignInState
-	10, // 6: sneakers.appliance.osadmin.v1.PollSignInResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
-	16, // 7: sneakers.appliance.osadmin.v1.Session.role:type_name -> sneakers.appliance.osadmin.v1.Role
-	15, // 8: sneakers.appliance.osadmin.v1.Session.signed_in:type_name -> google.protobuf.Timestamp
-	15, // 9: sneakers.appliance.osadmin.v1.Session.step_up_until:type_name -> google.protobuf.Timestamp
-	15, // 10: sneakers.appliance.osadmin.v1.Session.idle_expires:type_name -> google.protobuf.Timestamp
-	15, // 11: sneakers.appliance.osadmin.v1.Session.expires:type_name -> google.protobuf.Timestamp
-	10, // 12: sneakers.appliance.osadmin.v1.GetSessionResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
-	1,  // 13: sneakers.appliance.osadmin.v1.SignInService.SignIn:input_type -> sneakers.appliance.osadmin.v1.SignInRequest
-	4,  // 14: sneakers.appliance.osadmin.v1.SignInService.StepUp:input_type -> sneakers.appliance.osadmin.v1.StepUpRequest
-	6,  // 15: sneakers.appliance.osadmin.v1.SignInService.BeginSignIn:input_type -> sneakers.appliance.osadmin.v1.BeginSignInRequest
-	8,  // 16: sneakers.appliance.osadmin.v1.SignInService.PollSignIn:input_type -> sneakers.appliance.osadmin.v1.PollSignInRequest
-	11, // 17: sneakers.appliance.osadmin.v1.SignInService.GetSession:input_type -> sneakers.appliance.osadmin.v1.GetSessionRequest
-	13, // 18: sneakers.appliance.osadmin.v1.SignInService.SignOut:input_type -> sneakers.appliance.osadmin.v1.SignOutRequest
-	2,  // 19: sneakers.appliance.osadmin.v1.SignInService.SignIn:output_type -> sneakers.appliance.osadmin.v1.SignInResponse
-	5,  // 20: sneakers.appliance.osadmin.v1.SignInService.StepUp:output_type -> sneakers.appliance.osadmin.v1.StepUpResponse
-	7,  // 21: sneakers.appliance.osadmin.v1.SignInService.BeginSignIn:output_type -> sneakers.appliance.osadmin.v1.BeginSignInResponse
-	9,  // 22: sneakers.appliance.osadmin.v1.SignInService.PollSignIn:output_type -> sneakers.appliance.osadmin.v1.PollSignInResponse
-	12, // 23: sneakers.appliance.osadmin.v1.SignInService.GetSession:output_type -> sneakers.appliance.osadmin.v1.GetSessionResponse
-	14, // 24: sneakers.appliance.osadmin.v1.SignInService.SignOut:output_type -> sneakers.appliance.osadmin.v1.SignOutResponse
-	19, // [19:25] is the sub-list for method output_type
-	13, // [13:19] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	12, // 0: sneakers.appliance.osadmin.v1.SignInResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	17, // 1: sneakers.appliance.osadmin.v1.SignInRefusal.locked_until:type_name -> google.protobuf.Timestamp
+	17, // 2: sneakers.appliance.osadmin.v1.SignInRefusal.retry_after:type_name -> google.protobuf.Timestamp
+	12, // 3: sneakers.appliance.osadmin.v1.StepUpResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	12, // 4: sneakers.appliance.osadmin.v1.RedeemHandoffResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	17, // 5: sneakers.appliance.osadmin.v1.BeginSignInResponse.expires:type_name -> google.protobuf.Timestamp
+	0,  // 6: sneakers.appliance.osadmin.v1.PollSignInResponse.state:type_name -> sneakers.appliance.osadmin.v1.SignInState
+	12, // 7: sneakers.appliance.osadmin.v1.PollSignInResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	18, // 8: sneakers.appliance.osadmin.v1.Session.role:type_name -> sneakers.appliance.osadmin.v1.Role
+	17, // 9: sneakers.appliance.osadmin.v1.Session.signed_in:type_name -> google.protobuf.Timestamp
+	17, // 10: sneakers.appliance.osadmin.v1.Session.step_up_until:type_name -> google.protobuf.Timestamp
+	17, // 11: sneakers.appliance.osadmin.v1.Session.idle_expires:type_name -> google.protobuf.Timestamp
+	17, // 12: sneakers.appliance.osadmin.v1.Session.expires:type_name -> google.protobuf.Timestamp
+	12, // 13: sneakers.appliance.osadmin.v1.GetSessionResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	1,  // 14: sneakers.appliance.osadmin.v1.SignInService.SignIn:input_type -> sneakers.appliance.osadmin.v1.SignInRequest
+	4,  // 15: sneakers.appliance.osadmin.v1.SignInService.StepUp:input_type -> sneakers.appliance.osadmin.v1.StepUpRequest
+	6,  // 16: sneakers.appliance.osadmin.v1.SignInService.RedeemHandoff:input_type -> sneakers.appliance.osadmin.v1.RedeemHandoffRequest
+	8,  // 17: sneakers.appliance.osadmin.v1.SignInService.BeginSignIn:input_type -> sneakers.appliance.osadmin.v1.BeginSignInRequest
+	10, // 18: sneakers.appliance.osadmin.v1.SignInService.PollSignIn:input_type -> sneakers.appliance.osadmin.v1.PollSignInRequest
+	13, // 19: sneakers.appliance.osadmin.v1.SignInService.GetSession:input_type -> sneakers.appliance.osadmin.v1.GetSessionRequest
+	15, // 20: sneakers.appliance.osadmin.v1.SignInService.SignOut:input_type -> sneakers.appliance.osadmin.v1.SignOutRequest
+	2,  // 21: sneakers.appliance.osadmin.v1.SignInService.SignIn:output_type -> sneakers.appliance.osadmin.v1.SignInResponse
+	5,  // 22: sneakers.appliance.osadmin.v1.SignInService.StepUp:output_type -> sneakers.appliance.osadmin.v1.StepUpResponse
+	7,  // 23: sneakers.appliance.osadmin.v1.SignInService.RedeemHandoff:output_type -> sneakers.appliance.osadmin.v1.RedeemHandoffResponse
+	9,  // 24: sneakers.appliance.osadmin.v1.SignInService.BeginSignIn:output_type -> sneakers.appliance.osadmin.v1.BeginSignInResponse
+	11, // 25: sneakers.appliance.osadmin.v1.SignInService.PollSignIn:output_type -> sneakers.appliance.osadmin.v1.PollSignInResponse
+	14, // 26: sneakers.appliance.osadmin.v1.SignInService.GetSession:output_type -> sneakers.appliance.osadmin.v1.GetSessionResponse
+	16, // 27: sneakers.appliance.osadmin.v1.SignInService.SignOut:output_type -> sneakers.appliance.osadmin.v1.SignOutResponse
+	21, // [21:28] is the sub-list for method output_type
+	14, // [14:21] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_signin_proto_init() }
@@ -996,7 +1095,7 @@ func file_sneakers_appliance_osadmin_v1_signin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_signin_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_signin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -197,6 +197,26 @@ func (h *handler) Watch(ctx context.Context, _ *connect.Request[netdv1.WatchRequ
 	}
 }
 
+func (h *handler) Resolve(ctx context.Context, r *connect.Request[netdv1.ResolveRequest]) (*connect.Response[netdv1.ResolveResponse], error) {
+	res, err := h.d.Resolve(ctx, r.Msg.GetName())
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &netdv1.ResolveResponse{Addresses: addrStrings(res.Addrs), Found: res.Found}
+	if res.Server.IsValid() {
+		out.Server = res.Server.String()
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *handler) SetHostname(_ context.Context, r *connect.Request[netdv1.SetHostnameRequest]) (*connect.Response[netdv1.SetHostnameResponse], error) {
+	prev, err := h.d.SetHostname(r.Msg.GetHostname())
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&netdv1.SetHostnameResponse{Previous: prev}), nil
+}
+
 func addrStrings(in []netip.Addr) []string {
 	out := make([]string, 0, len(in))
 	for _, a := range in {
