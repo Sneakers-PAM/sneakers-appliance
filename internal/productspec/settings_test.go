@@ -4,10 +4,14 @@
 package productspec_test
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
@@ -133,5 +137,78 @@ func TestTheSneakersBundleReadsTheBoxsEmailSettings(t *testing.T) {
 	}
 	if sec["sneakers/sneakers-email/SMTP_PASS"] != productspec.SettingEmailPassword || sec["sneakers/sneakers-kratos/smtpConnectionURI"] != productspec.SettingEmailURI {
 		t.Errorf("box secret settings = %v", sec)
+	}
+}
+
+func TestTheSneakersBundleReadsTheBoxsTelemetrySettings(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := productspec.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.ReadsTelemetry() || s.Telemetry.Label == "" {
+		t.Fatalf("telemetry: %+v", s.Telemetry)
+	}
+	got := map[string]string{}
+	for _, b := range s.BoxSettings {
+		if b.ConfigMap != "sneakers/sneakers-telemetry" {
+			continue
+		}
+		for _, k := range b.Keys {
+			got[k.Key] = k.Setting
+		}
+	}
+	want := map[string]string{
+		"OTEL_EXPORTER_OTLP_ENDPOINT": productspec.SettingTelemetryEndpoint,
+		"OTLP_INSECURE_SKIP_VERIFY":   productspec.SettingTelemetrySkipVerify,
+		"OTLP_LOGS_ENABLED":           productspec.SettingTelemetryLogs,
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("sneakers-telemetry: %v", got)
+	}
+}
+
+func TestATelemetrySettingNeedsTheTelemetrySection(t *testing.T) {
+	for name, doc := range map[string]string{
+		"in a ConfigMap": "format: 2\nbox_settings:\n  - configmap: sneakers/t\n    keys:\n      - {key: A, setting: telemetry.logs}\n",
+		"in a Secret":    "format: 2\nbox_secrets:\n  - secret: sneakers/t\n    keys:\n      - {key: A, setting: telemetry.logs}\n",
+	} {
+		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "telemetry") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// Email's section doesn't stand in for telemetry's, nor the other way round.
+	if _, err := productspec.Parse([]byte("format: 2\nemail: {}\nbox_settings:\n  - configmap: sneakers/t\n    keys:\n      - {key: A, setting: telemetry.logs}\n")); err == nil {
+		t.Error("the email section let a telemetry setting through")
+	}
+	if _, err := productspec.Parse([]byte("format: 2\ntelemetry: {}\nbox_settings:\n  - configmap: sneakers/e\n    keys:\n      - {key: A, setting: email.host}\n")); err == nil {
+		t.Error("the telemetry section let an email setting through")
+	}
+}
+
+func TestEveryServiceLoadsTheTelemetrySettings(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "values.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var values map[string]struct {
+		EnvFromConfigMaps []struct {
+			Name string `yaml:"name"`
+		} `yaml:"envFromConfigMaps"`
+	}
+	if err := yaml.Unmarshal(b, &values); err != nil {
+		t.Fatal(err)
+	}
+	for _, service := range []string{"audit", "connector", "gateway", "identity", "mcp", "notify", "sshbroker", "vault", "workflow"} {
+		if !slices.ContainsFunc(values[service].EnvFromConfigMaps, func(c struct {
+			Name string `yaml:"name"`
+		}) bool {
+			return c.Name == "sneakers-telemetry"
+		}) {
+			t.Errorf("%s doesn't load sneakers-telemetry: %+v", service, values[service])
+		}
 	}
 }

@@ -508,7 +508,8 @@ settings**, ConfigMaps the box writes into the same stack (`box_settings`), and 
 box's email settings with an `email` section, which also names the workloads restarted after a
 change. A secret setting in a ConfigMap, an unknown setting, a key that's more than one of
 generated, value and setting, and settings with no `email` section are refused. See
-[product-email.md](product-email.md).
+[product-email.md](product-email.md). A `telemetry` section says the same for the box's telemetry
+settings, and `telemetry.*` settings with no such section are refused.
 
 And it may declare its **data paths**, which the box's disk guard samples for growth
 ([disk-layout.md](disk-layout.md#alerts-and-warnings)):

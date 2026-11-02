@@ -103,6 +103,9 @@ type Spec struct {
 	// Email, when set, says the product reads the box's email settings,
 	// so :8443 offers its Email page.
 	Email *Email `yaml:"email"`
+	// Telemetry, when set, says the product reads the box's telemetry
+	// settings, so :8443 offers its Telemetry page.
+	Telemetry *Telemetry `yaml:"telemetry"`
 	// Data are the product's data paths the box watches for growth (the
 	// disk guard): each a directory under DataRoot, optionally with the
 	// write-ahead log under it and the size that's too big.

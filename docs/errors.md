@@ -90,6 +90,12 @@ shell, the console and :8443 show the same sentence.
 | 3901 | `EMAIL_INVALID` | an email setting fails validation (the error names it) |
 | 3902 | `EMAIL_SEND` | the test email didn't go out; the error gives the relay's answer or the connection's failure |
 
+## Product telemetry (391x)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3910 | `TELEMETRY_INVALID` | a telemetry setting fails validation (the error names it) |
+
 ## Build kit and boot (1xxx and 2xxx)
 
 | Code | Symbol | Meaning |

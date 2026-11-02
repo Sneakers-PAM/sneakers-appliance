@@ -30,6 +30,14 @@ const (
 	// SettingEmailURI is the relay as one smtp:// or smtps:// URI with the
 	// account in it, in the form Ory's courier reads. Secret.
 	SettingEmailURI = "email.uri"
+	// SettingTelemetryEndpoint is the OTLP collector's https address; empty
+	// when export is off, whatever endpoint is saved.
+	SettingTelemetryEndpoint = "telemetry.endpoint"
+	// SettingTelemetrySkipVerify is "true" when the collector's certificate
+	// isn't verified, else "false".
+	SettingTelemetrySkipVerify = "telemetry.skip_verify"
+	// SettingTelemetryLogs is "true" when logs are exported, else "false".
+	SettingTelemetryLogs = "telemetry.logs"
 )
 
 // settings are the settings the box offers, each saying whether it is
@@ -38,6 +46,7 @@ var settings = map[string]bool{
 	SettingEmailHost: false, SettingEmailPort: false, SettingEmailFrom: false, SettingEmailUsername: false,
 	SettingEmailTLS: false, SettingEmailSkipVerify: false, SettingEmailCA: false,
 	SettingEmailPassword: true, SettingEmailURI: true,
+	SettingTelemetryEndpoint: false, SettingTelemetrySkipVerify: false, SettingTelemetryLogs: false,
 }
 
 // IsSetting reports whether the box offers the setting, and whether it is
@@ -66,6 +75,13 @@ func (e Email) RestartRef(i int) (ns, kind, name string, ok bool) {
 	return m[1], m[3], m[4], true
 }
 
+// Telemetry says the product reads the box's telemetry settings, so :8443
+// offers its Telemetry page.
+type Telemetry struct {
+	// Label says what the product exports.
+	Label string `yaml:"label"`
+}
+
 // BoxSetting is one ConfigMap the box writes from its settings.
 type BoxSetting struct {
 	// ConfigMap is <namespace>/<name>.
@@ -87,6 +103,24 @@ func (b BoxSetting) ConfigMapName() string { _, n, _ := strings.Cut(b.ConfigMap,
 
 // ReadsEmail reports whether the product reads the box's email settings.
 func (s Spec) ReadsEmail() bool { return s.Email != nil }
+
+// ReadsTelemetry reports whether the product reads the box's telemetry
+// settings.
+func (s Spec) ReadsTelemetry() bool { return s.Telemetry != nil }
+
+// settingSection says why the product can't read the setting: the section
+// of product.yaml it belongs to is missing.
+func (s Spec) settingSection(name string) string {
+	switch {
+	case strings.HasPrefix(name, "telemetry."):
+		if s.Telemetry == nil {
+			return "a telemetry setting, and product.yaml has no telemetry section"
+		}
+	case s.Email == nil:
+		return "an email setting, and product.yaml has no email section"
+	}
+	return ""
+}
 
 func (s Spec) checkSettings() error {
 	if e := s.Email; e != nil {
@@ -124,8 +158,8 @@ func (s Spec) checkSettings() error {
 				return bad("box_settings[%d].keys[%d]: the box offers no setting %q", i, j, k.Setting)
 			case secret:
 				return bad("box_settings[%d].keys[%d]: %s is secret; it goes into a box secret, never a ConfigMap", i, j, k.Setting)
-			case s.Email == nil:
-				return bad("box_settings[%d].keys[%d]: %s is an email setting, and product.yaml has no email section", i, j, k.Setting)
+			case s.settingSection(k.Setting) != "":
+				return bad("box_settings[%d].keys[%d]: %s is %s", i, j, k.Setting, s.settingSection(k.Setting))
 			}
 		}
 	}
@@ -137,8 +171,8 @@ func (s Spec) checkSettings() error {
 			if known, _ := IsSetting(k.Setting); !known {
 				return bad("box_secrets[%d].keys[%d]: the box offers no setting %q", i, j, k.Setting)
 			}
-			if s.Email == nil {
-				return bad("box_secrets[%d].keys[%d]: %s is an email setting, and product.yaml has no email section", i, j, k.Setting)
+			if why := s.settingSection(k.Setting); why != "" {
+				return bad("box_secrets[%d].keys[%d]: %s is %s", i, j, k.Setting, why)
 			}
 		}
 	}

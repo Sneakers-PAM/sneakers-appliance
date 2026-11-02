@@ -81,7 +81,7 @@ const RevisionAnnotation = "sneakers-appliance/revision"
 
 func (s *Store) settings() (map[string]string, error) {
 	if s.Settings == nil {
-		return boxsettings.DefaultEmail().Values(), nil
+		return boxsettings.DefaultValues(), nil
 	}
 	return s.Settings.Values()
 }
@@ -224,7 +224,7 @@ func escrowName(spec productspec.Spec, secret, key string) (string, bool) {
 // Render is the stack for spec's box secrets with values and the box's
 // settings at their defaults.
 func Render(spec productspec.Spec, values map[string]string) ([]byte, error) {
-	return RenderAll(spec, values, boxsettings.DefaultEmail().Values())
+	return RenderAll(spec, values, boxsettings.DefaultValues())
 }
 
 // RenderAll is the stack for spec's box secrets with values, and its box
