@@ -413,6 +413,37 @@ func (vm *VM) Expect(re string, timeout time.Duration) string {
 	}
 }
 
+// ExpectLine is Expect for a line whose end the test reads, such as
+// `lab-hook: phase pods: .*`: it matches only lines the console has
+// finished. The serial log grows a few bytes at a time as the UART sends
+// them, so Expect can match the start of a line still being written and
+// return only that part. Once QEMU has exited, the last line counts too.
+func (vm *VM) ExpectLine(re string, timeout time.Duration) string {
+	vm.t.Helper()
+	rx := regexp.MustCompile(re)
+	deadline := time.Now().Add(timeout)
+	for {
+		if m := rx.FindString(finishedLines(vm.Console())); m != "" {
+			return m
+		}
+		if time.Now().After(deadline) {
+			vm.t.Fatalf("serial console never showed a whole line with %q in %s", re, timeout)
+		}
+		if vm.exited() {
+			if m := rx.FindString(vm.Console()); m != "" {
+				return m
+			}
+			vm.t.Fatalf("QEMU exited before the serial console showed %q", re)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// finishedLines is console up to its last newline.
+func finishedLines(console string) string {
+	return console[:strings.LastIndexByte(console, '\n')+1]
+}
+
 // Exited is closed once QEMU has exited: a guest reboot (QEMU runs with
 // -no-reboot), a power-off or a kill.
 func (vm *VM) Exited() <-chan struct{} { return vm.done }
