@@ -315,8 +315,18 @@ in it). `CheckUpdates` (Check now, any admin) reads the index again from the pol
 every press and answers each unit's offers: the Base OS's full and patch files (a patch only for
 the running base), the Base Web's (only those that fit the running Base OS; `base_web_waits` names
 a newer one that needs a newer Base OS), and the product's, each with its size and what it needs,
-the one to take marked `preferred` (the newest Base OS's patch, unless the box has less free
-memory than the rebuild needs, 600 MB by default). `GetUpgrades.last_check` keeps the last answer.
+the one to take marked `preferred`. For the Base OS the newest version decides, by how far the
+upgrade goes:
+
+| The upgrade | Preferred |
+| --- | --- |
+| On the running major and minor (the same train), such as 0.3.1 to 0.3.4 | the patch |
+| To a newer minor or major, such as 0.3.1 to 0.4.0 or 1.0.0 | the full file |
+| Either, on a box with less free memory than a patch rebuild needs (600 MB by default) | the full file |
+
+When the newest version doesn't offer the file the rule wants, its other file is preferred, so there
+is always one preferred Base OS line. The admin can still pick any line. For the Base Web and the
+product the newest line is preferred. `GetUpgrades.last_check` keeps the last answer.
 While `FetchUpdate` runs, `GetUpgrades.fetch_progress` reports its state (`querying`,
 `downloading`, `verifying`, `done` or `failed`), the bytes, the speed and the time left; once the
 file is in, its signature and SHA-256 are checked as a stage will (`verified`), and a file that

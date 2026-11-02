@@ -22,6 +22,7 @@ import (
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
+	"golang.org/x/mod/semver"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -264,6 +265,29 @@ func (h *upgradeSvc) CheckUpdates(ctx context.Context, _ *connect.Request[osadmi
 	return nil, lastErr
 }
 
+// preferredBaseOS is the index in offers (newest first, as OfferBaseOS
+// gives them) of the Base OS line to take, -1 when there is none. The
+// newest version decides: on the running major and minor its patch, to a
+// newer minor or major its full file, and its full file too when the box
+// lacks the memory to rebuild a patch. When that version doesn't offer the
+// file wanted, its other file is preferred, so there is always one.
+func preferredBaseOS(offers []updatepkg.IndexEntry, base string, roomForPatch bool) int {
+	if len(offers) == 0 {
+		return -1
+	}
+	newest := offers[0].Version
+	want := string(updatepkg.KindFull)
+	if roomForPatch && semver.MajorMinor("v"+newest) == semver.MajorMinor("v"+base) {
+		want = string(updatepkg.KindPatch)
+	}
+	for i, e := range offers {
+		if e.Version == newest && e.Kind == want {
+			return i
+		}
+	}
+	return 0
+}
+
 // offers is each unit's offers from idx for a box running base.
 func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdatesResponse {
 	b := s.box(base)
@@ -271,8 +295,12 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 	inst, hasProduct := s.slots().Installed()
 	web, hasWeb := s.webSlots().Header("current")
 	roomForPatch := s.memAvailable() < 0 || s.memAvailable() >= s.patchMinFree()
-	preferred := ""
-	for _, e := range idx.OfferBaseOS(b) {
+	baseOS := idx.OfferBaseOS(b)
+	preferred := preferredBaseOS(baseOS, base, roomForPatch)
+	if preferred >= 0 {
+		s.o.Logger.Debug("osadmin: preferred Base OS line", log.F("base", base), log.F("version", baseOS[preferred].Version), log.F("kind", baseOS[preferred].Kind), log.F("roomForPatch", roomForPatch))
+	}
+	for i, e := range baseOS {
 		o := &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Bases: e.Bases, Commit: e.Commit,
 			IncludesBaseWeb: e.Includes[updatepkg.UnitBaseWeb]}
 		if hasProduct && inst.HasRange() && !inst.InRange(e.Version) {
@@ -281,9 +309,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		if hasWeb {
 			o.Note = webAfterBaseOS(web, e.Version, o.GetIncludesBaseWeb())
 		}
-		if preferred == "" && (e.Kind == string(updatepkg.KindFull) || roomForPatch) {
-			o.Preferred, preferred = true, e.Version
-		}
+		o.Preferred = i == preferred
 		out.BaseOs = append(out.BaseOs, o)
 	}
 	for i, e := range idx.OfferBaseWeb(b) {
