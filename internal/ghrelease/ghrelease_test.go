@@ -255,8 +255,17 @@ func TestRedirectHosts(t *testing.T) {
 	}
 }
 
+// finished is rel with every asset a finished release has.
+func finished(tag string, draft, pre bool) ghrelease.Release {
+	r := rel(tag, draft, pre)
+	for _, n := range ghrelease.FinishedAssets(tag, "amd64") {
+		r.Assets = append(r.Assets, ghrelease.Asset{Name: n, State: "uploaded"})
+	}
+	return r
+}
+
 func TestPreviousOnTheSameChannel(t *testing.T) {
-	rels := []ghrelease.Release{rel("v0.1.0", false, false), rel("v0.2.0-rc.1", false, true), rel("v0.2.0-rc.2", true, true), rel("v0.2.0-rc.3", false, true), rel("v0.3.0", false, false)}
+	rels := []ghrelease.Release{finished("v0.1.0", false, false), finished("v0.2.0-rc.1", false, true), finished("v0.2.0-rc.2", true, true), finished("v0.2.0-rc.3", false, true), finished("v0.3.0", false, false)}
 	for tag, want := range map[string]string{
 		"v0.2.0-rc.3": "v0.2.0-rc.1", // the draft isn't published
 		"v0.2.0-rc.4": "v0.2.0-rc.3",
@@ -264,12 +273,61 @@ func TestPreviousOnTheSameChannel(t *testing.T) {
 		"v0.3.1-rc.1": "v0.3.0", // an rc's previous may be stable
 		"v0.4.0":      "v0.3.0",
 	} {
-		if got, ok := ghrelease.Previous(rels, tag); !ok || got.TagName != want {
-			t.Errorf("Previous(%s) = %q %v, want %s", tag, got.TagName, ok, want)
+		if got, skipped, ok := ghrelease.Previous(rels, tag, "amd64"); !ok || got.TagName != want || len(skipped) != 0 {
+			t.Errorf("Previous(%s) = %q %v skipped %v, want %s", tag, got.TagName, ok, skipped, want)
 		}
 	}
-	if _, ok := ghrelease.Previous(rels, "v0.1.0"); ok {
+	if _, _, ok := ghrelease.Previous(rels, "v0.1.0", "amd64"); ok {
 		t.Error("the first release has a previous one")
+	}
+}
+
+// The assets a finished release has are the ones the release job uploads
+// that a box or a later release reads: the signed index, SHA256SUMS and
+// release.yaml, and the three full units.
+func TestFinishedAssets(t *testing.T) {
+	want := []string{
+		"sneakers-product-index.json", "sneakers-product-index.json.sigstore.json",
+		"SHA256SUMS", "SHA256SUMS.sigstore.json",
+		"release.yaml", "release.yaml.sigstore.json",
+		"sneakers-appliance-baseOS-0.1.0-rc.6-amd64.bin",
+		"sneakers-appliance-baseWeb-0.1.0-rc.6-amd64.bin",
+		"sneakers-product-0.1.0-rc.6-amd64.bin",
+	}
+	if got := ghrelease.FinishedAssets("v0.1.0-rc.6", "amd64"); !slices.Equal(got, want) {
+		t.Fatalf("FinishedAssets = %v, want %v", got, want)
+	}
+}
+
+// A release whose run failed after it was published has none or only some
+// of its assets: the next release patches from the one before it, and
+// says which it skipped and what it lacks.
+func TestPreviousSkipsAnUnfinishedRelease(t *testing.T) {
+	partial := finished("v0.1.0-rc.6", false, true)
+	partial.Assets = partial.Assets[:4]
+	uploading := finished("v0.1.0-rc.5", false, true)
+	uploading.Assets[len(uploading.Assets)-1].State = "starter"
+	rels := []ghrelease.Release{rel("v0.1.0-rc.7", false, true), partial, uploading, finished("v0.1.0-rc.4", false, true)}
+	got, skipped, ok := ghrelease.Previous(rels, "v0.1.0-rc.8", "amd64")
+	if !ok || got.TagName != "v0.1.0-rc.4" {
+		t.Fatalf("Previous = %q %v, want v0.1.0-rc.4", got.TagName, ok)
+	}
+	if len(skipped) != 3 || skipped[0].Tag != "v0.1.0-rc.7" || skipped[1].Tag != "v0.1.0-rc.6" || skipped[2].Tag != "v0.1.0-rc.5" {
+		t.Fatalf("skipped %+v", skipped)
+	}
+	if len(skipped[0].Missing) != 9 || !slices.Equal(skipped[2].Missing, []string{"sneakers-product-0.1.0-rc.5-amd64.bin"}) ||
+		slices.Contains(skipped[1].Missing, "SHA256SUMS") || !slices.Contains(skipped[1].Missing, "sneakers-appliance-baseOS-0.1.0-rc.6-amd64.bin") {
+		t.Fatalf("missing %+v", skipped)
+	}
+}
+
+// With every earlier release unfinished there is none to patch from, and
+// each is named.
+func TestPreviousWithNoFinishedReleaseLeft(t *testing.T) {
+	rels := []ghrelease.Release{rel("v0.1.0-rc.2", false, true), rel("v0.1.0-rc.1", false, true)}
+	got, skipped, ok := ghrelease.Previous(rels, "v0.1.0-rc.3", "amd64")
+	if ok || got.TagName != "" || len(skipped) != 2 {
+		t.Fatalf("Previous = %q %v skipped %+v", got.TagName, ok, skipped)
 	}
 }
 

@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -119,10 +120,38 @@ func Pick(rels []Release, channel string) (Release, bool) {
 	return c[0], true
 }
 
+// FinishedAssets is what a finished release tagged tag has for arch: the
+// assets the release job's publish step uploads that a box or a later
+// release reads. Those are the signed index, SHA256SUMS and release.yaml,
+// each with its .sigstore.json, and the three full units (Base OS, Base Web
+// and Product). The Base OS patch, the images and the image countersignatures
+// are uploaded too, but nothing later relies on them, and a first release
+// has no patch (docs/release.md, File names).
+func FinishedAssets(tag, arch string) []string {
+	v := strings.TrimPrefix(tag, "v")
+	return []string{
+		"sneakers-product-index.json", "sneakers-product-index.json.sigstore.json",
+		"SHA256SUMS", "SHA256SUMS.sigstore.json",
+		"release.yaml", "release.yaml.sigstore.json",
+		"sneakers-appliance-baseOS-" + v + "-" + arch + ".bin",
+		"sneakers-appliance-baseWeb-" + v + "-" + arch + ".bin",
+		"sneakers-product-" + v + "-" + arch + ".bin",
+	}
+}
+
+// Skipped is a published release Previous passed over because it isn't
+// finished, with the assets it lacks.
+type Skipped struct {
+	Tag     string
+	Missing []string
+}
+
 // Previous is the release a release tagged tag patches from: the newest
 // published release older than tag on tag's channel (an rc tag's channel
-// takes stable releases too).
-func Previous(rels []Release, tag string) (Release, bool) {
+// takes stable releases too) that is finished for arch (FinishedAssets). A
+// release whose run failed after it was published lacks some of those, so
+// it's skipped for the one before it, and named in skipped.
+func Previous(rels []Release, tag, arch string) (prev Release, skipped []Skipped, ok bool) {
 	older := make([]Release, 0, len(rels))
 	for _, r := range rels {
 		if semver.IsValid(r.TagName) && semver.Compare(r.TagName, tag) < 0 {
@@ -133,7 +162,14 @@ func Previous(rels []Release, tag string) (Release, bool) {
 	if semver.Prerelease(tag) != "" {
 		channel = RC
 	}
-	return Pick(older, channel)
+	for _, r := range Candidates(older, channel) {
+		if m := r.Missing(FinishedAssets(r.TagName, arch)...); len(m) > 0 {
+			skipped = append(skipped, Skipped{Tag: r.TagName, Missing: m})
+			continue
+		}
+		return r, skipped, true
+	}
+	return Release{}, skipped, false
 }
 
 // Repo is a GitHub repository, owner/name.
