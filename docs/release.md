@@ -225,7 +225,10 @@ Each workload goes in its phase's own stack (`product.yaml` `phases`, below), la
 tool refuses a workload no phase names, or a switch's workload whose phase doesn't place the
 switch's stack. The bundle check refuses a bundle without a phase's stack, with a workload in
 it that its phase doesn't name or that lacks the labels, or with a switch's stack that runs a
-workload and that no phase places (`switch_stacks`).
+workload and that no phase places (`switch_stacks`). The tool also refuses a pod that repeats a
+container name: the API server would refuse the workload, and the box would wait for one k0s never
+creates. A claim's owner step is named for its volume (`data-owner`, `backup-owner`), so a pod with
+two claims has two.
 
 The renders layer sneakers-release's `migrate/deploy/migrate-callers-values.yaml`, so the vault
 and audit list the migrate caller and the NetworkPolicies admit it; the import's
