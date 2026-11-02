@@ -79,7 +79,8 @@ settings with `pin_sha256` set and verification on; `SetEmail` saves the pin
 ([product-email.md](product-email.md#pinning-the-relays-certificate)).
 
 `TelemetryService` is the product's Telemetry page ([product-telemetry.md](product-telemetry.md)):
-`GetTelemetry` answers `state` (`not installed`, `not in this product`, `off` or `on`), the settings,
+`GetTelemetry` answers `state` (`not installed`, `not in this product`, `off` or `on`), the settings
+(with `ca_pem`, the collector's CA, when one is set),
 each service's export state and the last restart. `SetTelemetry` checks the collector, saves the
 settings and restarts the services phase by phase, answering once that's begun;
 `RetryTelemetryRestart` carries a failed restart on. A bad setting is `TELEMETRY_INVALID`, a collector

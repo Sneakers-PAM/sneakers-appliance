@@ -13,6 +13,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
@@ -165,9 +166,11 @@ func TestTheSneakersBundleReadsTheBoxsTelemetrySettings(t *testing.T) {
 		}
 	}
 	want := map[string]string{
-		"OTEL_EXPORTER_OTLP_ENDPOINT": productspec.SettingTelemetryEndpoint,
-		"OTLP_INSECURE_SKIP_VERIFY":   productspec.SettingTelemetrySkipVerify,
-		"OTLP_LOGS_ENABLED":           productspec.SettingTelemetryLogs,
+		"OTEL_EXPORTER_OTLP_ENDPOINT":    productspec.SettingTelemetryEndpoint,
+		"OTLP_INSECURE_SKIP_VERIFY":      productspec.SettingTelemetrySkipVerify,
+		"OTLP_LOGS_ENABLED":              productspec.SettingTelemetryLogs,
+		"OTLP_CA_PEM":                    productspec.SettingTelemetryCA,
+		"OTEL_EXPORTER_OTLP_CERTIFICATE": productspec.SettingTelemetryCAFile,
 	}
 	if !maps.Equal(got, want) {
 		t.Fatalf("sneakers-telemetry: %v", got)
@@ -314,5 +317,55 @@ func TestTheSneakersBundleNeedsATelemetryBase(t *testing.T) {
 	}
 	if floor, _ := s.BaseFloor(); floor != productspec.TelemetryMinBase {
 		t.Fatalf("the Sneakers bundle's floor: %q", floor)
+	}
+}
+
+// Every service that loads the telemetry settings mounts the collector's
+// CA from them at the file the exporters are pointed at.
+func TestEveryServiceMountsTheCollectorCA(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "values.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	type item struct {
+		Key  string `yaml:"key"`
+		Path string `yaml:"path"`
+	}
+	var values map[string]struct {
+		ExtraVolumes []struct {
+			Name      string `yaml:"name"`
+			ConfigMap struct {
+				Name     string `yaml:"name"`
+				Optional bool   `yaml:"optional"`
+				Items    []item `yaml:"items"`
+			} `yaml:"configMap"`
+		} `yaml:"extraVolumes"`
+		ExtraVolumeMounts []struct {
+			Name      string `yaml:"name"`
+			MountPath string `yaml:"mountPath"`
+			ReadOnly  bool   `yaml:"readOnly"`
+		} `yaml:"extraVolumeMounts"`
+	}
+	if err := yaml.Unmarshal(b, &values); err != nil {
+		t.Fatal(err)
+	}
+	dir, file := filepath.Split(boxsettings.TelemetryCAFile)
+	for _, service := range []string{"audit", "connector", "gateway", "identity", "mcp", "notify", "sshbroker", "vault", "workflow"} {
+		v := values[service]
+		vol := ""
+		for _, x := range v.ExtraVolumes {
+			if x.ConfigMap.Name == "sneakers-telemetry" && x.ConfigMap.Optional && slices.Contains(x.ConfigMap.Items, item{Key: "OTLP_CA_PEM", Path: file}) {
+				vol = x.Name
+			}
+		}
+		if vol == "" || !slices.ContainsFunc(v.ExtraVolumeMounts, func(m struct {
+			Name      string `yaml:"name"`
+			MountPath string `yaml:"mountPath"`
+			ReadOnly  bool   `yaml:"readOnly"`
+		}) bool {
+			return m.Name == vol && filepath.Clean(m.MountPath) == filepath.Clean(dir) && m.ReadOnly
+		}) {
+			t.Errorf("%s doesn't mount the collector CA at %s: %+v", service, boxsettings.TelemetryCAFile, v)
+		}
 	}
 }

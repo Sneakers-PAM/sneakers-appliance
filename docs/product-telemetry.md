@@ -7,8 +7,8 @@ volume and hands them to the product. Export is off until an admin turns it on.
 
 > **Warning:** with **Verify the certificate** off, traces and metrics go to a collector whose
 > identity isn't checked. Anyone on the path between the box and the collector can read them, or
-> pose as the collector. No logs leave while verification is off. Use a certificate the box trusts
-> wherever the collector supports it.
+> pose as the collector. No logs leave while verification is off. Use a certificate the box trusts,
+> or set the collector's CA, wherever the collector supports it.
 
 ## Before you update
 
@@ -24,13 +24,15 @@ the update's result say to update the base first; the product keeps running as i
 |---|---|---|
 | Export | off | Off stops the export and keeps the endpoint. |
 | Endpoint | (none) | `https://<host>[:<port>]`, the collector's OTLP gRPC address, normally port 4317. `http://`, a bare `host:port` and other schemes are refused. With no port, 443. |
-| Verify the certificate | on | Checks the collector's certificate. Off skips the CA and certificate checks. |
+| Verify the certificate | on | Checks the collector's certificate: against the collector CA when one is set, else the system roots. Off skips the CA and certificate checks. |
+| Collector CA | (none) | A PEM CA (one or more certificates, at most 64 KiB) for a collector signed by a private CA. Set, it's trusted **in place of** the system roots, by the save's handshake and by every service, because the OTLP exporters read a CA file that way. Unused while verification is off. One that doesn't parse is refused (`TELEMETRY_INVALID`). |
 | Logs | off | Exports logs as well as traces and metrics. Turning them on is written to the audit entry and logged as a warning. |
 
-Saving needs a step-up and is audited as `product.telemetry.set`, with every setting and
-`logs_turned_on`. With export on, the box first shakes hands with the collector over TLS, checking
-its certificate unless verification is off; if that fails nothing is saved and the answer is
-`TELEMETRY_UNREACHABLE`. A save is refused while an import step runs, and an open elevated shell
+Saving needs a step-up and is audited as `product.telemetry.set`, with every setting,
+`logs_turned_on`, and the collector CA by its certificates' SHA-256 fingerprints (`none` without
+one). With export on, the box first shakes hands with the collector over TLS, checking its
+certificate unless verification is off, against the collector CA when one is set, the same way the
+services will; if that fails nothing is saved and the answer is `TELEMETRY_UNREACHABLE`. A save is refused while an import step runs, and an open elevated shell
 refuses it as it refuses a product update (an owner may override).
 
 ## How a change reaches the services
@@ -86,10 +88,20 @@ box_settings:
       - {key: OTEL_EXPORTER_OTLP_ENDPOINT, setting: telemetry.endpoint}
       - {key: OTLP_INSECURE_SKIP_VERIFY, setting: telemetry.skip_verify}
       - {key: OTLP_LOGS_ENABLED, setting: telemetry.logs}
+      - {key: OTLP_CA_PEM, setting: telemetry.ca_pem}
+      - {key: OTEL_EXPORTER_OTLP_CERTIFICATE, setting: telemetry.ca_file}
 ```
 
 Every workload in `restart` must be in a phase. Each service loads the ConfigMap whole through
 `envFromConfigMaps`.
+
+The collector CA reaches the services as a file. `telemetry.ca_pem` is the PEM while export is on,
+and each of the nine services mounts that key of the ConfigMap, read only and optional, at
+`/etc/sneakers/otlp/ca.pem` (the chart's `extraVolumes` and `extraVolumeMounts`, set in the
+bundle's `values.yaml`). `telemetry.ca_file` is that path while export is on and verified with a CA
+set, else empty. The OpenTelemetry SDK's OTLP exporters read `OTEL_EXPORTER_OTLP_CERTIFICATE` and
+trust that file's certificates in place of the system roots; empty, they use the system roots. A
+change of CA restarts the services like any other change.
 
 ## An example collector
 

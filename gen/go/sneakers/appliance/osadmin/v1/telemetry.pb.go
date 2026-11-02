@@ -37,7 +37,13 @@ type TelemetrySettings struct {
 	// leave while it's on.
 	SkipVerify bool `protobuf:"varint,3,opt,name=skip_verify,json=skipVerify,proto3" json:"skip_verify,omitempty"`
 	// logs exports logs as well as traces and metrics.
-	Logs          bool `protobuf:"varint,4,opt,name=logs,proto3" json:"logs,omitempty"`
+	Logs bool `protobuf:"varint,4,opt,name=logs,proto3" json:"logs,omitempty"`
+	// ca_pem is the collector's CA, PEM (one or more certificates, at most
+	// 64 KiB); empty for none. Set, the save's handshake and every service's
+	// export check the collector's certificate against it in place of the
+	// system roots. Unused while skip_verify is on. A CA that doesn't parse
+	// is refused with TELEMETRY_INVALID.
+	CaPem         string `protobuf:"bytes,5,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -98,6 +104,13 @@ func (x *TelemetrySettings) GetLogs() bool {
 		return x.Logs
 	}
 	return false
+}
+
+func (x *TelemetrySettings) GetCaPem() string {
+	if x != nil {
+		return x.CaPem
+	}
+	return ""
 }
 
 // TelemetryWorkload is one service's export state.
@@ -544,13 +557,14 @@ var File_sneakers_appliance_osadmin_v1_telemetry_proto protoreflect.FileDescript
 
 const file_sneakers_appliance_osadmin_v1_telemetry_proto_rawDesc = "" +
 	"\n" +
-	"-sneakers/appliance/osadmin/v1/telemetry.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"~\n" +
+	"-sneakers/appliance/osadmin/v1/telemetry.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\x95\x01\n" +
 	"\x11TelemetrySettings\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12\x1a\n" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\x12\x1f\n" +
 	"\vskip_verify\x18\x03 \x01(\bR\n" +
 	"skipVerify\x12\x12\n" +
-	"\x04logs\x18\x04 \x01(\bR\x04logs\"=\n" +
+	"\x04logs\x18\x04 \x01(\bR\x04logs\x12\x15\n" +
+	"\x06ca_pem\x18\x05 \x01(\tR\x05caPem\"=\n" +
 	"\x11TelemetryWorkload\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\"l\n" +
