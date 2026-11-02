@@ -73,7 +73,7 @@ func (s *Server) OpenRootShell(l Local, challenge, code string) (elevation.Reque
 	}
 	r, ticket, err := s.o.Elevation.Open(s.o.Access.Read(), elevation.Caller{Admin: l.Admin, KeyFP: l.KeyFP, Source: l.Source}, challenge, code)
 	if codes.Is(err, codes.RootCode) {
-		s.o.Lockout.Fail(l.Admin, l.Source, s.o.Clock.Now(), s.lockoutMode())
+		s.o.Lockout.Fail(l.Admin, l.Source, s.o.Clock.Now(), s.lockoutRule())
 	}
 	return r, ticket, err
 }
