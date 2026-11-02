@@ -124,6 +124,14 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.mcpShow(ctx)
 	case "mcp.set":
 		res, err = s.mcpSet(ctx, r.Args[0] == "on", r.Flags["machine-api"])
+	case "telemetry.show":
+		res, err = s.telemetryShow(ctx)
+	case "telemetry.set":
+		res, err = s.telemetrySet(ctx, r.Args[0] == "on", r.Args[1], r.Flags)
+	case "telemetry.retry":
+		if _, err = s.Access.RetryTelemetryRestart(ctx, connect.NewRequest(&accessv1.RetryTelemetryRestartRequest{})); err == nil {
+			res = Result{Text: "The restart carries on from the phase it stopped at; telemetry shows how it goes.", Data: map[string]any{"restarting": true}}
+		}
 	case "updates.show":
 		res, err = s.updatesShow(ctx)
 	case "updates.set":
@@ -223,6 +231,61 @@ func (s *Services) mcpSet(ctx context.Context, on bool, api string) (Result, err
 	}
 	word := map[bool]string{true: "on", false: "off"}
 	return Result{Text: fmt.Sprintf("MCP is %s; the machine API is %s. The product is ready with it.", word[on], word[machine]), Data: map[string]any{"mcp": on, "machineApi": machine}}, nil
+}
+
+func (s *Services) telemetryShow(ctx context.Context) (Result, error) {
+	out, err := s.Access.GetTelemetry(ctx, connect.NewRequest(&accessv1.GetTelemetryRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	m := out.Msg.GetTelemetry()
+	word := map[bool]string{true: "on", false: "off"}
+	c := m.GetSettings()
+	var b strings.Builder
+	fmt.Fprintf(&b, "%-12s %s\n%-12s %s\n%-12s %s\n%-12s %s\n", "telemetry", Printable(m.GetState()), "endpoint", Printable(c.GetEndpoint()), "verify", word[!c.GetSkipVerify()], "logs", word[c.GetLogs()])
+	if m.GetLogsHeld() {
+		b.WriteString("No logs leave while the collector isn't verified.\n")
+	}
+	if r := m.GetRestart(); r.GetState() != "" && r.GetState() != "none" {
+		fmt.Fprintf(&b, "%-12s %s %s %s %s\n", "restart", Printable(r.GetState()), Printable(r.GetPhase()), Printable(r.GetWorkload()), Printable(r.GetWhy()))
+	}
+	states := map[string]string{}
+	for _, w := range m.GetWorkloads() {
+		fmt.Fprintf(&b, "%-12s %s\n", Printable(w.GetName()), Printable(w.GetState()))
+		states[w.GetName()] = w.GetState()
+	}
+	if e := m.GetStatusError(); e != "" {
+		b.WriteString(Printable(e) + "\n")
+	}
+	return Result{Text: b.String(), Data: map[string]any{"state": m.GetState(), "endpoint": c.GetEndpoint(), "logs": c.GetLogs(), "verify": !c.GetSkipVerify(), "restart": m.GetRestart().GetState(), "phase": m.GetRestart().GetPhase(), "workload": m.GetRestart().GetWorkload(), "why": m.GetRestart().GetWhy(), "services": states}}, nil
+}
+
+// telemetrySet sets the collector; what's left out stays as saved.
+func (s *Services) telemetrySet(ctx context.Context, on bool, endpoint string, flags map[string]string) (Result, error) {
+	cur, err := s.Access.GetTelemetry(ctx, connect.NewRequest(&accessv1.GetTelemetryRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	saved := cur.Msg.GetTelemetry().GetSettings()
+	next := &osadminv1.TelemetrySettings{Enabled: on, Endpoint: saved.GetEndpoint(), SkipVerify: saved.GetSkipVerify(), Logs: saved.GetLogs()}
+	if endpoint != "" {
+		next.Endpoint = endpoint
+	}
+	if v, ok := flags["logs"]; ok {
+		next.Logs = v == "on"
+	}
+	if v, ok := flags["verify"]; ok {
+		next.SkipVerify = v == "off"
+	}
+	out, err := s.Access.SetTelemetry(ctx, connect.NewRequest(&accessv1.SetTelemetryRequest{Settings: next}))
+	if err != nil {
+		return Result{}, err
+	}
+	text := "Saved; nothing the services read changed."
+	if out.Msg.GetRestarting() {
+		text = "Saved. The services restart phase by phase; telemetry shows how it goes."
+	}
+	return Result{Text: text, Data: map[string]any{"enabled": on, "restarting": out.Msg.GetRestarting()}}, nil
 }
 
 // updatesShow prints the GitHub update source's channel, repository and

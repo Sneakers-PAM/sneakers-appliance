@@ -168,6 +168,18 @@ realci_later() {
   say "realci: later present=$now restore=$state"
   [ -z "$state" ] || last=""
 }
+# realci_telemetry: the telemetry leg's marker. Every change in the last
+# restart's state is said, and when one ends the pods, for their start times.
+realci_telemetry_run=/var/lib/sneakers/platform/telemetry-restart.json
+realci_telemetry_was=
+realci_telemetry() {
+  [ -f "$realci_telemetry_run" ] || return 0
+  now="$(sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' "$realci_telemetry_run" | head -1)"
+  [ "$now" = "$realci_telemetry_was" ] && return 0
+  realci_telemetry_was="$now"
+  say "realci: telemetry restart=$now"
+  [ "$now" = running ] || realci_pods "$v" telemetry
+}
 realci_rows() { # version when
   line=""
   for db in $realci_dbs; do
@@ -246,6 +258,7 @@ realci() {
     v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
     realci_memory
     realci_later
+    realci_telemetry
     if box_running 127.0.0.1 9180; then
       ticks=""
       # The box says running three times in a row before a report, so a

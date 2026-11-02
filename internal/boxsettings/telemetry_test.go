@@ -4,9 +4,13 @@
 package boxsettings_test
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
@@ -113,5 +117,35 @@ func TestTheEndpointMustBeHTTPS(t *testing.T) {
 	st := boxsettings.Store{Dir: t.TempDir()}
 	if err := st.SetTelemetry(boxsettings.Telemetry{Enabled: true, Endpoint: "http://collector.example.com"}); err == nil {
 		t.Error("SetTelemetry saved a plain http endpoint")
+	}
+}
+
+func TestTheCollectorPortGoesToTheBoxsPolicy(t *testing.T) {
+	for endpoint, want := range map[string]string{"https://c.example.com:4317": "4317", "https://c.example.com": "443"} {
+		if got := (boxsettings.Telemetry{Enabled: true, Endpoint: endpoint}).Values()[productspec.SettingTelemetryPort]; got != want {
+			t.Errorf("%s: port %q", endpoint, got)
+		}
+	}
+	if got := (boxsettings.Telemetry{Endpoint: "https://c.example.com:4317"}).Values()[productspec.SettingTelemetryPort]; got != "" {
+		t.Errorf("off: port %q", got)
+	}
+}
+
+func TestTheProbeChecksTheCollector(t *testing.T) {
+	ts := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	defer ts.Close()
+	ctx := context.Background()
+	if err := (boxsettings.Telemetry{Enabled: true, Endpoint: ts.URL}).Probe(ctx); !codes.Is(err, codes.TelemetryUnreachable) {
+		t.Fatalf("an unknown certificate: %v", err)
+	}
+	if err := (boxsettings.Telemetry{Enabled: true, Endpoint: ts.URL, SkipVerify: true}).Probe(ctx); err != nil {
+		t.Fatalf("skip-verify: %v", err)
+	}
+	ts.Close()
+	if err := (boxsettings.Telemetry{Enabled: true, Endpoint: ts.URL, SkipVerify: true}).Probe(ctx); !codes.Is(err, codes.TelemetryUnreachable) {
+		t.Fatalf("nothing listening: %v", err)
+	}
+	if err := (boxsettings.Telemetry{Endpoint: ts.URL}).Probe(ctx); err != nil {
+		t.Fatalf("off asks nothing: %v", err)
 	}
 }

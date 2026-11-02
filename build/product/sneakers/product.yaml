@@ -185,9 +185,23 @@ email:
 # The services export traces, metrics and logs to the collector set on
 # :8443's Telemetry page (docs/product-telemetry.md). The box writes the
 # settings as the sneakers-telemetry ConfigMap, which every service loads
-# whole.
+# whole. A change restarts the services, phase by phase, without stopping
+# the product. The MCP server's own NetworkPolicy doesn't reach a collector,
+# so while export is on the box writes one that opens the collector's port.
 telemetry:
   label: Traces, metrics and logs from every service
+  status: sneakers/sneakers-gateway:9100
+  egress: [sneakers/sneakers-mcp]
+  restart:
+    - sneakers/deployment/sneakers-identity
+    - sneakers/deployment/sneakers-vault
+    - sneakers/deployment/sneakers-workflow
+    - sneakers/deployment/sneakers-audit
+    - sneakers/deployment/sneakers-notify
+    - sneakers/deployment/sneakers-connector
+    - sneakers/deployment/sneakers-sshbroker
+    - sneakers/deployment/sneakers-gateway
+    - sneakers/deployment/sneakers-mcp
 box_settings:
   - configmap: sneakers/sneakers-email
     keys:

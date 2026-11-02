@@ -95,6 +95,8 @@ shell, the console and :8443 show the same sentence.
 | Code | Symbol | Cause |
 |---|---|---|
 | 3910 | `TELEMETRY_INVALID` | a telemetry setting fails validation (the error names it) |
+| 3911 | `TELEMETRY_UNREACHABLE` | the collector didn't answer a TLS handshake when the settings were saved; nothing was saved |
+| 3912 | `TELEMETRY_RESTART` | there's no failed restart to retry, or a workload didn't come back in time |
 
 ## Build kit and boot (1xxx and 2xxx)
 

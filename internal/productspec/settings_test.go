@@ -152,6 +152,9 @@ func TestTheSneakersBundleReadsTheBoxsTelemetrySettings(t *testing.T) {
 	if !s.ReadsTelemetry() || s.Telemetry.Label == "" {
 		t.Fatalf("telemetry: %+v", s.Telemetry)
 	}
+	if g := s.Telemetry.Groups(s); len(g) != 3 || g[0].Phase != "identity" || g[2].Phase != "front" {
+		t.Fatalf("the restart order: %+v", g)
+	}
 	got := map[string]string{}
 	for _, b := range s.BoxSettings {
 		if b.ConfigMap != "sneakers/sneakers-telemetry" {
@@ -210,5 +213,78 @@ func TestEveryServiceLoadsTheTelemetrySettings(t *testing.T) {
 		}) {
 			t.Errorf("%s doesn't load sneakers-telemetry: %+v", service, values[service])
 		}
+	}
+}
+
+const withTelemetryPhases = `format: 2
+telemetry:
+  label: Traces
+  status: sneakers/sneakers-gateway:9100
+  egress: [sneakers/sneakers-mcp]
+  restart:
+    - sneakers/deployment/sneakers-gateway
+    - sneakers/deployment/sneakers-vault
+    - sneakers/deployment/sneakers-identity
+    - sneakers/deployment/sneakers-audit
+phases:
+  - {name: data, label: D, stack: s-data, workloads: [sneakers-postgres]}
+  - {name: identity, label: I, stack: s-identity, workloads: [sneakers-identity, sneakers-vault]}
+  - {name: services, label: S, stack: s-services, workloads: [sneakers-audit]}
+  - {name: front, label: F, stack: s-front, workloads: [sneakers-gateway]}
+`
+
+func TestTheTelemetryRestartFollowsThePhases(t *testing.T) {
+	s, err := productspec.Parse([]byte(withTelemetryPhases))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, g := range s.Telemetry.Groups(s) {
+		got = append(got, g.Phase+":"+strings.Join(g.Restart, ","))
+	}
+	want := []string{
+		"identity:sneakers/deployment/sneakers-identity,sneakers/deployment/sneakers-vault",
+		"services:sneakers/deployment/sneakers-audit",
+		"front:sneakers/deployment/sneakers-gateway",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("the order: %q", got)
+	}
+	if ns, svc, ok := s.Telemetry.StatusRef(); !ok || ns != "sneakers" || svc != "sneakers-gateway:9100" {
+		t.Fatalf("status: %q %q %v", ns, svc, ok)
+	}
+}
+
+func TestATelemetryRestartWithNoPhasesIsOneGroup(t *testing.T) {
+	s, err := productspec.Parse([]byte("format: 2\ntelemetry:\n  restart: [sneakers/deployment/a, sneakers/deployment/b]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := s.Telemetry.Groups(s)
+	if len(g) != 1 || g[0].Phase != "" || len(g[0].Restart) != 2 {
+		t.Fatalf("groups: %+v", g)
+	}
+}
+
+func TestTelemetrySectionsAreRefusedWhenTheyBreakARule(t *testing.T) {
+	for name, doc := range map[string]string{
+		"a bad restart":   "format: 2\ntelemetry:\n  restart: [sneakers/pod/x]\n",
+		"no phase for it": strings.Replace(withTelemetryPhases, "sneakers/deployment/sneakers-audit", "sneakers/deployment/sneakers-other", 1),
+		"a bad status":    "format: 2\ntelemetry:\n  status: gateway\n",
+		"a bad egress":    "format: 2\ntelemetry:\n  egress: [mcp]\n",
+	} {
+		if _, err := productspec.Parse([]byte(doc)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestTheAppliancesAccountMayReadTheTelemetryStatus(t *testing.T) {
+	s, err := productspec.Parse([]byte(withTelemetryPhases))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rbac := string(productspec.RBAC(s)); !strings.Contains(rbac, "services/proxy") || !strings.Contains(rbac, `"sneakers-gateway:9100"`) {
+		t.Fatalf("rbac:\n%s", rbac)
 	}
 }

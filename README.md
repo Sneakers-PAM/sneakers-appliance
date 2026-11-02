@@ -36,6 +36,7 @@ sneakers-kit build sneakers-os:0.1.0 --format ova --out ./out
 - [docs/product-email.md](docs/product-email.md): the Email page, the product's mail relay.
 - [docs/data-move.md](docs/data-move.md): the one-time move of a product's databases to a new
   PostgreSQL cluster during an upgrade, proved before the services start, and how a failure goes back.
+- [docs/product-telemetry.md](docs/product-telemetry.md): the Telemetry page, the collector the services export to.
 - [docs/import.md](docs/import.md): the Import page, which brings an earlier install's export into
   the product before its own setup (imported-users mode).
 - [docs/factory-reset.md](docs/factory-reset.md): how init reboots, shuts down and factory resets

@@ -948,6 +948,11 @@ func RBAC(s Spec) []byte {
 	for _, e := range s.Escrow {
 		secrets[e.Namespace()] = appendNew(secrets[e.Namespace()], e.SecretName())
 	}
+	if s.Telemetry != nil {
+		if ns, proxy, ok := s.Telemetry.StatusRef(); ok {
+			proxies[ns] = appendNew(proxies[ns], proxy)
+		}
+	}
 	nss := map[string]bool{}
 	for ns := range secrets {
 		nss[ns] = true

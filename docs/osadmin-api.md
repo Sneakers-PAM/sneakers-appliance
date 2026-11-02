@@ -72,6 +72,14 @@ whether a password is saved, never the password. `SetEmail` saves them and appli
 again (`password` absent keeps the saved one, empty clears it); `SendTestEmail` sends one message.
 A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`.
 
+`TelemetryService` is the product's Telemetry page ([product-telemetry.md](product-telemetry.md)):
+`GetTelemetry` answers `state` (`not installed`, `not in this product`, `off` or `on`), the settings,
+each service's export state and the last restart. `SetTelemetry` checks the collector, saves the
+settings and restarts the services phase by phase, answering once that's begun;
+`RetryTelemetryRestart` carries a failed restart on. A bad setting is `TELEMETRY_INVALID`, a collector
+that doesn't answer `TELEMETRY_UNREACHABLE`, a retry with nothing failed `TELEMETRY_RESTART`, and a
+save during an import or another update `UPGRADE_BUSY`.
+
 `StatusService.HideProtectionNotice` hides the reduced-protection banner
 (`WARNING_KIND_REDUCED_PROTECTION`) for every admin: any signed-in admin may call it, with no
 step-up or code. The request carries the `protection_reason` the banner was shown for; the box
@@ -182,6 +190,9 @@ same.
 | `ProductService.RemoveBackup` | owner, SSH only | every call | `product.backup.remove-request` |
 | `ProductService.RestoreBackup` | owner, SSH only | every call | `product.backup.restore` |
 | `ProductService.PrepareBackupExport` | owner, SSH only | every call | `product.backup.export-request` |
+| `TelemetryService.GetTelemetry` | admin | no | |
+| `TelemetryService.SetTelemetry` | admin | yes | `product.telemetry.set` |
+| `TelemetryService.RetryTelemetryRestart` | admin | yes | `product.telemetry.restart` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `EmailService.GetEmail` | admin | no | |

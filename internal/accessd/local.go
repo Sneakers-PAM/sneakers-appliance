@@ -84,6 +84,31 @@ func (h *accessH) GetMcp(ctx context.Context, r *connect.Request[accessv1.GetMcp
 	return connect.NewResponse(&accessv1.GetMcpResponse{Mcp: out}), nil
 }
 
+func (h *accessH) GetTelemetry(ctx context.Context, r *connect.Request[accessv1.GetTelemetryRequest]) (*connect.Response[accessv1.GetTelemetryResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceGetTelemetryProcedure, osadminv1connect.TelemetryServiceGetTelemetryProcedure, h.s.h.Telemetry.GetTelemetry, &osadminv1.GetTelemetryRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.GetTelemetryResponse{Telemetry: out}), nil
+}
+
+func (h *accessH) SetTelemetry(ctx context.Context, r *connect.Request[accessv1.SetTelemetryRequest]) (*connect.Response[accessv1.SetTelemetryResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceSetTelemetryProcedure, osadminv1connect.TelemetryServiceSetTelemetryProcedure, h.s.h.Telemetry.SetTelemetry,
+		&osadminv1.SetTelemetryRequest{Settings: r.Msg.GetSettings()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.SetTelemetryResponse{Restarting: out.GetRestarting()}), nil
+}
+
+func (h *accessH) RetryTelemetryRestart(ctx context.Context, r *connect.Request[accessv1.RetryTelemetryRestartRequest]) (*connect.Response[accessv1.RetryTelemetryRestartResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceRetryTelemetryRestartProcedure, osadminv1connect.TelemetryServiceRetryTelemetryRestartProcedure, h.s.h.Telemetry.RetryTelemetryRestart,
+		&osadminv1.RetryTelemetryRestartRequest{}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.RetryTelemetryRestartResponse{}), nil
+}
+
 func (h *accessH) SetMcp(ctx context.Context, r *connect.Request[accessv1.SetMcpRequest]) (*connect.Response[accessv1.SetMcpResponse], error) {
 	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceSetMcpProcedure, osadminv1connect.McpServiceSetMcpProcedure, h.s.h.Mcp.SetMcp,
 		&osadminv1.SetMcpRequest{McpEnabled: r.Msg.GetMcpEnabled(), MachineApiEnabled: r.Msg.GetMachineApiEnabled()}); err != nil {

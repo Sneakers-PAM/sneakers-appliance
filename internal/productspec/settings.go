@@ -3,7 +3,10 @@
 
 package productspec
 
-import "strings"
+import (
+	"regexp"
+	"strings"
+)
 
 // The box settings an admin sets on :8443 for the product, by the names a
 // product.yaml reads them under (box_settings and box_secrets keys'
@@ -38,6 +41,9 @@ const (
 	SettingTelemetrySkipVerify = "telemetry.skip_verify"
 	// SettingTelemetryLogs is "true" when logs are exported, else "false".
 	SettingTelemetryLogs = "telemetry.logs"
+	// SettingTelemetryPort is the collector's port while export is on, else
+	// empty. The box opens it in its NetworkPolicy; no key reads it.
+	SettingTelemetryPort = "telemetry.port"
 )
 
 // settings are the settings the box offers, each saying whether it is
@@ -46,7 +52,7 @@ var settings = map[string]bool{
 	SettingEmailHost: false, SettingEmailPort: false, SettingEmailFrom: false, SettingEmailUsername: false,
 	SettingEmailTLS: false, SettingEmailSkipVerify: false, SettingEmailCA: false,
 	SettingEmailPassword: true, SettingEmailURI: true,
-	SettingTelemetryEndpoint: false, SettingTelemetrySkipVerify: false, SettingTelemetryLogs: false,
+	SettingTelemetryEndpoint: false, SettingTelemetrySkipVerify: false, SettingTelemetryLogs: false, SettingTelemetryPort: false,
 }
 
 // IsSetting reports whether the box offers the setting, and whether it is
@@ -68,7 +74,12 @@ type Email struct {
 
 // RestartRef splits Restart[i].
 func (e Email) RestartRef(i int) (ns, kind, name string, ok bool) {
-	m := restartRE.FindStringSubmatch(e.Restart[i])
+	return SplitRestart(e.Restart[i])
+}
+
+// SplitRestart splits a <namespace>/<kind>/<name> reference.
+func SplitRestart(ref string) (ns, kind, name string, ok bool) {
+	m := restartRE.FindStringSubmatch(ref)
 	if m == nil {
 		return "", "", "", false
 	}
@@ -80,7 +91,71 @@ func (e Email) RestartRef(i int) (ns, kind, name string, ok bool) {
 type Telemetry struct {
 	// Label says what the product exports.
 	Label string `yaml:"label"`
+	// Restart are the workloads that read the settings,
+	// <namespace>/<deployment|statefulset|daemonset>/<name>. They restart
+	// once a change is in place, in the order of the phases.
+	Restart []string `yaml:"restart"`
+	// Status is the Service that answers each workload's export state,
+	// <namespace>/<service>:<port>, read through the API server's service
+	// proxy.
+	Status string `yaml:"status"`
+	// Egress are the workloads whose NetworkPolicy doesn't reach the
+	// collector, <namespace>/<app.kubernetes.io/name>: while export is on
+	// the box writes one that opens the collector's port for each.
+	Egress []string `yaml:"egress"`
 }
+
+// TelemetryStatusPath is what Status answers on.
+const TelemetryStatusPath = "/telemetry-status"
+
+// RestartGroup is the workloads of one phase. Phase is empty for a product
+// with no phases.
+type RestartGroup struct {
+	Phase   string
+	Restart []string
+}
+
+// Groups is Restart in the order of spec's phases, each phase's workloads
+// together; with no phases, one group.
+func (t Telemetry) Groups(spec Spec) []RestartGroup {
+	if len(spec.Phases) == 0 {
+		if len(t.Restart) == 0 {
+			return nil
+		}
+		return []RestartGroup{{Restart: t.Restart}}
+	}
+	var out []RestartGroup
+	for i, ph := range spec.Phases {
+		var refs []string
+		for _, r := range spec.Phases[i].Workloads {
+			for j := range t.Restart {
+				if _, _, name, ok := t.RestartRef(j); ok && name == r {
+					refs = append(refs, t.Restart[j])
+				}
+			}
+		}
+		if len(refs) > 0 {
+			out = append(out, RestartGroup{Phase: ph.Name, Restart: refs})
+		}
+	}
+	return out
+}
+
+// RestartRef splits Restart[i].
+func (t Telemetry) RestartRef(i int) (ns, kind, name string, ok bool) {
+	return SplitRestart(t.Restart[i])
+}
+
+// StatusRef splits Status.
+func (t Telemetry) StatusRef() (ns, proxy string, ok bool) {
+	ns, proxy, ok = strings.Cut(t.Status, "/")
+	if !ok || !dnsRE.MatchString(ns) || !telemetryProxyRE.MatchString(proxy) {
+		return "", "", false
+	}
+	return ns, proxy, true
+}
+
+var telemetryProxyRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?:[0-9]{1,5}$`)
 
 // BoxSetting is one ConfigMap the box writes from its settings.
 type BoxSetting struct {
@@ -127,6 +202,26 @@ func (s Spec) checkSettings() error {
 		for j := range e.Restart {
 			if _, _, _, ok := e.RestartRef(j); !ok {
 				return bad("email.restart: %q isn't <namespace>/<deployment|statefulset|daemonset>/<name>", e.Restart[j])
+			}
+		}
+	}
+	if t := s.Telemetry; t != nil {
+		for j := range t.Restart {
+			_, _, name, ok := t.RestartRef(j)
+			if !ok {
+				return bad("telemetry.restart: %q isn't <namespace>/<deployment|statefulset|daemonset>/<name>", t.Restart[j])
+			}
+			if _, phased := s.PhaseOf(name); len(s.Phases) > 0 && !phased {
+				return bad("telemetry.restart: no phase names %s", name)
+			}
+		}
+		if _, _, ok := t.StatusRef(); t.Status != "" && !ok {
+			return bad("telemetry.status: %q isn't <namespace>/<service>:<port>", t.Status)
+		}
+		for _, e := range t.Egress {
+			ns, name, ok := strings.Cut(e, "/")
+			if !ok || !dnsRE.MatchString(ns) || !dnsRE.MatchString(name) {
+				return bad("telemetry.egress: %q isn't <namespace>/<name>", e)
 			}
 		}
 	}

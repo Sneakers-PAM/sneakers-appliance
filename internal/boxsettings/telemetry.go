@@ -4,13 +4,22 @@
 package boxsettings
 
 import (
+	"context"
+	"crypto/tls"
 	"net"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
+
+// defaultCollectorPort is the port of an endpoint that names none.
+const defaultCollectorPort = "443"
+
+// probeBound is how long a save waits for the collector's TLS handshake.
+const probeBound = 10 * time.Second
 
 // Telemetry is where the product's services export traces, metrics and
 // logs. Off stops the export and keeps the endpoint.
@@ -56,6 +65,34 @@ func (t Telemetry) Check() error {
 	return nil
 }
 
+// Probe shakes hands with the collector, checking its certificate unless
+// SkipVerify says not to. Off, it asks nothing.
+func (t Telemetry) Probe(ctx context.Context) error {
+	if !t.Enabled {
+		return nil
+	}
+	if err := t.Check(); err != nil {
+		return err
+	}
+	u, err := url.Parse(t.Endpoint)
+	if err != nil {
+		return telemetryRefused("the collector endpoint %q isn't an https:// address", t.Endpoint)
+	}
+	port := u.Port()
+	if port == "" {
+		port = defaultCollectorPort
+	}
+	ctx, cancel := context.WithTimeout(ctx, probeBound)
+	defer cancel()
+	d := tls.Dialer{Config: &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: t.SkipVerify, ServerName: u.Hostname()}} // #nosec G402 -- skip-verify is the admin's choice, and the page warns
+	c, err := d.DialContext(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
+	if err != nil {
+		return codes.New(codes.TelemetryUnreachable, "the collector at %s can't be reached over TLS: %v", u.Host, err)
+	}
+	_ = c.Close()
+	return nil
+}
+
 // Values are the settings by the names a product.yaml reads. Off, the
 // services see no endpoint; with the collector unverified, no logs.
 func (t Telemetry) Values() map[string]string {
@@ -63,8 +100,15 @@ func (t Telemetry) Values() map[string]string {
 	if t.Enabled {
 		endpoint = t.Endpoint
 	}
+	port := ""
+	if u, err := url.Parse(t.Endpoint); t.Enabled && err == nil {
+		if port = u.Port(); port == "" {
+			port = defaultCollectorPort
+		}
+	}
 	return map[string]string{
 		productspec.SettingTelemetryEndpoint:   endpoint,
+		productspec.SettingTelemetryPort:       port,
 		productspec.SettingTelemetrySkipVerify: strconv.FormatBool(t.SkipVerify),
 		productspec.SettingTelemetryLogs:       strconv.FormatBool(t.Enabled && t.Logs && !t.SkipVerify),
 	}

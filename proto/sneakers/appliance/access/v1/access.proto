@@ -26,6 +26,7 @@ import "sneakers/appliance/netd/v1/netd.proto";
 import "sneakers/appliance/osadmin/v1/access.proto";
 import "sneakers/appliance/osadmin/v1/elevation.proto";
 import "sneakers/appliance/osadmin/v1/mcp.proto";
+import "sneakers/appliance/osadmin/v1/telemetry.proto";
 import "sneakers/appliance/osadmin/v1/network.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/product.proto";
@@ -74,6 +75,13 @@ service AccessService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   rpc SetMcp(SetMcpRequest) returns (SetMcpResponse);
+  // GetTelemetry, SetTelemetry and RetryTelemetryRestart are the closed
+  // shell's "<product> telemetry": osadmin's, run as the login's admin.
+  rpc GetTelemetry(GetTelemetryRequest) returns (GetTelemetryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc SetTelemetry(SetTelemetryRequest) returns (SetTelemetryResponse);
+  rpc RetryTelemetryRestart(RetryTelemetryRestartRequest) returns (RetryTelemetryRestartResponse);
   // GetUpdateChannel and SetUpdateChannel are the closed shell's "updates":
   // osadmin's UpgradeService.GetUpgrades and SetUpgradePolicy run as the
   // login's admin, so the shell shows and sets the same channel (and, on a
@@ -817,6 +825,24 @@ message SetMcpRequest {
 }
 
 message SetMcpResponse {}
+
+message GetTelemetryRequest {}
+
+message GetTelemetryResponse {
+  sneakers.appliance.osadmin.v1.GetTelemetryResponse telemetry = 1;
+}
+
+message SetTelemetryRequest {
+  sneakers.appliance.osadmin.v1.TelemetrySettings settings = 1;
+}
+
+message SetTelemetryResponse {
+  bool restarting = 1;
+}
+
+message RetryTelemetryRestartRequest {}
+
+message RetryTelemetryRestartResponse {}
 
 message GetUpdateChannelRequest {}
 
