@@ -405,7 +405,9 @@ jobs:
             BRAND=build/product/sneakers/brand DATAMOVE=build/product/sneakers/datamove bash build/product/build.sh
       # The previous published release on this tag's channel (a box on the
       # channel runs it now; an rc's may be a stable release), whose Base OS
-      # the patch below starts from. None for the first release.
+      # the patch below starts from. Only a finished one counts: a release
+      # whose run failed after it was published is skipped, and named in
+      # the log. None for the first release.
       - name: Find the previous release on the channel
         id: previous
         env:
