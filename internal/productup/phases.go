@@ -58,6 +58,7 @@ var stepLabels = map[string]string{
 	StepQuiesce:   "Stopping what was left running",
 	StepCluster:   "Starting the cluster's network, DNS and edge",
 	StepDataMove:  "Moving the database",
+	StepRestore:   "Restoring the database",
 }
 
 // PhaseStep is the step id of the phase name.
