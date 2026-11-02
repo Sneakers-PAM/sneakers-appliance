@@ -23,6 +23,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/test/image/harness"
 )
 
 // telemetryPhases are the Sneakers product's phases a telemetry restart
@@ -54,21 +56,28 @@ func TestTheRealBundleRestartsForTelemetryInOrder(t *testing.T) {
 	if image == "" {
 		t.Skip("SNEAKERS_REAL_NEW_IMAGE names the base under test")
 	}
-	b := newRealBoxMarked(t, e, image, e.newVersion, 0, "telemetry-break\n")
+	harness.Need(t, []string{"socat"})
+	// QEMU's user network gives the box no way out (restrict=on) but its
+	// guestfwd rules, so the collector listens on the runner before the box
+	// boots, at podEgressTarget on the box's side. socat makes one
+	// connection per connect: the save's handshake and each service's.
+	col := newCanaryCollector(t)
+	fwd := fmt.Sprintf("tcp:%s-cmd:socat - TCP:127.0.0.1:%d", podEgressTarget, col.port)
+	b := newRealBoxMarked(t, e, image, e.newVersion, 0, "telemetry-break\n", []string{fwd})
 	v := productVersion(e.next)
 	b.apply(e.next, "UPDATE_TARGET_PRODUCT")
 	installed := b.mustRun(v, "the install of "+v, realRows{}, true, false)
 
 	// The box answers a save only after a TLS handshake with the
-	// collector; QEMU's user network reaches the host at its .2.
-	col := newCanaryCollector(t)
+	// collector. The endpoint's port is the one the box opens in the MCP
+	// server's NetworkPolicy.
 	adm := signIn(t, b.adminPort, b.alice)
 	adm.call(t, "SignInService/StepUp", map[string]any{"totpCode": b.alice.code()}, &struct{}{})
 	var set struct {
 		Restarting bool `json:"restarting"`
 	}
 	adm.call(t, "TelemetryService/SetTelemetry", map[string]any{"settings": map[string]any{
-		"enabled": true, "endpoint": fmt.Sprintf("https://10.0.2.2:%d", col.port), "skipVerify": true, "logs": true,
+		"enabled": true, "endpoint": "https://" + podEgressTarget.String(), "skipVerify": true, "logs": true,
 	}}, &set)
 	if !set.Restarting {
 		t.Fatal("the save didn't restart the services")
@@ -251,7 +260,7 @@ type canaryCollector struct {
 func newCanaryCollector(t *testing.T) *canaryCollector {
 	t.Helper()
 	c := &canaryCollector{paths: map[string]int{}, first: make(chan struct{})}
-	l, err := net.Listen("tcp", "0.0.0.0:0")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}

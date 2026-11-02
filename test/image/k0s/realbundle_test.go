@@ -68,6 +68,9 @@ type realBox struct {
 	boots                  int
 	// memMiB is the VM's memory; 0 is 8 GiB.
 	memMiB int
+	// guestFwd are guestfwd rules every boot carries, so the box reaches
+	// listeners on the runner (harness.Options.GuestFwd).
+	guestFwd []string
 }
 
 func (b *realBox) opts(img string) harness.Options {
@@ -77,7 +80,8 @@ func (b *realBox) opts(img string) harness.Options {
 	}
 	return harness.Options{SecureBoot: harness.OffWithKeys, Keys: b.keys, MemMiB: mem, CPUs: 4,
 		Disks: []harness.Disk{{Image: img, Move: true}}, Timeout: 5 * time.Hour,
-		HostFwd: []string{fmt.Sprintf("tcp:127.0.0.1:%d-:22", b.sshPort), fmt.Sprintf("tcp:127.0.0.1:%d-:8443", b.adminPort), fmt.Sprintf("tcp:127.0.0.1:%d-:443", b.hp)}}
+		HostFwd:  []string{fmt.Sprintf("tcp:127.0.0.1:%d-:22", b.sshPort), fmt.Sprintf("tcp:127.0.0.1:%d-:8443", b.adminPort), fmt.Sprintf("tcp:127.0.0.1:%d-:443", b.hp)},
+		GuestFwd: b.guestFwd}
 }
 
 // keepConsole writes the boot's serial console where the job collects its
@@ -113,16 +117,17 @@ func newRealBox(t *testing.T, e realEnv) *realBox {
 // 8 GiB), and sets it up.
 func newRealBoxFrom(t *testing.T, e realEnv, img, version string, memMiB int) *realBox {
 	t.Helper()
-	return newRealBoxMarked(t, e, img, version, memMiB, "")
+	return newRealBoxMarked(t, e, img, version, memMiB, "", nil)
 }
 
 // newRealBoxMarked is newRealBoxFrom with more lines in the lab hook's ESP
-// marker, which the hook reads for what a leg asks of it.
-func newRealBoxMarked(t *testing.T, e realEnv, img, version string, memMiB int, marks string) *realBox {
+// marker, which the hook reads for what a leg asks of it, and guestfwd
+// rules for every boot: what they forward to must be listening already.
+func newRealBoxMarked(t *testing.T, e realEnv, img, version string, memMiB int, marks string, guestFwd []string) *realBox {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Hour)
 	t.Cleanup(cancel)
-	b := &realBox{t: t, ctx: ctx, keys: e.keys, sshPort: freePort(t), adminPort: freePort(t), hp: freePort(t), memMiB: memMiB}
+	b := &realBox{t: t, ctx: ctx, keys: e.keys, sshPort: freePort(t), adminPort: freePort(t), hp: freePort(t), memMiB: memMiB, guestFwd: guestFwd}
 	marked := filepath.Join(t.TempDir(), "marked.raw")
 	if out, err := exec.Command("cp", "--sparse=always", img, marked).CombinedOutput(); err != nil { // #nosec G204 -- test-only, fixed tool
 		t.Fatalf("cp: %v: %s", err, out)

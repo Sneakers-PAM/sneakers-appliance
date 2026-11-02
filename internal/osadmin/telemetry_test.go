@@ -66,10 +66,10 @@ func (e *telemetryBox) Restart(_ context.Context, _, _, name string) error {
 func (e *telemetryBox) RolledOut(_ context.Context, _, _, name string) (string, bool, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	switch {
-	case name == "mcp":
+	if name == "mcp" {
 		return "", false, nil
-	case name == e.stuck:
+	}
+	if name == e.stuck {
 		return "0 of 1 updated", true, nil
 	}
 	return "", true, nil
