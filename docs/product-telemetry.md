@@ -10,6 +10,14 @@ volume and hands them to the product. Export is off until an admin turns it on.
 > pose as the collector. No logs leave while verification is off. Use a certificate the box trusts
 > wherever the collector supports it.
 
+## Before you update
+
+The Telemetry page comes with base `0.1.0-rc.7`. A product bundle that reads the telemetry settings
+is sealed for that base or newer, so update the base first. On an older base the product update is
+refused before anything is decrypted or applied (`UPGRADE_PRODUCT_BASE`), and the Updates page and
+the update's result say to update the base first; the product keeps running as it was
+([release.md](release.md#the-base-a-productyaml-needs)).
+
 ## The settings
 
 | Setting | Default | Meaning |

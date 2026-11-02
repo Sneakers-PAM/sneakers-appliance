@@ -168,7 +168,7 @@ same release key and encrypted to the same update key, with these header fields:
 |---|---|
 | `name` | `sneakers-product` (signed, so a base `.bin` can't pass for a product bundle or the reverse) |
 | `kind` | `product` |
-| `min_base` | the oldest base version it fits, SemVer, inclusive; the box refuses it on an older base (`UPGRADE_PRODUCT_BASE`, naming the range and the running base), before it decrypts anything |
+| `min_base` | the oldest base version it fits, SemVer, inclusive; the box refuses it on an older base (`UPGRADE_PRODUCT_BASE`, naming the range and the running base and asking for the base update first), before it decrypts anything. A production bundle is never sealed below what its `product.yaml` needs ([below](#the-base-a-productyaml-needs)) |
 | `max_base` | the newest base version it fits, inclusive; optional (no maximum when it's absent) |
 | `bases` | exact base versions, for boxes that predate `min_base`; a box that reads `min_base` ignores them. A bundle sealed before the range existed carries only `bases` and is still accepted on one of them, with a note in osadmin's log. To be dropped before v0.1.0 |
 
@@ -187,7 +187,7 @@ signed by the release key, YAML stacks only (none named `sneakers-appliance-expo
 How it's installed and updated is in [upgrades.md](upgrades.md#the-product-bundle).
 
 `build/product/build.sh` lays the bundle out (with `BRAND=<folder>` for a brand), runs that check (`sneakers-artifact product-check`)
-and packs it for a base range (`MIN_BASE` and the optional `MAX_BASE`, `bin-pack --kind product --min-base ... --max-base ...`; `BASES`, `--base`, still adds exact bases for older boxes); the caller signs the
+and packs it for a base range (`MIN_BASE` and the optional `MAX_BASE`, `bin-pack --kind product --min-base ... --max-base ...`; `BASES`, `--base`, still adds exact bases for older boxes), refusing a production range that starts below the base its `product.yaml` needs ([below](#the-base-a-productyaml-needs)); the caller signs the
 header and seals it with `bin-seal`. `sneakers-artifact product-index` (also `index`) writes the
 index a mirror serves next to the `.bin` files, format 2: version, architecture, channel, the base range and
 bases, file name and size per product bundle under `products`; the Base OS releases (with `kind`,
@@ -552,6 +552,23 @@ allowed applets and options, a path outside the data root, shell characters, a r
 ConfigMaps or any resource not on the list, a verb other than `get`, `describe` or `logs`, a timeout
 past 60s, a redact pattern that doesn't compile, a title declared twice, or more than 32 sections.
 The section is new in this release, so the base goes first here too.
+
+#### The base a product.yaml needs
+
+A base older than a section refuses the whole `product.yaml`, and it only finds out after it has
+decrypted the bundle, with a parse error that doesn't say what to do. So a section that needs a
+newer base also sets the oldest base a bundle that uses it may be sealed for, and `bin-pack --kind
+product` refuses a production bundle whose `min_base` is below it, or that names an older exact
+base (`UPGRADE_FORMAT`). Sealed that way, an older base refuses the bundle up front, before it
+decrypts anything (`UPGRADE_PRODUCT_BASE`), and the refusal on the Updates page and in the update's
+result says to update the base first. Nothing is applied, and the product keeps running as it was.
+
+| Section | Oldest base |
+|---|---|
+| `telemetry` | `0.1.0-rc.7` |
+
+Lab bundles aren't checked: a lab base's version doesn't sort against a release's. A release packs
+its product for its own version and newer, which is always at or above the table.
 
 `build/product/build.sh` takes it as `PRODUCT_YAML`; the Sneakers bundle's is
 `build/product/sneakers/product.yaml`: every agreed component (PostgreSQL, Valkey, Kratos, Hydra,

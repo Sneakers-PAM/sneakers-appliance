@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/product"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/sigbundle"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/updatepkg"
@@ -72,6 +73,11 @@ func binPackCmd() *cobra.Command {
 		Use:   "bin-pack",
 		Short: "Encrypt a signed artifact layout into an update package's payload and write the header to sign",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if updatepkg.Kind(kind) == updatepkg.KindProduct {
+				if err := checkProductFloor(layout, h); err != nil {
+					return err
+				}
+			}
 			r, err := readRecipient(recipient)
 			if err != nil {
 				return err
@@ -145,6 +151,18 @@ func binPackCmd() *cobra.Command {
 		_ = cmd.MarkFlagRequired(req)
 	}
 	return cmd
+}
+
+// checkProductFloor refuses a product bundle whose product.yaml needs a
+// newer base than the range h is sealed for (updatepkg.CheckBaseFloor).
+func checkProductFloor(layout string, h updatepkg.Header) error {
+	spec, err := productspec.Load(layout)
+	if err != nil {
+		return err
+	}
+	floor, why := spec.BaseFloor()
+	h.Kind = updatepkg.KindProduct
+	return h.CheckBaseFloor(floor, why)
 }
 
 func binSealCmd() *cobra.Command {

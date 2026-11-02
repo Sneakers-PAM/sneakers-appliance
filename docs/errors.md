@@ -134,7 +134,7 @@ shell, the console and :8443 show the same sentence.
 | 2501 | `UPGRADE_DOWNGRADE` | the release isn't newer than the running one |
 | 2502 | `UPGRADE_UNPREDICTABLE` | the release's UKI isn't one whose PCR 11 the box can predict |
 | 2503 | `UPGRADE_NO_PREVIOUS` | there's no previous release to roll back to |
-| 2504 | `UPGRADE_FORMAT` | the file isn't a sneakers-appliance update package, or its header breaks the format's rules |
+| 2504 | `UPGRADE_FORMAT` | the file isn't a sneakers-appliance update package, or its header breaks the format's rules; at seal time, a production product bundle whose base range starts below what its `product.yaml` needs ([release.md](release.md#the-base-a-productyaml-needs)) |
 | 2505 | `UPGRADE_SIGNATURE` | the update package isn't signed by this box's release key, or it changed after it was signed |
 | 2506 | `UPGRADE_DECRYPT` | the update package doesn't decrypt with this box's update key, or the booted UKI carries no update key |
 | 2507 | `UPGRADE_CHANNEL` | a lab package never installs on a production box, and a production package never on a lab box |
@@ -143,7 +143,7 @@ shell, the console and :8443 show the same sentence.
 | 2510 | `UPGRADE_UPLOAD` | the upload or fetch is unknown, too large, or failed |
 | 2511 | `UPGRADE_NOT_STAGED` | no release is staged to apply |
 | 2512 | `UPGRADE_ELEVATED` | an elevated shell is open (the refusal names it); it ends, or an owner terminates it or overrides it (which ends it), before an update applies or reverts |
-| 2513 | `UPGRADE_PRODUCT_BASE` | the product bundle doesn't fit the base version this box runs, or a base release is outside the installed product's base range |
+| 2513 | `UPGRADE_PRODUCT_BASE` | the product bundle doesn't fit the base version this box runs (on an older base it says to update the base first; nothing is applied), or a base release is outside the installed product's base range |
 | 2514 | `UPGRADE_NO_REBOOT` | an apply or revert was accepted, but the box didn't reboot within the bound |
 | 2515 | `UPGRADE_BUSY` | a file is already coming in or waiting, a stage is under way, or another update is being applied; verify or cancel it, or wait for it, first |
 | 2516 | `UPGRADE_PRODUCT_START` | a product apply or revert restarted the product, but it wasn't ready within the bound: its workloads hadn't rolled out, its health check didn't answer, or 443 didn't answer with it; the failed step says which ([upgrades.md](upgrades.md#when-the-product-is-ready)) |

@@ -288,3 +288,31 @@ func TestTheAppliancesAccountMayReadTheTelemetryStatus(t *testing.T) {
 		t.Fatalf("rbac:\n%s", rbac)
 	}
 }
+
+func TestAProductThatReadsTelemetryNeedsABaseThatDoes(t *testing.T) {
+	s, err := productspec.Parse([]byte("format: 2\ntelemetry:\n  label: Traces\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor, why := s.BaseFloor()
+	if floor != "0.1.0-rc.7" || !strings.Contains(why, "telemetry") {
+		t.Fatalf("the floor: %q %q", floor, why)
+	}
+	plain, err := productspec.Parse([]byte("format: 2\nemail: {}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if floor, why := plain.BaseFloor(); floor != "" || why != "" {
+		t.Fatalf("a product without telemetry has a floor: %q %q", floor, why)
+	}
+}
+
+func TestTheSneakersBundleNeedsATelemetryBase(t *testing.T) {
+	s, err := productspec.Load(filepath.Join("..", "..", "build", "product", "sneakers"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if floor, _ := s.BaseFloor(); floor != productspec.TelemetryMinBase {
+		t.Fatalf("the Sneakers bundle's floor: %q", floor)
+	}
+}

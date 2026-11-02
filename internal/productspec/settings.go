@@ -183,6 +183,21 @@ func (s Spec) ReadsEmail() bool { return s.Email != nil }
 // settings.
 func (s Spec) ReadsTelemetry() bool { return s.Telemetry != nil }
 
+// TelemetryMinBase is the first base release that reads a product.yaml's
+// telemetry section and its settings. An older base refuses the whole
+// product.yaml, so a bundle that has one is sealed for this base or newer.
+const TelemetryMinBase = "0.1.0-rc.7"
+
+// BaseFloor is the oldest base release that can apply the product, and
+// why, from the sections it uses; "" when any base that reads format 2
+// can.
+func (s Spec) BaseFloor() (version, why string) {
+	if s.ReadsTelemetry() {
+		return TelemetryMinBase, "it reads the box's telemetry settings"
+	}
+	return "", ""
+}
+
 // settingSection says why the product can't read the setting: the section
 // of product.yaml it belongs to is missing.
 func (s Spec) settingSection(name string) string {
