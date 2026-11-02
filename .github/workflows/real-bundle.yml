@@ -81,12 +81,15 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      # Three real bundles, their service images and a box's disk with them
-      # installed need more room than the runner leaves free.
+      # Four real bundles, their service images and a box's disk with them
+      # installed need more room than the runner leaves free, and the same
+      # runner label can come with a disk half the size.
       - name: Make room on the runner
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/local/.ghcup /usr/share/swift /usr/lib/jvm /usr/local/share/powershell /opt/az /opt/microsoft \
+            /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby /usr/lib/google-cloud-sdk /usr/local/share/chromium
           docker image prune -af >/dev/null
           df -h /
       - name: Setup Go
@@ -238,6 +241,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           df -h /
+          sudo du -xsh "$RUNNER_TEMP"/realci/* "$RUNNER_TEMP"/layouts /var/lib/docker 2>/dev/null | sort -h | tail -12 || true
       # Every path this job caches, checked for the run's keys and any
       # private key before anything is saved (the cache steps above save
       # theirs at the end of the job; the legs don't write to them).

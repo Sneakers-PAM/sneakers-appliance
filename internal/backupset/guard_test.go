@@ -148,7 +148,7 @@ func TestTheNextBaseBackupClosesTheGap(t *testing.T) {
 	if !strings.Contains(fmt.Sprint(b.g.Warnings()), "WAL files go") {
 		t.Fatalf("warnings = %+v", b.g.Warnings())
 	}
-	store := b.fixture.b.StoreHostDir()
+	store := b.b.StoreHostDir()
 	writeStore(t, store, "basebackups_005/base_000000010000000000000060/x")
 	body := fmt.Sprintf(`{"LSN":1,"FinishTime":%q}`, b.clock.Add(time.Hour).Format(time.RFC3339))
 	if err := os.WriteFile(filepath.Join(store, baseDir, "base_000000010000000000000060"+sentinelSuffix), []byte(body), 0o600); err != nil {
@@ -176,7 +176,7 @@ func TestStatusSaysWhatWentWrong(t *testing.T) {
 
 func TestUnfinishedFilesAreClearedOnceOld(t *testing.T) {
 	b := newGuardBox(t)
-	store := b.fixture.b.StoreHostDir()
+	store := b.b.StoreHostDir()
 	writeStore(t, store, "wal_005/000000010000000000000001.lz4", "wal_005/000000010000000000000002.lz4.tmp.20261101T194433Z-63f0")
 	b.clock = time.Now()
 	b.tick(0)

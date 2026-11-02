@@ -12,8 +12,12 @@
 //     never pulled (the box is airgapped);
 //   - a PersistentVolumeClaim goes, and the volume that used it (or a
 //     StatefulSet's volume claim template) becomes a hostPath under the
-//     data directory, owned by the pod's user, and the claim product.yaml's
-//     backups name becomes their directory on the backup partition;
+//     data directory, owned by the pod's user through an init container
+//     named for the volume, and the claim product.yaml's backups name
+//     becomes their directory on the backup partition;
+//   - a pod that repeats a container name is refused: the API server
+//     would refuse it, and the box would wait for a workload k0s never
+//     creates;
 //   - an Ingress loses its host and TLS: the box's edge serves every name
 //     on 443 with the box's certificate;
 //   - no Secret value is carried: a Secret the chart renders must be one
@@ -361,7 +365,9 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 	}
 	hostPath := func(vol doc, dir string) {
 		vol["hostPath"] = doc{"path": dir, "type": "DirectoryOrCreate"}
-		init := doc{"name": "data-owner", "image": mainImage, "imagePullPolicy": "Never",
+		// Named for its volume: a pod may have two, and the API server refuses
+		// a pod whose containers share a name.
+		init := doc{"name": fmt.Sprintf("%v-owner", vol["name"]), "image": mainImage, "imagePullPolicy": "Never",
 			"command": []any{"sh", "-c", fmt.Sprintf("chown %d:%d /data && chmod 0700 /data", uid, uid)},
 			"securityContext": doc{"runAsUser": 0, "runAsNonRoot": false, "allowPrivilegeEscalation": false, "readOnlyRootFilesystem": true,
 				"capabilities": doc{"drop": []any{"ALL"}, "add": []any{"CHOWN", "FOWNER"}}},
@@ -406,6 +412,23 @@ func pod(o options, d doc, kind, name string, pins map[string]string, box map[st
 				vols = append(vols, vol)
 			}
 			ps["volumes"] = vols
+		}
+	}
+	return containerNames(ps)
+}
+
+// containerNames refuses a pod that repeats a container name: the API server
+// would refuse the workload, and the stack would come up without it.
+func containerNames(ps doc) error {
+	seen := map[any]bool{}
+	for _, key := range []string{"initContainers", "containers"} {
+		list, _ := ps[key].([]any)
+		for _, c := range list {
+			cm, _ := c.(doc)
+			if seen[cm["name"]] {
+				return fmt.Errorf("two containers are named %v, which the API server refuses", cm["name"])
+			}
+			seen[cm["name"]] = true
 		}
 	}
 	return nil

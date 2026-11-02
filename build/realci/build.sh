@@ -215,8 +215,9 @@ product() {
   cp "$bin" "$OUT/product-$label.bin"
   "$tool" bin-verify --release-key "$KEYS/cosign.pub" --channel lab --identity-uki "$OUT/base-old/work/sneakers-$old_version.efi" "$OUT/product-$label.bin" >/dev/null
   say "product .$label: $version, $(stat -c %s "$OUT/product-$label.bin") bytes, $(wc -l < "$b/images.txt") images, phases: $(grep -c '^  - name:' <(sed -n '/^phases:/,/^[a-z]/p' "$src/build/product/sneakers/product.yaml")), in $(( $(date +%s) - start ))s"
-  # The tree under the work directory is the unpacked bundle: drop it.
-  rm -rf "$b/work/tree"
+  # Everything the bundle was made from: only the sealed .bin is used again,
+  # and the disks the legs boot need the room.
+  rm -rf "$b/work" "$b/out"
 }
 product 12 "$P12_APPLIANCE_COMMIT" "$P12_RELEASE_COMMIT"
 product 13 "$P13_APPLIANCE_COMMIT" "$P13_RELEASE_COMMIT"
