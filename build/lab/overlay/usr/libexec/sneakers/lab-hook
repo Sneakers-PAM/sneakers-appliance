@@ -168,6 +168,41 @@ realci_later() {
   say "realci: later present=$now restore=$state"
   [ -z "$state" ] || last=""
 }
+# realci_telemetry: the telemetry leg's marker. Every change in the last
+# restart's state is said, and when one ends the pods, for their start times.
+# With "telemetry-break" in the ESP marker, the first restart is made to
+# fail in the services phase: once it runs, sneakers-notify's new pods get a
+# node selector no node has, so they never start and the phase runs out of
+# time; once it has failed the selector goes again, for the leg's retry.
+realci_telemetry_run=/var/lib/sneakers/platform/telemetry-restart.json
+realci_telemetry_broken=/var/lib/sneakers/lab-realci-telemetry-broken
+realci_telemetry_marker=/run/sneakers/esp/lab-hook
+realci_telemetry_was=
+realci_telemetry() {
+  [ -f "$realci_telemetry_run" ] || return 0
+  now="$(sed -n 's/.*"state":"\([a-z]*\)".*/\1/p' "$realci_telemetry_run" | head -1)"
+  [ "$now" = "$realci_telemetry_was" ] && return 0
+  realci_telemetry_was="$now"
+  say "realci: telemetry restart=$now"
+  if [ "$now" = running ] && [ ! -e "$realci_telemetry_broken" ] && grep -qx telemetry-break "$realci_telemetry_marker"; then
+    if k -n sneakers patch deployment sneakers-notify --type=strategic \
+      -p '{"spec":{"template":{"spec":{"nodeSelector":{"sneakers.lab/realci-break":"true"}}}}}' >/dev/null; then
+      : > "$realci_telemetry_broken"
+      say "realci: telemetry break=on"
+    else
+      say "realci: telemetry break=failed"
+    fi
+  fi
+  if [ "$now" = failed ] && [ -e "$realci_telemetry_broken" ]; then
+    if k -n sneakers patch deployment sneakers-notify --type=json \
+      -p '[{"op":"remove","path":"/spec/template/spec/nodeSelector/sneakers.lab~1realci-break"}]' >/dev/null; then
+      say "realci: telemetry break=off"
+    else
+      say "realci: telemetry break=stuck"
+    fi
+  fi
+  [ "$now" = running ] || realci_pods "$v" telemetry
+}
 realci_rows() { # version when
   line=""
   for db in $realci_dbs; do
@@ -246,6 +281,7 @@ realci() {
     v="$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$product/bundle.json")"
     realci_memory
     realci_later
+    realci_telemetry
     if box_running 127.0.0.1 9180; then
       ticks=""
       # The box says running three times in a row before a report, so a

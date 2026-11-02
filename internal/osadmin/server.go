@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
@@ -182,6 +183,20 @@ type Options struct {
 	EmailWorkloads EmailWorkloads
 	// SendEmail sends the test email; nil is boxsettings.Send.
 	SendEmail func(ctx context.Context, e boxsettings.Email, to string) (string, error)
+	// Telemetry keeps the product's collector settings (boxsettings.Store
+	// on the box); nil leaves the Telemetry page with nothing to set.
+	Telemetry TelemetrySettings
+	// TelemetryWorkloads restart the workloads that read the telemetry
+	// settings, a phase at a time.
+	TelemetryWorkloads TelemetryWorkloads
+	// TelemetryPhaseBound is how long a phase's workloads may take to come
+	// back; 0 is DefaultTelemetryPhaseBound.
+	TelemetryPhaseBound time.Duration
+	// TelemetryPoll is how often a restart asks about them; 0 is 3 s.
+	TelemetryPoll time.Duration
+	// ProbeTelemetry checks the collector on a save; nil is
+	// boxsettings.Telemetry's own Probe.
+	ProbeTelemetry func(ctx context.Context, t boxsettings.Telemetry) error
 	// Exposed reads the installed product's exposed values as the
 	// appliance's own service account (kubeapi.Client on the box); nil
 	// reads none.
@@ -199,18 +214,19 @@ type Options struct {
 
 // Server is the appliance admin.
 type Server struct {
-	o        Options
-	sessions *weblogin.Sessions
-	codes    *onetime.Codes
-	creds    credentialFlows
-	certMu   sync.Mutex
-	resets   resets
-	upgrades upgrades
-	mirror   mirrorCheck
-	github   githubState
-	checks   checks
-	progress progress
-	ready    readiness
+	o         Options
+	sessions  *weblogin.Sessions
+	codes     *onetime.Codes
+	creds     credentialFlows
+	certMu    sync.Mutex
+	resets    resets
+	upgrades  upgrades
+	telemetry telemetryState
+	mirror    mirrorCheck
+	github    githubState
+	checks    checks
+	progress  progress
+	ready     readiness
 	// resetting: a product reset runs in this process; resetFinishing: the
 	// box is finishing a cut-off one by itself, from before it starts.
 	resetting      atomic.Bool
@@ -291,6 +307,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewTlsServiceHandler(&tlsSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewEmailServiceHandler(&emailSvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewTelemetryServiceHandler(&telemetrySvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewImportServiceHandler(&importSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))

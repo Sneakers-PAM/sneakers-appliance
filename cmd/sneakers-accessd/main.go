@@ -71,6 +71,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productreset"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productup"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/release"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/rootkey"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
@@ -313,6 +314,16 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig,
 			stack: filepath.Join("/var/lib/k0s/manifests", productspec.BoxSecretsStack, productspec.BoxSecretsStack+".yaml"),
 		},
+		// The services' OTLP collector (docs/product-telemetry.md), kept
+		// beside the email settings. A change restarts them phase by phase.
+		Telemetry: settings,
+		TelemetryWorkloads: telemetryWorkloads{
+			emailWorkloads: emailWorkloads{
+				k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig,
+				stack: filepath.Join("/var/lib/k0s/manifests", productspec.BoxSecretsStack, productspec.BoxSecretsStack+".yaml"),
+			},
+			probe: &productup.Probe{Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s"},
+		},
 		Paths:            paths,
 		BoxStateFile:     boxstate.File,
 		ResetRunningFile: filepath.Join(c.run, productreset.RunningFile),
@@ -539,6 +550,16 @@ func (w emailWorkloads) Applied(ctx context.Context) error {
 
 func (w emailWorkloads) Restart(ctx context.Context, ns, kind, name string) error {
 	return rolloutRestart(w.k0s, w.kubeconfig)(ctx, ns, kind, name)
+}
+
+// telemetryWorkloads add to emailWorkloads what an ordered restart waits on.
+type telemetryWorkloads struct {
+	emailWorkloads
+	probe *productup.Probe
+}
+
+func (w telemetryWorkloads) RolledOut(ctx context.Context, ns, kind, name string) (string, bool, error) {
+	return w.probe.RolledOut(ctx, ns, kind, name)
 }
 
 func allEqual(got []string, want string) bool {

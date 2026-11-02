@@ -42,6 +42,8 @@ identity:
   envFromConfigMaps:
     - name: sneakers-email
       optional: false
+    - name: sneakers-telemetry
+      optional: true
   secretEnv:
     TOTP_ENC_KEY:
       secretName: sneakers-box
@@ -50,6 +52,9 @@ identity:
       key: SMTP_PASS
       required: true
 vault:
+  envFromConfigMaps: &telemetry
+    - name: sneakers-telemetry
+      optional: true
   secretEnv:
     VAULT_ROOT_KEK:
       secretName: sneakers-box
@@ -87,11 +92,22 @@ gateway:
           cidr: 198.18.0.1/32
       - ipBlock:
           cidr: 10.244.0.1/32  # scrub:allow=private-ip -- k0s's default pod network gateway
-  envFromConfigMaps: &switch
+  envFromConfigMaps:
     - name: sneakers-mcp-switch
       optional: true
+    - name: sneakers-telemetry
+      optional: true
+workflow:
+  envFromConfigMaps: *telemetry
+audit:
+  envFromConfigMaps: *telemetry
+notify:
+  envFromConfigMaps: *telemetry
+connector:
+  envFromConfigMaps: *telemetry
 mcp:
   enabled: false
+  envFromConfigMaps: *telemetry
 hydra:
   enabled: false
 web-staff:
@@ -104,7 +120,9 @@ web-staff:
     annotations: *edge
   networkPolicy:
     ingressFrom: *edgeFrom
-  envFromConfigMaps: *switch
+  envFromConfigMaps:
+    - name: sneakers-mcp-switch
+      optional: true
 web-admin:
   ingress:
     enabled: true
@@ -115,6 +133,7 @@ web-admin:
   env:
     APPLIANCE_BOX_POLLER: 'true'
 sshbroker:
+  envFromConfigMaps: *telemetry
   ingress:
     enabled: true
     className: traefik

@@ -209,9 +209,35 @@ func (h Header) AppliesTo(running string) error {
 	case h.Kind == KindPatch && !slices.Contains(h.Bases, running):
 		return codes.New(codes.UpgradePatchBase, "the patch %s is for %v; this box runs %s", h.Version, h.Bases, running)
 	case h.Kind == KindProduct && h.HasRange() && !h.InRange(running):
+		if semver.Compare("v"+running, "v"+h.MinBase) < 0 {
+			return codes.New(codes.UpgradeProductBase, "the product bundle %s needs base %s; this box runs %s. Nothing was applied: update the base to %s first, then apply this product", h.Version, h.RangeText(), running, h.RangeText())
+		}
 		return codes.New(codes.UpgradeProductBase, "the product bundle %s needs base %s; this box runs %s", h.Version, h.RangeText(), running)
 	case h.Kind == KindProduct && !h.HasRange() && !slices.Contains(h.Bases, running):
-		return codes.New(codes.UpgradeProductBase, "the product bundle %s fits the base versions %v; this box runs %s", h.Version, h.Bases, running)
+		return codes.New(codes.UpgradeProductBase, "the product bundle %s fits the base versions %v; this box runs %s. Nothing was applied: update the base first, or apply a product bundle that fits %s", h.Version, h.Bases, running, running)
+	}
+	return nil
+}
+
+// CheckBaseFloor refuses to seal a production product bundle that a base
+// older than floor would take: product.yaml uses something (why) that
+// only floor and newer read, and an older base would refuse it only after
+// decrypting it, with a parse error. Sealed for floor or newer, an older
+// base refuses it up front (AppliesTo) and asks for the base update
+// first. Lab bundles aren't checked: a lab base's version doesn't sort
+// against a release's.
+func (h Header) CheckBaseFloor(floor, why string) error {
+	if floor == "" || h.Kind != KindProduct || h.Channel == release.ChannelLab {
+		return nil
+	}
+	fix := fmt.Sprintf("; seal it with --min-base %s or newer and no older --base, so an older base refuses it and asks for the base update first", floor)
+	if h.MinBase == "" || semver.Compare("v"+h.MinBase, "v"+floor) < 0 {
+		return codes.New(codes.UpgradeFormat, "the product bundle %s fits bases from %q, and %s, which no base before %s can%s", h.Version, h.MinBase, why, floor, fix)
+	}
+	for _, b := range h.Bases {
+		if semver.Compare("v"+b, "v"+floor) < 0 {
+			return codes.New(codes.UpgradeFormat, "the product bundle %s names the exact base %s, and %s, which no base before %s can%s", h.Version, b, why, floor, fix)
+		}
 	}
 	return nil
 }

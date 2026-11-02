@@ -474,3 +474,27 @@ func TestBinInputsPrintsTheHeadersDigest(t *testing.T) {
 		t.Fatalf("a .bin without inputs printed %q", got)
 	}
 }
+
+// A product bundle whose product.yaml needs a newer base than its range
+// starts at isn't sealed: an older base would take it and fail on what it
+// can't read, instead of asking for the base update first.
+func TestBinPackRefusesAProductBelowItsBaseFloor(t *testing.T) {
+	tmp := t.TempDir()
+	keys, tree := filepath.Join(tmp, "keys"), filepath.Join(tmp, "tree")
+	if _, err := runCmd(t, "lab-update-key", "--out", keys); err != nil {
+		t.Fatal(err)
+	}
+	writeTree(t, tree, fixtures.LabKeys(t))
+	writeFile(t, filepath.Join(tree, "product.yaml"), []byte("format: 2\ntelemetry:\n  label: Traces\n"))
+	pack := func(out string, flags ...string) error {
+		_, err := runCmd(t, append([]string{"bin-pack", "--layout", tree, "--recipient", filepath.Join(keys, "update.pub"),
+			"--version", "0.1.0-rc.7", "--channel", "production", "--kind", "product", "--out", filepath.Join(tmp, out)}, flags...)...)
+		return err
+	}
+	if err := pack("old", "--min-base", "0.1.0-rc.6"); !codes.Is(err, codes.UpgradeFormat) || !strings.Contains(err.Error(), "telemetry") {
+		t.Fatalf("a range from before telemetry: want UPGRADE_FORMAT, got %v", err)
+	}
+	if err := pack("new", "--min-base", "0.1.0-rc.7", "--base", "0.1.0-rc.7"); err != nil {
+		t.Fatalf("a range from telemetry's base: %v", err)
+	}
+}

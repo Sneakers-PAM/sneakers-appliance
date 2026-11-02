@@ -313,6 +313,18 @@ func (s *Server) overrideElevation(ctx context.Context, r elevation.Request, by 
 	}
 }
 
+// holdMaintenance keeps the maintenance a caller began for d from now,
+// when that's longer than it holds already: a run with its own bound,
+// such as a telemetry restart's phases, outlasts MaintenanceBound.
+func (s *Server) holdMaintenance(d time.Duration) {
+	s.upgrades.mu.Lock()
+	defer s.upgrades.mu.Unlock()
+	if until := s.o.Clock.Now().Add(d); s.upgrades.applying && until.After(s.upgrades.maintUntil) {
+		s.upgrades.maintUntil = until
+		s.o.Logger.Info("osadmin: maintenance held", log.F("for", d.String()))
+	}
+}
+
 func (s *Server) endMaintenance() {
 	defer s.boxChanged()
 	s.upgrades.mu.Lock()

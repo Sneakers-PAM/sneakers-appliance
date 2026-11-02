@@ -1,0 +1,109 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The product's Telemetry page: the OTLP collector its services export to.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/upgrade.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// TelemetryService sets where the installed product's services export
+// traces, metrics and logs (docs/product-telemetry.md).
+service TelemetryService {
+  rpc GetTelemetry(GetTelemetryRequest) returns (GetTelemetryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // SetTelemetry checks the collector, saves the settings and restarts the
+  // services that read them, phase by phase, under the same maintenance
+  // gate as a product update. It answers once the restart has begun;
+  // GetTelemetry follows it.
+  rpc SetTelemetry(SetTelemetryRequest) returns (SetTelemetryResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "product.telemetry.set"
+    };
+  }
+  // RetryTelemetryRestart carries a failed restart on from the phase it
+  // stopped at.
+  rpc RetryTelemetryRestart(RetryTelemetryRestartRequest) returns (RetryTelemetryRestartResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "product.telemetry.restart"
+    };
+  }
+}
+
+// TelemetrySettings are the collector's settings.
+message TelemetrySettings {
+  // enabled off stops the export and keeps the endpoint.
+  bool enabled = 1;
+  // endpoint is https://<host>[:<port>].
+  string endpoint = 2;
+  // skip_verify skips the collector's CA and certificate checks. No logs
+  // leave while it's on.
+  bool skip_verify = 3;
+  // logs exports logs as well as traces and metrics.
+  bool logs = 4;
+}
+
+// TelemetryWorkload is one service's export state.
+message TelemetryWorkload {
+  string name = 1;
+  // state is "sending", "issue", "off" or "unknown".
+  string state = 2;
+}
+
+// TelemetryRestart is the last restart for a change.
+message TelemetryRestart {
+  // state is "none", "running", "done" or "failed".
+  string state = 1;
+  // phase is the phase it's at, or stopped at.
+  string phase = 2;
+  // workload is the workload it stopped at.
+  string workload = 3;
+  // why says why it stopped. Later phases keep the old settings until a
+  // retry.
+  string why = 4;
+}
+
+message GetTelemetryRequest {}
+
+message GetTelemetryResponse {
+  // state is "not installed", "not in this product", "off" or "on".
+  string state = 1;
+  TelemetrySettings settings = 2;
+  // label is what the product exports.
+  string label = 3;
+  // logs_held says logs are switched on but stay on the box, because the
+  // collector isn't verified.
+  bool logs_held = 4;
+  repeated TelemetryWorkload workloads = 5;
+  // status_error says the workloads' states couldn't be read.
+  string status_error = 6;
+  TelemetryRestart restart = 7;
+}
+
+message SetTelemetryRequest {
+  TelemetrySettings settings = 1;
+  // elevation_override is an owner's override of an open elevated shell.
+  ElevationOverride elevation_override = 2;
+}
+
+message SetTelemetryResponse {
+  // restarting says the settings changed what the services read.
+  bool restarting = 1;
+}
+
+message RetryTelemetryRestartRequest {
+  // elevation_override is an owner's override of an open elevated shell.
+  ElevationOverride elevation_override = 1;
+}
+
+message RetryTelemetryRestartResponse {}

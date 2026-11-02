@@ -100,3 +100,49 @@ func TestTheOfferFollowsTheBaseRange(t *testing.T) {
 		t.Fatalf("the entry carries the range: %+v", got[0])
 	}
 }
+
+func TestAProductSealedForABaseBelowItsFloorIsRefused(t *testing.T) {
+	const why = "it reads the box's telemetry settings"
+	prod := func(minBase string, bases ...string) updatepkg.Header {
+		return updatepkg.Header{Version: "0.1.0-rc.7", Arch: "amd64", Kind: updatepkg.KindProduct, MinBase: minBase, Bases: bases, Channel: release.ChannelProduction}
+	}
+	for name, h := range map[string]updatepkg.Header{
+		"a minimum below":       prod("0.1.0-rc.6"),
+		"an older exact base":   prod("0.1.0-rc.7", "0.1.0-rc.6"),
+		"exact bases, no range": prod("", "0.1.0-rc.6"),
+	} {
+		err := h.CheckBaseFloor("0.1.0-rc.7", why)
+		if !codes.Is(err, codes.UpgradeFormat) {
+			t.Fatalf("%s: want UPGRADE_FORMAT, got %v", name, err)
+		}
+		if d := codes.Describe(err); !strings.Contains(d, "0.1.0-rc.7") || !strings.Contains(d, why) || !strings.Contains(d, "--min-base") {
+			t.Errorf("%s: the refusal names the floor, why and the fix: %s", name, d)
+		}
+	}
+	for name, h := range map[string]updatepkg.Header{
+		"the floor":            prod("0.1.0-rc.7", "0.1.0-rc.7"),
+		"newer":                prod("0.1.0"),
+		"no floor":             prod("0.1.0-rc.1"),
+		"a lab bundle":         {Version: "0.0.1-r1-abc", Arch: "amd64", Kind: updatepkg.KindProduct, MinBase: "0.0.1-r1-abc", Channel: release.ChannelLab},
+		"not a product bundle": {Version: "0.1.0-rc.6", Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction},
+	} {
+		floor := "0.1.0-rc.7"
+		if name == "no floor" {
+			floor = ""
+		}
+		if err := h.CheckBaseFloor(floor, why); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestAnOlderBaseIsToldToUpdateTheBaseFirst(t *testing.T) {
+	err := ranged("0.2.0", "").AppliesTo("0.1.9")
+	if d := codes.Describe(err); !codes.Is(err, codes.UpgradeProductBase) || !strings.Contains(d, "update the base to 0.2.0 or newer first") {
+		t.Fatalf("the refusal: %s", d)
+	}
+	exact := updatepkg.Header{Version: "0.4.0", Arch: "amd64", Kind: updatepkg.KindProduct, Bases: []string{"0.2.0"}, Channel: release.ChannelLab}
+	if d := codes.Describe(exact.AppliesTo("0.1.9")); !strings.Contains(d, "update the base first") {
+		t.Fatalf("the refusal for exact bases: %s", d)
+	}
+}

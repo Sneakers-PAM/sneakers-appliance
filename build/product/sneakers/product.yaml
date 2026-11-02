@@ -182,6 +182,26 @@ email:
   label: Password resets, one-time codes and notices
   restart:
     - sneakers/deployment/sneakers-identity
+# The services export traces, metrics and logs to the collector set on
+# :8443's Telemetry page (docs/product-telemetry.md). The box writes the
+# settings as the sneakers-telemetry ConfigMap, which every service loads
+# whole. A change restarts the services, phase by phase, without stopping
+# the product. The MCP server's own NetworkPolicy doesn't reach a collector,
+# so while export is on the box writes one that opens the collector's port.
+telemetry:
+  label: Traces, metrics and logs from every service
+  status: sneakers/sneakers-gateway:9100
+  egress: [sneakers/sneakers-mcp]
+  restart:
+    - sneakers/deployment/sneakers-identity
+    - sneakers/deployment/sneakers-vault
+    - sneakers/deployment/sneakers-workflow
+    - sneakers/deployment/sneakers-audit
+    - sneakers/deployment/sneakers-notify
+    - sneakers/deployment/sneakers-connector
+    - sneakers/deployment/sneakers-sshbroker
+    - sneakers/deployment/sneakers-gateway
+    - sneakers/deployment/sneakers-mcp
 box_settings:
   - configmap: sneakers/sneakers-email
     keys:
@@ -192,6 +212,11 @@ box_settings:
       - {key: SMTP_TLS_MODE, setting: email.tls}
       - {key: SMTP_TLS_INSECURE, setting: email.skip_verify}
       - {key: SMTP_CA_PEM, setting: email.ca_pem}
+  - configmap: sneakers/sneakers-telemetry
+    keys:
+      - {key: OTEL_EXPORTER_OTLP_ENDPOINT, setting: telemetry.endpoint}
+      - {key: OTLP_INSECURE_SKIP_VERIFY, setting: telemetry.skip_verify}
+      - {key: OTLP_LOGS_ENABLED, setting: telemetry.logs}
 
 # The data paths the box's disk guard watches for growth (docs/disk-layout.md
 # "Keeping the disk from filling"), under /var/lib/sneakers-data, where each

@@ -181,3 +181,47 @@ func TestWithoutSettingsTheDefaultsGoIn(t *testing.T) {
 		t.Fatalf("ConfigMap = %+v", cm.Data)
 	}
 }
+
+const telemetrySpec = `format: 2
+telemetry:
+  egress: [sneakers/sneakers-mcp]
+box_settings:
+  - configmap: sneakers/sneakers-telemetry
+    keys:
+      - {key: OTEL_EXPORTER_OTLP_ENDPOINT, setting: telemetry.endpoint}
+`
+
+func TestTheBoxOpensTheCollectorsPortOnlyWhileExportIsOn(t *testing.T) {
+	spec, err := productspec.Parse([]byte(telemetrySpec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	on, err := boxsecrets.RenderAll(spec, nil, boxsettings.Telemetry{Enabled: true, Endpoint: "https://collector.example.com:4317"}.Values())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"kind: NetworkPolicy", "app.kubernetes.io/name: sneakers-mcp", "port: 4317", "0.0.0.0/0", "::/0", "- Egress"} {
+		if !strings.Contains(string(on), want) {
+			t.Fatalf("no %q in:\n%s", want, on)
+		}
+	}
+	off, err := boxsecrets.RenderAll(spec, nil, boxsettings.Telemetry{Endpoint: "https://collector.example.com:4317"}.Values())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(off), "NetworkPolicy") {
+		t.Fatalf("off still opens the port:\n%s", off)
+	}
+	other, err := boxsecrets.RenderAll(spec, nil, boxsettings.Telemetry{Enabled: true, Endpoint: "https://collector.example.com:4318"}.Values())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rev := func(b []byte) string {
+		_, after, _ := strings.Cut(string(b), boxsecrets.RevisionAnnotation+": ")
+		v, _, _ := strings.Cut(after, "\n")
+		return v
+	}
+	if rev(on) == rev(other) {
+		t.Fatal("a new port didn't change the stack's revision")
+	}
+}

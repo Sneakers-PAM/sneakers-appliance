@@ -487,6 +487,21 @@ func (p *Probe) liveWorkloads(ctx context.Context) ([]workload, error) {
 	return l.Items, nil
 }
 
+// RolledOut says why one workload hasn't rolled out yet, or "" once it has;
+// present is false when the cluster doesn't have it (its switch is off).
+func (p *Probe) RolledOut(ctx context.Context, ns, kind, name string) (why string, present bool, err error) {
+	live, err := p.liveWorkloads(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	for _, w := range live {
+		if strings.EqualFold(w.Kind, kind) && w.Metadata.Namespace == ns && w.Metadata.Name == name {
+			return rolledOut(w), true, nil
+		}
+	}
+	return "", false, nil
+}
+
 func (p *Probe) podItems(ctx context.Context) ([]podItem, error) {
 	out, err := p.kubectl(ctx, "get", "pods", "--all-namespaces", "-o", "json")
 	if err != nil {

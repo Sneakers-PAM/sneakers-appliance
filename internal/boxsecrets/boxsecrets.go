@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,7 +82,7 @@ const RevisionAnnotation = "sneakers-appliance/revision"
 
 func (s *Store) settings() (map[string]string, error) {
 	if s.Settings == nil {
-		return boxsettings.DefaultEmail().Values(), nil
+		return boxsettings.DefaultValues(), nil
 	}
 	return s.Settings.Values()
 }
@@ -224,7 +225,7 @@ func escrowName(spec productspec.Spec, secret, key string) (string, bool) {
 // Render is the stack for spec's box secrets with values and the box's
 // settings at their defaults.
 func Render(spec productspec.Spec, values map[string]string) ([]byte, error) {
-	return RenderAll(spec, values, boxsettings.DefaultEmail().Values())
+	return RenderAll(spec, values, boxsettings.DefaultValues())
 }
 
 // RenderAll is the stack for spec's box secrets with values, and its box
@@ -245,6 +246,10 @@ func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byt
 	}
 	for _, b := range spec.BoxSettings {
 		addNS(b.Namespace())
+	}
+	egress := collectorEgress(spec, settings)
+	for _, e := range egress {
+		addNS(e.ns)
 	}
 	type object struct {
 		kind, ns, name, field string
@@ -291,6 +296,9 @@ func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byt
 		}
 		objs = append(objs, object{"ConfigMap", b.Namespace(), b.ConfigMapName(), "data", data})
 	}
+	for _, e := range egress {
+		_, _ = fmt.Fprintf(digest, "NetworkPolicy/%s/%s:%d\n", e.ns, e.app, e.port)
+	}
 	rev := hex.EncodeToString(digest.Sum(nil))[:16]
 	meta := func(name, ns string) map[string]any {
 		m := map[string]any{"name": name, "annotations": map[string]string{RevisionAnnotation: rev},
@@ -311,6 +319,9 @@ func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byt
 		}
 		docs = append(docs, d)
 	}
+	for _, e := range egress {
+		docs = append(docs, map[string]any{"apiVersion": "networking.k8s.io/v1", "kind": "NetworkPolicy", "metadata": meta(e.app+"-collector", e.ns), "spec": e.policy()})
+	}
 	var out strings.Builder
 	for i, d := range docs {
 		b, err := yaml.Marshal(d)
@@ -323,6 +334,38 @@ func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byt
 		out.Write(b)
 	}
 	return []byte(out.String()), nil
+}
+
+// egressRule opens the collector's port for one workload.
+type egressRule struct {
+	ns, app string
+	port    int
+}
+
+// collectorEgress are the policies the box writes while export is on: the
+// product names the workloads whose own policy doesn't reach the collector.
+func collectorEgress(spec productspec.Spec, settings map[string]string) []egressRule {
+	port, err := strconv.Atoi(settings[productspec.SettingTelemetryPort])
+	if spec.Telemetry == nil || err != nil {
+		return nil
+	}
+	var out []egressRule
+	for _, e := range spec.Telemetry.Egress {
+		ns, app, _ := strings.Cut(e, "/")
+		out = append(out, egressRule{ns, app, port})
+	}
+	return out
+}
+
+func (e egressRule) policy() map[string]any {
+	return map[string]any{
+		"podSelector": map[string]any{"matchLabels": map[string]string{"app.kubernetes.io/name": e.app}},
+		"policyTypes": []string{"Egress"},
+		"egress": []any{map[string]any{
+			"to":    []any{map[string]any{"ipBlock": map[string]string{"cidr": "0.0.0.0/0"}}, map[string]any{"ipBlock": map[string]string{"cidr": "::/0"}}},
+			"ports": []any{map[string]any{"port": e.port, "protocol": "TCP"}},
+		}},
+	}
 }
 
 // StackRevision is the revision the stack file at p carries.

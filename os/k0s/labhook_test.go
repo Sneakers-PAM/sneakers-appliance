@@ -254,3 +254,69 @@ last=
 		t.Fatalf("realci_later said:\n%s\nwant:\n%s", out, want)
 	}
 }
+
+// The telemetry leg's stop-on-failure check: with telemetry-break in the
+// ESP marker, the first restart that runs gets sneakers-notify stuck, and
+// once that restart has failed the hook frees it again for the retry. A
+// later restart, and a box without the marker, are left alone.
+func TestTheLabHookBreaksTheFirstTelemetryRestartOnce(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := regexp.MustCompile(`(?ms)^realci_telemetry\(\) \{[^\n]*\n.*?^\}\n`).FindString(string(b))
+	if fn == "" {
+		t.Fatal("the lab hook has no realci_telemetry function")
+	}
+	run := func(marker string) string {
+		t.Helper()
+		dir := t.TempDir()
+		if err := os.WriteFile(dir+"/marker", []byte(marker), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		script := `say() { echo "lab-hook: $*"; }
+k() { echo "k $1 $2 $3 $4 $5 $6" >&2; }
+realci_pods() { echo "pods $2"; }
+v=v1
+realci_telemetry_run=` + dir + `/run.json
+realci_telemetry_broken=` + dir + `/broken
+realci_telemetry_marker=` + dir + `/marker
+realci_telemetry_was=
+` + fn + `
+state() { printf '{"state":"%s"}\n' "$1" > "$realci_telemetry_run"; realci_telemetry; }
+state running
+state failed
+state running
+state done
+`
+		out, err := exec.Command("sh", "-c", script).CombinedOutput() // #nosec G204 -- the repo's own script
+		if err != nil {
+			t.Fatalf("realci_telemetry: %v: %s", err, out)
+		}
+		return string(out)
+	}
+	want := `lab-hook: realci: telemetry restart=running
+k -n sneakers patch deployment sneakers-notify --type=strategic
+lab-hook: realci: telemetry break=on
+lab-hook: realci: telemetry restart=failed
+k -n sneakers patch deployment sneakers-notify --type=json
+lab-hook: realci: telemetry break=off
+pods telemetry
+lab-hook: realci: telemetry restart=running
+lab-hook: realci: telemetry restart=done
+pods telemetry
+`
+	if got := run("real-bundle job\ntelemetry-break\n"); got != want {
+		t.Fatalf("with the marker, realci_telemetry said:\n%s\nwant:\n%s", got, want)
+	}
+	plain := `lab-hook: realci: telemetry restart=running
+lab-hook: realci: telemetry restart=failed
+pods telemetry
+lab-hook: realci: telemetry restart=running
+lab-hook: realci: telemetry restart=done
+pods telemetry
+`
+	if got := run("real-bundle job\n"); got != plain {
+		t.Fatalf("without it, realci_telemetry said:\n%s\nwant:\n%s", got, plain)
+	}
+}

@@ -17,6 +17,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"net/mail"
 	"net/url"
@@ -203,7 +204,8 @@ type Store struct {
 }
 
 type file struct {
-	Email *Email `json:"email,omitempty"`
+	Email     *Email     `json:"email,omitempty"`
+	Telemetry *Telemetry `json:"telemetry,omitempty"`
 }
 
 func (s *Store) read() (file, error) {
@@ -243,6 +245,10 @@ func (s *Store) SetEmail(e Email) error {
 		return err
 	}
 	f.Email = &e
+	return s.write(f)
+}
+
+func (s *Store) write(f file) error {
 	b, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return fmt.Errorf("boxsettings: %w", err)
@@ -260,6 +266,13 @@ func (s *Store) SetEmail(e Email) error {
 	return nil
 }
 
+// DefaultValues are every setting the box offers at its default.
+func DefaultValues() map[string]string {
+	v := DefaultEmail().Values()
+	maps.Copy(v, Telemetry{}.Values())
+	return v
+}
+
 // Values are every setting the box offers, by name: the saved ones, else
 // the defaults.
 func (s *Store) Values() (map[string]string, error) {
@@ -267,5 +280,11 @@ func (s *Store) Values() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return e.Values(), nil
+	t, err := s.Telemetry()
+	if err != nil {
+		return nil, err
+	}
+	v := e.Values()
+	maps.Copy(v, t.Values())
+	return v, nil
 }

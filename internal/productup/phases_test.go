@@ -1177,3 +1177,21 @@ func TestACommandThatHangsNeverHoldsTheProbe(t *testing.T) {
 		t.Fatalf("%+v %v", r, err)
 	}
 }
+
+func TestRolledOutSaysWhereAWorkloadIs(t *testing.T) {
+	c := newCluster()
+	c.apiUp = true
+	c.add(&live{kind: "Deployment", ns: "app", name: "app-web", replicas: 1, ready: true})
+	c.add(&live{kind: "Deployment", ns: "app", name: "app-slow", replicas: 1})
+	p := &productup.Probe{Run: c.run}
+	ctx := context.Background()
+	if why, present, err := p.RolledOut(ctx, "app", "deployment", "app-web"); err != nil || !present || why != "" {
+		t.Fatalf("a workload that's up: %q %v %v", why, present, err)
+	}
+	if why, present, err := p.RolledOut(ctx, "app", "deployment", "app-slow"); err != nil || !present || why == "" {
+		t.Fatalf("a workload that's down: %q %v %v", why, present, err)
+	}
+	if _, present, err := p.RolledOut(ctx, "app", "deployment", "app-off"); err != nil || present {
+		t.Fatalf("a workload that isn't there: %v %v", present, err)
+	}
+}
