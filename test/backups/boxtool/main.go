@@ -63,7 +63,7 @@ func main() {
 		}},
 		Kubectl: func(ctx context.Context, args ...string) ([]byte, error) {
 			var out, errb bytes.Buffer
-			c := exec.CommandContext(ctx, "kubectl", append([]string{"--kubeconfig", kubeconfig}, args...)...)
+			c := exec.CommandContext(ctx, "kubectl", append([]string{"--kubeconfig", kubeconfig}, args...)...) // #nosec G204 -- test-only, fixed tool
 			c.Stdout, c.Stderr = &out, &errb
 			if err := c.Run(); err != nil {
 				return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(errb.String()))

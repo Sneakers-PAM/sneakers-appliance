@@ -177,8 +177,7 @@ func (deployments) Start(context.Context) error { return nil }
 // dying is the box's engine, up to the point a power loss takes it.
 type dying struct {
 	datamove.Engine
-	at    string
-	dumps int
+	at string
 }
 
 func die() { _ = syscall.Kill(os.Getpid(), syscall.SIGKILL); select {} }
