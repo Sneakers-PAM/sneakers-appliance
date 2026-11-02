@@ -6,6 +6,7 @@ package boxsettings
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -22,8 +23,45 @@ import (
 // sendTimeout bounds a test email: the dial and the whole conversation.
 const sendTimeout = 30 * time.Second
 
-func sendFailed(step string, err error) error {
-	return codes.New(codes.EmailSend, "%s: %v", step, err)
+// The steps of a send, which a failure names (FailureOf).
+const (
+	StepConnect = "connect"
+	StepTLS     = "tls"
+	StepAuth    = "auth"
+	StepFrom    = "from"
+	StepTo      = "to"
+	StepData    = "data"
+)
+
+// sendError is a send that failed at step, with the relay's reply (or the
+// connection's failure), scrubbed of the password.
+type sendError struct {
+	step, reply string
+	err         error
+}
+
+func (e *sendError) Error() string { return e.err.Error() }
+func (e *sendError) Unwrap() error { return e.err }
+
+// FailureOf is the step a send failed at and the relay's reply; empty
+// when err isn't a failed send.
+func FailureOf(err error) (step, reply string) {
+	var se *sendError
+	if errors.As(err, &se) {
+		return se.step, se.reply
+	}
+	return "", ""
+}
+
+func failedAt(step, reply string, err error) error {
+	return &sendError{step: step, reply: reply, err: err}
+}
+
+func sendFailed(step, what string, err error) error {
+	if ce, ok := certErrorIn(err); ok {
+		return failedAt(step, ce.Reason, ce.coded())
+	}
+	return failedAt(step, err.Error(), codes.New(codes.EmailSend, "%s: %v", what, err))
 }
 
 // Send sends a short test email to to through e, the same way the
@@ -52,21 +90,21 @@ func Send(ctx context.Context, e Email, to string) (string, error) {
 		return "", err
 	}
 	if err := c.Mail(e.From); err != nil {
-		return "", sendFailed("the relay refused the from address", err)
+		return "", sendFailed(StepFrom, "the relay refused the from address", err)
 	}
 	if err := c.Rcpt(to); err != nil {
-		return "", sendFailed("the relay refused the test address", err)
+		return "", sendFailed(StepTo, "the relay refused the test address", err)
 	}
 	w, err := c.Data()
 	if err != nil {
-		return "", sendFailed("the relay refused the message", err)
+		return "", sendFailed(StepData, "the relay refused the message", err)
 	}
 	if _, err := w.Write(message(e.From, to)); err != nil {
 		_ = w.Close()
-		return "", sendFailed("the message didn't go out", err)
+		return "", sendFailed(StepData, "the message didn't go out", err)
 	}
 	if err := w.Close(); err != nil {
-		return "", sendFailed("the relay didn't take the message", err)
+		return "", sendFailed(StepData, "the relay didn't take the message", err)
 	}
 	_ = c.Quit()
 	return "the relay took the message", nil
@@ -81,7 +119,7 @@ func dial(ctx context.Context, e Email) (*smtp.Client, error) {
 	d := &net.Dialer{}
 	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		return nil, sendFailed("the relay "+addr+" can't be reached", err)
+		return nil, sendFailed(StepConnect, "the relay "+addr+" can't be reached", err)
 	}
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
@@ -90,28 +128,39 @@ func dial(ctx context.Context, e Email) (*smtp.Client, error) {
 		tc := tls.Client(conn, tlsCfg)
 		if err := tc.HandshakeContext(ctx); err != nil {
 			_ = conn.Close()
-			return nil, sendFailed("TLS with the relay failed", err)
+			return nil, sendFailed(StepTLS, "TLS with the relay failed", err)
 		}
 		conn = tc
 	}
 	c, err := smtp.NewClient(conn, e.Host)
 	if err != nil {
 		_ = conn.Close()
-		return nil, sendFailed("the relay didn't greet", err)
+		return nil, sendFailed(StepConnect, "the relay didn't greet", err)
 	}
 	return c, nil
 }
 
+// tlsConfig is the relay connection's TLS. With Verify off nothing is
+// checked (the admin's choice, which the page warns about). With it on the
+// box checks the certificate itself, so a refusal can carry it: against
+// the pin when there is one, else against the system roots and the CA.
 func tlsConfig(e Email) (*tls.Config, error) {
-	// #nosec G402 -- verification off is the admin's choice on the Email
-	// page, which warns about it.
-	cfg := &tls.Config{ServerName: e.Host, InsecureSkipVerify: !e.Verify, MinVersion: tls.VersionTLS12} //nolint:gosec
-	if e.CA != "" {
+	// #nosec G402 -- verification is done in VerifyConnection, or is off by
+	// the admin's choice on the Email page, which warns about it.
+	cfg := &tls.Config{ServerName: e.Host, InsecureSkipVerify: true, MinVersion: tls.VersionTLS12} //nolint:gosec
+	if !e.Verify {
+		return cfg, nil
+	}
+	var roots *x509.CertPool
+	if e.PinSHA256 == "" && e.CA != "" {
 		pool, err := e.pool()
 		if err != nil {
 			return nil, err
 		}
-		cfg.RootCAs = pool
+		roots = pool
+	}
+	cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+		return verifyRelay(cs, e.Host, e.PinSHA256, roots, time.Now())
 	}
 	return cfg, nil
 }
@@ -119,14 +168,14 @@ func tlsConfig(e Email) (*tls.Config, error) {
 func secure(c *smtp.Client, e Email) error {
 	if e.TLS == TLSStartTLS {
 		if ok, _ := c.Extension("STARTTLS"); !ok {
-			return codes.New(codes.EmailSend, "the relay doesn't offer STARTTLS; nothing was sent")
+			return failedAt(StepTLS, "no STARTTLS in the relay's EHLO", codes.New(codes.EmailSend, "the relay doesn't offer STARTTLS; nothing was sent"))
 		}
 		cfg, err := tlsConfig(e)
 		if err != nil {
 			return err
 		}
 		if err := c.StartTLS(cfg); err != nil {
-			return sendFailed("STARTTLS with the relay failed", err)
+			return sendFailed(StepTLS, "STARTTLS with the relay failed", err)
 		}
 	}
 	if e.Username == "" {
@@ -134,11 +183,11 @@ func secure(c *smtp.Client, e Email) error {
 	}
 	ok, mechs := c.Extension("AUTH")
 	if !ok {
-		return codes.New(codes.EmailSend, "the relay offers no AUTH, and a username is set")
+		return failedAt(StepAuth, "no AUTH in the relay's EHLO", codes.New(codes.EmailSend, "the relay offers no AUTH, and a username is set"))
 	}
 	a := &relayAuth{user: e.Username, pass: e.Password, login: !slices.Contains(strings.Fields(strings.ToUpper(mechs)), "PLAIN")}
 	if err := c.Auth(a); err != nil {
-		return sendFailed("the relay refused the username and password", scrub(err, e.Password))
+		return sendFailed(StepAuth, "the relay refused the username and password", scrub(err, e.Password))
 	}
 	return nil
 }

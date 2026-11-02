@@ -6,6 +6,7 @@ syntax = "proto3";
 
 package sneakers.appliance.osadmin.v1;
 
+import "google/protobuf/timestamp.proto";
 import "sneakers/appliance/osadmin/v1/options.proto";
 import "sneakers/appliance/osadmin/v1/upgrade.proto";
 
@@ -30,12 +31,29 @@ service EmailService {
   }
   // SendTestEmail sends a short message to one address, through the
   // settings given (with the saved password unless one is given), or
-  // through the saved ones.
+  // through the saved ones. With verify on, a relay certificate the box
+  // doesn't trust stops it before AUTH with EMAIL_UNTRUSTED, and one that
+  // isn't the pinned certificate with EMAIL_PIN_MISMATCH; both carry an
+  // EmailCertificateRefusal detail. A failure's audit entry and log line
+  // name the step that failed and the relay's reply, without the password.
   rpc SendTestEmail(SendTestEmailRequest) returns (SendTestEmailResponse) {
     option (rule) = {
       role: ROLE_ADMIN
       step_up: true
       audit: "product.email.test-send"
+    };
+  }
+  // PinEmailCertificate pins the relay's certificate on the settings given
+  // (the form's), or the saved ones: the box connects with their TLS mode,
+  // checks that the relay presents the certificate with sha256 now, and
+  // answers the settings with pin_sha256 set and verify on. Nothing is
+  // saved; SetEmail saves the pin with the rest. Replacing another pin
+  // needs replaces_sha256 to name it.
+  rpc PinEmailCertificate(PinEmailCertificateRequest) returns (PinEmailCertificateResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "product.email.pin"
     };
   }
 }
@@ -63,8 +81,40 @@ message EmailSettings {
   // verify checks the relay's certificate (STARTTLS and TLS).
   bool verify = 6;
   // ca_pem is the relay's CA, trusted on top of the system roots; empty
-  // for none.
+  // for none. It's read only while verify is on, and a pin takes its
+  // place.
   string ca_pem = 7;
+  // pin_sha256 pins the relay's certificate by its SHA-256 fingerprint,
+  // colon hex in capitals (PinEmailCertificate gives it in that form);
+  // empty for no pin. With verify on, the relay must present exactly this
+  // certificate, within its validity dates, in place of a chain to the
+  // system roots or ca_pem; the host name isn't checked against it.
+  string pin_sha256 = 8;
+}
+
+// RelayCertificate is the certificate a relay presented.
+message RelayCertificate {
+  string subject = 1;
+  string issuer = 2;
+  google.protobuf.Timestamp not_before = 3;
+  google.protobuf.Timestamp not_after = 4;
+  // sha256 is the certificate's fingerprint, colon hex in capitals.
+  string sha256 = 5;
+  repeated string dns_names = 6;
+  repeated string ip_addresses = 7;
+}
+
+// EmailCertificateRefusal is the error detail of EMAIL_UNTRUSTED and
+// EMAIL_PIN_MISMATCH: the certificate the relay presented, to check
+// against one got another way and pin with PinEmailCertificate.
+message EmailCertificateRefusal {
+  RelayCertificate certificate = 1;
+  // pinned_sha256 is the pin the certificate was held to; empty when the
+  // settings have none. On EMAIL_PIN_MISMATCH it's the old fingerprint,
+  // and certificate.sha256 the new one.
+  string pinned_sha256 = 2;
+  // reason says why the certificate was refused.
+  string reason = 3;
 }
 
 message GetEmailRequest {}
@@ -106,4 +156,22 @@ message SendTestEmailRequest {
 message SendTestEmailResponse {
   // answer is the relay's answer to the message.
   string answer = 1;
+}
+
+message PinEmailCertificateRequest {
+  // settings, when present, are the form's; else the saved ones.
+  EmailSettings settings = 1;
+  // sha256 is the fingerprint to pin, as the refusal gave it (colons or
+  // spaces and case don't matter).
+  string sha256 = 2;
+  // replaces_sha256 is the pin the settings hold now, given again to
+  // confirm replacing it; needed only when they pin another certificate.
+  string replaces_sha256 = 3;
+}
+
+message PinEmailCertificateResponse {
+  // settings are the settings given with pin_sha256 set and verify on.
+  EmailSettings settings = 1;
+  // certificate is the certificate the relay presented, the pinned one.
+  RelayCertificate certificate = 2;
 }

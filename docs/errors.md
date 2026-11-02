@@ -89,6 +89,8 @@ shell, the console and :8443 show the same sentence.
 |---|---|---|
 | 3901 | `EMAIL_INVALID` | an email setting fails validation (the error names it) |
 | 3902 | `EMAIL_SEND` | the test email didn't go out; the error gives the relay's answer or the connection's failure |
+| 3903 | `EMAIL_UNTRUSTED` | the relay's certificate isn't trusted (or a pinned one is outside its validity dates); nothing was sent, and the refusal carries the certificate to check and pin |
+| 3904 | `EMAIL_PIN_MISMATCH` | the relay presented another certificate than the pinned one; nothing was sent, and the refusal carries both fingerprints |
 
 ## Product telemetry (391x)
 

@@ -17,6 +17,7 @@ import (
 	"net"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // SelfSignedLifetime keeps the self-signed certificate inside the lifetime
@@ -114,4 +115,26 @@ func Fingerprint(der []byte) string {
 		parts = append(parts, h[i:i+2])
 	}
 	return strings.Join(parts, ":")
+}
+
+// NormalizeFingerprint folds a SHA-256 fingerprint in any common form
+// (colons or spaces, any case) to the colon hex Fingerprint gives; false
+// when it isn't 64 hex digits.
+func NormalizeFingerprint(s string) (string, bool) {
+	h := strings.Map(func(r rune) rune {
+		if r == ':' || unicode.IsSpace(r) {
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, s)
+	b, err := hex.DecodeString(h)
+	if err != nil || len(b) != sha256.Size {
+		return "", false
+	}
+	h = strings.ToUpper(h)
+	parts := make([]string, 0, sha256.Size)
+	for i := 0; i < len(h); i += 2 {
+		parts = append(parts, h[i:i+2])
+	}
+	return strings.Join(parts, ":"), true
 }

@@ -5,6 +5,7 @@ package osadmin_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -54,6 +55,14 @@ type emailBox struct {
 	sendErr  error
 	restarts chan string
 	applied  int
+	// presented fakes the certificate the relay presents to a pin.
+	presented func(context.Context, boxsettings.Email) (boxsettings.RelayCert, error)
+}
+
+func (e *emailBox) setPresented(f func(context.Context, boxsettings.Email) (boxsettings.RelayCert, error)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.presented = f
 }
 
 func (e *emailBox) Applied(context.Context) error {
@@ -85,6 +94,15 @@ func newEmailBox(t *testing.T, spec string) *emailBox {
 				return "", e.sendErr
 			}
 			return "250 queued as " + to, nil
+		}
+		o.EmailCertificate = func(ctx context.Context, m boxsettings.Email) (boxsettings.RelayCert, error) {
+			e.mu.Lock()
+			f := e.presented
+			e.mu.Unlock()
+			if f == nil {
+				return boxsettings.RelayCert{}, errors.New("no relay in this test")
+			}
+			return f(ctx, m)
 		}
 	})
 	e.box = b
