@@ -101,3 +101,11 @@ func TestAProductWithNoRestoreGoesOn(t *testing.T) {
 		t.Fatalf("asked %d, settled %d", f.asked, f.settled)
 	}
 }
+
+// The follower drops a record whose step isn't a product-up step, and a
+// restore only moves on while it's asked, so the step has to count as one.
+func TestARestoreIsAProductUpStep(t *testing.T) {
+	if !productup.IsStep(productup.StepRestore) {
+		t.Fatalf("%q isn't a product-up step", productup.StepRestore)
+	}
+}
