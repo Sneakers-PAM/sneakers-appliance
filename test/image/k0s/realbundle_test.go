@@ -113,6 +113,13 @@ func newRealBox(t *testing.T, e realEnv) *realBox {
 // 8 GiB), and sets it up.
 func newRealBoxFrom(t *testing.T, e realEnv, img, version string, memMiB int) *realBox {
 	t.Helper()
+	return newRealBoxMarked(t, e, img, version, memMiB, "")
+}
+
+// newRealBoxMarked is newRealBoxFrom with more lines in the lab hook's ESP
+// marker, which the hook reads for what a leg asks of it.
+func newRealBoxMarked(t *testing.T, e realEnv, img, version string, memMiB int, marks string) *realBox {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Hour)
 	t.Cleanup(cancel)
 	b := &realBox{t: t, ctx: ctx, keys: e.keys, sshPort: freePort(t), adminPort: freePort(t), hp: freePort(t), memMiB: memMiB}
@@ -121,7 +128,7 @@ func newRealBoxFrom(t *testing.T, e realEnv, img, version string, memMiB int) *r
 		t.Fatalf("cp: %v: %s", err, out)
 	}
 	marker := filepath.Join(t.TempDir(), "lab-hook")
-	if err := os.WriteFile(marker, []byte("real-bundle job\n"), 0o600); err != nil {
+	if err := os.WriteFile(marker, []byte("real-bundle job\n"+marks), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	esp := fmt.Sprintf("%s@@%d", marked, disk.Installed()[0].Start)

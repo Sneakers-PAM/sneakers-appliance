@@ -25,8 +25,10 @@ name: Real bundle upgrades
 #   the old database cluster, takes the product under test through the normal
 #   update path. The data move runs as one step of it; every row has to be on
 #   the new cluster and the old one left as it was, through a power loss too.
-# - telemetry: the box exports to a collector: the services restart in the
-#   order of the phases, and the product stays up.
+# - telemetry: the box exports to a collector set on the :8443 page: a restart
+#   the lab hook makes fail stops at its phase and a retry carries on, the
+#   services restart in the order of the phases, the product stays up, and
+#   canary values sent through the gateway never reach the collector.
 # - control: the upgrade leg with the base from before the quiesce fixes
 #   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
 #   the run. Pull requests and runs by hand only.
@@ -77,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","telemetry","recover","control","import","move","backup"]' || '["upgrade","recover","import","move","backup"]') }}
+        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","telemetry","recover","control","import","move","backup"]' || '["upgrade","telemetry","recover","import","move","backup"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
