@@ -52,7 +52,7 @@ reach the disk is capped:
 | Containerd's images | `/var/lib/k0s` | the cleanup removes the images neither product slot needs; the kubelet's own image garbage collection is the last resort, from 90% down to 85% |
 | Update files | `/var/lib/sneakers/osadmin-api/uploads/`, `/var/lib/sneakers/image-stage/` | an upload or fetch nobody staged goes after 7 days; partial uploads and cut-off stage work after an hour |
 | Temporary files | `/tmp` (tmpfs) | files not changed for 7 days |
-| The database's write-ahead log | the product's data path (`product.yaml` `data`) | PostgreSQL's own `max_wal_size` (512 MB in the Sneakers bundle); the box warns past the declared `wal_warn` (1 GiB) and never removes a WAL file |
+| The database's write-ahead log | the product's data path (`product.yaml` `data`) | PostgreSQL's own `max_wal_size` (512 MB in the Sneakers bundle); the box warns past the declared `wal_warn` (1 GiB) and never removes a WAL file. WAL waiting for a stuck archive is held to 1 GiB on top ([backups.md](backups.md#a-full-backup-partition)) |
 
 The kubelet's settings are explicit in the box's own worker profile (`sneakers`, in
 `os/k0s/k0s.yaml.tmpl`; k0s-interim starts k0s with `--profile sneakers`), not left to its defaults.

@@ -35,6 +35,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -597,14 +598,42 @@ func firstEvent(port int, max time.Duration) (string, error) {
 	return "", fmt.Errorf("no event: %v", sc.Err())
 }
 
+// The kernel reuses a closed listener's port soon enough to land a box's two
+// forwards on one port.
+func TestFreePortNeverGivesAPortTwice(t *testing.T) {
+	seen := map[int]bool{}
+	for range 4000 {
+		p := freePort(t)
+		if seen[p] {
+			t.Fatalf("port %d came back", p)
+		}
+		seen[p] = true
+	}
+}
+
+// handedOut is every port freePort gave a test: the kernel can give a closed
+// listener's port to the next one, and QEMU refuses to forward a port twice.
+var (
+	handedOutMu sync.Mutex
+	handedOut   = map[int]bool{}
+)
+
 func freePort(t *testing.T) int {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
+	handedOutMu.Lock()
+	defer handedOutMu.Unlock()
+	for {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		port := ln.Addr().(*net.TCPAddr).Port
+		_ = ln.Close()
+		if !handedOut[port] {
+			handedOut[port] = true
+			return port
+		}
 	}
-	defer func() { _ = ln.Close() }()
-	return ln.Addr().(*net.TCPAddr).Port
 }
 
 func key(t *testing.T, name string) string {

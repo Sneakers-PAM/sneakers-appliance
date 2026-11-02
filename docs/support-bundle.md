@@ -176,7 +176,7 @@ support:
     short: true
     redact: ['acct-[0-9]+']
   - title: The size of the database
-    command: du -s -h /var/lib/sneakers-data/postgres
+    command: du -s -h /var/lib/sneakers-data/pgha
 ```
 
 | Field | Meaning |

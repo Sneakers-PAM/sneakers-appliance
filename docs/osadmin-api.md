@@ -175,6 +175,13 @@ same.
 | `ProductService.ListExposedValues` | admin | no | |
 | `ProductService.GetExposedValue` | admin | no | `product.value.read` |
 | `ProductService.ResetProduct` | owner, SSH only | every call | `product.reset` |
+| `ProductService.ListKeptDumps` | admin | no | |
+| `ProductService.RemoveKeptDump` | owner, SSH only | every call | `product.kept-dump.remove` |
+| `ProductService.ListBackups` | admin | no | |
+| `ProductService.CreateBackup` | admin | no | `product.backup.request` |
+| `ProductService.RemoveBackup` | owner, SSH only | every call | `product.backup.remove-request` |
+| `ProductService.RestoreBackup` | owner, SSH only | every call | `product.backup.restore` |
+| `ProductService.PrepareBackupExport` | owner, SSH only | every call | `product.backup.export-request` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `EmailService.GetEmail` | admin | no | |

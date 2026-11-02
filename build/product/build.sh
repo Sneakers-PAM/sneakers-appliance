@@ -37,6 +37,8 @@
 #                put at import/job.yaml with @MIGRATE_IMAGE@ filled
 #   MIGRATE_IMAGE the sneakers-migrate image by digest, which release.yaml
 #                pins (required with IMPORT_JOB)
+#   DATAMOVE     the product's data-move checks (optional; docs/data-move.md),
+#                such as build/product/sneakers/datamove, put at datamove/
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
 #   LAYOUTS      the service images a release built (build/bundle/build.sh;
 #                optional)
@@ -96,6 +98,12 @@ if [ -n "${IMPORT_JOB:-}" ]; then
   sed "s|@MIGRATE_IMAGE@|$MIGRATE_IMAGE|g" "$IMPORT_JOB" > "$tree/import/job.yaml"
   chmod 0644 "$tree/import/job.yaml"
   echo "product: import Job from $IMPORT_JOB ($MIGRATE_IMAGE)"
+fi
+
+if [ -n "${DATAMOVE:-}" ]; then
+  mkdir -p "$tree/datamove"
+  install -m 0644 "$DATAMOVE"/*.sql "$tree/datamove/"
+  echo "product: data-move checks from $DATAMOVE"
 fi
 
 if [ -n "${BRAND:-}" ]; then

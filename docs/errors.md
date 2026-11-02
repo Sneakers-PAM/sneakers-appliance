@@ -149,3 +149,12 @@ shell, the console and :8443 show the same sentence.
 | 2532 | `UPGRADE_WEB_LOAD` | a Base Web slot failed its load checks (the signature, a file's SHA-256 or size, a file or link that isn't listed); a switch puts the links back and the pages it would replace keep serving, and at start the built-in pages serve ([upgrades.md](upgrades.md#base-web)) |
 | 2533 | `UPGRADE_PATCH_RESULT` | a patch didn't rebuild the release byte for byte; nothing was staged, and a fetched patch falls back to the full `.bin` ([upgrades.md](upgrades.md#base-os-patches)) |
 | 2534 | `PRODUCT_NOT_INSTALLED` | no product is installed, so there's nothing to remove; install it from the Product card on Updates ([upgrades.md](upgrades.md#removing-the-product)) |
+| 2535 | `DATA_MOVE` | moving the product's databases to a new cluster failed: the reason says at which step, and the box goes back to the previous product slot and the old cluster, whose data the move never changes ([data-move.md](data-move.md)) |
+| 2536 | `DATA_MOVE_ROOM` | the database move won't fit on the box, so it didn't start; the refusal says how much room it needs and where ([data-move.md](data-move.md#room)) |
+| 2537 | `DATA_MOVE_DUMP` | that kept dump isn't there, or the box hasn't settled on the new database yet and may still need it; `<product> dumps list` shows the kept dumps ([data-move.md](data-move.md#kept-dumps)) |
+| 2539 | `BACKUP` | a backup set couldn't be made, or a restore failed and the box went back to the data it had: the reason says why ([backups.md](backups.md)) |
+| 2540 | `BACKUP_BUSY` | another backup or restore runs, or an update does, or the box hasn't settled on a data move; nothing changed ([backups.md](backups.md#restoring)) |
+| 2541 | `BACKUP_ROOM` | the partition or volume the backup or restore needs is out of room; the refusal says how much ([backups.md](backups.md#restoring)) |
+| 2542 | `BACKUP_SET` | there's no such backup set, or that name can't be one; `<product> backup list` shows the sets ([backups.md](backups.md#sets)) |
+| 2543 | `BACKUP_OTHER_BOX` | the backup set was made on a box holding other keys, so this box can't restore it; nothing changed ([backups.md](backups.md#restoring)) |
+| 2538 | `DATA_MOVE_BUNDLE` | the box reverted over a data move and that bundle neither declares `data_move` nor keeps the old database, so what was written there would be stranded; nothing changed, and the bundle stays staged ([data-move.md](data-move.md#going-back-and-returning)) |

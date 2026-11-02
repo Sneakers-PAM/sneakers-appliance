@@ -16,6 +16,9 @@
 #     dev-only switch, no "lab" in a name or value;
 #   - every workload is in its phase's own stack, labelled with the phase,
 #     and the always-on stack holds none;
+#   - the services reach the helm-postgres-ha cluster over TLS, it runs beside
+#     the old cluster on its own volume, at the chart version release.yaml pins,
+#     and nothing but the old cluster's own objects names the old address;
 #   - every wait-phase init container runs with arguments the release's own
 #     sneakers-migrate wait takes, and exits 0 once its DNS and targets
 #     answer (the DNS-only waits too);
@@ -86,6 +89,35 @@ if grep -q '^kind: \(Deployment\|StatefulSet\|DaemonSet\)$' "$out/sneakers/sneak
   fail "the always-on stack holds a workload: every workload starts in its phase"
 fi
 grep -q 'sneakers-appliance/phase: front' "$out/sneakers-mcp/sneakers-mcp.yaml" || fail "the MCP switch's workloads aren't in the front phase"
+# The data move: both clusters in the data phase, each on its own volume, and
+# every connection going to the new one over TLS.
+data="$out/sneakers-data/sneakers-data.yaml"
+for w in sneakers-postgres sneakers-pgha; do
+  grep -q "^    name: $w$" "$data" || fail "the data phase has no $w: the move needs both clusters"
+done
+grep -q 'path: /var/lib/sneakers-data/postgres$' "$data" || fail "the old cluster lost its volume"
+grep -q 'path: /var/lib/sneakers-data/pgha$' "$data" || fail "the new cluster has no volume of its own"
+# The backups are on the encrypted backup partition, for the members and the
+# restore check alike, and no pod writes them to the data volume.
+grep -q 'path: /var/lib/sneakers/backup/postgres$' "$data" || fail "the cluster's backups aren't on the backup partition"
+grep -q 'path: /var/lib/sneakers/backup/postgres$' "$out/sneakers/sneakers.yaml" || fail "the restore check doesn't read the backup partition"
+if grep -rq 'path: /var/lib/sneakers-data/pgha-backup' "$out"; then fail "a backup claim went to the data volume"; fi
+dsns="$(grep -h 'postgres://' "$out"/*/*.yaml || true)"
+[ -n "$dsns" ] || fail "no stack names a database"
+if grep -v '@sneakers-pgha-primary:5432/[a-z_]*?sslmode=require' <<<"$dsns" | grep -q .; then
+  fail "a DSN isn't on the new cluster with TLS: $(grep -v 'sneakers-pgha-primary' <<<"$dsns" | head -3)"
+fi
+if grep -hq 'sneakers-postgres\.sneakers\.svc' "$out"/sneakers-[ifs]*/*.yaml; then
+  fail "a later phase still waits for the old cluster"
+fi
+for f in "$here/product.yaml" "$here/import-job.yaml"; do
+  if grep -v '^ *#' "$f" | grep -q 'sneakers-postgres:5432\|sslmode=disable'; then fail "$f still names the old address"; fi
+done
+# One render: the cluster comes from the umbrella, at the version release.yaml pins.
+pgha_version="$(awk '/^    postgres-ha:$/ { on = 1 } on && /^ *version: / { print $2; exit }' "$work/release.yaml")"
+grep -q "helm.sh/chart: postgres-ha-$pgha_version\$" "$data" || fail "the cluster isn't the chart at $pgha_version"
+echo "ok: both clusters in the data phase, every connection on the new one over TLS"
+
 # Each phased workload waits for the cluster's DNS and its needs first,
 # with the release's migrate image.
 migrate_ref="$(go run "$root/build/tools/bundle" images --release "$work/release.yaml" | awk '$1 ~ /sneakers-migrate$/ { print $1 "@" $2 }')"

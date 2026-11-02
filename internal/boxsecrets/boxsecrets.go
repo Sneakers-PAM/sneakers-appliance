@@ -14,22 +14,27 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/fs"
 	"math/big"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	log "github.com/Bugs5382/go-log"
 	"gopkg.in/yaml.v3"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
@@ -53,7 +58,17 @@ type Store struct {
 	// nothing is sealed under that name; nil restores nothing.
 	Restore func(name string) (value string, found bool, err error)
 	Logger  log.Logger
+	// Now is the clock for certificates; nil is time.Now.
+	Now func() time.Time
 }
+
+// A box certificate lasts ten years and is renewed at the first apply or
+// revert in its last year. Nothing in between can miss a renewal: the
+// box's clients ask for TLS and don't check the certificate's dates.
+const (
+	CertificateLifetime    = 10 * 365 * 24 * time.Hour
+	CertificateRenewBefore = 365 * 24 * time.Hour
+)
 
 // Settings are the box's settings by name (productspec.IsSetting).
 type Settings interface {
@@ -100,6 +115,16 @@ func (s *Store) Ensure(slot string) error {
 	}
 	made, restored := 0, 0
 	for _, b := range spec.BoxSecrets {
+		if b.Certificate != nil {
+			issued, err := s.certificate(b, values)
+			if err != nil {
+				return err
+			}
+			if issued {
+				made++
+			}
+			continue
+		}
 		for _, k := range b.Keys {
 			id := b.Secret + "/" + k.Key
 			if k.Generate == "" || values[id] != "" {
@@ -146,6 +171,43 @@ func (s *Store) Ensure(slot string) error {
 	}
 	s.logger().Info("boxsecrets: the box secrets are in place", log.F("secrets", len(spec.BoxSecrets)), log.F("generated", made), log.F("restored", restored))
 	return nil
+}
+
+func (s *Store) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
+}
+
+// certificate issues b's certificate when the box has none, the one it has
+// is in its last year, or the bundle names other hosts. The old one goes
+// with its key: nothing but this Secret ever trusted it.
+func (s *Store) certificate(b productspec.BoxSecret, values map[string]string) (bool, error) {
+	id := func(k string) string { return b.Secret + "/" + k }
+	now := s.now()
+	if certCurrent(values[id(productspec.CertKey)], *b.Certificate, now) {
+		return false, nil
+	}
+	crt, key, err := certstore.NewInternal(b.Certificate.CommonName, b.Certificate.DNSNames, CertificateLifetime, now)
+	if err != nil {
+		return false, fmt.Errorf("boxsecrets: %w", err)
+	}
+	values[id(productspec.CertKey)], values[id(productspec.PrivKey)], values[id(productspec.CAKey)] = string(crt), string(key), string(crt)
+	s.logger().Info("boxsecrets: a certificate is issued", log.F("secret", b.Secret))
+	return true, nil
+}
+
+func certCurrent(certPEM string, want productspec.BoxCertificate, now time.Time) bool {
+	blk, _ := pem.Decode([]byte(certPEM))
+	if blk == nil {
+		return false
+	}
+	c, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return false
+	}
+	return c.NotAfter.Sub(now) > CertificateRenewBefore && slices.Equal(c.DNSNames, want.DNSNames) && c.Subject.CommonName == want.CommonName
 }
 
 // escrowName is the escrow name of a box secret's key, when the bundle
@@ -199,6 +261,15 @@ func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byt
 	for _, b := range spec.BoxSecrets {
 		data := &yaml.Node{Kind: yaml.MappingNode}
 		_, _ = fmt.Fprintf(digest, "Secret/%s\n", b.Secret)
+		if b.Certificate != nil {
+			for _, k := range b.KeyNames() {
+				v, ok := values[b.Secret+"/"+k]
+				if !ok {
+					return nil, fmt.Errorf("boxsecrets: %s has no %s", b.Secret, k)
+				}
+				pair(data, k, v)
+			}
+		}
 		for _, k := range b.Keys {
 			v, err := value(b, k, values, settings)
 			if err != nil {

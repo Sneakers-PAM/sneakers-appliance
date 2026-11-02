@@ -24,6 +24,7 @@ exposed_values:
 # bundle check (bundle.CheckProduct) refuses one that's missing any of them.
 components:
   - {name: PostgreSQL, image: postgres}
+  - {name: The PostgreSQL agent, image: pgha}
   - {name: Valkey, image: valkey}
   - {name: Ory Kratos, image: kratos}
   - {name: Ory Hydra, image: hydra}
@@ -121,11 +122,15 @@ box_secrets:
     keys:
       - {key: password, generate: password}
       - {key: postgres-password, generate: password}
+      # The new cluster's own roles (replication and pg_rewind); one member
+      # never uses them, and the chart won't start without them.
+      - {key: replication-password, generate: password}
+      - {key: rewind-password, generate: password}
       - {key: valkey-password, generate: password}
       - {key: redis-url, value: "redis://:{valkey-password}@sneakers-valkey:6379/0"}
   - secret: sneakers/sneakers-kratos
     keys:
-      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-postgres:5432/sneakers_kratos?sslmode=disable"}
+      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-pgha-primary:5432/sneakers_kratos?sslmode=require"}
       - {key: secretsDefault, generate: password}
       - {key: secretsCookie, generate: password}
       - {key: secretsCipher, generate: password}
@@ -134,9 +139,22 @@ box_secrets:
       - {key: smtpConnectionURI, setting: email.uri}
   - secret: sneakers/sneakers-hydra
     keys:
-      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-postgres:5432/sneakers_hydra?sslmode=disable"}
+      - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-pgha-primary:5432/sneakers_hydra?sslmode=require"}
       - {key: secretsSystem, generate: password}
       - {key: secretsCookie, generate: password}
+  # The new database cluster's TLS: no cert-manager runs on the box, so the
+  # box issues and renews it (docs/release.md#productyaml). The services
+  # connect with sslmode=require.
+  - secret: sneakers/sneakers-pgha-tls
+    certificate:
+      common_name: sneakers-pgha-primary.sneakers.svc
+      dns_names:
+        - sneakers-pgha-primary
+        - sneakers-pgha-primary.sneakers
+        - sneakers-pgha-primary.sneakers.svc
+        - sneakers-pgha-primary.sneakers.svc.cluster.local
+        - "*.sneakers-pgha-headless.sneakers.svc"
+        - "*.sneakers-pgha-headless.sneakers.svc.cluster.local"
   # The vault root key and the TOTP encryption key (32 bytes each, base64).
   # Losing them loses the data they protect: the recovery escrow carries
   # both (escrow above).
@@ -183,7 +201,7 @@ box_settings:
 data:
   - name: database
     label: The database
-    path: postgres
+    path: pgha
     wal: pgdata/pg_wal
     wal_warn: 1GiB
 
@@ -216,6 +234,9 @@ support:
     timeout: 30s
     short: true
   - title: The size of the database
+    command: du -s -h /var/lib/sneakers-data/pgha
+    timeout: 30s
+  - title: The size of the old database
     command: du -s -h /var/lib/sneakers-data/postgres
     timeout: 30s
   - title: The size of the data volumes
@@ -231,6 +252,84 @@ ready:
     service: sneakers/sneakers-gateway:http
     path: /readyz
   timeout: 15m
+
+# The one move onto the helm-postgres-ha cluster (docs/data-move.md): every
+# box runs the old cluster until it's through, and keeps it, untouched, as the
+# way back. A later release removes it. The tools run in each cluster's own
+# pod. The target's are over its local socket as the pod's user: that pod has
+# no password in its environment, only in files, and peer login needs none.
+data_move:
+  label: Moving the database
+  after: data
+  databases:
+    - sneakers_identity
+    - sneakers_vault
+    - sneakers_workflow
+    - sneakers_audit
+    - sneakers_kratos
+    - sneakers_hydra
+  source:
+    namespace: sneakers
+    name: sneakers-postgres
+    host: 127.0.0.1
+    user: postgres
+    password_env: POSTGRES_PASSWORD
+  target:
+    namespace: sneakers
+    name: sneakers-pgha
+    host: /var/run/postgresql
+    user: postgres
+  checks:
+    - name: the audit chain
+      database: sneakers_audit
+      file: datamove/audit-chain.sql
+
+# Backups of the database (docs/backups.md). WAL-G archives to the box's
+# encrypted backup partition from inside the cluster: the render's backup claim
+# becomes /var/lib/sneakers/backup/postgres there, for the members and the
+# restore check alike. The box cuts sets from that archive and restores one
+# through the chart's own restore bootstrap, whose settings are these. The
+# chart keeps the cluster's identity on its Lease, and a restored cluster takes
+# a new one.
+backups:
+  label: Restoring the database
+  after: data
+  cluster:
+    namespace: sneakers
+    name: sneakers-pgha
+    host: /var/run/postgresql
+    user: postgres
+  claim: sneakers-pgha-backup
+  dir: postgres
+  mount: /backup
+  store: walg
+  data: database
+  pgdata: pgdata
+  databases: [sneakers_audit]
+  command: [/pgha/bin/pgha, backup]
+  status:
+    lease: sneakers-pgha-backup
+    success: postgres-ha/last-success
+    failure: postgres-ha/last-failure
+    verify: postgres-ha/last-verify
+    verify_result: postgres-ha/last-verify-result
+    verify_ok: ok
+  restore:
+    env:
+      PGHA_BOOTSTRAP_MODE: restore
+      PGHA_RESTORE_STORAGE: file
+      PGHA_RESTORE_BACKUP: LATEST
+      PGHA_RESTORE_PREFIX: "{set}"
+      PGHA_RESTORE_TARGET_NAME: "{point}"
+    identity_lease: sneakers-pgha
+    identity_annotations:
+      - postgres-ha/system-identifier
+      - postgres-ha/timeline
+      - postgres-ha/lsn
+  checks:
+    - name: the audit chain
+      database: sneakers_audit
+      file: datamove/audit-chain.sql
 
 # The order the product comes up in (docs/upgrades.md#the-phases): on every
 # boot, update and revert the box quiesces what an earlier run left, waits
@@ -251,22 +350,22 @@ phases:
   - name: data
     label: Starting the database and the cache
     stack: sneakers-data
-    workloads: [sneakers-postgres, sneakers-valkey]
+    workloads: [sneakers-postgres, sneakers-pgha, sneakers-valkey]
   - name: identity
     label: Starting sign-in, identity and the vault
     stack: sneakers-identity
     workloads: [sneakers-kratos, sneakers-identity, sneakers-vault]
     needs:
-      sneakers-kratos: [sneakers-postgres:5432]
-      sneakers-identity: [sneakers-postgres:5432]
-      sneakers-vault: [sneakers-postgres:5432, sneakers-valkey:6379]
+      sneakers-kratos: [sneakers-pgha-primary:5432]
+      sneakers-identity: [sneakers-pgha-primary:5432]
+      sneakers-vault: [sneakers-pgha-primary:5432, sneakers-valkey:6379]
   - name: services
     label: Starting the services
     stack: sneakers-services
     workloads: [sneakers-workflow, sneakers-audit, sneakers-notify, sneakers-connector, sneakers-sshbroker]
     needs:
-      sneakers-workflow: [sneakers-postgres:5432, sneakers-vault:9091]
-      sneakers-audit: [sneakers-postgres:5432]
+      sneakers-workflow: [sneakers-pgha-primary:5432, sneakers-vault:9091]
+      sneakers-audit: [sneakers-pgha-primary:5432]
       sneakers-notify: [sneakers-valkey:6379, sneakers-identity:9192]
       sneakers-connector: [sneakers-vault:9091]
       sneakers-sshbroker: [sneakers-valkey:6379, sneakers-vault:9091]
@@ -285,4 +384,4 @@ phases:
         - sneakers-audit:9194
         - sneakers-notify:9195
         - sneakers-sshbroker:9096
-      sneakers-hydra: [sneakers-postgres:5432]
+      sneakers-hydra: [sneakers-pgha-primary:5432]

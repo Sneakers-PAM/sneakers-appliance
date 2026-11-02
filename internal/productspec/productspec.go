@@ -114,6 +114,12 @@ type Spec struct {
 	// Phases, when set, are the order the product comes up in, each
 	// gated on Ready before the next (phases.go, docs/upgrades.md).
 	Phases []Phase `yaml:"phases"`
+	// DataMove, when set, moves the product's databases to a new cluster
+	// once, as the product comes up (datamove.go, docs/data-move.md).
+	DataMove *DataMove `yaml:"data_move"`
+	// Backups, when set, is how the box backs up and restores the product's
+	// database (docs/backups.md).
+	Backups *Backups `yaml:"backups"`
 	// Support are the sections the product adds to the box's support
 	// bundle (support.go, docs/support-bundle.md).
 	Support []Support `yaml:"support"`
@@ -405,6 +411,35 @@ type BoxSecret struct {
 	// Secret is <namespace>/<name>.
 	Secret string   `yaml:"secret"`
 	Keys   []BoxKey `yaml:"keys"`
+	// Certificate, instead of Keys, makes it a TLS Secret the box issues
+	// and renews: tls.crt, tls.key and ca.crt.
+	Certificate *BoxCertificate `yaml:"certificate"`
+}
+
+// BoxCertificate is a certificate for a workload inside the box, issued on
+// the box so no bundle carries a private key.
+type BoxCertificate struct {
+	CommonName string   `yaml:"common_name"`
+	DNSNames   []string `yaml:"dns_names"`
+}
+
+// The keys of a Secret that holds a box certificate.
+const (
+	CertKey = "tls.crt"
+	PrivKey = "tls.key"
+	CAKey   = "ca.crt"
+)
+
+// KeyNames are the Secret's keys.
+func (b BoxSecret) KeyNames() []string {
+	if b.Certificate != nil {
+		return []string{CertKey, PrivKey, CAKey}
+	}
+	out := make([]string, 0, len(b.Keys))
+	for _, k := range b.Keys {
+		out = append(out, k.Key)
+	}
+	return out
 }
 
 // BoxKey is one key of a box secret: generated once (Generate), or a value
@@ -588,6 +623,12 @@ func Parse(b []byte) (Spec, error) {
 	if err := s.checkPhases(); err != nil {
 		return Spec{}, err
 	}
+	if err := s.checkDataMove(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkBackups(); err != nil {
+		return Spec{}, err
+	}
 	if err := s.checkSupport(); err != nil {
 		return Spec{}, err
 	}
@@ -666,6 +707,15 @@ func (s Spec) checkBoxSecrets() error {
 			return bad("box_secrets[%d]: %s is declared twice", i, b.Secret)
 		}
 		secrets[b.Secret] = true
+		if b.Certificate != nil {
+			if err := b.Certificate.check(); err != nil {
+				return bad("box_secrets[%d]: %s: %v", i, b.Secret, err)
+			}
+			if len(b.Keys) != 0 {
+				return bad("box_secrets[%d]: %s is a certificate or has keys, not both", i, b.Secret)
+			}
+			continue
+		}
 		if len(b.Keys) == 0 {
 			return bad("box_secrets[%d]: %s has no keys", i, b.Secret)
 		}
@@ -708,6 +758,23 @@ func (s Spec) checkBoxSecrets() error {
 					return bad("box_secrets[%d].keys[%d]: %s names %s, which isn't a generated box secret key", i, j, k.Key, p)
 				}
 			}
+		}
+	}
+	return nil
+}
+
+var certNameRE = regexp.MustCompile(`^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$`)
+
+func (c BoxCertificate) check() error {
+	if c.CommonName == "" || len(c.CommonName) > 64 {
+		return errors.New("a certificate needs a common name of 1 to 64 characters")
+	}
+	if len(c.DNSNames) == 0 {
+		return errors.New("a certificate needs its DNS names")
+	}
+	for _, n := range c.DNSNames {
+		if !certNameRE.MatchString(n) {
+			return fmt.Errorf("the DNS name %q isn't one", n)
 		}
 	}
 	return nil

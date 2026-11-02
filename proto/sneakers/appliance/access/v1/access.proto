@@ -97,6 +97,21 @@ service AccessService {
   // UpgradeService method run as the login's admin (an owner, with a new
   // authenticator code for the apply). The data is kept.
   rpc ReinstallProduct(ReinstallProductRequest) returns (ReinstallProductResponse);
+  // ListKeptDumps is the closed shell's "<product> dumps list": osadmin's
+  // ProductService.ListKeptDumps run as the login's admin.
+  rpc ListKeptDumps(ListKeptDumpsRequest) returns (ListKeptDumpsResponse);
+  // RemoveKeptDump is the closed shell's "<product> dumps remove":
+  // osadmin's ProductService.RemoveKeptDump run as the login's admin, which
+  // must be an owner and give a new authenticator code.
+  rpc RemoveKeptDump(RemoveKeptDumpRequest) returns (RemoveKeptDumpResponse);
+  // ListBackups, CreateBackup, RemoveBackup, RestoreBackup and
+  // PrepareBackupExport are the closed shell's "<product> backup" commands:
+  // osadmin's ProductService methods run as the login's admin.
+  rpc ListBackups(ListBackupsRequest) returns (ListBackupsResponse);
+  rpc CreateBackup(CreateBackupRequest) returns (CreateBackupResponse);
+  rpc RemoveBackup(RemoveBackupRequest) returns (RemoveBackupResponse);
+  rpc RestoreBackup(RestoreBackupRequest) returns (RestoreBackupResponse);
+  rpc PrepareBackupExport(PrepareBackupExportRequest) returns (PrepareBackupExportResponse);
 }
 
 // NetworkService relays the network settings to netd, whose socket is
@@ -845,6 +860,61 @@ message ReinstallProductRequest {
   string totp_code = 1;
   // confirm is the installed version, as typed.
   string confirm = 2;
+}
+
+message ListKeptDumpsRequest {}
+
+message ListKeptDumpsResponse {
+  repeated sneakers.appliance.osadmin.v1.KeptDump dumps = 1;
+}
+
+message RemoveKeptDumpRequest {
+  // totp_code is a new authenticator code, read at the command.
+  string totp_code = 1;
+  // name is the dump's name, as typed.
+  string name = 2;
+}
+
+message RemoveKeptDumpResponse {}
+
+message ListBackupsRequest {}
+
+message ListBackupsResponse {
+  repeated sneakers.appliance.osadmin.v1.BoxBackupSet sets = 1;
+}
+
+message CreateBackupRequest {
+  string name = 1;
+}
+
+message CreateBackupResponse {
+  sneakers.appliance.osadmin.v1.BoxBackupSet set = 1;
+}
+
+message RemoveBackupRequest {
+  // totp_code is a new authenticator code, read at the command.
+  string totp_code = 1;
+  string name = 2;
+}
+
+message RemoveBackupResponse {}
+
+message RestoreBackupRequest {
+  // totp_code is a new authenticator code, read at the command.
+  string totp_code = 1;
+  string name = 2;
+}
+
+message RestoreBackupResponse {}
+
+message PrepareBackupExportRequest {
+  // totp_code is a new authenticator code, given with the command.
+  string totp_code = 1;
+  string name = 2;
+}
+
+message PrepareBackupExportResponse {
+  string ticket = 1;
 }
 
 message ReinstallProductResponse {

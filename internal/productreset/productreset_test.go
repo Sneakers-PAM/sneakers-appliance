@@ -140,6 +140,7 @@ func newFixture(t *testing.T) *fixture {
 	write(t, filepath.Join(f.data, "postgres", "pgdata", "PG_VERSION"), "18\n")
 	write(t, filepath.Join(f.data, "valkey", "dump.rdb"), strings.Repeat("v", 1000))
 	write(t, filepath.Join(f.platform, "phase-placed"), "sneakers-data\n")
+	write(t, filepath.Join(f.platform, "data-move.json"), `{"state":"done"}`)
 	if err := os.MkdirAll(f.images, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -186,6 +187,9 @@ func TestTheClusterStepQuiescesThenRemovesTheProductsObjects(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.platform, "phase-placed")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the phase-placed list is still there: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(f.platform, "data-move.json")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the data move's journal is still there: %v", err)
 	}
 	// 3 namespaces; 6 objects in them, 2 cluster-wide, 1 volume, and the
 	// namespaces themselves.
@@ -290,6 +294,19 @@ func TestTheDataStepRemovesTheProductsDataAndRecords(t *testing.T) {
 	}
 }
 
+// The kept dumps hold the product's data, so the reset takes them with it.
+func TestTheDataStepRemovesTheMovesDumps(t *testing.T) {
+	f := newFixture(t)
+	f.r.MoveDumps = filepath.Join(f.root, "backup", "data-move")
+	write(t, filepath.Join(f.r.MoveDumps, "replaced-20261101T120000Z", "app_one.dump"), "kept")
+	if _, err := f.r.Data(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(f.r.MoveDumps); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the dumps stayed: %v", err)
+	}
+}
+
 // Nothing leaves k0s until the reset has said so on the disk, and only
 // once the product has stopped: a reset cut off before that lost nothing.
 func TestClusterSaysSoBeforeItRemovesAnything(t *testing.T) {
@@ -310,5 +327,24 @@ func TestClusterSaysSoBeforeItRemovesAnything(t *testing.T) {
 	}
 	if len(ents) == 0 {
 		t.Fatal("a stack went although the record didn't write")
+	}
+}
+
+// An archive left behind stops a new install's database from starting, so the
+// reset takes the backups with the data.
+func TestTheDataStepRemovesTheBackups(t *testing.T) {
+	f := newFixture(t)
+	dir := filepath.Join(f.root, "backup", "postgres")
+	journal := filepath.Join(f.root, "platform-backup-restore.json")
+	write(t, filepath.Join(dir, "walg", "wal_005", "000000010000000000000001.lz4"), "wal")
+	write(t, journal, "{}")
+	f.r.Backups = func() []string { return []string{dir, journal} }
+	if _, err := f.r.Data(); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{dir, journal} {
+		if _, err := os.Stat(p); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s stayed: %v", p, err)
+		}
 	}
 }

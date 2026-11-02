@@ -18,6 +18,13 @@ name: Real bundle upgrades
 #   takes an earlier install with a 727,000-record audit chain through the
 #   Import page (review, convert, check, import, verify), with the box's
 #   memory read at each step.
+# - backup: a box running the product under test cuts a backup set, takes a
+#   later write, restores the set and has to come back without it, every other
+#   row there, and stay so through a power loss.
+# - move: a box on the base under test running rc.6, the last product on
+#   the old database cluster, takes the product under test through the normal
+#   update path. The data move runs as one step of it; every row has to be on
+#   the new cluster and the old one left as it was, through a power loss too.
 # - control: the upgrade leg with the base from before the quiesce fixes
 #   (CONTROL_COMMIT); it is expected to fail, and its failure doesn't fail
 #   the run. Pull requests and runs by hand only.
@@ -68,18 +75,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control","import"]' || '["upgrade","recover","import"]') }}
+        leg: ${{ fromJSON((github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && '["upgrade","recover","control","import","move","backup"]' || '["upgrade","recover","import","move","backup"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      # Three real bundles, their service images and a box's disk with them
-      # installed need more room than the runner leaves free.
+      # Four real bundles, their service images and a box's disk with them
+      # installed need more room than the runner leaves free, and the same
+      # runner label can come with a disk half the size.
       - name: Make room on the runner
         run: |
           df -h /
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/local/.ghcup /usr/share/swift /usr/lib/jvm /usr/local/share/powershell /opt/az /opt/microsoft \
+            /opt/hostedtoolcache/PyPy /opt/hostedtoolcache/Ruby /usr/lib/google-cloud-sdk /usr/local/share/chromium
           docker image prune -af >/dev/null
           df -h /
       - name: Setup Go
@@ -182,16 +192,18 @@ jobs:
           [[ "$next" =~ ^[0-9a-f]{40}$ ]] || { echo "sneakers-release's next commit is '$next'" >&2; exit 1; }
           echo "p12=$P12_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "p13=$P13_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "rc6=$RC6_RELEASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "old=$OLD_BASE_COMMIT" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "realci: next is sneakers-release $next"
-      - name: Cache the .12 and .13 service images
+      - name: Cache the .12, .13 and rc.6 service images
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: |
             ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p12 }}
             ${{ runner.temp }}/layouts/${{ steps.pins.outputs.p13 }}
-          key: realci-images-${{ steps.pins.outputs.p12 }}-${{ steps.pins.outputs.p13 }}-${{ hashFiles('build/release/images.sh') }}
+            ${{ runner.temp }}/layouts/${{ steps.pins.outputs.rc6 }}
+          key: realci-images-${{ steps.pins.outputs.p12 }}-${{ steps.pins.outputs.p13 }}-${{ steps.pins.outputs.rc6 }}-${{ hashFiles('build/release/images.sh') }}
       # The old base's tree stamps its static tools with its own pins, so it
       # builds its own when this commit's stamps differ (build/realci/build.sh).
       - name: Cache the old base's static tools
@@ -229,6 +241,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           df -h /
+          sudo du -xsh "$RUNNER_TEMP"/realci/* "$RUNNER_TEMP"/layouts /var/lib/docker 2>/dev/null | sort -h | tail -12 || true
       # Every path this job caches, checked for the run's keys and any
       # private key before anything is saved (the cache steps above save
       # theirs at the end of the job; the legs don't write to them).
@@ -259,6 +272,8 @@ jobs:
             upgrade|control) run='^TestTheRealBundlesUpdateInOrder$' ;;
             recover) run='^TestTheRealBundlesRecoverFromAStuckUpdate$' ;;
             import) run='^TestTheRealBundleImportsALargeAuditChain$' ;;
+            move) run='^TestTheRealBundleMovesTheDatabase$' ;;
+            backup) run='^TestTheRealBundleRestoresABackup$' ;;
           esac
           start="$(date +%s)"
           status=0

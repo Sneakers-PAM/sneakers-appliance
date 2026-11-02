@@ -29,6 +29,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/backupset"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxvalues"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productswitch"
@@ -64,6 +65,9 @@ type Result struct {
 	// while an import is open (productspec.Import.After): the phases
 	// through it run, the later ones wait, and the box says maintenance.
 	Held bool
+	// Unbounded is a step the product's ready timeout doesn't cover: a
+	// data move takes as long as the data, under its own timeout.
+	Unbounded bool
 }
 
 // StackLabel is the label k0s's manifest applier puts on every object of a
@@ -101,6 +105,18 @@ type Probe struct {
 	Manifests string
 	// AskTimeout bounds each command and the edge request; 0 is 10 s.
 	AskTimeout time.Duration
+	// Move runs a data move the slot declares; nil can't run one. Only the
+	// process that follows the product sets it.
+	Move DataMover
+	// Restore runs a restore of the product's database; nil can't run one.
+	// Only the process that follows the product sets it.
+	Restore Restorer
+}
+
+// Restorer is the box's restore, which holds the product while it runs.
+type Restorer interface {
+	Ask(svc backupset.Services) backupset.Status
+	Settle(ctx context.Context) error
 }
 
 // defaultAskTimeout bounds each command and the edge request.
@@ -408,11 +424,16 @@ func (p *Probe) onStacks() ([]string, error) {
 // slot's stacks hold, read from their files with the box's own values put
 // in, as k0s-interim and productswitch hand them to k0s.
 func (p *Probe) wantedWorkloads(stacks []string) ([]wanted, error) {
+	return p.workloadsIn(p.Slot, stacks)
+}
+
+// workloadsIn is wantedWorkloads for any slot.
+func (p *Probe) workloadsIn(slot string, stacks []string) ([]wanted, error) {
 	kernel, _ := os.Hostname()
-	values := boxvalues.Table(p.Slot, boxvalues.Read(p.SwitchDir), kernel)
+	values := boxvalues.Table(slot, boxvalues.Read(p.SwitchDir), kernel)
 	var out []wanted
 	for _, st := range stacks {
-		files, err := filepath.Glob(filepath.Join(p.Slot, "manifests", st, "*.y*ml"))
+		files, err := filepath.Glob(filepath.Join(slot, "manifests", st, "*.y*ml"))
 		if err != nil {
 			return nil, err
 		}

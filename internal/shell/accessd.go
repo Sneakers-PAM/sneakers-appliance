@@ -67,7 +67,7 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		}
 		switch r.Action {
 		case "network.show", "network.set", "network.review", "network.commit", "network.discard", "network.confirm", "network.allowlist.reset", "keys.list",
-			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall", "support.bundle":
+			"admins.list", "recovery.add", "setup.recovery", "rootshell.begin", "rootshell.open", "product.value", "mcp.show", "mcp.set", "updates.show", "updates.set", "disk.cleanup", "product.reset", "product.reinstall", "product.dumps.list", "product.dumps.remove", "product.backup.list", "product.backup.create", "product.backup.remove", "product.backup.restore", "product.backup.export", "support.bundle":
 			return Result{}, true, ErrUnavailable
 		}
 		return Result{}, false, nil
@@ -136,6 +136,20 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		res, err = s.productReset(ctx, r.Args[0], r.Args[1])
 	case "product.reinstall":
 		res, err = s.productReinstall(ctx, r.Args[0], r.Args[1])
+	case "product.backup.list":
+		res, err = s.backupSets(ctx)
+	case "product.backup.create":
+		res, err = s.createBackup(ctx, r.Args)
+	case "product.backup.remove":
+		res, err = s.removeBackup(ctx, r.Args[0], r.Args[1])
+	case "product.backup.restore":
+		res, err = s.restoreBackup(ctx, r.Args[0], r.Args[1])
+	case "product.backup.export":
+		res, err = s.exportBackup(ctx, r.Args[0], r.Args[1])
+	case "product.dumps.list":
+		res, err = s.keptDumps(ctx)
+	case "product.dumps.remove":
+		res, err = s.removeKeptDump(ctx, r.Args[0], r.Args[1])
 	default:
 		return Result{}, false, nil
 	}
@@ -323,6 +337,36 @@ func (s *Services) productReinstall(ctx context.Context, confirm, code string) (
 	}
 	text := fmt.Sprintf("Sneakers %s is reinstalled from %s, and its data is kept. The product restarts and comes up phase by phase: status, or the Product card on Updates, says when it's ready. Revert there goes back to the copy it replaced.\n", v, from)
 	return Result{Text: text, Data: map[string]any{"version": out.Msg.GetVersion(), "source": out.Msg.GetSource()}}, nil
+}
+
+// keptDumps lists the dumps a data move kept of what it replaced.
+func (s *Services) keptDumps(ctx context.Context) (Result, error) {
+	out, err := s.Access.ListKeptDumps(ctx, connect.NewRequest(&accessv1.ListKeptDumpsRequest{}))
+	if err != nil {
+		return Result{}, err
+	}
+	list := out.Msg.GetDumps()
+	if len(list) == 0 {
+		return Result{Text: "No kept dumps.\n", Data: map[string]any{"dumps": []any{}}}, nil
+	}
+	var b strings.Builder
+	data := make([]map[string]any, 0, len(list))
+	for _, d := range list {
+		fmt.Fprintf(&b, "%s  %s  %s  %s", Printable(d.GetName()), Printable(d.GetTaken()), diskBytes(d.GetBytes()), Printable(d.GetPath()))
+		if !d.GetWhole() {
+			b.WriteString("  (cut off; not a whole dump)")
+		}
+		b.WriteString("\n")
+		data = append(data, map[string]any{"name": d.GetName(), "taken": d.GetTaken(), "bytes": d.GetBytes(), "path": d.GetPath(), "whole": d.GetWhole()})
+	}
+	return Result{Text: b.String(), Data: map[string]any{"dumps": data}}, nil
+}
+
+func (s *Services) removeKeptDump(ctx context.Context, name, code string) (Result, error) {
+	if _, err := s.Access.RemoveKeptDump(ctx, connect.NewRequest(&accessv1.RemoveKeptDumpRequest{TotpCode: code, Name: name})); err != nil {
+		return Result{}, err
+	}
+	return Result{Text: fmt.Sprintf("%s is removed.\n", Printable(name)), Data: map[string]any{"removed": name}}, nil
 }
 
 // diskBytes is n in binary units, one decimal.

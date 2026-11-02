@@ -21,6 +21,12 @@ global:
   logLevel: error
   logFormat: json
   workloadIdentityIssuer: https://kubernetes.default.svc
+  # The services run on the helm-postgres-ha cluster (values-postgres-ha.yaml),
+  # once the box has moved its data there. The old cluster stays, and holds
+  # the way back.
+  database:
+    host: sneakers-pgha-primary
+    sslmode: require
 bundledSecrets:
   enabled: true
 identity:

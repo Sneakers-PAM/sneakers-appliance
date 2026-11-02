@@ -141,6 +141,70 @@ func (h *accessH) ResetProduct(ctx context.Context, r *connect.Request[accessv1.
 	return connect.NewResponse(&accessv1.ResetProductResponse{Result: out}), nil
 }
 
+// ListKeptDumps is the closed shell's "<product> dumps list".
+func (h *accessH) ListKeptDumps(ctx context.Context, r *connect.Request[accessv1.ListKeptDumpsRequest]) (*connect.Response[accessv1.ListKeptDumpsResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceListKeptDumpsProcedure, osadminv1connect.ProductServiceListKeptDumpsProcedure, h.s.h.Product.ListKeptDumps, &osadminv1.ListKeptDumpsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.ListKeptDumpsResponse{Dumps: out.GetDumps()}), nil
+}
+
+// ListBackups is the closed shell's "<product> backup list".
+func (h *accessH) ListBackups(ctx context.Context, r *connect.Request[accessv1.ListBackupsRequest]) (*connect.Response[accessv1.ListBackupsResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceListBackupsProcedure, osadminv1connect.ProductServiceListBackupsProcedure, h.s.h.Product.ListBackups, &osadminv1.ListBackupsRequest{})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.ListBackupsResponse{Sets: out.GetSets()}), nil
+}
+
+// CreateBackup is the closed shell's "<product> backup create".
+func (h *accessH) CreateBackup(ctx context.Context, r *connect.Request[accessv1.CreateBackupRequest]) (*connect.Response[accessv1.CreateBackupResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceCreateBackupProcedure, osadminv1connect.ProductServiceCreateBackupProcedure, h.s.h.Product.CreateBackup, &osadminv1.CreateBackupRequest{Name: r.Msg.GetName()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.CreateBackupResponse{Set: out.GetSet()}), nil
+}
+
+// RemoveBackup is the closed shell's "<product> backup remove".
+func (h *accessH) RemoveBackup(ctx context.Context, r *connect.Request[accessv1.RemoveBackupRequest]) (*connect.Response[accessv1.RemoveBackupResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceRemoveBackupProcedure, osadminv1connect.ProductServiceRemoveBackupProcedure, h.s.h.Product.RemoveBackup,
+		&osadminv1.RemoveBackupRequest{TotpCode: r.Msg.GetTotpCode(), Name: r.Msg.GetName()}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.RemoveBackupResponse{}), nil
+}
+
+// RestoreBackup is the closed shell's "<product> backup restore".
+func (h *accessH) RestoreBackup(ctx context.Context, r *connect.Request[accessv1.RestoreBackupRequest]) (*connect.Response[accessv1.RestoreBackupResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceRestoreBackupProcedure, osadminv1connect.ProductServiceRestoreBackupProcedure, h.s.h.Product.RestoreBackup,
+		&osadminv1.RestoreBackupRequest{TotpCode: r.Msg.GetTotpCode(), Name: r.Msg.GetName()}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.RestoreBackupResponse{}), nil
+}
+
+// PrepareBackupExport is the closed shell's "<product> backup export".
+func (h *accessH) PrepareBackupExport(ctx context.Context, r *connect.Request[accessv1.PrepareBackupExportRequest]) (*connect.Response[accessv1.PrepareBackupExportResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServicePrepareBackupExportProcedure, osadminv1connect.ProductServicePrepareBackupExportProcedure, h.s.h.Product.PrepareBackupExport,
+		&osadminv1.PrepareBackupExportRequest{TotpCode: r.Msg.GetTotpCode(), Name: r.Msg.GetName()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.PrepareBackupExportResponse{Ticket: out.GetTicket()}), nil
+}
+
+// RemoveKeptDump is the closed shell's "<product> dumps remove".
+func (h *accessH) RemoveKeptDump(ctx context.Context, r *connect.Request[accessv1.RemoveKeptDumpRequest]) (*connect.Response[accessv1.RemoveKeptDumpResponse], error) {
+	if _, err := run(ctx, h.s, r.Header(), accessv1connect.AccessServiceRemoveKeptDumpProcedure, osadminv1connect.ProductServiceRemoveKeptDumpProcedure, h.s.h.Product.RemoveKeptDump,
+		&osadminv1.RemoveKeptDumpRequest{TotpCode: r.Msg.GetTotpCode(), Name: r.Msg.GetName()}); err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.RemoveKeptDumpResponse{}), nil
+}
+
 // ReinstallProduct is the closed shell's "<product> reinstall": the
 // installed version again, keeping the data. A staged bundle of that
 // version is used as it is; otherwise the box's update source must offer

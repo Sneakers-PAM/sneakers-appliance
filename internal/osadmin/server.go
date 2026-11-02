@@ -101,6 +101,8 @@ type Options struct {
 	// as the steps after restarting, until the product answers on 443;
 	// nil ends the apply at the restart.
 	ProductUp ProductProbe
+	// Backups is the box's backup sets; nil on a box without them.
+	Backups *Backups
 	// BoxEvents is edgefall's push socket (edgefall.PushClient on the
 	// box): the box state goes there the moment an update, a product
 	// apply, a reboot or a shutdown starts, before anything stops, and at
@@ -235,6 +237,8 @@ type Server struct {
 	mcpApply mcpApply
 	// bundleMu is held while a support bundle runs: one at a time.
 	bundleMu sync.Mutex
+	// exports are the backup exports an owner authorised.
+	exports exportTickets
 }
 
 // New returns a server.

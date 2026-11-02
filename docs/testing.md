@@ -8,10 +8,13 @@
 | Tool interop (efitools, cosign, sbsign, sbverify, unsquashfs, ukify against the kit's checks) | `go test -tags tools ./test/kit/labkeys/` | every PR (`🔑 Lab keys and tool interop`) |
 | The root image: reproducible, the declared tree, its refusals | `bash build/root/build_test.sh` | every PR (`🔑 Lab keys and tool interop`) |
 | The airgap bundle: pull by digest per architecture, signatures, both-way check (a `registry:2` container) | `go test ./internal/bundle/` | every PR (`🧪 Build & Test`) |
+| The data move with the real tools against plain PostgreSQL containers: every row moved, TLS and password logins, and SIGKILLs mid-dump, mid-restore and before the switch, each back on the old data, and a revert and return with both sides' writes kept ([data-move.md](data-move.md#testing-it)) | `go test -tags integration ./internal/datamove/` | on every pull request, in the Go CI job (needs docker) |
 | The disk guard on a real small volume: filled past 80% with removable files it recovers by itself; past 90% with a protected file it stays critical and touches nothing | `DISKGUARD_TEST_DIR=<a directory on a tmpfs or loop volume of 8 GiB or less> go test -tags integration -run Fill ./internal/diskguard/` | by hand (a tmpfs mount needs root; the test skips without the variable) |
 | Kernel and static tools | `job-image-build.yaml` | PRs that touch their inputs |
 | The image suite (QEMU, OVMF Secure Boot, swtpm) | `go test -tags image ./test/image/...` | after each merge to main, nightly at 07:17 UTC (03:17 ET), and on demand (`image-e2e.yml`); a merge never cancels the suite already running on main, it waits for it; a pull request only builds the lab release and reports the root image and product bundle sizes |
 | The real Sneakers product through the update paths a box takes (QEMU, the real bundles) | `build/realci/build.sh`, then `go test -tags image -run 'TestTheRealBundles' ./test/image/k0s/` | after each merge to main, nightly at 05:41 UTC (01:41 ET), by hand, on a pull request that changes the job, and in the release workflow before anything is built (`real-bundle.yml`, [the real-bundle job](#the-real-bundle-job)) |
+| Backups and restore against the real chart on kind, killed at each step, a full partition and a gap | `test/backups/rehearsal.sh` ([backups.md](backups.md#testing-it)) | pull requests into main that touch the backups or the Sneakers product, and by hand (`data-move.yml`) |
+| The data move against the real charts on kind, amd64 and arm64, killed mid-dump, mid-restore and before the switch | `test/datamove/rehearsal.sh` ([data-move.md](data-move.md#testing-it)) | pull requests into main that touch the move or the Sneakers product, and by hand (`data-move.yml`) |
 | The sign-off journeys in a real browser (headless Chromium against one booted box with the :8443 pages and the real product) | `build/journeys/build.sh`, then `go test -tags image -run TestTheSignOffJourneys ./test/image/journeys/` | pull requests that touch the image or the journeys, nightly at 07:17 UTC with the image suite, and on demand (`image-e2e.yml`, [the browser journeys](#the-browser-journeys)); never on a push to main |
 
 Tests that need a tool skip with its name when it's missing; CI sets `SNEAKERS_REQUIRE_TOOLS=1`, so
@@ -160,6 +163,7 @@ with them) fails here and not on a box.
 | the base under test (n7) | `build/lab/build.sh` at the commit under test, packed as a Base OS update (`sneakers-artifact bin-pack`, as the release workflow's lab job does) |
 | `.12`, the product without phases | this repository at `P12_APPLIANCE_COMMIT` with sneakers-release at `P12_RELEASE_COMMIT` |
 | `.13`, the first with phases | `P13_APPLIANCE_COMMIT` with `P13_RELEASE_COMMIT` |
+| `mrc6`, rc.6, the last product on the old database cluster | `RC6_APPLIANCE_COMMIT` with `RC6_RELEASE_COMMIT` |
 | `next`, the product under test (`0.1.0-lab.realci.next`) | the commit under test with `NEXT_RELEASE_COMMIT` (empty: sneakers-release's main) |
 | the import leg's `sneakers-migrate`, for the runner | the commit next's `release.yaml` pins for the migrate image (`spec.jobs.migrate`), so the export writes a bundle format the box's steps read |
 | the import leg's `synth`, for the runner | next's sneakers-release commit |
@@ -175,6 +179,12 @@ with this commit's lab hook, so the test reads the same lines from each. The ser
 cached by the sneakers-release commit they're built from; the bases and the bundles are built and
 signed every run ([the caches](#the-caches)).
 
+**The room on the runner.** The same `ubuntu-24.04` label comes with a 145 GB disk or a 72 GB one, and
+a box's disk grows on the runner's as it installs, with QEMU stopping without a word when that runs
+out. So the job clears what it doesn't use before it builds, each bundle's build tree goes once it's
+sealed (the legs only read the `.bin`), and the step prints `df` and what's left under the job's
+directories.
+
 **The lab hook's real-product path.** With the Sneakers product installed (a `sneakers` stack), the
 hook ([k0s.md](k0s.md)) writes 1000 rows into a `realci_rows` table in each of the product's six
 databases once the box first runs it (once per box), through the root's `kubectl exec` into the
@@ -186,7 +196,7 @@ While the box doesn't run, it prints the box's state, the pods, each `wait-phase
 crash-looping container's last lines and the rows every five minutes. Every minute it prints the
 box's memory (`realci: memory`: MemTotal and MemAvailable, what the product's pods use, the running
 import step's peak so far) and each product container that restarted, with how its last run ended
-(`realci: restarted <container>=<restarts>/<reason>/<exit code>`). Every five seconds it reads the
+(`realci: restarted <container>=<restarts>/<reason>/<exit code>`). With the rows it prints which cluster's pod it read them from and the data move's state (`realci: database`). Every five seconds it reads the
 running import step's `memory.peak`, and prints the peak once the step's pod is gone
 (`realci: import peak`).
 
@@ -197,6 +207,8 @@ running import step's `memory.peak`, and prints the peak once the step's pod is 
 | upgrade | `TestTheRealBundlesUpdateInOrder` | the old base with `.12` and `sneakers mcp on` over SSH; the Base OS update to the base under test; `.12` to the product under test (no phases to phases); then a power loss. After each step the box runs the product within 45 minutes (else it's stuck: the failure names what holds it, such as a `wait-phase` init container backing off, with the hook's last lines); for a phased product every phase (data, identity, services, front) has a pod and each pod started only once the phases before it were Ready; no running pod or init container restarted, every init container (a phase's `wait-phase` among them) completed, and each pod is Ready; the MCP server runs; every database still counts, the 1000 rows are in each, no table that held rows has fewer, and PostgreSQL didn't start on a new data directory. After the power loss no pod is one from before it, restarted in place, and the state volume is mounted `nodelalloc` ([disk-layout.md](disk-layout.md)) |
 | recover | `TestTheRealBundlesRecoverFromAStuckUpdate` | the old base with `.12` and the MCP switch on, then `.13` on the old base, which that base doesn't bring up: the test records whether it got stuck, and if so the hook's lines and whether the rows were already short in that state. Then the base under test is applied in that state, and whether it brings `.13` up by itself is recorded (it can't: `.13`'s own data-phase wait fails, with the `wait-phase` lines in the log); the box must then take the product under test and run it with the checks above |
 | import | `TestTheRealBundleImportsALargeAuditChain` | a new box (12 GiB) on the base under test's raw disk, with the product under test installed and running. The source is sneakers-release's synthetic source with a 727,000-record audit chain, more than the largest source measured (`build/realci/source.sh`): PostgreSQL and Kratos containers on the runner, seeded by the release's `synth` while the box comes up. It is exported to the box's import key as the appliance move takes it, named `source.example.org` where that `sneakers-migrate` takes `--source-name`, then taken through the Import page's API: open, upload, review, convert (a proposal sheet that renames one secret), check, import with the first admin's email and its one-time password, and verify. Each step must pass, and the box ends in imported-users mode. With a migrate image that writes bundle format 2.0, the leg also checks that the audit trail stayed on the source: the export and the import list it as not carried, the review says so, the import names the source and wrote one audit record, and verify finds the box's chain starting with that record. With an older image the chain moves in the bundle (37 MB), and the leg logs that it did. The leg logs each step's time and peak memory, and the box's memory with the product running and with the import open ([import.md](import.md#memory) has the numbers) |
+| backup | `TestTheRealBundleRestoresABackup` | a new box on the base under test's raw disk runs the product under test. An owner cuts a set over SSH while it runs, the lab hook writes a table the set can't hold, and the owner restores the set through the closed shell. The table must be gone, every earlier row there and the phases up in order, and again after a power loss ([backups.md](backups.md)) |
+| move | `TestTheRealBundleMovesTheDatabase` | a new box on the base under test's raw disk runs `mrc6` on the old database cluster, then takes the product under test through the normal update path. The [data move](data-move.md) runs as a step of it: every row must be there on `sneakers-pgha-0`, with the move settled, and again after a power loss |
 | control | the upgrade test with `CONTROL=1` | the base under test is `CONTROL_COMMIT`, from before the quiesce fixes (#365, #370): the update to phases must fail there. The leg is allowed to fail (`continue-on-error`); it runs on pull requests and by hand |
 
 A leg takes up to about an hour and a quarter on a GitHub runner (the builds about 3 minutes when

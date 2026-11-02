@@ -273,12 +273,15 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 	if v == "" {
 		err = codes.New(codes.UpgradeNotStaged, "no product bundle is staged; upload or fetch one and stage it first")
 	}
-	overrode := ""
+	if m, ok := s.o.ProductUp.(moveFollower); ok && err == nil {
+		err = m.CheckMoveApply(s.slots().Staged())
+	}
+	overrode, note := "", ""
 	if err == nil {
 		overrode, err = s.beginMaintenance(ctx, "product update applies", edgefall.KindProductApply, by, o)
 		if err == nil {
 			s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
-			err = s.switchProduct(ctx, s.slots().Staged(), func() error { _, err := s.slots().Apply(); return err })
+			note, err = s.switchProduct(ctx, s.slots().Staged(), func() error { _, err := s.slots().Apply(); return err })
 			s.endMaintenance()
 		}
 	}
@@ -296,7 +299,7 @@ func (s *Server) applyProduct(ctx context.Context, by osaudit.Entry, o *osadminv
 	if err == nil {
 		s.forgetResetKept()
 	}
-	s.productHistory(action, v, by.Actor, err, overrideDetail(overrode))
+	s.productHistory(action, v, by.Actor, err, withNote(overrideDetail(overrode), note))
 	s.o.Logger.Info("osadmin: product apply", log.F("version", v), log.F("reinstall", reinstall), log.F("by", by.Actor), log.F("ok", err == nil))
 	return v, overrode, err
 }
@@ -332,17 +335,17 @@ func (s *Server) forgetResetKept() {
 // revertProduct goes back to the previous product slot.
 func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadminv1.ElevationOverride) (string, string, error) {
 	overrode, err := s.beginMaintenance(ctx, "product update reverts", edgefall.KindProductApply, by, o)
-	v := ""
+	v, note := "", ""
 	if err == nil {
 		s.beginProgress("revert", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, s.slots().Status().Previous, "")
-		err = s.switchProduct(ctx, s.slots().Previous(), func() error {
+		note, err = s.switchProduct(ctx, s.slots().Previous(), func() error {
 			var err error
 			v, err = s.slots().Revert()
 			return err
 		})
 		s.endMaintenance()
 	}
-	s.productHistory("revert", v, by.Actor, err, overrideDetail(overrode))
+	s.productHistory("revert", v, by.Actor, err, withNote(overrideDetail(overrode), note))
 	s.o.Logger.Info("osadmin: product revert", log.F("version", v), log.F("by", by.Actor), log.F("ok", err == nil))
 	return v, overrode, err
 }
@@ -353,35 +356,46 @@ func (s *Server) revertProduct(ctx context.Context, by osaudit.Entry, o *osadmin
 // running product then stops while current still names its slot: k0s's
 // pre-stop (sneakers-accessd quiesce) stops it by that slot's own spec,
 // latest phase first, the database last. Only then do the slots switch.
-func (s *Server) switchProduct(ctx context.Context, next string, switchSlots func() error) error {
+// It answers what the switch means for a data move's data, or "", whenever
+// the slots did switch.
+func (s *Server) switchProduct(ctx context.Context, next string, switchSlots func() error) (string, error) {
 	s.setStep(stepSwitch, "")
 	if s.o.BoxSecrets != nil && next != "" {
 		if err := s.o.BoxSecrets.Ensure(next); err != nil {
 			s.o.Logger.Error(err, "osadmin: the product's box secrets can't be made; the product isn't switched")
 			s.failStep(stepSwitch, err)
-			return err
+			return "", err
 		}
 	}
 	if err := s.stopProduct(ctx); err != nil {
 		s.failStep(stepSwitch, err)
-		return err
+		return "", err
 	}
 	if err := switchSlots(); err != nil {
 		s.failStep(stepSwitch, err)
 		s.startAgain(ctx)
-		return err
+		return "", err
 	}
+	note := s.moveReverted()
 	s.recordBoxValues(ctx)
-	s.setStep(stepRestart, "")
+	s.setStep(stepRestart, note)
 	if err := s.startProduct(ctx); err != nil {
 		s.failStep(stepRestart, err)
-		return err
+		return note, err
 	}
 	s.finishSteps(stepRestart)
 	if s.o.ProductUp != nil {
 		s.startProductUp()
 	}
-	return nil
+	return note, nil
+}
+
+// withNote adds note to a history entry's detail.
+func withNote(detail, note string) string {
+	if detail == "" || note == "" {
+		return detail + note
+	}
+	return detail + "; " + note
 }
 
 // startAgain starts the product from the slot it ran from when the switch

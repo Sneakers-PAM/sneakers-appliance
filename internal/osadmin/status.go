@@ -140,6 +140,11 @@ func (h *status) GetStatus(ctx context.Context, _ *connect.Request[osadminv1.Get
 		out.TlsChange = c
 		add(osadminv1.WarningKind_WARNING_KIND_TLS_CHANGED, detail)
 	}
+	if s.o.Backups != nil && s.o.Backups.Guard != nil {
+		for _, w := range s.o.Backups.Guard.Warnings() {
+			out.Warnings = append(out.Warnings, &osadminv1.Warning{Kind: osadminv1.WarningKind_WARNING_KIND_BACKUP, Detail: w.Detail, Critical: w.Critical})
+		}
+	}
 	if st := s.o.Access.Read(); st.LastRecoverAccess != nil && s.o.Clock.Now().Before(st.LastRecoverAccess.Add(24*time.Hour)) {
 		add(osadminv1.WarningKind_WARNING_KIND_CONSOLE_RECOVERY, "The console's Recover access was used at "+st.LastRecoverAccess.UTC().Format(time.RFC3339)+".")
 	}

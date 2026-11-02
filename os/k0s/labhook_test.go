@@ -158,7 +158,7 @@ func TestTheLabHookReportsTheRealProduct(t *testing.T) {
 		t.Fatal("the hook's pods line doesn't show the init containers")
 	}
 	var defs []string
-	for _, name := range []string{"pg_in", "pg_start", "realci_rows", "realci_pods"} {
+	for _, name := range []string{"pg_pod", "pg_in", "pg_start", "realci_rows", "realci_pods"} {
 		fn := regexp.MustCompile(`(?m)^` + name + `\(\) \{.*\}\n`).FindString(hook)
 		if fn == "" {
 			fn = regexp.MustCompile(`(?ms)^` + name + `\(\) \{[^\n]*\n.*?^\}\n`).FindString(hook)
@@ -181,6 +181,7 @@ func TestTheLabHookReportsTheRealProduct(t *testing.T) {
 	stub := `say() { echo "lab-hook: $*"; }
 k() {
   case "$*" in
+    *"get pod sneakers-pgha-0"*) return 1 ;;
     *"exec sneakers-postgres-0"*sneakers_hydra*) return 1 ;;
     *"exec sneakers-postgres-0"*) echo "realci_rows=1000,t=2" ;;
     *"logs sneakers-postgres-0"*) printf 'PostgreSQL init process complete\ndatabase system was shut down at x\n' ;;
@@ -195,8 +196,61 @@ k() {
 	}
 	got := string(out)
 	rows := `lab-hook: realci: rows running version=0.1.0-x start=first sneakers_identity[realci_rows=1000,t=2] sneakers_vault[realci_rows=1000,t=2] sneakers_workflow[realci_rows=1000,t=2] sneakers_audit[realci_rows=1000,t=2] sneakers_kratos[realci_rows=1000,t=2] sneakers_hydra[missing]` + "\n"
+	rows += "lab-hook: realci: database running version=0.1.0-x on=sneakers-postgres-0 move=\n"
 	pods := "lab-hook: realci: pods running version=0.1.0-x: p app=a order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;\n"
 	if got != rows+pods {
 		t.Fatalf("the hook printed\n%s\nwant\n%s%s", got, rows, pods)
+	}
+}
+
+// The database comes back while the restore still runs, so the backup leg's
+// line for its end has to come from the restore moving on, with the rows
+// unchanged. The product then runs on other data, so it's reported again.
+func TestTheLabHookFollowsARestoreToItsEnd(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := regexp.MustCompile(`(?ms)^realci_later\(\) \{[^\n]*\n.*?^\}\n`).FindString(string(b))
+	if fn == "" {
+		t.Fatal("the lab hook has no realci_later function")
+	}
+	dir := t.TempDir()
+	set, journal := dir+"/manifest.json", dir+"/backup-restore.json"
+	if err := os.WriteFile(set, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := `say() { echo "lab-hook: $*"; }
+realci_set=` + set + `
+realci_journal=` + journal + `
+realci_later_mark=` + dir + `/mark
+realci_later_was=
+last=v1
+pg_in() { case "$2" in CREATE*) ;; *) echo "$PRESENT" ;; esac; }
+` + fn + `
+tick() { PRESENT=$1; realci_later; echo "last=$last"; }
+tick t
+printf '{\n  "state": "running"\n}\n' > ` + journal + `
+tick f
+last=v1
+tick f
+printf '{\n  "state": "settling"\n}\n' > ` + journal + `
+tick f
+`
+	cmd := exec.Command("sh", "-c", script) // #nosec G204 -- the repo's own script
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("realci_later: %v: %s", err, out)
+	}
+	want := `lab-hook: realci: later present=t restore=
+last=v1
+lab-hook: realci: later present=f restore=running
+last=
+last=v1
+lab-hook: realci: later present=f restore=settling
+last=
+`
+	if string(out) != want {
+		t.Fatalf("realci_later said:\n%s\nwant:\n%s", out, want)
 	}
 }

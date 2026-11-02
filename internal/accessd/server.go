@@ -149,6 +149,7 @@ func (s *Server) Handler() http.Handler {
 	local.Handle(accessv1connect.NewSshLoginServiceHandler(&sshLoginH{s: s}))
 	local.Handle("/"+osadminv1connect.LocalServiceName+"/", s.api.LocalHandler())
 	local.HandleFunc("GET "+accessapi.SupportBundlePath, s.serveSupportBundle)
+	local.HandleFunc("GET "+accessapi.BackupExportPath, s.serveBackupExport)
 
 	front := http.NewServeMux()
 	front.Handle(accessv1connect.NewBindingServiceHandler(&bindingH{s: s}))
@@ -200,6 +201,14 @@ var shellMethods = map[string]bool{
 	accessapi.SupportBundlePath:                                 true,
 	accessv1connect.AccessServiceResetProductProcedure:          true,
 	accessv1connect.AccessServiceReinstallProductProcedure:      true,
+	accessv1connect.AccessServiceListKeptDumpsProcedure:         true,
+	accessv1connect.AccessServiceRemoveKeptDumpProcedure:        true,
+	accessv1connect.AccessServiceListBackupsProcedure:           true,
+	accessv1connect.AccessServiceCreateBackupProcedure:          true,
+	accessv1connect.AccessServiceRemoveBackupProcedure:          true,
+	accessv1connect.AccessServiceRestoreBackupProcedure:         true,
+	accessv1connect.AccessServicePrepareBackupExportProcedure:   true,
+	accessapi.BackupExportPath:                                  true,
 	accessv1connect.NetworkServiceGetNetworkProcedure:           true,
 	accessv1connect.NetworkServiceSetNetworkProcedure:           true,
 	accessv1connect.NetworkServiceStageNetworkProcedure:         true,
