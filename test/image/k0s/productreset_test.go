@@ -81,7 +81,7 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 	adm.call(t, "UpgradeService/StageUpdate", map[string]any{"uploadId": id}, &staged)
 	adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_PRODUCT", "totpCode": alice.code()}, &struct{}{})
 	box.Expect(`lab-hook: box running`, 30*time.Minute)
-	first := dataMarker(t, box.Expect(`lab-hook: product data: \S+`, 10*time.Minute))
+	first := dataMarker(t, box.ExpectLine(`lab-hook: product data: \S+`, 10*time.Minute))
 	tokenBefore := setupToken(ctx, t, sshPort, alice)
 
 	// A reinstall of the same version, over SSH from the staged bundle:
@@ -92,7 +92,7 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 		t.Fatalf("the reinstall's answer:\n%s", out)
 	}
 	re := regexp.MustCompile(`lab-hook: after the reinstall of the same version: product data: (\S+) restarts: ([\d ]*)`).FindStringSubmatch(
-		box.Expect(`lab-hook: after the reinstall of the same version: .*`, 30*time.Minute))
+		box.ExpectLine(`lab-hook: after the reinstall of the same version: .*`, 30*time.Minute))
 	if re == nil || re[1] != first || strings.Trim(strings.ReplaceAll(re[2], "0", ""), " ") != "" || strings.TrimSpace(re[2]) == "" {
 		t.Fatalf("after the reinstall: %v (the data before: %s)", re, first)
 	}
@@ -112,7 +112,7 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 		t.Fatalf("the reset's answer:\n%s", out)
 	}
 	t.Logf("reset: %s", removed[0])
-	left := box.Expect(`lab-hook: product reset: .*`, 5*time.Minute)
+	left := box.ExpectLine(`lab-hook: product reset: .*`, 5*time.Minute)
 	if !strings.Contains(left, "data [] ") || !strings.Contains(left, "staged "+staged.Package.Version+" ") || !strings.Contains(left, "image links 0 ") {
 		t.Fatalf("after the reset: %s", left)
 	}
@@ -154,7 +154,7 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 	// Apply on the Product card installs it again: new data, a new setup
 	// token.
 	adm.call(t, "UpgradeService/ApplyUpdate", map[string]any{"target": "UPDATE_TARGET_PRODUCT", "totpCode": alice.code()}, &struct{}{})
-	again := dataMarker(t, box.Expect(`lab-hook: after the reinstall: product data: \S+`, 30*time.Minute))
+	again := dataMarker(t, box.ExpectLine(`lab-hook: after the reinstall: product data: \S+`, 30*time.Minute))
 	if again == first {
 		t.Fatalf("the reinstalled product has the old data (%s)", first)
 	}
@@ -172,7 +172,7 @@ func TestAProductResetRemovesTheProductAndKeepsTheBox(t *testing.T) {
 		t.Fatalf("the reinstall's answer:\n%s", out)
 	}
 	back := regexp.MustCompile(`lab-hook: after the reinstall after the reset: product data: (\S+) phased pods ready: ([A-Za-z ]*)`).FindStringSubmatch(
-		box.Expect(`lab-hook: after the reinstall after the reset: .*`, 30*time.Minute))
+		box.ExpectLine(`lab-hook: after the reinstall after the reset: .*`, 30*time.Minute))
 	if back == nil || back[1] != again || strings.TrimSpace(back[2]) == "" || strings.Contains(back[2], "False") {
 		t.Fatalf("after the reinstall after the reset: %v (the data before: %s)", back, again)
 	}

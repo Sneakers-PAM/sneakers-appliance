@@ -129,7 +129,7 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	next.Expect(`lab-hook: node ready`, 15*time.Minute)
 	next.Expect(`lab-hook: hello pod ready`, 15*time.Minute)
 	next.Expect(`lab-hook: box running`, 15*time.Minute)
-	installed := phasesInOrder(t, next.Expect(`lab-hook: phase pods: .*`, time.Minute), "the first install")
+	installed := phasesInOrder(t, next.ExpectLine(`lab-hook: phase pods: .*`, time.Minute), "the first install")
 	next.Expect(`lab-hook: edge pod ready`, 10*time.Minute)
 	next.Expect(`lab-hook: root shell kubectl works`, 2*time.Minute)
 	next.Expect(`lab-hook: root shell helm works`, 2*time.Minute)
@@ -207,14 +207,14 @@ func TestTheProductBundleBringsK0sAndTheHelloStack(t *testing.T) {
 	after.Expect(`sneakers-init: phase=normal`, 5*time.Minute)
 	after.Expect(`lab-hook: hello pod ready`, 25*time.Minute)
 	after.Expect(`lab-hook: box running`, 25*time.Minute)
-	again := phasesInOrder(t, after.Expect(`lab-hook: phase pods: .*`, time.Minute), "after a power loss")
-	t.Logf("after a power loss: %s", after.Expect(`lab-hook: scaling events: .*`, time.Minute))
+	again := phasesInOrder(t, after.ExpectLine(`lab-hook: phase pods: .*`, time.Minute), "after a power loss")
+	t.Logf("after a power loss: %s", after.ExpectLine(`lab-hook: scaling events: .*`, time.Minute))
 	if old := oldPods(installed, again); len(old) > 0 {
 		t.Fatalf("after a power loss: %v are the first install's pods, restarted in place, not quiesced", old)
 	}
 	// With every container restarting at once, no pod's network is set up
 	// twice at the same time (the CNI plugin's "exec: already started").
-	if bad := sandboxErrors(after.Expect(`lab-hook: sandbox events: .*`, time.Minute)); len(bad) > 0 {
+	if bad := sandboxErrors(after.ExpectLine(`lab-hook: sandbox events: .*`, time.Minute)); len(bad) > 0 {
 		t.Fatalf("after a power loss: %d FailedCreatePodSandBox events with exec: already started: %v", len(bad), bad)
 	}
 }
