@@ -189,3 +189,44 @@ func TestEndKillsAShellThatIgnoresTheHangup(t *testing.T) {
 		t.Fatalf("signals %v", got)
 	}
 }
+
+// Right after a shell's exec the kernel already shows the new exe while
+// /proc/<pid>/environ still reads empty, until the new image's
+// environment is set up. List waits for it instead of reporting no source.
+func TestListWaitsForAShellStillInExec(t *testing.T) {
+	f := newFakeProc(t)
+	f.process(100, 90, 1001, shell, 12345, "SSH_CONNECTION=192.0.2.50 51000 192.0.2.10 22")
+	f.write("100/environ", "")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		time.Sleep(50 * time.Millisecond)
+		tmp := filepath.Join(f.root, "100", "environ.new")
+		if err := os.WriteFile(tmp, []byte("SSH_CONNECTION=192.0.2.50 51000 192.0.2.10 22\x00"), 0o600); err == nil {
+			_ = os.Rename(tmp, filepath.Join(f.root, "100", "environ"))
+		}
+	}()
+	got, err := f.scanner().List()
+	<-done
+	if err != nil || len(got) != 1 || got[0].Source != "192.0.2.50" {
+		t.Fatalf("%+v %v", got, err)
+	}
+}
+
+// A shell whose environment never shows up is still listed, with no
+// source, once the wait is over.
+func TestListGivesUpOnAnEnvironmentThatStaysEmpty(t *testing.T) {
+	f := newFakeProc(t)
+	f.process(100, 90, 1001, shell, 12345)
+	f.write("100/environ", "")
+	p := f.scanner()
+	p.EnvWait = 100 * time.Millisecond
+	start := time.Now()
+	got, err := p.List()
+	if err != nil || len(got) != 1 || got[0].Source != "" {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if d := time.Since(start); d < 100*time.Millisecond || d > 2*time.Second {
+		t.Fatalf("List took %v", d)
+	}
+}
