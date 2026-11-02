@@ -21,6 +21,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/access"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
@@ -438,6 +439,11 @@ func toConnect(err error) error {
 	ce := connect.NewError(c, errors.New(codes.Describe(err)))
 	if r := lockout.RefusalOf(err); r != (lockout.Refusal{}) || code == codes.AccessCredentials || code == codes.SetupCode || code == codes.RootCode {
 		if d, derr := connect.NewErrorDetail(refusalToWire(r)); derr == nil {
+			ce.AddDetail(d)
+		}
+	}
+	if cr, ok := boxsettings.CertErrorOf(err); ok {
+		if d, derr := connect.NewErrorDetail(&osadminv1.EmailCertificateRefusal{Certificate: relayCertToWire(cr.Cert), PinnedSha256: cr.Pinned, Reason: cr.Reason}); derr == nil {
 			ce.AddDetail(d)
 		}
 	}

@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
@@ -63,8 +64,14 @@ type Email struct {
 	TLS      string `json:"tls"`
 	// Verify checks the relay's certificate (starttls and tls).
 	Verify bool `json:"verify"`
-	// CA is the relay's CA, PEM, trusted on top of the system roots.
+	// CA is the relay's CA, PEM, trusted on top of the system roots. It's
+	// read only while Verify is on.
 	CA string `json:"ca"`
+	// PinSHA256 pins the relay's certificate by its SHA-256 fingerprint
+	// (colon hex in capitals, as certstore.Fingerprint gives it). With
+	// Verify on, the relay must present exactly that certificate, within
+	// its validity dates, in place of a chain to the roots or the CA.
+	PinSHA256 string `json:"pinSha256,omitempty"`
 }
 
 // DefaultEmail is no relay, with the submission port and STARTTLS.
@@ -104,9 +111,14 @@ func (e Email) Check() error {
 	default:
 		return refused("the TLS mode %q isn't %s, %s or %s", e.TLS, TLSNone, TLSStartTLS, TLSImplicit)
 	}
-	if e.CA != "" {
+	if e.CA != "" && e.Verify {
 		if _, err := e.pool(); err != nil {
 			return err
+		}
+	}
+	if e.PinSHA256 != "" {
+		if pin, ok := certstore.NormalizeFingerprint(e.PinSHA256); !ok || pin != e.PinSHA256 {
+			return refused("the relay certificate pin %q isn't a SHA-256 fingerprint in colon hex", e.PinSHA256)
 		}
 	}
 	if strings.ContainsAny(e.Username, "\r\n\x00") || len(e.Username) > 256 {

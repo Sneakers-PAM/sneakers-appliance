@@ -7,8 +7,9 @@ relay: the box keeps the settings on its encrypted state volume and hands them t
 > **Warning:** with TLS set to **None**, or with **Verify the certificate** off, mail and the relay
 > password are sent unencrypted, or to a relay whose identity isn't checked. Anyone on the path
 > between the box and the relay can read them, or pose as the relay. Use STARTTLS or TLS with
-> verification on wherever the relay supports it. The Email page shows the same warning whenever
-> either is off.
+> verification on wherever the relay supports it, and pin a self-signed relay's certificate
+> ([below](#pinning-the-relays-certificate)) rather than turning verification off. The Email page
+> shows the same warning whenever either is off.
 
 ## The settings
 
@@ -18,8 +19,9 @@ relay: the box keeps the settings on its encrypted state volume and hands them t
 | Port | 587 | The relay's port: 587 for submission, 465 for TLS, 25 for plain relaying. |
 | From address | (none) | The address mail is sent from; required with a relay. |
 | TLS | STARTTLS | **None** (plain), **STARTTLS** (upgraded before anything is sent; a relay that doesn't offer it is refused) or **TLS** (TLS from the first byte, usually 465). |
-| Verify the certificate | on | Checks the relay's certificate against the system roots and the relay CA. |
-| Relay CA | (none) | A PEM CA, trusted for the relay on top of the system roots, for a relay signed by a private CA. |
+| Verify the certificate | on | Checks the relay's certificate: against the pin when there is one, else against the system roots and the relay CA. |
+| Pinned certificate | (none) | The SHA-256 fingerprint of the relay's own certificate, set by **Trust this certificate** after a test ([below](#pinning-the-relays-certificate)). With verification on, the relay must present exactly that certificate. |
+| Relay CA | (none) | A PEM CA, trusted for the relay on top of the system roots, for a relay signed by a private CA. Read only while verification is on: with it off, a stored CA is ignored and never fails a test. |
 | Username, password | (none) | AUTH (PLAIN, or LOGIN when the relay offers only that). The password is write-only: the page shows only whether one is saved, and can replace or clear it. |
 
 Saving needs a step-up. It is audited as `product.email.set` with every setting but the password
@@ -30,7 +32,33 @@ names (`email.restart`). **Send test email** sends a short message to an address
 the settings on the page (with the saved password unless you type one), the same way the product
 sends; it needs a step-up and is audited as `product.email.test-send`. The test changes nothing.
 
+## Pinning the relay's certificate
+
+A relay with a self-signed certificate (or one signed by a CA you'd rather not paste) is trusted by
+its fingerprint, the way the update mirror pins its certificate:
+
+1. Set the relay with **Verify the certificate** on, and press **Send test email**. When the relay's
+   certificate isn't trusted, the box stops before AUTH, so the password isn't sent, and answers
+   `EMAIL_UNTRUSTED` with the certificate: its subject, issuer, validity dates and SHA-256
+   fingerprint.
+2. Check that fingerprint against one you got another way: from the relay's admin, or from the
+   relay's own console (for example `openssl x509 -noout -fingerprint -sha256 -in <cert>`).
+3. Press **Trust this certificate**. The box connects again (`PinEmailCertificate`), checks the relay
+   presents the same certificate, and puts its fingerprint on the form, with verification on.
+   Nothing is saved yet; it's audited as `product.email.pin`.
+4. Send the test again: it now passes against the pin. **Save** keeps the pin with the rest; the
+   change is audited (`detail.pinAdded`, `detail.pinRemoved`).
+
+From then on every connection the box makes to the relay needs that certificate, within its
+validity dates; the system roots, the relay CA and the host name aren't consulted. A relay whose
+certificate changed fails with `EMAIL_PIN_MISMATCH`, which carries the old and the new
+fingerprints. Replacing the pin needs the old fingerprint given again (`replaces_sha256`), so a
+stale form can't swap it. Clearing the pinned certificate and saving removes the pin.
+
 ## Send test email: failures
+
+Each failure's audit entry and log line name the step it stopped at (`connect`, `tls`, `auth`,
+`from`, `to` or `data`) and the relay's reply, without the password.
 
 Every failure `Send` (`internal/boxsettings/send.go`) can return, what it means, and the likely
 fix:
@@ -40,10 +68,12 @@ fix:
 | `no relay is set` | `Host` is empty. | Set a relay host (and the rest of the settings) and save before testing. |
 | `the test address %q isn't a plain email address` | The typed test address doesn't parse as one plain address. | Retype it as a single address, no display name. |
 | `the relay <addr> can't be reached: ...` | The TCP dial to `host:port` failed. | Check the host and port, and that the box can reach that address and port. |
-| `TLS with the relay failed: ...` | The implicit-TLS handshake failed (`TLS == tls`). | Confirm the relay speaks TLS on that port; add its CA to Relay CA if it's privately signed, or accept the risk and turn off Verify. |
+| `EMAIL_UNTRUSTED`: `the relay's certificate ... isn't trusted: ...` | Verification is on and the relay's certificate doesn't chain to the system roots or the relay CA for its host name, or a pinned certificate is outside its validity dates. Nothing was sent. | Check the fingerprint with the relay's admin and pin it ([above](#pinning-the-relays-certificate)); for an expired pinned certificate, the relay needs a new one, pinned again. |
+| `EMAIL_PIN_MISMATCH`: `the relay presented ..., not the pinned ...` | The relay presented another certificate than the pinned one. Nothing was sent. | Find out why it changed. Only once the relay's admin confirms the new fingerprint, pin it, giving the old one again. |
+| `TLS with the relay failed: ...` | The implicit-TLS handshake failed (`TLS == tls`). | Confirm the relay speaks TLS on that port. |
 | `the relay didn't greet: ...` | `smtp.NewClient` failed: the box connected but got no valid SMTP greeting. | Confirm the port is actually the relay's SMTP port. |
 | `the relay doesn't offer STARTTLS; nothing was sent` | `TLS == starttls`, but the relay's `EHLO` doesn't list the `STARTTLS` extension. | Pick the TLS mode the relay actually supports on that port. |
-| `STARTTLS with the relay failed: ...` | The STARTTLS upgrade itself failed. | Same as the implicit-TLS failure: check the certificate, the Relay CA, or Verify. |
+| `STARTTLS with the relay failed: ...` | The STARTTLS upgrade itself failed. | Same as the implicit-TLS failure. |
 | `the relay offers no AUTH, and a username is set` | `Username` is set, but the relay's `EHLO` lists no `AUTH` extension. | Clear the username and password if this relay needs none, or confirm the relay and port. |
 | `the relay refused the username and password: ...` (password scrubbed) | `c.Auth` failed: the relay rejected PLAIN or LOGIN with this username and password. | Re-check the username, and re-enter and save the password. |
 | `the relay refused the from address: ...` | `c.Mail(e.From)` was refused. | Set From to an address the relay account may send as. |
@@ -88,4 +118,6 @@ logged.
 
 The Sneakers bundle's mail goes out through its identity service, which loads the `sneakers-email`
 ConfigMap and reads `SMTP_PASS` from the `sneakers-email` Secret; the Kratos courier (not run) gets
-`email.uri`. Ory's URI has no CA parameter, so the relay CA reaches the identity service only.
+`email.uri`. Ory's URI has no CA parameter, so the relay CA reaches the identity service only. The
+pin is the box's own: the test and every connection the box makes check it, and it isn't a
+setting a `product.yaml` reads yet.

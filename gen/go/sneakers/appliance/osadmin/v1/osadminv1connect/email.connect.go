@@ -45,6 +45,9 @@ const (
 	// EmailServiceSendTestEmailProcedure is the fully-qualified name of the EmailService's
 	// SendTestEmail RPC.
 	EmailServiceSendTestEmailProcedure = "/sneakers.appliance.osadmin.v1.EmailService/SendTestEmail"
+	// EmailServicePinEmailCertificateProcedure is the fully-qualified name of the EmailService's
+	// PinEmailCertificate RPC.
+	EmailServicePinEmailCertificateProcedure = "/sneakers.appliance.osadmin.v1.EmailService/PinEmailCertificate"
 )
 
 // EmailServiceClient is a client for the sneakers.appliance.osadmin.v1.EmailService service.
@@ -55,8 +58,19 @@ type EmailServiceClient interface {
 	SetEmail(context.Context, *connect.Request[v1.SetEmailRequest]) (*connect.Response[v1.SetEmailResponse], error)
 	// SendTestEmail sends a short message to one address, through the
 	// settings given (with the saved password unless one is given), or
-	// through the saved ones.
+	// through the saved ones. With verify on, a relay certificate the box
+	// doesn't trust stops it before AUTH with EMAIL_UNTRUSTED, and one that
+	// isn't the pinned certificate with EMAIL_PIN_MISMATCH; both carry an
+	// EmailCertificateRefusal detail. A failure's audit entry and log line
+	// name the step that failed and the relay's reply, without the password.
 	SendTestEmail(context.Context, *connect.Request[v1.SendTestEmailRequest]) (*connect.Response[v1.SendTestEmailResponse], error)
+	// PinEmailCertificate pins the relay's certificate on the settings given
+	// (the form's), or the saved ones: the box connects with their TLS mode,
+	// checks that the relay presents the certificate with sha256 now, and
+	// answers the settings with pin_sha256 set and verify on. Nothing is
+	// saved; SetEmail saves the pin with the rest. Replacing another pin
+	// needs replaces_sha256 to name it.
+	PinEmailCertificate(context.Context, *connect.Request[v1.PinEmailCertificateRequest]) (*connect.Response[v1.PinEmailCertificateResponse], error)
 }
 
 // NewEmailServiceClient constructs a client for the sneakers.appliance.osadmin.v1.EmailService
@@ -89,14 +103,21 @@ func NewEmailServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(emailServiceMethods.ByName("SendTestEmail")),
 			connect.WithClientOptions(opts...),
 		),
+		pinEmailCertificate: connect.NewClient[v1.PinEmailCertificateRequest, v1.PinEmailCertificateResponse](
+			httpClient,
+			baseURL+EmailServicePinEmailCertificateProcedure,
+			connect.WithSchema(emailServiceMethods.ByName("PinEmailCertificate")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // emailServiceClient implements EmailServiceClient.
 type emailServiceClient struct {
-	getEmail      *connect.Client[v1.GetEmailRequest, v1.GetEmailResponse]
-	setEmail      *connect.Client[v1.SetEmailRequest, v1.SetEmailResponse]
-	sendTestEmail *connect.Client[v1.SendTestEmailRequest, v1.SendTestEmailResponse]
+	getEmail            *connect.Client[v1.GetEmailRequest, v1.GetEmailResponse]
+	setEmail            *connect.Client[v1.SetEmailRequest, v1.SetEmailResponse]
+	sendTestEmail       *connect.Client[v1.SendTestEmailRequest, v1.SendTestEmailResponse]
+	pinEmailCertificate *connect.Client[v1.PinEmailCertificateRequest, v1.PinEmailCertificateResponse]
 }
 
 // GetEmail calls sneakers.appliance.osadmin.v1.EmailService.GetEmail.
@@ -114,6 +135,11 @@ func (c *emailServiceClient) SendTestEmail(ctx context.Context, req *connect.Req
 	return c.sendTestEmail.CallUnary(ctx, req)
 }
 
+// PinEmailCertificate calls sneakers.appliance.osadmin.v1.EmailService.PinEmailCertificate.
+func (c *emailServiceClient) PinEmailCertificate(ctx context.Context, req *connect.Request[v1.PinEmailCertificateRequest]) (*connect.Response[v1.PinEmailCertificateResponse], error) {
+	return c.pinEmailCertificate.CallUnary(ctx, req)
+}
+
 // EmailServiceHandler is an implementation of the sneakers.appliance.osadmin.v1.EmailService
 // service.
 type EmailServiceHandler interface {
@@ -123,8 +149,19 @@ type EmailServiceHandler interface {
 	SetEmail(context.Context, *connect.Request[v1.SetEmailRequest]) (*connect.Response[v1.SetEmailResponse], error)
 	// SendTestEmail sends a short message to one address, through the
 	// settings given (with the saved password unless one is given), or
-	// through the saved ones.
+	// through the saved ones. With verify on, a relay certificate the box
+	// doesn't trust stops it before AUTH with EMAIL_UNTRUSTED, and one that
+	// isn't the pinned certificate with EMAIL_PIN_MISMATCH; both carry an
+	// EmailCertificateRefusal detail. A failure's audit entry and log line
+	// name the step that failed and the relay's reply, without the password.
 	SendTestEmail(context.Context, *connect.Request[v1.SendTestEmailRequest]) (*connect.Response[v1.SendTestEmailResponse], error)
+	// PinEmailCertificate pins the relay's certificate on the settings given
+	// (the form's), or the saved ones: the box connects with their TLS mode,
+	// checks that the relay presents the certificate with sha256 now, and
+	// answers the settings with pin_sha256 set and verify on. Nothing is
+	// saved; SetEmail saves the pin with the rest. Replacing another pin
+	// needs replaces_sha256 to name it.
+	PinEmailCertificate(context.Context, *connect.Request[v1.PinEmailCertificateRequest]) (*connect.Response[v1.PinEmailCertificateResponse], error)
 }
 
 // NewEmailServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -153,6 +190,12 @@ func NewEmailServiceHandler(svc EmailServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(emailServiceMethods.ByName("SendTestEmail")),
 		connect.WithHandlerOptions(opts...),
 	)
+	emailServicePinEmailCertificateHandler := connect.NewUnaryHandler(
+		EmailServicePinEmailCertificateProcedure,
+		svc.PinEmailCertificate,
+		connect.WithSchema(emailServiceMethods.ByName("PinEmailCertificate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.osadmin.v1.EmailService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EmailServiceGetEmailProcedure:
@@ -161,6 +204,8 @@ func NewEmailServiceHandler(svc EmailServiceHandler, opts ...connect.HandlerOpti
 			emailServiceSetEmailHandler.ServeHTTP(w, r)
 		case EmailServiceSendTestEmailProcedure:
 			emailServiceSendTestEmailHandler.ServeHTTP(w, r)
+		case EmailServicePinEmailCertificateProcedure:
+			emailServicePinEmailCertificateHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -180,4 +225,8 @@ func (UnimplementedEmailServiceHandler) SetEmail(context.Context, *connect.Reque
 
 func (UnimplementedEmailServiceHandler) SendTestEmail(context.Context, *connect.Request[v1.SendTestEmailRequest]) (*connect.Response[v1.SendTestEmailResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.EmailService.SendTestEmail is not implemented"))
+}
+
+func (UnimplementedEmailServiceHandler) PinEmailCertificate(context.Context, *connect.Request[v1.PinEmailCertificateRequest]) (*connect.Response[v1.PinEmailCertificateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.EmailService.PinEmailCertificate is not implemented"))
 }

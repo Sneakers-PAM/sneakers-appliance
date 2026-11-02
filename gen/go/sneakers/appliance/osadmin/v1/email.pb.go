@@ -14,6 +14,7 @@ package osadminv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -95,8 +96,15 @@ type EmailSettings struct {
 	// verify checks the relay's certificate (STARTTLS and TLS).
 	Verify bool `protobuf:"varint,6,opt,name=verify,proto3" json:"verify,omitempty"`
 	// ca_pem is the relay's CA, trusted on top of the system roots; empty
-	// for none.
-	CaPem         string `protobuf:"bytes,7,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
+	// for none. It's read only while verify is on, and a pin takes its
+	// place.
+	CaPem string `protobuf:"bytes,7,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
+	// pin_sha256 pins the relay's certificate by its SHA-256 fingerprint,
+	// colon hex in capitals (PinEmailCertificate gives it in that form);
+	// empty for no pin. With verify on, the relay must present exactly this
+	// certificate, within its validity dates, in place of a chain to the
+	// system roots or ca_pem; the host name isn't checked against it.
+	PinSha256     string `protobuf:"bytes,8,opt,name=pin_sha256,json=pinSha256,proto3" json:"pin_sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -180,6 +188,174 @@ func (x *EmailSettings) GetCaPem() string {
 	return ""
 }
 
+func (x *EmailSettings) GetPinSha256() string {
+	if x != nil {
+		return x.PinSha256
+	}
+	return ""
+}
+
+// RelayCertificate is the certificate a relay presented.
+type RelayCertificate struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Subject   string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Issuer    string                 `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	NotBefore *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=not_before,json=notBefore,proto3" json:"not_before,omitempty"`
+	NotAfter  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"`
+	// sha256 is the certificate's fingerprint, colon hex in capitals.
+	Sha256        string   `protobuf:"bytes,5,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	DnsNames      []string `protobuf:"bytes,6,rep,name=dns_names,json=dnsNames,proto3" json:"dns_names,omitempty"`
+	IpAddresses   []string `protobuf:"bytes,7,rep,name=ip_addresses,json=ipAddresses,proto3" json:"ip_addresses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelayCertificate) Reset() {
+	*x = RelayCertificate{}
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelayCertificate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelayCertificate) ProtoMessage() {}
+
+func (x *RelayCertificate) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelayCertificate.ProtoReflect.Descriptor instead.
+func (*RelayCertificate) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RelayCertificate) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *RelayCertificate) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *RelayCertificate) GetNotBefore() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotBefore
+	}
+	return nil
+}
+
+func (x *RelayCertificate) GetNotAfter() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NotAfter
+	}
+	return nil
+}
+
+func (x *RelayCertificate) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *RelayCertificate) GetDnsNames() []string {
+	if x != nil {
+		return x.DnsNames
+	}
+	return nil
+}
+
+func (x *RelayCertificate) GetIpAddresses() []string {
+	if x != nil {
+		return x.IpAddresses
+	}
+	return nil
+}
+
+// EmailCertificateRefusal is the error detail of EMAIL_UNTRUSTED and
+// EMAIL_PIN_MISMATCH: the certificate the relay presented, to check
+// against one got another way and pin with PinEmailCertificate.
+type EmailCertificateRefusal struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Certificate *RelayCertificate      `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	// pinned_sha256 is the pin the certificate was held to; empty when the
+	// settings have none. On EMAIL_PIN_MISMATCH it's the old fingerprint,
+	// and certificate.sha256 the new one.
+	PinnedSha256 string `protobuf:"bytes,2,opt,name=pinned_sha256,json=pinnedSha256,proto3" json:"pinned_sha256,omitempty"`
+	// reason says why the certificate was refused.
+	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EmailCertificateRefusal) Reset() {
+	*x = EmailCertificateRefusal{}
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EmailCertificateRefusal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EmailCertificateRefusal) ProtoMessage() {}
+
+func (x *EmailCertificateRefusal) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EmailCertificateRefusal.ProtoReflect.Descriptor instead.
+func (*EmailCertificateRefusal) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *EmailCertificateRefusal) GetCertificate() *RelayCertificate {
+	if x != nil {
+		return x.Certificate
+	}
+	return nil
+}
+
+func (x *EmailCertificateRefusal) GetPinnedSha256() string {
+	if x != nil {
+		return x.PinnedSha256
+	}
+	return ""
+}
+
+func (x *EmailCertificateRefusal) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type GetEmailRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -188,7 +364,7 @@ type GetEmailRequest struct {
 
 func (x *GetEmailRequest) Reset() {
 	*x = GetEmailRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -200,7 +376,7 @@ func (x *GetEmailRequest) String() string {
 func (*GetEmailRequest) ProtoMessage() {}
 
 func (x *GetEmailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[1]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -213,7 +389,7 @@ func (x *GetEmailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEmailRequest.ProtoReflect.Descriptor instead.
 func (*GetEmailRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{1}
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{3}
 }
 
 type GetEmailResponse struct {
@@ -235,7 +411,7 @@ type GetEmailResponse struct {
 
 func (x *GetEmailResponse) Reset() {
 	*x = GetEmailResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -247,7 +423,7 @@ func (x *GetEmailResponse) String() string {
 func (*GetEmailResponse) ProtoMessage() {}
 
 func (x *GetEmailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[2]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -260,7 +436,7 @@ func (x *GetEmailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetEmailResponse.ProtoReflect.Descriptor instead.
 func (*GetEmailResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{2}
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetEmailResponse) GetState() string {
@@ -312,7 +488,7 @@ type SetEmailRequest struct {
 
 func (x *SetEmailRequest) Reset() {
 	*x = SetEmailRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -324,7 +500,7 @@ func (x *SetEmailRequest) String() string {
 func (*SetEmailRequest) ProtoMessage() {}
 
 func (x *SetEmailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[3]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -337,7 +513,7 @@ func (x *SetEmailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEmailRequest.ProtoReflect.Descriptor instead.
 func (*SetEmailRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{3}
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *SetEmailRequest) GetSettings() *EmailSettings {
@@ -369,7 +545,7 @@ type SetEmailResponse struct {
 
 func (x *SetEmailResponse) Reset() {
 	*x = SetEmailResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -381,7 +557,7 @@ func (x *SetEmailResponse) String() string {
 func (*SetEmailResponse) ProtoMessage() {}
 
 func (x *SetEmailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[4]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -394,7 +570,7 @@ func (x *SetEmailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetEmailResponse.ProtoReflect.Descriptor instead.
 func (*SetEmailResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{4}
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{6}
 }
 
 type SendTestEmailRequest struct {
@@ -411,7 +587,7 @@ type SendTestEmailRequest struct {
 
 func (x *SendTestEmailRequest) Reset() {
 	*x = SendTestEmailRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -423,7 +599,7 @@ func (x *SendTestEmailRequest) String() string {
 func (*SendTestEmailRequest) ProtoMessage() {}
 
 func (x *SendTestEmailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[5]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -436,7 +612,7 @@ func (x *SendTestEmailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendTestEmailRequest.ProtoReflect.Descriptor instead.
 func (*SendTestEmailRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{5}
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SendTestEmailRequest) GetTo() string {
@@ -470,7 +646,7 @@ type SendTestEmailResponse struct {
 
 func (x *SendTestEmailResponse) Reset() {
 	*x = SendTestEmailResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -482,7 +658,7 @@ func (x *SendTestEmailResponse) String() string {
 func (*SendTestEmailResponse) ProtoMessage() {}
 
 func (x *SendTestEmailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[6]
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -495,7 +671,7 @@ func (x *SendTestEmailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendTestEmailResponse.ProtoReflect.Descriptor instead.
 func (*SendTestEmailResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{6}
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SendTestEmailResponse) GetAnswer() string {
@@ -505,11 +681,130 @@ func (x *SendTestEmailResponse) GetAnswer() string {
 	return ""
 }
 
+type PinEmailCertificateRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// settings, when present, are the form's; else the saved ones.
+	Settings *EmailSettings `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	// sha256 is the fingerprint to pin, as the refusal gave it (colons or
+	// spaces and case don't matter).
+	Sha256 string `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	// replaces_sha256 is the pin the settings hold now, given again to
+	// confirm replacing it; needed only when they pin another certificate.
+	ReplacesSha256 string `protobuf:"bytes,3,opt,name=replaces_sha256,json=replacesSha256,proto3" json:"replaces_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *PinEmailCertificateRequest) Reset() {
+	*x = PinEmailCertificateRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PinEmailCertificateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PinEmailCertificateRequest) ProtoMessage() {}
+
+func (x *PinEmailCertificateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PinEmailCertificateRequest.ProtoReflect.Descriptor instead.
+func (*PinEmailCertificateRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PinEmailCertificateRequest) GetSettings() *EmailSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+func (x *PinEmailCertificateRequest) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *PinEmailCertificateRequest) GetReplacesSha256() string {
+	if x != nil {
+		return x.ReplacesSha256
+	}
+	return ""
+}
+
+type PinEmailCertificateResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// settings are the settings given with pin_sha256 set and verify on.
+	Settings *EmailSettings `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
+	// certificate is the certificate the relay presented, the pinned one.
+	Certificate   *RelayCertificate `protobuf:"bytes,2,opt,name=certificate,proto3" json:"certificate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PinEmailCertificateResponse) Reset() {
+	*x = PinEmailCertificateResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PinEmailCertificateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PinEmailCertificateResponse) ProtoMessage() {}
+
+func (x *PinEmailCertificateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PinEmailCertificateResponse.ProtoReflect.Descriptor instead.
+func (*PinEmailCertificateResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *PinEmailCertificateResponse) GetSettings() *EmailSettings {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+func (x *PinEmailCertificateResponse) GetCertificate() *RelayCertificate {
+	if x != nil {
+		return x.Certificate
+	}
+	return nil
+}
+
 var File_sneakers_appliance_osadmin_v1_email_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_osadmin_v1_email_proto_rawDesc = "" +
 	"\n" +
-	")sneakers/appliance/osadmin/v1/email.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\xd1\x01\n" +
+	")sneakers/appliance/osadmin/v1/email.proto\x12\x1dsneakers.appliance.osadmin.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a+sneakers/appliance/osadmin/v1/options.proto\x1a+sneakers/appliance/osadmin/v1/upgrade.proto\"\xf0\x01\n" +
 	"\rEmailSettings\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\rR\x04port\x12\x12\n" +
@@ -517,7 +812,22 @@ const file_sneakers_appliance_osadmin_v1_email_proto_rawDesc = "" +
 	"\busername\x18\x04 \x01(\tR\busername\x129\n" +
 	"\x03tls\x18\x05 \x01(\x0e2'.sneakers.appliance.osadmin.v1.EmailTlsR\x03tls\x12\x16\n" +
 	"\x06verify\x18\x06 \x01(\bR\x06verify\x12\x15\n" +
-	"\x06ca_pem\x18\a \x01(\tR\x05caPem\"\x11\n" +
+	"\x06ca_pem\x18\a \x01(\tR\x05caPem\x12\x1d\n" +
+	"\n" +
+	"pin_sha256\x18\b \x01(\tR\tpinSha256\"\x90\x02\n" +
+	"\x10RelayCertificate\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x129\n" +
+	"\n" +
+	"not_before\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tnotBefore\x127\n" +
+	"\tnot_after\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bnotAfter\x12\x16\n" +
+	"\x06sha256\x18\x05 \x01(\tR\x06sha256\x12\x1b\n" +
+	"\tdns_names\x18\x06 \x03(\tR\bdnsNames\x12!\n" +
+	"\fip_addresses\x18\a \x03(\tR\vipAddresses\"\xa9\x01\n" +
+	"\x17EmailCertificateRefusal\x12Q\n" +
+	"\vcertificate\x18\x01 \x01(\v2/.sneakers.appliance.osadmin.v1.RelayCertificateR\vcertificate\x12#\n" +
+	"\rpinned_sha256\x18\x02 \x01(\tR\fpinnedSha256\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x11\n" +
 	"\x0fGetEmailRequest\"\xc9\x01\n" +
 	"\x10GetEmailResponse\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12H\n" +
@@ -537,16 +847,24 @@ const file_sneakers_appliance_osadmin_v1_email_proto_rawDesc = "" +
 	"\bpassword\x18\x03 \x01(\tH\x00R\bpassword\x88\x01\x01B\v\n" +
 	"\t_password\"/\n" +
 	"\x15SendTestEmailResponse\x12\x16\n" +
-	"\x06answer\x18\x01 \x01(\tR\x06answer*i\n" +
+	"\x06answer\x18\x01 \x01(\tR\x06answer\"\xa7\x01\n" +
+	"\x1aPinEmailCertificateRequest\x12H\n" +
+	"\bsettings\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.EmailSettingsR\bsettings\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12'\n" +
+	"\x0freplaces_sha256\x18\x03 \x01(\tR\x0ereplacesSha256\"\xba\x01\n" +
+	"\x1bPinEmailCertificateResponse\x12H\n" +
+	"\bsettings\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.EmailSettingsR\bsettings\x12Q\n" +
+	"\vcertificate\x18\x02 \x01(\v2/.sneakers.appliance.osadmin.v1.RelayCertificateR\vcertificate*i\n" +
 	"\bEmailTls\x12\x19\n" +
 	"\x15EMAIL_TLS_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eEMAIL_TLS_NONE\x10\x01\x12\x16\n" +
 	"\x12EMAIL_TLS_STARTTLS\x10\x02\x12\x16\n" +
-	"\x12EMAIL_TLS_IMPLICIT\x10\x032\xb1\x03\n" +
+	"\x12EMAIL_TLS_IMPLICIT\x10\x032\xdd\x04\n" +
 	"\fEmailService\x12v\n" +
 	"\bGetEmail\x12..sneakers.appliance.osadmin.v1.GetEmailRequest\x1a/.sneakers.appliance.osadmin.v1.GetEmailResponse\"\t\xc2\xf3\x18\x02\x10\x01\x90\x02\x01\x12\x88\x01\n" +
 	"\bSetEmail\x12..sneakers.appliance.osadmin.v1.SetEmailRequest\x1a/.sneakers.appliance.osadmin.v1.SetEmailResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11product.email.set\x12\x9d\x01\n" +
-	"\rSendTestEmail\x123.sneakers.appliance.osadmin.v1.SendTestEmailRequest\x1a4.sneakers.appliance.osadmin.v1.SendTestEmailResponse\"!\xc2\xf3\x18\x1d\x10\x01\x18\x01\"\x17product.email.test-sendB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
+	"\rSendTestEmail\x123.sneakers.appliance.osadmin.v1.SendTestEmailRequest\x1a4.sneakers.appliance.osadmin.v1.SendTestEmailResponse\"!\xc2\xf3\x18\x1d\x10\x01\x18\x01\"\x17product.email.test-send\x12\xa9\x01\n" +
+	"\x13PinEmailCertificate\x129.sneakers.appliance.osadmin.v1.PinEmailCertificateRequest\x1a:.sneakers.appliance.osadmin.v1.PinEmailCertificateResponse\"\x1b\xc2\xf3\x18\x17\x10\x01\x18\x01\"\x11product.email.pinB[ZYgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_osadmin_v1_email_proto_rawDescOnce sync.Once
@@ -561,35 +879,48 @@ func file_sneakers_appliance_osadmin_v1_email_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_email_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_sneakers_appliance_osadmin_v1_email_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_sneakers_appliance_osadmin_v1_email_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_sneakers_appliance_osadmin_v1_email_proto_goTypes = []any{
-	(EmailTls)(0),                 // 0: sneakers.appliance.osadmin.v1.EmailTls
-	(*EmailSettings)(nil),         // 1: sneakers.appliance.osadmin.v1.EmailSettings
-	(*GetEmailRequest)(nil),       // 2: sneakers.appliance.osadmin.v1.GetEmailRequest
-	(*GetEmailResponse)(nil),      // 3: sneakers.appliance.osadmin.v1.GetEmailResponse
-	(*SetEmailRequest)(nil),       // 4: sneakers.appliance.osadmin.v1.SetEmailRequest
-	(*SetEmailResponse)(nil),      // 5: sneakers.appliance.osadmin.v1.SetEmailResponse
-	(*SendTestEmailRequest)(nil),  // 6: sneakers.appliance.osadmin.v1.SendTestEmailRequest
-	(*SendTestEmailResponse)(nil), // 7: sneakers.appliance.osadmin.v1.SendTestEmailResponse
-	(*ElevationOverride)(nil),     // 8: sneakers.appliance.osadmin.v1.ElevationOverride
+	(EmailTls)(0),                       // 0: sneakers.appliance.osadmin.v1.EmailTls
+	(*EmailSettings)(nil),               // 1: sneakers.appliance.osadmin.v1.EmailSettings
+	(*RelayCertificate)(nil),            // 2: sneakers.appliance.osadmin.v1.RelayCertificate
+	(*EmailCertificateRefusal)(nil),     // 3: sneakers.appliance.osadmin.v1.EmailCertificateRefusal
+	(*GetEmailRequest)(nil),             // 4: sneakers.appliance.osadmin.v1.GetEmailRequest
+	(*GetEmailResponse)(nil),            // 5: sneakers.appliance.osadmin.v1.GetEmailResponse
+	(*SetEmailRequest)(nil),             // 6: sneakers.appliance.osadmin.v1.SetEmailRequest
+	(*SetEmailResponse)(nil),            // 7: sneakers.appliance.osadmin.v1.SetEmailResponse
+	(*SendTestEmailRequest)(nil),        // 8: sneakers.appliance.osadmin.v1.SendTestEmailRequest
+	(*SendTestEmailResponse)(nil),       // 9: sneakers.appliance.osadmin.v1.SendTestEmailResponse
+	(*PinEmailCertificateRequest)(nil),  // 10: sneakers.appliance.osadmin.v1.PinEmailCertificateRequest
+	(*PinEmailCertificateResponse)(nil), // 11: sneakers.appliance.osadmin.v1.PinEmailCertificateResponse
+	(*timestamppb.Timestamp)(nil),       // 12: google.protobuf.Timestamp
+	(*ElevationOverride)(nil),           // 13: sneakers.appliance.osadmin.v1.ElevationOverride
 }
 var file_sneakers_appliance_osadmin_v1_email_proto_depIdxs = []int32{
-	0, // 0: sneakers.appliance.osadmin.v1.EmailSettings.tls:type_name -> sneakers.appliance.osadmin.v1.EmailTls
-	1, // 1: sneakers.appliance.osadmin.v1.GetEmailResponse.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
-	1, // 2: sneakers.appliance.osadmin.v1.SetEmailRequest.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
-	8, // 3: sneakers.appliance.osadmin.v1.SetEmailRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
-	1, // 4: sneakers.appliance.osadmin.v1.SendTestEmailRequest.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
-	2, // 5: sneakers.appliance.osadmin.v1.EmailService.GetEmail:input_type -> sneakers.appliance.osadmin.v1.GetEmailRequest
-	4, // 6: sneakers.appliance.osadmin.v1.EmailService.SetEmail:input_type -> sneakers.appliance.osadmin.v1.SetEmailRequest
-	6, // 7: sneakers.appliance.osadmin.v1.EmailService.SendTestEmail:input_type -> sneakers.appliance.osadmin.v1.SendTestEmailRequest
-	3, // 8: sneakers.appliance.osadmin.v1.EmailService.GetEmail:output_type -> sneakers.appliance.osadmin.v1.GetEmailResponse
-	5, // 9: sneakers.appliance.osadmin.v1.EmailService.SetEmail:output_type -> sneakers.appliance.osadmin.v1.SetEmailResponse
-	7, // 10: sneakers.appliance.osadmin.v1.EmailService.SendTestEmail:output_type -> sneakers.appliance.osadmin.v1.SendTestEmailResponse
-	8, // [8:11] is the sub-list for method output_type
-	5, // [5:8] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	0,  // 0: sneakers.appliance.osadmin.v1.EmailSettings.tls:type_name -> sneakers.appliance.osadmin.v1.EmailTls
+	12, // 1: sneakers.appliance.osadmin.v1.RelayCertificate.not_before:type_name -> google.protobuf.Timestamp
+	12, // 2: sneakers.appliance.osadmin.v1.RelayCertificate.not_after:type_name -> google.protobuf.Timestamp
+	2,  // 3: sneakers.appliance.osadmin.v1.EmailCertificateRefusal.certificate:type_name -> sneakers.appliance.osadmin.v1.RelayCertificate
+	1,  // 4: sneakers.appliance.osadmin.v1.GetEmailResponse.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
+	1,  // 5: sneakers.appliance.osadmin.v1.SetEmailRequest.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
+	13, // 6: sneakers.appliance.osadmin.v1.SetEmailRequest.elevation_override:type_name -> sneakers.appliance.osadmin.v1.ElevationOverride
+	1,  // 7: sneakers.appliance.osadmin.v1.SendTestEmailRequest.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
+	1,  // 8: sneakers.appliance.osadmin.v1.PinEmailCertificateRequest.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
+	1,  // 9: sneakers.appliance.osadmin.v1.PinEmailCertificateResponse.settings:type_name -> sneakers.appliance.osadmin.v1.EmailSettings
+	2,  // 10: sneakers.appliance.osadmin.v1.PinEmailCertificateResponse.certificate:type_name -> sneakers.appliance.osadmin.v1.RelayCertificate
+	4,  // 11: sneakers.appliance.osadmin.v1.EmailService.GetEmail:input_type -> sneakers.appliance.osadmin.v1.GetEmailRequest
+	6,  // 12: sneakers.appliance.osadmin.v1.EmailService.SetEmail:input_type -> sneakers.appliance.osadmin.v1.SetEmailRequest
+	8,  // 13: sneakers.appliance.osadmin.v1.EmailService.SendTestEmail:input_type -> sneakers.appliance.osadmin.v1.SendTestEmailRequest
+	10, // 14: sneakers.appliance.osadmin.v1.EmailService.PinEmailCertificate:input_type -> sneakers.appliance.osadmin.v1.PinEmailCertificateRequest
+	5,  // 15: sneakers.appliance.osadmin.v1.EmailService.GetEmail:output_type -> sneakers.appliance.osadmin.v1.GetEmailResponse
+	7,  // 16: sneakers.appliance.osadmin.v1.EmailService.SetEmail:output_type -> sneakers.appliance.osadmin.v1.SetEmailResponse
+	9,  // 17: sneakers.appliance.osadmin.v1.EmailService.SendTestEmail:output_type -> sneakers.appliance.osadmin.v1.SendTestEmailResponse
+	11, // 18: sneakers.appliance.osadmin.v1.EmailService.PinEmailCertificate:output_type -> sneakers.appliance.osadmin.v1.PinEmailCertificateResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_sneakers_appliance_osadmin_v1_email_proto_init() }
@@ -599,15 +930,15 @@ func file_sneakers_appliance_osadmin_v1_email_proto_init() {
 	}
 	file_sneakers_appliance_osadmin_v1_options_proto_init()
 	file_sneakers_appliance_osadmin_v1_upgrade_proto_init()
-	file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[3].OneofWrappers = []any{}
 	file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[5].OneofWrappers = []any{}
+	file_sneakers_appliance_osadmin_v1_email_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_email_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_email_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   7,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

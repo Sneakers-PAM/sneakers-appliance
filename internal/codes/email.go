@@ -7,13 +7,17 @@ import apperr "github.com/Bugs5382/go-apperr"
 
 // The product's email settings codes: 39xx.
 const (
-	EmailInvalid = 3901
-	EmailSend    = 3902
+	EmailInvalid     = 3901
+	EmailSend        = 3902
+	EmailUntrusted   = 3903
+	EmailPinMismatch = 3904
 )
 
 var emailEntries = []apperr.Entry{
 	{Code: EmailInvalid, Symbol: "EMAIL_INVALID", Title: "email", Cause: "an email setting fails validation (the error names it)"},
 	{Code: EmailSend, Symbol: "EMAIL_SEND", Title: "email", Cause: "the test email didn't go out; the error gives the relay's answer or the connection's failure"},
+	{Code: EmailUntrusted, Symbol: "EMAIL_UNTRUSTED", Title: "email", Cause: "the relay's certificate isn't trusted (or a pinned one is outside its validity dates); nothing was sent, and the refusal carries the certificate to check and pin"},
+	{Code: EmailPinMismatch, Symbol: "EMAIL_PIN_MISMATCH", Title: "email", Cause: "the relay presented another certificate than the pinned one; nothing was sent, and the refusal carries both fingerprints"},
 }
 
 func init() { Entries = append(Entries, emailEntries...) }

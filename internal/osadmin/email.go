@@ -6,14 +6,17 @@ package osadmin
 import (
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/edgefall"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
@@ -61,13 +64,13 @@ func tlsOf(word string) osadminv1.EmailTls {
 }
 
 func toWire(e boxsettings.Email) *osadminv1.EmailSettings {
-	return &osadminv1.EmailSettings{Host: e.Host, Port: uint32(max(e.Port, 0)), From: e.From, Username: e.Username, Tls: tlsOf(e.TLS), Verify: e.Verify, CaPem: e.CA} // #nosec G115 -- a port, 0 to 65535
+	return &osadminv1.EmailSettings{Host: e.Host, Port: uint32(max(e.Port, 0)), From: e.From, Username: e.Username, Tls: tlsOf(e.TLS), Verify: e.Verify, CaPem: e.CA, PinSha256: e.PinSHA256} // #nosec G115 -- a port, 0 to 65535
 }
 
 // fromWire is the settings in w, the password from password when given,
 // else kept; an unknown TLS mode stays unknown, so Check refuses it.
 func fromWire(w *osadminv1.EmailSettings, password *string, saved boxsettings.Email) boxsettings.Email {
-	e := boxsettings.Email{Host: w.GetHost(), Port: int(w.GetPort()), From: w.GetFrom(), Username: w.GetUsername(), TLS: tlsWords[w.GetTls()], Verify: w.GetVerify(), CA: w.GetCaPem()}
+	e := boxsettings.Email{Host: w.GetHost(), Port: int(w.GetPort()), From: w.GetFrom(), Username: w.GetUsername(), TLS: tlsWords[w.GetTls()], Verify: w.GetVerify(), CA: w.GetCaPem(), PinSHA256: w.GetPinSha256()}
 	if e.TLS == "" {
 		e.TLS = w.GetTls().String()
 	}
@@ -151,7 +154,9 @@ func (h *emailSvc) SetEmail(ctx context.Context, r *connect.Request[osadminv1.Se
 	if e.CA != "" {
 		ca = "set"
 	}
-	c.note("product email", "host", e.Host, "port", strconv.Itoa(e.Port), "from", e.From, "username", e.Username, "tls", e.TLS, "verify", onOff(e.Verify), "ca", ca, "password", pw)
+	added, removed := pinChange(saved.PinSHA256, e.PinSHA256)
+	c.note("product email", "host", e.Host, "port", strconv.Itoa(e.Port), "from", e.From, "username", e.Username, "tls", e.TLS, "verify", onOff(e.Verify), "ca", ca, "password", pw,
+		"pinAdded", added, "pinRemoved", removed)
 	if err := e.Check(); err != nil {
 		return nil, err
 	}
@@ -171,7 +176,10 @@ func (h *emailSvc) SetEmail(ctx context.Context, r *connect.Request[osadminv1.Se
 	if !e.Encrypted() && e.Configured() {
 		s.o.Logger.Warn("osadmin: the product's mail goes to its relay unencrypted or to a relay that isn't verified", log.F("tls", e.TLS), log.F("verify", e.Verify), log.F("by", c.session.Admin))
 	}
-	s.o.Logger.Info("osadmin: the product's email settings are saved; the product is applied again", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("verify", e.Verify), log.F("password", pw), log.F("version", v), log.F("by", c.session.Admin))
+	if added != "" || removed != "" {
+		s.o.Logger.Info("osadmin: the relay's certificate pin changed", log.F("host", e.Host), log.F("pinAdded", added), log.F("pinRemoved", removed), log.F("by", c.session.Admin))
+	}
+	s.o.Logger.Info("osadmin: the product's email settings are saved; the product is applied again", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("verify", e.Verify), log.F("pinned", e.PinSHA256 != ""), log.F("password", pw), log.F("version", v), log.F("by", c.session.Admin))
 	s.continueApply(osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, v, "")
 	_, err = s.switchProduct(ctx, s.slots().Current(), func() error { return nil })
 	s.endMaintenance()
@@ -226,16 +234,97 @@ func (h *emailSvc) SendTestEmail(ctx context.Context, r *connect.Request[osadmin
 	} else if r.Msg.Password != nil {
 		e.Password = *r.Msg.Password
 	}
-	c.note("product email", "to", r.Msg.GetTo(), "host", e.Host, "port", strconv.Itoa(e.Port), "tls", e.TLS, "verify", onOff(e.Verify))
+	c.note("product email", "to", r.Msg.GetTo(), "host", e.Host, "port", strconv.Itoa(e.Port), "tls", e.TLS, "verify", onOff(e.Verify), "pinned", strconv.FormatBool(e.PinSHA256 != ""))
 	send := s.o.SendEmail
 	if send == nil {
 		send = boxsettings.Send
 	}
 	started := time.Now()
 	answer, err := send(ctx, e, r.Msg.GetTo())
-	s.o.Logger.Info("osadmin: test email", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", err == nil), log.F("by", c.session.Admin))
+	if err != nil {
+		step, reply := boxsettings.FailureOf(err)
+		if ce, ok := boxsettings.CertErrorOf(err); ok {
+			step, reply = boxsettings.StepTLS, ce.Reason
+			c.note("product email", "presented", ce.Cert.SHA256, "pinnedTo", ce.Pinned)
+		}
+		reply = scrubPassword(reply, e.Password)
+		c.note("product email", "step", step, "reply", reply)
+		s.o.Logger.Warn("osadmin: test email", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", false),
+			log.F("step", step), log.F("reply", reply), log.F("by", c.session.Admin))
+		return nil, err
+	}
+	s.o.Logger.Info("osadmin: test email", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", true), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.SendTestEmailResponse{Answer: answer}), nil
+}
+
+// scrubPassword keeps the relay password out of a reply that echoed it.
+func scrubPassword(reply, pass string) string {
+	if pass == "" {
+		return reply
+	}
+	return strings.ReplaceAll(reply, pass, "[password]")
+}
+
+// pinChange is the fingerprint a change pins and the one it unpins; empty
+// for no change.
+func pinChange(old, next string) (added, removed string) {
+	if old == next {
+		return "", ""
+	}
+	return next, old
+}
+
+// PinEmailCertificate checks the relay presents the certificate given and
+// answers the settings pinned to it. Nothing is saved.
+func (h *emailSvc) PinEmailCertificate(ctx context.Context, r *connect.Request[osadminv1.PinEmailCertificateRequest]) (*connect.Response[osadminv1.PinEmailCertificateResponse], error) {
+	s, c := h.s, callFrom(ctx)
+	if _, _, err := s.emailProduct(); err != nil {
+		return nil, err
+	}
+	saved, err := s.o.Email.Email()
 	if err != nil {
 		return nil, err
 	}
-	return connect.NewResponse(&osadminv1.SendTestEmailResponse{Answer: answer}), nil
+	e := saved
+	if r.Msg.GetSettings() != nil {
+		e = fromWire(r.Msg.GetSettings(), nil, saved)
+	}
+	c.note("product email", "host", e.Host, "port", strconv.Itoa(e.Port), "tls", e.TLS)
+	pin, ok := certstore.NormalizeFingerprint(r.Msg.GetSha256())
+	if !ok {
+		return nil, codes.New(codes.EmailInvalid, "sha256: a SHA-256 fingerprint is 64 hex digits")
+	}
+	if e.TLS != boxsettings.TLSStartTLS && e.TLS != boxsettings.TLSImplicit {
+		return nil, codes.New(codes.EmailInvalid, "the relay is reached without TLS; there's no certificate to pin")
+	}
+	if e.PinSHA256 != "" && e.PinSHA256 != pin {
+		if old, ok := certstore.NormalizeFingerprint(r.Msg.GetReplacesSha256()); !ok || old != e.PinSHA256 {
+			return nil, codes.New(codes.EmailInvalid, "the relay is pinned to %s; give that fingerprint again as replaces_sha256 to replace it", e.PinSHA256)
+		}
+	}
+	read := s.o.EmailCertificate
+	if read == nil {
+		read = boxsettings.Presented
+	}
+	started := time.Now()
+	got, err := read(ctx, e)
+	if err != nil {
+		s.o.Logger.Warn("osadmin: the relay's certificate wasn't read for a pin", log.F("host", e.Host), log.F("port", e.Port), log.F("ms", time.Since(started).Milliseconds()), log.F("error", codes.Describe(err)))
+		return nil, err
+	}
+	if got.SHA256 != pin {
+		c.note("product email", "presented", got.SHA256, "asked", pin)
+		s.o.Logger.Warn("osadmin: the relay presents another certificate than the one to pin", log.F("host", e.Host), log.F("presented", got.SHA256), log.F("asked", pin))
+		return nil, boxsettings.PinMismatch(got, pin)
+	}
+	added, removed := pinChange(e.PinSHA256, pin)
+	c.note("product email", "pinAdded", added, "pinRemoved", removed)
+	e.PinSHA256, e.Verify = pin, true
+	s.o.Logger.Info("osadmin: the relay's certificate is pinned on the form", log.F("host", e.Host), log.F("pin", pin), log.F("replaced", removed), log.F("ms", time.Since(started).Milliseconds()), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.PinEmailCertificateResponse{Settings: toWire(e), Certificate: relayCertToWire(got)}), nil
+}
+
+func relayCertToWire(c boxsettings.RelayCert) *osadminv1.RelayCertificate {
+	return &osadminv1.RelayCertificate{Subject: c.Subject, Issuer: c.Issuer, NotBefore: timestamppb.New(c.NotBefore), NotAfter: timestamppb.New(c.NotAfter), Sha256: c.SHA256,
+		DnsNames: c.DNSNames, IpAddresses: c.IPs}
 }

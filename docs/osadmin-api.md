@@ -70,7 +70,13 @@ after setup, and invitations and Recover access codes still use the code pages.
 answers `state` (`not installed`, `not in this product`, `not set` or `set`), the settings and
 whether a password is saved, never the password. `SetEmail` saves them and applies the product
 again (`password` absent keeps the saved one, empty clears it); `SendTestEmail` sends one message.
-A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`.
+A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`. With verification on, a
+relay certificate the box doesn't trust stops the test before AUTH with `EMAIL_UNTRUSTED`, and one
+that isn't the pinned certificate with `EMAIL_PIN_MISMATCH`; both carry an `EmailCertificateRefusal`
+detail (the presented certificate's subject, issuer, validity dates and SHA-256, the old pin, and
+why). `PinEmailCertificate` checks the relay presents the certificate given and answers the form's
+settings with `pin_sha256` set and verification on; `SetEmail` saves the pin
+([product-email.md](product-email.md#pinning-the-relays-certificate)).
 
 `TelemetryService` is the product's Telemetry page ([product-telemetry.md](product-telemetry.md)):
 `GetTelemetry` answers `state` (`not installed`, `not in this product`, `off` or `on`), the settings,
@@ -198,6 +204,7 @@ same.
 | `EmailService.GetEmail` | admin | no | |
 | `EmailService.SetEmail` | admin | yes | `product.email.set` |
 | `EmailService.SendTestEmail` | admin | yes | `product.email.test-send` |
+| `EmailService.PinEmailCertificate` | admin | yes | `product.email.pin` |
 | `ImportService.GetImport` | admin | no | |
 | `ImportService.OpenImport` | admin | yes | `import.open` |
 | `ImportService.RunImportStep` | admin | yes | `import.run` |

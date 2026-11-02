@@ -183,6 +183,9 @@ type Options struct {
 	EmailWorkloads EmailWorkloads
 	// SendEmail sends the test email; nil is boxsettings.Send.
 	SendEmail func(ctx context.Context, e boxsettings.Email, to string) (string, error)
+	// EmailCertificate reads the certificate the relay presents, for a pin;
+	// nil is boxsettings.Presented.
+	EmailCertificate func(ctx context.Context, e boxsettings.Email) (boxsettings.RelayCert, error)
 	// Telemetry keeps the product's collector settings (boxsettings.Store
 	// on the box); nil leaves the Telemetry page with nothing to set.
 	Telemetry TelemetrySettings
