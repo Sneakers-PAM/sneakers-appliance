@@ -179,6 +179,12 @@ with this commit's lab hook, so the test reads the same lines from each. The ser
 cached by the sneakers-release commit they're built from; the bases and the bundles are built and
 signed every run ([the caches](#the-caches)).
 
+**The room on the runner.** The same `ubuntu-24.04` label comes with a 145 GB disk or a 72 GB one, and
+a box's disk grows on the runner's as it installs, with QEMU stopping without a word when that runs
+out. So the job clears what it doesn't use before it builds, each bundle's build tree goes once it's
+sealed (the legs only read the `.bin`), and the step prints `df` and what's left under the job's
+directories.
+
 **The lab hook's real-product path.** With the Sneakers product installed (a `sneakers` stack), the
 hook ([k0s.md](k0s.md)) writes 1000 rows into a `realci_rows` table in each of the product's six
 databases once the box first runs it (once per box), through the root's `kubectl exec` into the
