@@ -86,9 +86,9 @@ func TestAPhasedBundleTakesOverFromOneWithoutPhases(t *testing.T) {
 	apply(bundle)
 	box.Expect(`lab-hook: phased product`, 5*time.Minute)
 	box.Expect(`lab-hook: box running`, 25*time.Minute)
-	pods := phasesInOrder(t, box.Expect(`lab-hook: phase pods: .*`, time.Minute), "after the update to phases")
+	pods := phasesInOrder(t, box.ExpectLine(`lab-hook: phase pods: .*`, time.Minute), "after the update to phases")
 	if _, ok := pods["lab-mcp"]; !ok {
 		t.Fatalf("the switch's lab-mcp isn't a phased pod: %v", pods)
 	}
-	t.Logf("after the update to phases: %s", box.Expect(`lab-hook: scaling events: .*`, time.Minute))
+	t.Logf("after the update to phases: %s", box.ExpectLine(`lab-hook: scaling events: .*`, time.Minute))
 }
