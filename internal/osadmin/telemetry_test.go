@@ -83,6 +83,12 @@ func (e *telemetryBox) restarted() []string {
 
 func newTelemetryBox(t *testing.T) *telemetryBox {
 	t.Helper()
+	return newTelemetryBoxWith(t, 200*time.Millisecond)
+}
+
+// newTelemetryBoxWith gives each phase bound to come back.
+func newTelemetryBoxWith(t *testing.T, bound time.Duration) *telemetryBox {
+	t.Helper()
 	e := &telemetryBox{}
 	b := newBox(t, true, func(b *box, o *osadmin.Options) {
 		st := &boxsettings.Store{Dir: filepath.Join(b.state, "platform")}
@@ -90,7 +96,7 @@ func newTelemetryBox(t *testing.T) *telemetryBox {
 		o.Email = st
 		o.BoxSecrets = &boxsecrets.Store{Dir: filepath.Join(b.state, "platform"), Manifests: filepath.Join(b.state, "k0s-manifests"), Settings: st}
 		o.TelemetryWorkloads = e
-		o.TelemetryPhaseBound = 200 * time.Millisecond
+		o.TelemetryPhaseBound = bound
 		o.TelemetryPoll = 10 * time.Millisecond
 		o.ProbeTelemetry = func(context.Context, boxsettings.Telemetry) error {
 			e.mu.Lock()
@@ -206,4 +212,35 @@ func TestARetryWithNothingFailedIsRefused(t *testing.T) {
 	e.alice.stepUp("alice")
 	_, err := e.client().RetryTelemetryRestart(context.Background(), connect.NewRequest(&osadminv1.RetryTelemetryRestartRequest{}))
 	symbolIn(t, err, connect.CodeFailedPrecondition, "TELEMETRY_RESTART")
+}
+
+// A restart may take a phase bound for k0s to apply the settings and one
+// for each phase, so its maintenance holds that long, past the 15 minutes
+// an apply holds, and then lapses: a restart that never ends doesn't block
+// elevation for ever.
+func TestAPhasedRestartHoldsMaintenanceForEveryPhase(t *testing.T) {
+	e := newTelemetryBoxWith(t, 5*time.Minute)
+	e.stuck = "audit"
+	e.alice.stepUp("alice")
+	if _, err := e.client().SetTelemetry(context.Background(), set("https://collector.example.com", true)); err != nil {
+		t.Fatal(err)
+	}
+	// Three phases and the apply, 5 minutes each, and a minute's margin.
+	want := 21 * time.Minute
+	if want <= osadmin.MaintenanceBound {
+		t.Fatalf("the test needs more than %s", osadmin.MaintenanceBound)
+	}
+	e.clk.Advance(osadmin.MaintenanceBound + time.Minute)
+	if !e.srv.Maintenance() {
+		t.Fatal("maintenance lapsed while the restart's phases still had time")
+	}
+	e.clk.Advance(want - osadmin.MaintenanceBound)
+	if e.srv.Maintenance() {
+		t.Fatal("a restart that never ends holds maintenance for ever")
+	}
+	e.mu.Lock()
+	e.stuck = ""
+	e.mu.Unlock()
+	e.alice.signIn("alice")
+	e.waitRestart(t, "done")
 }

@@ -53,6 +53,10 @@ type TelemetryWorkloads interface {
 // come back from a restart.
 const DefaultTelemetryPhaseBound = productspec.DefaultPhaseTimeout
 
+// telemetryMaintenanceMargin is what a restart's maintenance holds past
+// its bounds, for the writes between them.
+const telemetryMaintenanceMargin = time.Minute
+
 // telemetryPoll is how often a restart asks about its workloads.
 const telemetryPoll = 3 * time.Second
 
@@ -327,6 +331,9 @@ func (h *telemetrySvc) RetryTelemetryRestart(ctx context.Context, r *connect.Req
 // stops the run: later phases keep the old settings until a retry.
 func (s *Server) restartTelemetryReaders(spec productspec.Spec, from string) {
 	s.writeTelemetryRun(telemetryRun{State: telemetryRestartRunning, Phase: from}, true)
+	hold := s.telemetryMaintenance(spec, from)
+	s.holdMaintenance(hold)
+	s.o.Logger.Debug("osadmin: the telemetry restart holds maintenance", log.F("from", from), log.F("for", hold.String()))
 	go func() {
 		defer s.endMaintenance()
 		end := s.runTelemetryRestart(spec, from)
@@ -339,20 +346,36 @@ func (s *Server) restartTelemetryReaders(spec productspec.Spec, from string) {
 	}()
 }
 
-func (s *Server) runTelemetryRestart(spec productspec.Spec, from string) telemetryRun {
-	bound := s.o.TelemetryPhaseBound
-	if bound <= 0 {
-		bound = DefaultTelemetryPhaseBound
+// telemetryPhaseBound is how long each step of a restart may take.
+func (s *Server) telemetryPhaseBound() time.Duration {
+	if s.o.TelemetryPhaseBound > 0 {
+		return s.o.TelemetryPhaseBound
 	}
+	return DefaultTelemetryPhaseBound
+}
+
+// telemetryGroups are the phases a restart from the phase from runs.
+func telemetryGroups(spec productspec.Spec, from string) []productspec.RestartGroup {
+	groups := spec.Telemetry.Groups(spec)
+	first := slices.IndexFunc(groups, func(g productspec.RestartGroup) bool { return g.Phase == from })
+	return groups[max(first, 0):]
+}
+
+// telemetryMaintenance is how long a restart from the phase from can run:
+// a bound for k0s to apply the settings, one for each phase, and a margin.
+func (s *Server) telemetryMaintenance(spec productspec.Spec, from string) time.Duration {
+	return time.Duration(len(telemetryGroups(spec, from))+1)*s.telemetryPhaseBound() + telemetryMaintenanceMargin
+}
+
+func (s *Server) runTelemetryRestart(spec productspec.Spec, from string) telemetryRun {
+	bound := s.telemetryPhaseBound()
 	ctx, cancel := context.WithTimeout(context.Background(), bound)
 	err := s.o.TelemetryWorkloads.Applied(ctx)
 	cancel()
 	if err != nil {
 		return telemetryRun{State: telemetryRestartFailed, Phase: from, Why: "k0s hasn't applied the settings: " + err.Error()}
 	}
-	groups := spec.Telemetry.Groups(spec)
-	first := slices.IndexFunc(groups, func(g productspec.RestartGroup) bool { return g.Phase == from })
-	for _, g := range groups[max(first, 0):] {
+	for _, g := range telemetryGroups(spec, from) {
 		s.writeTelemetryRun(telemetryRun{State: telemetryRestartRunning, Phase: g.Phase}, true)
 		if r := s.restartTelemetryPhase(g, bound); r.State == telemetryRestartFailed {
 			return r

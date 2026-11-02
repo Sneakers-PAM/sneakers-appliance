@@ -47,7 +47,10 @@ product's phases, without the product stopping:
    shows the phase and the workload with a **Retry**, audited as `product.telemetry.restart`, which
    carries on from that phase. A restart a reboot cut off shows the same way.
 
-The maintenance gate holds for the run. The audit service restarts with `Recreate`, so it's down for
+The maintenance gate holds for the run, and for at most 5 minutes for k0s to apply the settings,
+5 minutes for each phase still to run and a minute's margin: 21 minutes for the Sneakers product's
+three phases, longer than the 15 minutes an update's gate holds. A run that never ends lets the gate
+go then, so it can't block an elevated shell for ever. The audit service restarts with `Recreate`, so it's down for
 its restart; the others overlap. A change that alters nothing the services read, such as a new
 endpoint while export is off, saves without a restart.
 
