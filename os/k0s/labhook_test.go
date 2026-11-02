@@ -202,3 +202,55 @@ k() {
 		t.Fatalf("the hook printed\n%s\nwant\n%s%s", got, rows, pods)
 	}
 }
+
+// The database comes back while the restore still runs, so the backup leg's
+// line for its end has to come from the restore moving on, with the rows
+// unchanged. The product then runs on other data, so it's reported again.
+func TestTheLabHookFollowsARestoreToItsEnd(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := regexp.MustCompile(`(?ms)^realci_later\(\) \{[^\n]*\n.*?^\}\n`).FindString(string(b))
+	if fn == "" {
+		t.Fatal("the lab hook has no realci_later function")
+	}
+	dir := t.TempDir()
+	set, journal := dir+"/manifest.json", dir+"/backup-restore.json"
+	if err := os.WriteFile(set, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := `say() { echo "lab-hook: $*"; }
+realci_set=` + set + `
+realci_journal=` + journal + `
+realci_later_mark=` + dir + `/mark
+realci_later_was=
+last=v1
+pg_in() { case "$2" in CREATE*) ;; *) echo "$PRESENT" ;; esac; }
+` + fn + `
+tick() { PRESENT=$1; realci_later; echo "last=$last"; }
+tick t
+printf '{\n  "state": "running"\n}\n' > ` + journal + `
+tick f
+last=v1
+tick f
+printf '{\n  "state": "settling"\n}\n' > ` + journal + `
+tick f
+`
+	cmd := exec.Command("sh", "-c", script) // #nosec G204 -- the repo's own script
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("realci_later: %v: %s", err, out)
+	}
+	want := `lab-hook: realci: later present=t restore=
+last=v1
+lab-hook: realci: later present=f restore=running
+last=
+last=v1
+lab-hook: realci: later present=f restore=settling
+last=
+`
+	if string(out) != want {
+		t.Fatalf("realci_later said:\n%s\nwant:\n%s", out, want)
+	}
+}

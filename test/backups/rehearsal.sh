@@ -149,6 +149,8 @@ jq -e '.keys | length == 2' "$work/manifest.json" >/dev/null || fail "the manife
 links="$(n "stat -c %h /box/backup/postgres/sets/before-the-change/store/wal_005/$(jq -r '.files[] | select(.path | endswith(".lz4") and contains("wal_005")) | .path' "$work/manifest.json" | head -1 | xargs basename)")"
 [ "$links" -ge 2 ] || fail "the set copied its WAL: $links links"
 note "ok: the set links the archive's files, it doesn't copy them"
+cluster_env() { k get statefulset sneakers-pgha -o json | jq -c '.spec.template.spec.containers[0].env'; }
+env_before="$(cluster_env)"
 
 step "the later rows"
 sql sneakers_audit <<SQL
@@ -217,7 +219,7 @@ note "ok: the restore took $(( $(date +%s) - start )) seconds"
 sql postgres <<<"SELECT 1;" >/dev/null
 sql sneakers_audit <<<"INSERT INTO rehearsal VALUES (0, 'after the restore');"
 note "ok: the first rows are back, the later ones aren't, the audit chain holds, and it takes writes"
-k get statefulset sneakers-pgha -o json | jq -e '[.spec.template.spec.containers[0].env[].name] | index("PGHA_BOOTSTRAP_MODE") | not' >/dev/null || fail "the restore's env stayed"
+[ "$(cluster_env)" = "$env_before" ] || fail "the restore left the cluster's env changed: $(cluster_env)"
 tool settle
 n "! ls -d /box/data/pgha/pgdata.pre-restore /box/backup/postgres/walg.pre-restore 2>/dev/null" || fail "what was moved aside stayed"
 until n "ls /box/backup/postgres/walg/basebackups_005/*sentinel.json" >/dev/null 2>&1; do sleep 1; done

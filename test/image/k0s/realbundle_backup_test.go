@@ -7,6 +7,7 @@ package k0s_test
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,8 @@ func TestTheRealBundleRestoresABackup(t *testing.T) {
 	if out := answerOverSSH(b.ctx, t, b.sshPort, b.alice, "realci-before", "sneakers", "backup", "restore", "realci-before"); !strings.Contains(out, "has started") {
 		t.Fatalf("backup restore:\n%s", out)
 	}
-	b.vm.Expect(`realci: later present=f restore=(settling|done)`, 30*time.Minute)
+	// The report after the line: the one before it is from before the restore.
+	b.vm.Expect(`realci: later present=f restore=(settling|done)[\s\S]*realci: report version=`+regexp.QuoteMeta(v)+`\s`, 30*time.Minute)
 	b.mustRun(v, "the restore", base, true, false)
 	t.Logf("the restore took %s", time.Since(start).Round(time.Second))
 

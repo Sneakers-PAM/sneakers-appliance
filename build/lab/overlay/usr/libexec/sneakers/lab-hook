@@ -148,18 +148,25 @@ realci_write() {
 }
 # realci_later: the backup leg's marker. Once the set realci-before exists a
 # table goes in that the set can't hold, and every change in whether the
-# database has it is said, so the leg sees a restore take it away.
+# database has it, or in the restore's state, is said, so the leg sees a
+# restore take it away and finish. The database is back well before the
+# restore ends, and the product then runs on other data, so a restore sends
+# the loop round to report it again.
+realci_set=/var/lib/sneakers/backup/postgres/sets/realci-before/manifest.json
+realci_journal=/var/lib/sneakers/platform/backup-restore.json
 realci_later_mark=/var/lib/sneakers/lab-realci-later
 realci_later_was=
 realci_later() {
-  [ -f /var/lib/sneakers/backup/postgres/sets/realci-before/manifest.json ] || return 0
+  [ -f "$realci_set" ] || return 0
   if [ ! -e "$realci_later_mark" ] && pg_in sneakers_audit "CREATE TABLE realci_later (i int)" >/dev/null 2>&1; then
     : > "$realci_later_mark"
   fi
   now="$(pg_in sneakers_audit "SELECT to_regclass('realci_later') IS NOT NULL" 2>/dev/null)" || return 0
-  [ "$now" = "$realci_later_was" ] && return 0
-  realci_later_was="$now"
-  say "realci: later present=$now restore=$(sed -n 's/.*"state": *"\([a-z-]*\)".*/\1/p' /var/lib/sneakers/platform/backup-restore.json 2>/dev/null | head -1)"
+  state="$(sed -n 's/.*"state": *"\([a-z-]*\)".*/\1/p' "$realci_journal" 2>/dev/null | head -1)"
+  [ "$now $state" = "$realci_later_was" ] && return 0
+  realci_later_was="$now $state"
+  say "realci: later present=$now restore=$state"
+  [ -z "$state" ] || last=""
 }
 realci_rows() { # version when
   line=""
