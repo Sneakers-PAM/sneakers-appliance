@@ -8,12 +8,18 @@ package k0s_test
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +55,12 @@ var telemetryPhases = [][]string{
 //     token, and made-up ones sent in a header, a query string and a body)
 //     are pushed through the gateway while the services export, and the
 //     collector has to have received traces or metrics, and none of them.
-//     No logs leave: the collector isn't verified.
+//     No logs leave: the collector isn't verified;
+//   - the collector's CA: the collector's certificate is signed by a CA the
+//     test makes, so with verification on a save is refused until the CA
+//     is set. With it set, and logs on, the services restart, trust the
+//     collector through the CA file they're given, and send logs too, and
+//     still none of the canaries.
 func TestTheRealBundleRestartsForTelemetryInOrder(t *testing.T) {
 	e := needReal(t)
 	image := os.Getenv("SNEAKERS_REAL_NEW_IMAGE")
@@ -168,6 +179,38 @@ func TestTheRealBundleRestartsForTelemetryInOrder(t *testing.T) {
 			t.Errorf("logs reached a collector that isn't verified: %s", p)
 		}
 	}
+
+	// The collector's CA. It runs even when the canary above failed, so a
+	// leak and the CA path are both reported.
+	adm = signIn(t, b.adminPort, b.alice)
+	adm.call(t, "SignInService/StepUp", map[string]any{"totpCode": b.alice.code()}, &struct{}{})
+	verified := map[string]any{"enabled": true, "endpoint": "https://" + podEgressTarget.String(), "skipVerify": false, "logs": true}
+	if err := adm.try("TelemetryService/SetTelemetry", map[string]any{"settings": verified}, &set); err == nil || !strings.Contains(err.Error(), "TELEMETRY_UNREACHABLE") {
+		t.Fatalf("verification on, without the collector's CA: %v", err)
+	}
+	verified["caPem"] = col.caPEM
+	set.Restarting = false
+	adm.call(t, "TelemetryService/SetTelemetry", map[string]any{"settings": verified}, &set)
+	if !set.Restarting {
+		t.Fatal("setting the CA didn't restart the services")
+	}
+	b.vm.Expect(`realci: telemetry restart=done`, 20*time.Minute)
+	if got := telemetryState(t, signIn(t, b.adminPort, b.alice)); got.LogsHeld || got.Restart.State != "done" {
+		t.Fatalf("with the CA set, the page shows %+v", got)
+	}
+	col.reset()
+	sendCanaries(t, b.hp, canaries)
+	col.waitForPath(t, "LogsService", 5*time.Minute)
+	time.Sleep(70 * time.Second)
+	sendCanaries(t, b.hp, canaries)
+	time.Sleep(70 * time.Second)
+	paths, size = col.summary()
+	t.Logf("verified through the CA, the collector received %d bytes: %v", size, paths)
+	for where, value := range canaries {
+		if col.saw(value) {
+			t.Errorf("the collector received %s, verified through the CA", where)
+		}
+	}
 }
 
 // telemetryPage is what the Telemetry page reads.
@@ -247,9 +290,12 @@ func sendCanaries(t *testing.T, port int, canaries map[string]string) {
 }
 
 // canaryCollector is an OTLP/gRPC collector on the host that keeps every
-// message it's sent, gzip or not, and answers each with an empty one.
+// message it's sent, gzip or not, and answers each with an empty one. Its
+// certificate names podEgressTarget's address and is signed by a CA the
+// test makes (caPEM).
 type canaryCollector struct {
 	port  int
+	caPEM string
 	mu    sync.Mutex
 	got   []byte
 	paths map[string]int
@@ -260,6 +306,8 @@ type canaryCollector struct {
 func newCanaryCollector(t *testing.T) *canaryCollector {
 	t.Helper()
 	c := &canaryCollector{paths: map[string]int{}, first: make(chan struct{})}
+	cert, caPEM := collectorCert(t)
+	c.caPEM = caPEM
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +315,7 @@ func newCanaryCollector(t *testing.T) *canaryCollector {
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(c.serve))
 	srv.Listener = l
 	srv.EnableHTTP2 = true
-	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12}
+	srv.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
 	srv.StartTLS()
 	t.Cleanup(srv.Close)
 	c.port = l.Addr().(*net.TCPAddr).Port
@@ -319,6 +367,63 @@ func (c *canaryCollector) waitForExports(t *testing.T, max time.Duration) {
 	case <-time.After(max):
 		t.Fatalf("no service exported to the collector in %s", max)
 	}
+}
+
+// waitForPath fails unless something is exported on a path with part in
+// it (such as "LogsService") within max.
+func (c *canaryCollector) waitForPath(t *testing.T, part string, max time.Duration) {
+	t.Helper()
+	end := time.Now().Add(max)
+	for time.Now().Before(end) {
+		paths, _ := c.summary()
+		for p := range paths {
+			if strings.Contains(p, part) {
+				return
+			}
+		}
+		time.Sleep(5 * time.Second)
+	}
+	paths, _ := c.summary()
+	t.Fatalf("nothing came on %s in %s: %v", part, max, paths)
+}
+
+// reset forgets what the collector received so far.
+func (c *canaryCollector) reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.got, c.paths = nil, map[string]int{}
+}
+
+// collectorCert is the collector's certificate, for podEgressTarget's
+// address, and the PEM of the CA that signed it, made for this run.
+func collectorCert(t *testing.T) (tls.Certificate, string) {
+	t.Helper()
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "realci collector CA"}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, ca, ca, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "realci collector"}, NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour),
+		IPAddresses: []net.IP{net.IP(podEgressTarget.Addr().AsSlice())}, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature}
+	der, err := x509.CreateCertificate(rand.Reader, leaf, caCert, &key.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}))
 }
 
 func (c *canaryCollector) saw(value string) bool {

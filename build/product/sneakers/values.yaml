@@ -44,6 +44,19 @@ identity:
       optional: false
     - name: sneakers-telemetry
       optional: true
+  # The collector's CA from the sneakers-telemetry ConfigMap, where
+  # OTEL_EXPORTER_OTLP_CERTIFICATE points while one is set
+  # (boxsettings.TelemetryCAFile). Optional, so a box that hasn't written
+  # the ConfigMap yet still starts the pod.
+  extraVolumes: &otlpCAVolumes
+    - name: otlp-ca
+      configMap:
+        name: sneakers-telemetry
+        optional: true
+        items:
+          - {key: OTLP_CA_PEM, path: ca.pem}
+  extraVolumeMounts: &otlpCAMounts
+    - {name: otlp-ca, mountPath: /etc/sneakers/otlp, readOnly: true}
   secretEnv:
     TOTP_ENC_KEY:
       secretName: sneakers-box
@@ -55,6 +68,8 @@ vault:
   envFromConfigMaps: &telemetry
     - name: sneakers-telemetry
       optional: true
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
   secretEnv:
     VAULT_ROOT_KEK:
       secretName: sneakers-box
@@ -97,17 +112,29 @@ gateway:
       optional: true
     - name: sneakers-telemetry
       optional: true
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
 workflow:
   envFromConfigMaps: *telemetry
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
 audit:
   envFromConfigMaps: *telemetry
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
 notify:
   envFromConfigMaps: *telemetry
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
 connector:
   envFromConfigMaps: *telemetry
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
 mcp:
   enabled: false
   envFromConfigMaps: *telemetry
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
 hydra:
   enabled: false
 web-staff:
@@ -134,6 +161,8 @@ web-admin:
     APPLIANCE_BOX_POLLER: 'true'
 sshbroker:
   envFromConfigMaps: *telemetry
+  extraVolumes: *otlpCAVolumes
+  extraVolumeMounts: *otlpCAMounts
   ingress:
     enabled: true
     className: traefik

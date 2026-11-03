@@ -27,7 +27,7 @@ shell, the console and :8443 show the same sentence.
 | 3015 | `ACCESS_KEY_REVOKED` | the key was removed and is on the revocation list; an owner un-revokes it first |
 | 3016 | `ACCESS_PASSWORD` | the password is shorter than 12 characters, on the breached-password list, or the admin's name |
 | 3017 | `ACCESS_CREDENTIALS` | the name, password or TOTP code is wrong, or the TOTP code was used already |
-| 3018 | `ACCESS_LOCKED` | the account is locked after 3 failures in 15 minutes, for 15 minutes or until an owner unlocks it |
+| 3018 | `ACCESS_LOCKED` | the account is locked after the owner's limit of failures (3, 4 or 5, default 5) in 15 minutes, for 15 minutes or until an owner unlocks it |
 | 3019 | `ACCESS_THROTTLED` | this source failed too often; it may try again after the time given |
 | 3020 | `ACCESS_NO_ADMIN` | sshd was asked to start while no admin has a password and a TOTP secret |
 | 3021 | `ACCESS_POLICY` | an access setting is out of its bounds |
@@ -89,6 +89,8 @@ shell, the console and :8443 show the same sentence.
 |---|---|---|
 | 3901 | `EMAIL_INVALID` | an email setting fails validation (the error names it) |
 | 3902 | `EMAIL_SEND` | the test email didn't go out; the error gives the relay's answer or the connection's failure |
+| 3903 | `EMAIL_UNTRUSTED` | the relay's certificate isn't trusted (or a pinned one is outside its validity dates); nothing was sent, and the refusal carries the certificate to check and pin |
+| 3904 | `EMAIL_PIN_MISMATCH` | the relay presented another certificate than the pinned one; nothing was sent, and the refusal carries both fingerprints |
 
 ## Product telemetry (391x)
 

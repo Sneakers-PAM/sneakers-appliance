@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
@@ -63,8 +64,14 @@ type Email struct {
 	TLS      string `json:"tls"`
 	// Verify checks the relay's certificate (starttls and tls).
 	Verify bool `json:"verify"`
-	// CA is the relay's CA, PEM, trusted on top of the system roots.
+	// CA is the relay's CA, PEM, trusted on top of the system roots. It's
+	// read only while Verify is on.
 	CA string `json:"ca"`
+	// PinSHA256 pins the relay's certificate by its SHA-256 fingerprint
+	// (colon hex in capitals, as certstore.Fingerprint gives it). With
+	// Verify on, the relay must present exactly that certificate, within
+	// its validity dates, in place of a chain to the roots or the CA.
+	PinSHA256 string `json:"pinSha256,omitempty"`
 }
 
 // DefaultEmail is no relay, with the submission port and STARTTLS.
@@ -104,9 +111,14 @@ func (e Email) Check() error {
 	default:
 		return refused("the TLS mode %q isn't %s, %s or %s", e.TLS, TLSNone, TLSStartTLS, TLSImplicit)
 	}
-	if e.CA != "" {
+	if e.CA != "" && e.Verify {
 		if _, err := e.pool(); err != nil {
 			return err
+		}
+	}
+	if e.PinSHA256 != "" {
+		if pin, ok := certstore.NormalizeFingerprint(e.PinSHA256); !ok || pin != e.PinSHA256 {
+			return refused("the relay certificate pin %q isn't a SHA-256 fingerprint in colon hex", e.PinSHA256)
 		}
 	}
 	if strings.ContainsAny(e.Username, "\r\n\x00") || len(e.Username) > 256 {
@@ -123,10 +135,28 @@ func (e Email) Check() error {
 
 // pool is the system roots and the relay's CA.
 func (e Email) pool() (*x509.CertPool, error) {
-	if len(e.CA) > maxCA {
-		return nil, refused("the relay CA is over %d KiB", maxCA>>10)
+	certs, err := parseCA(e.CA, "relay", refused)
+	if err != nil {
+		return nil, err
 	}
-	rest := []byte(e.CA)
+	pool, err := x509.SystemCertPool()
+	if err != nil || pool == nil {
+		pool = x509.NewCertPool()
+	}
+	for _, c := range certs {
+		pool.AddCert(c)
+	}
+	return pool, nil
+}
+
+// parseCA is the PEM certificates of a CA setting (what names whose),
+// refused through fail when it's too big, holds none, or one doesn't
+// parse.
+func parseCA(text, what string, fail func(string, ...any) error) ([]*x509.Certificate, error) {
+	if len(text) > maxCA {
+		return nil, fail("the %s CA is over %d KiB", what, maxCA>>10)
+	}
+	rest := []byte(text)
 	var certs []*x509.Certificate
 	for {
 		var b *pem.Block
@@ -139,21 +169,14 @@ func (e Email) pool() (*x509.CertPool, error) {
 		}
 		c, err := x509.ParseCertificate(b.Bytes)
 		if err != nil {
-			return nil, refused("the relay CA has a certificate that doesn't parse: %v", err)
+			return nil, fail("the %s CA has a certificate that doesn't parse: %v", what, err)
 		}
 		certs = append(certs, c)
 	}
 	if len(certs) == 0 {
-		return nil, refused("the relay CA holds no PEM certificate")
+		return nil, fail("the %s CA holds no PEM certificate", what)
 	}
-	pool, err := x509.SystemCertPool()
-	if err != nil || pool == nil {
-		pool = x509.NewCertPool()
-	}
-	for _, c := range certs {
-		pool.AddCert(c)
-	}
-	return pool, nil
+	return certs, nil
 }
 
 // URI is the relay as one URI, in the form Ory's courier reads:

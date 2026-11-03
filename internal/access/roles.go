@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"slices"
 	"time"
+
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/lockout"
 )
 
 // Role is an admin's role.
@@ -112,12 +114,21 @@ const (
 	MaxKeyValidDays    = 1825
 	DefaultKeyDays     = 365
 	DefaultRootMinutes = 10
+	// MinLockoutFailures and MaxLockoutFailures bound the consecutive
+	// failures that lock an account.
+	MinLockoutFailures = 3
+	MaxLockoutFailures = 5
 )
 
 // Policy is the access policy (owner settings on the Access page).
 type Policy struct {
 	// LockoutMode is LockoutTimed or LockoutUntilUnlocked.
 	LockoutMode string `json:"lockoutMode"`
+	// LockoutMaxFailures is the consecutive failures within the window
+	// that lock an account, MinLockoutFailures to MaxLockoutFailures; zero
+	// (a store written before it existed) reads as
+	// lockout.DefaultMaxFailures.
+	LockoutMaxFailures int `json:"lockoutMaxFailures,omitempty"`
 	// RootCodeMinutes is how long a root-shell code works.
 	RootCodeMinutes int `json:"rootCodeMinutes"`
 	// RootSessionMinutes is the longest a root shell stays open.
@@ -128,7 +139,7 @@ type Policy struct {
 
 // DefaultPolicy is the policy of a new box.
 func DefaultPolicy() Policy {
-	return Policy{LockoutMode: LockoutTimed, RootCodeMinutes: DefaultRootMinutes, RootSessionMinutes: DefaultRootMinutes, SSHKeyValidDays: DefaultKeyDays}
+	return Policy{LockoutMode: LockoutTimed, LockoutMaxFailures: lockout.DefaultMaxFailures, RootCodeMinutes: DefaultRootMinutes, RootSessionMinutes: DefaultRootMinutes, SSHKeyValidDays: DefaultKeyDays}
 }
 
 // Effective fills the zero fields of a store written before they existed.
@@ -136,6 +147,9 @@ func (p Policy) Effective() Policy {
 	d := DefaultPolicy()
 	if p.LockoutMode == "" {
 		p.LockoutMode = d.LockoutMode
+	}
+	if p.LockoutMaxFailures == 0 {
+		p.LockoutMaxFailures = d.LockoutMaxFailures
 	}
 	if p.RootCodeMinutes == 0 {
 		p.RootCodeMinutes = d.RootCodeMinutes

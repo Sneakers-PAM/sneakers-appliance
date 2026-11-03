@@ -10,10 +10,8 @@ package osadmin
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -25,13 +23,13 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	"connectrpc.com/connect"
 	log "github.com/Bugs5382/go-log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/osaudit"
 )
@@ -129,22 +127,11 @@ func parseTrustCAs(s string, now time.Time) ([]*x509.Certificate, error) {
 // normalizePin folds a SHA-256 fingerprint in any common form (colons or
 // spaces, any case) to the colon hex Fingerprint gives.
 func normalizePin(s string) (string, error) {
-	h := strings.Map(func(r rune) rune {
-		if r == ':' || unicode.IsSpace(r) {
-			return -1
-		}
-		return unicode.ToLower(r)
-	}, s)
-	b, err := hex.DecodeString(h)
-	if err != nil || len(b) != sha256.Size {
+	pin, ok := certstore.NormalizeFingerprint(s)
+	if !ok {
 		return "", codes.New(codes.TLSInvalid, "pin_sha256: a SHA-256 fingerprint is 64 hex digits")
 	}
-	h = strings.ToUpper(h)
-	parts := make([]string, 0, sha256.Size)
-	for i := 0; i < len(h); i += 2 {
-		parts = append(parts, h[i:i+2])
-	}
-	return strings.Join(parts, ":"), nil
+	return pin, nil
 }
 
 func subjectName(c *x509.Certificate) string {

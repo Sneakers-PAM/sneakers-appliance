@@ -55,7 +55,7 @@ func (h *setup) RedeemCode(ctx context.Context, r *connect.Request[osadminv1.Red
 		got, err := h.s.codes.Redeem(r.Msg.GetCode(), c.source)
 		if err != nil {
 			err = lockout.WithRefusal(err, lockout.Refusal{AttemptsLeft: h.s.codes.Setup().AttemptsLeft})
-			fail := h.s.o.Lockout.Fail("", c.source, now, h.s.lockoutMode())
+			fail := h.s.o.Lockout.Fail("", c.source, now, h.s.lockoutRule())
 			if !fail.RetryAfter.IsZero() {
 				h.s.write(osaudit.Entry{Actor: "accessd", Source: c.source, Action: "access.throttle", Target: c.source,
 					Detail: map[string]string{"surface": osaudit.SurfaceAdmin, "until": fail.RetryAfter.UTC().Format(time.RFC3339)}}, nil)
@@ -250,7 +250,7 @@ func (h *setup) CompleteCredentials(ctx context.Context, r *connect.Request[osad
 	}
 	step, err := checkNewTOTP(en, r.Msg.GetTotpCode(), now)
 	if err != nil {
-		h.s.o.Lockout.Fail("", c.source, now, h.s.lockoutMode())
+		h.s.o.Lockout.Fail("", c.source, now, h.s.lockoutRule())
 		return nil, err
 	}
 	if err := h.s.credentialsTarget(cs, en.Admin); err != nil {

@@ -464,9 +464,13 @@ message UnitOffer {
   // file_name is what FetchUpdate takes.
   string file_name = 4;
   int64 size = 5;
-  // preferred marks the line to take: for the newest Base OS, its patch
-  // when it fits the running base and the box has the memory to rebuild
-  // it, else its full file.
+  // preferred marks the line to take; exactly one Base OS line has it
+  // whenever any is offered. The newest Base OS decides: on the running
+  // version's major and minor (the same train) its patch, to a newer minor
+  // or major its full file, and its full file too when the box lacks the
+  // memory to rebuild a patch. When the newest version doesn't offer the
+  // file the rule wants, its other file is preferred. For the Base Web and
+  // the product, the newest line.
   bool preferred = 6;
   // bases are a patch's base versions.
   repeated string bases = 7;

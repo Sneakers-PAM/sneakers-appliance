@@ -5,7 +5,14 @@ package osadmin_test
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"os"
 	"path/filepath"
 	"slices"
@@ -36,6 +43,7 @@ box_settings:
   - configmap: sneakers/sneakers-telemetry
     keys:
       - {key: OTEL_EXPORTER_OTLP_ENDPOINT, setting: telemetry.endpoint}
+      - {key: OTEL_EXPORTER_OTLP_CERTIFICATE, setting: telemetry.ca_file}
 phases:
   - {name: identity, label: I, stack: s-identity, workloads: [vault]}
   - {name: services, label: S, stack: s-services, workloads: [audit]}
@@ -52,6 +60,8 @@ type telemetryBox struct {
 	stuck    string
 	probed   int
 	probeErr error
+	// lastProbe is the settings the last save's handshake was given.
+	lastProbe boxsettings.Telemetry
 }
 
 func (e *telemetryBox) Applied(context.Context) error { return nil }
@@ -98,10 +108,11 @@ func newTelemetryBoxWith(t *testing.T, bound time.Duration) *telemetryBox {
 		o.TelemetryWorkloads = e
 		o.TelemetryPhaseBound = bound
 		o.TelemetryPoll = 10 * time.Millisecond
-		o.ProbeTelemetry = func(context.Context, boxsettings.Telemetry) error {
+		o.ProbeTelemetry = func(_ context.Context, tl boxsettings.Telemetry) error {
 			e.mu.Lock()
 			defer e.mu.Unlock()
 			e.probed++
+			e.lastProbe = tl
 			return e.probeErr
 		}
 	})
@@ -243,4 +254,55 @@ func TestAPhasedRestartHoldsMaintenanceForEveryPhase(t *testing.T) {
 	e.mu.Unlock()
 	e.alice.signIn("alice")
 	e.waitRestart(t, "done")
+}
+
+// The collector's CA is saved with the other settings, checked by the
+// save's handshake, read back on the page, audited by fingerprint, and
+// reaches the services as the CA file the exporters read.
+func TestTheCollectorCAIsATelemetrySetting(t *testing.T) {
+	e := newTelemetryBox(t)
+	e.alice.stepUp("alice")
+	ctx := context.Background()
+	der, caPEM := testCollectorCA(t)
+	req := connect.NewRequest(&osadminv1.SetTelemetryRequest{Settings: &osadminv1.TelemetrySettings{Enabled: true, Endpoint: "https://collector.example.com:4317", Logs: true, CaPem: caPEM}})
+	if _, err := e.client().SetTelemetry(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	e.waitRestart(t, "done")
+	e.mu.Lock()
+	probed := e.lastProbe
+	e.mu.Unlock()
+	if want := (boxsettings.Telemetry{Enabled: true, Endpoint: "https://collector.example.com:4317", Logs: true, CA: caPEM}); probed != want {
+		t.Fatal("the save's handshake didn't get the CA")
+	}
+	got, err := e.client().GetTelemetry(ctx, connect.NewRequest(&osadminv1.GetTelemetryRequest{}))
+	if err != nil || got.Msg.GetSettings().GetCaPem() != caPEM || got.Msg.GetLogsHeld() {
+		t.Fatalf("the page reads %v, %v", got, err)
+	}
+	if a := lastEntry(t, e.log, "product.telemetry.set"); a.Outcome != "ok" || a.Detail["ca"] != osadmin.Fingerprint(der) || strings.Contains(a.Detail["ca"], "BEGIN") {
+		t.Fatalf("audit %+v", a)
+	}
+	stack, err := os.ReadFile(filepath.Join(e.state, "k0s-manifests", productspec.BoxSecretsStack, productspec.BoxSecretsStack+".yaml"))
+	if err != nil || !strings.Contains(string(stack), boxsettings.TelemetryCAFile) {
+		t.Fatalf("the stack doesn't point the exporters at the CA: %v\n%s", err, stack)
+	}
+	bad := connect.NewRequest(&osadminv1.SetTelemetryRequest{Settings: &osadminv1.TelemetrySettings{Enabled: true, Endpoint: "https://collector.example.com:4317", CaPem: "not a certificate"}})
+	_, err = e.client().SetTelemetry(ctx, bad)
+	symbolIn(t, err, connect.CodeInvalidArgument, "TELEMETRY_INVALID")
+}
+
+// testCollectorCA is a self-signed CA: its DER and PEM.
+func testCollectorCA(t *testing.T) ([]byte, string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca := &x509.Certificate{SerialNumber: big.NewInt(3), Subject: pkix.Name{CommonName: "collector test CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	der, err := x509.CreateCertificate(rand.Reader, ca, ca, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return der, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
 }

@@ -77,7 +77,7 @@ var accessEntries = []apperr.Entry{
 	{Code: AccessKeyRevoked, Symbol: "ACCESS_KEY_REVOKED", Title: "access", Cause: "the key was removed and is on the revocation list; an owner un-revokes it first"},
 	{Code: AccessPassword, Symbol: "ACCESS_PASSWORD", Title: "access", Cause: "the password is shorter than 12 characters, on the breached-password list, or the admin's name"},
 	{Code: AccessCredentials, Symbol: "ACCESS_CREDENTIALS", Title: "access", Cause: "the name, password or TOTP code is wrong, or the TOTP code was used already"},
-	{Code: AccessLocked, Symbol: "ACCESS_LOCKED", Title: "access", Cause: "the account is locked after 3 failures in 15 minutes, for 15 minutes or until an owner unlocks it"},
+	{Code: AccessLocked, Symbol: "ACCESS_LOCKED", Title: "access", Cause: "the account is locked after the owner's limit of failures (3, 4 or 5, default 5) in 15 minutes, for 15 minutes or until an owner unlocks it"},
 	{Code: AccessThrottled, Symbol: "ACCESS_THROTTLED", Title: "access", Cause: "this source failed too often; it may try again after the time given"},
 	{Code: AccessNoAdmin, Symbol: "ACCESS_NO_ADMIN", Title: "access", Cause: "sshd was asked to start while no admin has a password and a TOTP secret"},
 	{Code: AccessPolicy, Symbol: "ACCESS_POLICY", Title: "access", Cause: "an access setting is out of its bounds"},

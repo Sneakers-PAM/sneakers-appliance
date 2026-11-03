@@ -6,6 +6,7 @@ package osadmin
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -14,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -94,11 +96,11 @@ type telemetrySvc struct {
 }
 
 func telemetryToWire(t boxsettings.Telemetry) *osadminv1.TelemetrySettings {
-	return &osadminv1.TelemetrySettings{Enabled: t.Enabled, Endpoint: t.Endpoint, SkipVerify: t.SkipVerify, Logs: t.Logs}
+	return &osadminv1.TelemetrySettings{Enabled: t.Enabled, Endpoint: t.Endpoint, SkipVerify: t.SkipVerify, Logs: t.Logs, CaPem: t.CA}
 }
 
 func telemetryFromWire(w *osadminv1.TelemetrySettings) boxsettings.Telemetry {
-	return boxsettings.Telemetry{Enabled: w.GetEnabled(), Endpoint: w.GetEndpoint(), SkipVerify: w.GetSkipVerify(), Logs: w.GetLogs()}
+	return boxsettings.Telemetry{Enabled: w.GetEnabled(), Endpoint: w.GetEndpoint(), SkipVerify: w.GetSkipVerify(), Logs: w.GetLogs(), CA: w.GetCaPem()}
 }
 
 // telemetryProduct is the installed product when it reads telemetry
@@ -249,7 +251,8 @@ func (h *telemetrySvc) SetTelemetry(ctx context.Context, r *connect.Request[osad
 	}
 	t := telemetryFromWire(r.Msg.GetSettings())
 	logsOn := t.Enabled && t.Logs && (!saved.Enabled || !saved.Logs)
-	c.note("product telemetry", "enabled", onOff(t.Enabled), "endpoint", t.Endpoint, "verify", onOff(!t.SkipVerify), "logs", onOff(t.Logs), "logs_turned_on", strconv.FormatBool(logsOn))
+	c.note("product telemetry", "enabled", onOff(t.Enabled), "endpoint", t.Endpoint, "verify", onOff(!t.SkipVerify), "logs", onOff(t.Logs), "logs_turned_on", strconv.FormatBool(logsOn),
+		"ca", caNote(t.CA))
 	if err := t.Check(); err != nil {
 		return nil, err
 	}
@@ -293,7 +296,7 @@ func (h *telemetrySvc) SetTelemetry(ctx context.Context, r *connect.Request[osad
 	if logsOn {
 		s.o.Logger.Warn("osadmin: the product's services export logs now", log.F("endpoint", t.Endpoint), log.F("by", c.session.Admin))
 	}
-	s.o.Logger.Info("osadmin: the telemetry settings are saved; the services restart in order", log.F("enabled", t.Enabled), log.F("endpoint", t.Endpoint), log.F("by", c.session.Admin))
+	s.o.Logger.Info("osadmin: the telemetry settings are saved; the services restart in order", log.F("enabled", t.Enabled), log.F("endpoint", t.Endpoint), log.F("ca", caNote(t.CA)), log.F("by", c.session.Admin))
 	s.restartTelemetryReaders(spec, "")
 	return connect.NewResponse(&osadminv1.SetTelemetryResponse{Restarting: true}), nil
 }
@@ -435,4 +438,27 @@ func (s *Server) restartTelemetryPhase(g productspec.RestartGroup, bound time.Du
 		}
 	}
 	return telemetryRun{State: telemetryRestartDone, Phase: g.Phase}
+}
+
+// caNote names a CA setting for the audit log and the logs: its
+// certificates' SHA-256 fingerprints, or "none".
+func caNote(caPEM string) string {
+	if caPEM == "" {
+		return "none"
+	}
+	var fps []string
+	rest := []byte(caPEM)
+	for {
+		var b *pem.Block
+		if b, rest = pem.Decode(rest); b == nil {
+			break
+		}
+		if b.Type == "CERTIFICATE" {
+			fps = append(fps, Fingerprint(b.Bytes))
+		}
+	}
+	if len(fps) == 0 {
+		return "unreadable"
+	}
+	return strings.Join(fps, ",")
 }

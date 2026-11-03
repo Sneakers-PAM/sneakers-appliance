@@ -59,7 +59,7 @@ func newRelay(t *testing.T, implicit, starttls bool, auth ...string) *relay {
 		t.Fatal(err)
 	}
 	if implicit {
-		ln = tls.NewListener(ln, &tls.Config{Certificates: []tls.Certificate{r.cert}, MinVersion: tls.VersionTLS12})
+		ln = tls.NewListener(ln, &tls.Config{GetCertificate: r.certificate, MinVersion: tls.VersionTLS12})
 	}
 	r.ln = ln
 	go r.serve()
@@ -68,6 +68,21 @@ func newRelay(t *testing.T, implicit, starttls bool, auth ...string) *relay {
 }
 
 func (r *relay) port() int { return r.ln.Addr().(*net.TCPAddr).Port }
+
+// certificate is what the relay presents now; setCert changes it, as a
+// relay whose certificate was replaced.
+func (r *relay) certificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c := r.cert
+	return &c, nil
+}
+
+func (r *relay) setCert(c tls.Certificate) {
+	r.mu.Lock()
+	r.cert = c
+	r.mu.Unlock()
+}
 
 // sessions are the sessions so far, waiting a moment for one to end: the
 // client may hang up before the relay has noted it.
@@ -137,7 +152,7 @@ func (r *relay) handle(c net.Conn) {
 			}
 		case "STARTTLS":
 			say("220 go ahead")
-			tc := tls.Server(c, &tls.Config{Certificates: []tls.Certificate{r.cert}, MinVersion: tls.VersionTLS12})
+			tc := tls.Server(c, &tls.Config{GetCertificate: r.certificate, MinVersion: tls.VersionTLS12})
 			if err := tc.Handshake(); err != nil {
 				return
 			}
@@ -210,6 +225,13 @@ func (r *relay) handle(c net.Conn) {
 
 func testCert(t *testing.T) (tls.Certificate, string) {
 	t.Helper()
+	return testCertFor(t, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
+}
+
+// testCertFor is a CA and a leaf for 127.0.0.1 valid from notBefore to
+// notAfter.
+func testCertFor(t *testing.T, notBefore, notAfter time.Time) (tls.Certificate, string) {
+	t.Helper()
 	caKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	ca := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "relay test CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
 		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
@@ -219,7 +241,7 @@ func testCert(t *testing.T) (tls.Certificate, string) {
 	}
 	caCert, _ := x509.ParseCertificate(caDER)
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+	leaf := &x509.Certificate{SerialNumber: big.NewInt(2), Subject: pkix.Name{CommonName: "127.0.0.1"}, NotBefore: notBefore, NotAfter: notAfter,
 		IPAddresses: []net.IP{net.ParseIP("127.0.0.1")}, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature}
 	der, err := x509.CreateCertificate(rand.Reader, leaf, caCert, &key.PublicKey, caKey)
 	if err != nil {

@@ -44,6 +44,13 @@ const (
 	// SettingTelemetryPort is the collector's port while export is on, else
 	// empty. The box opens it in its NetworkPolicy; no key reads it.
 	SettingTelemetryPort = "telemetry.port"
+	// SettingTelemetryCA is the collector's CA, PEM, while export is on;
+	// else empty. The product mounts it as a file.
+	SettingTelemetryCA = "telemetry.ca_pem"
+	// SettingTelemetryCAFile is the path the services' OTLP exporters read
+	// the CA from (OTEL_EXPORTER_OTLP_CERTIFICATE) while export is on and
+	// verified with a CA set; else empty, so they use the system roots.
+	SettingTelemetryCAFile = "telemetry.ca_file"
 )
 
 // settings are the settings the box offers, each saying whether it is
@@ -53,6 +60,7 @@ var settings = map[string]bool{
 	SettingEmailTLS: false, SettingEmailSkipVerify: false, SettingEmailCA: false,
 	SettingEmailPassword: true, SettingEmailURI: true,
 	SettingTelemetryEndpoint: false, SettingTelemetrySkipVerify: false, SettingTelemetryLogs: false, SettingTelemetryPort: false,
+	SettingTelemetryCA: false, SettingTelemetryCAFile: false,
 }
 
 // IsSetting reports whether the box offers the setting, and whether it is

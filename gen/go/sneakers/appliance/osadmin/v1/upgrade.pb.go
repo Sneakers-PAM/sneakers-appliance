@@ -1693,9 +1693,13 @@ type UnitOffer struct {
 	// file_name is what FetchUpdate takes.
 	FileName string `protobuf:"bytes,4,opt,name=file_name,json=fileName,proto3" json:"file_name,omitempty"`
 	Size     int64  `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
-	// preferred marks the line to take: for the newest Base OS, its patch
-	// when it fits the running base and the box has the memory to rebuild
-	// it, else its full file.
+	// preferred marks the line to take; exactly one Base OS line has it
+	// whenever any is offered. The newest Base OS decides: on the running
+	// version's major and minor (the same train) its patch, to a newer minor
+	// or major its full file, and its full file too when the box lacks the
+	// memory to rebuild a patch. When the newest version doesn't offer the
+	// file the rule wants, its other file is preferred. For the Base Web and
+	// the product, the newest line.
 	Preferred bool `protobuf:"varint,6,opt,name=preferred,proto3" json:"preferred,omitempty"`
 	// bases are a patch's base versions.
 	Bases []string `protobuf:"bytes,7,rep,name=bases,proto3" json:"bases,omitempty"`

@@ -250,3 +250,84 @@ func TestABaseOSOfferNamesTheBaseWebItShipsWith(t *testing.T) {
 		t.Fatalf("0.1.1, from before the rule: %v", old)
 	}
 }
+
+// baseOSIndex is an index offering the Base OS lines given: a full file
+// for each version in full, a patch from 0.1.0 (what the test box runs)
+// for each in patch.
+func baseOSIndex(t *testing.T, full, patch []string) []byte {
+	t.Helper()
+	var idx updatepkg.Index
+	for _, v := range full {
+		idx.Add(updatepkg.Header{Name: updatepkg.Name, Unit: updatepkg.UnitBaseOS, Version: v, Arch: "amd64", Kind: updatepkg.KindFull, Channel: release.ChannelProduction}, 33<<20)
+	}
+	for _, v := range patch {
+		h := patchHeader(v, "0.1.0")
+		h.Name = updatepkg.Name
+		idx.Add(h, 1<<20)
+	}
+	b, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// preferredBaseOS checks the Base OS offers against index and returns the
+// preferred line as "version kind", failing unless exactly one is.
+func preferredBaseOS(t *testing.T, index []byte, mods ...func(*box, *osadmin.Options)) string {
+	t.Helper()
+	b := newBox(t, false, mods...)
+	alice := b.browser()
+	alice.signIn("alice")
+	b.mirrorFiles[updatepkg.IndexName] = index
+	if err := setPolicy(t, alice, &osadminv1.UpgradePolicy{Source: osadmin.SourceManual, MirrorUrl: b.mirror.URL}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := checkNow(alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, o := range c.GetBaseOs() {
+		if o.GetPreferred() {
+			out = append(out, o.GetVersion()+" "+o.GetKind())
+		}
+	}
+	if len(out) != 1 {
+		t.Fatalf("preferred lines %v of %v", out, c.GetBaseOs())
+	}
+	return out[0]
+}
+
+// The preferred Base OS line follows how far the upgrade goes: a patch on
+// the running major and minor, a full file to a newer minor or major, the
+// full file on a box short of memory, and the other file when the one the
+// rule wants isn't offered.
+func TestThePreferredBaseOSLineFollowsTheTrain(t *testing.T) {
+	small := func(_ *box, o *osadmin.Options) { o.Upgrade.MemAvailable = func() int64 { return 300 << 20 } }
+	for _, c := range []struct {
+		name        string
+		full, patch []string
+		small       bool
+		want        string
+	}{
+		{"a patch on the same train", []string{"0.1.1"}, []string{"0.1.1"}, false, "0.1.1 patch"},
+		{"a full file to a newer minor", []string{"0.2.0"}, []string{"0.2.0"}, false, "0.2.0 full"},
+		{"a full file to a newer major", []string{"1.0.0"}, []string{"1.0.0"}, false, "1.0.0 full"},
+		{"the newest version decides", []string{"0.1.1", "0.2.0"}, []string{"0.1.1", "0.2.0"}, false, "0.2.0 full"},
+		{"a box short of memory on the same train", []string{"0.1.1"}, []string{"0.1.1"}, true, "0.1.1 full"},
+		{"no patch on the same train", []string{"0.1.1"}, nil, false, "0.1.1 full"},
+		{"no full file to a newer minor", nil, []string{"0.2.0"}, false, "0.2.0 patch"},
+		{"no full file on a box short of memory", nil, []string{"0.1.1"}, true, "0.1.1 patch"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var mods []func(*box, *osadmin.Options)
+			if c.small {
+				mods = append(mods, small)
+			}
+			if got := preferredBaseOS(t, baseOSIndex(t, c.full, c.patch), mods...); got != c.want {
+				t.Fatalf("preferred %q, want %q", got, c.want)
+			}
+		})
+	}
+}
