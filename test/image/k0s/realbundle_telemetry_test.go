@@ -105,8 +105,7 @@ func TestTheRealBundleRestartsForTelemetryInOrder(t *testing.T) {
 	if !got.LogsHeld {
 		t.Fatal("logs are on with an unverified collector, and the page doesn't say they stay on the box")
 	}
-	b.vm.Expect(`realci: pods telemetry version=`, time.Minute)
-	stopped, err := readRealPods(lastLine(b.vm.Console(), "realci: pods telemetry version="))
+	stopped, err := readRealPods(b.vm.ExpectLine(`realci: pods telemetry version=.*`, time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,13 +114,14 @@ func TestTheRealBundleRestartsForTelemetryInOrder(t *testing.T) {
 	}
 	t.Logf("the restart stopped at %s (%s): %s", got.Restart.Phase, got.Restart.Workload, got.Restart.Why)
 
-	// The retry, from the phase that failed.
+	// The retry, from the phase that failed. The hook said the failed
+	// restart's pods already, so only the lines after the mark count.
+	mark := b.vm.Mark()
 	adm = signIn(t, b.adminPort, b.alice)
 	adm.call(t, "SignInService/StepUp", map[string]any{"totpCode": b.alice.code()}, &struct{}{})
 	adm.call(t, "TelemetryService/RetryTelemetryRestart", map[string]any{}, &struct{}{})
-	b.vm.Expect(`realci: telemetry restart=done`, 20*time.Minute)
-	b.vm.Expect(`realci: pods telemetry version=`, time.Minute)
-	pods, err := readRealPods(lastLine(b.vm.Console(), "realci: pods telemetry version="))
+	b.vm.ExpectLineAfter(mark, `realci: telemetry restart=done`, 20*time.Minute)
+	pods, err := readRealPods(b.vm.ExpectLineAfter(mark, `realci: pods telemetry version=.*`, time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,11 +190,12 @@ func TestTheRealBundleRestartsForTelemetryInOrder(t *testing.T) {
 	}
 	verified["caPem"] = col.caPEM
 	set.Restarting = false
+	mark = b.vm.Mark()
 	adm.call(t, "TelemetryService/SetTelemetry", map[string]any{"settings": verified}, &set)
 	if !set.Restarting {
 		t.Fatal("setting the CA didn't restart the services")
 	}
-	b.vm.Expect(`realci: telemetry restart=done`, 20*time.Minute)
+	b.vm.ExpectLineAfter(mark, `realci: telemetry restart=done`, 20*time.Minute)
 	if got := telemetryState(t, signIn(t, b.adminPort, b.alice)); got.LogsHeld || got.Restart.State != "done" {
 		t.Fatalf("with the CA set, the page shows %+v", got)
 	}
