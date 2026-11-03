@@ -420,17 +420,29 @@ func (vm *VM) Expect(re string, timeout time.Duration) string {
 // return only that part. Once QEMU has exited, the last line counts too.
 func (vm *VM) ExpectLine(re string, timeout time.Duration) string {
 	vm.t.Helper()
+	return vm.ExpectLineAfter(0, re, timeout)
+}
+
+// Mark is where the console's finished lines end now, for ExpectLineAfter.
+func (vm *VM) Mark() int { return len(finishedLines(vm.Console())) }
+
+// ExpectLineAfter is ExpectLine for a line the console shows after mark,
+// from Mark: a hook line that repeats, such as one said at the end of each
+// restart, then matches only the one that came after the mark.
+func (vm *VM) ExpectLineAfter(mark int, re string, timeout time.Duration) string {
+	vm.t.Helper()
 	rx := regexp.MustCompile(re)
+	after := func(s string) string { return s[min(mark, len(s)):] }
 	deadline := time.Now().Add(timeout)
 	for {
-		if m := rx.FindString(finishedLines(vm.Console())); m != "" {
+		if m := rx.FindString(after(finishedLines(vm.Console()))); m != "" {
 			return m
 		}
 		if time.Now().After(deadline) {
 			vm.t.Fatalf("serial console never showed a whole line with %q in %s", re, timeout)
 		}
 		if vm.exited() {
-			if m := rx.FindString(vm.Console()); m != "" {
+			if m := rx.FindString(after(vm.Console())); m != "" {
 				return m
 			}
 			vm.t.Fatalf("QEMU exited before the serial console showed %q", re)
