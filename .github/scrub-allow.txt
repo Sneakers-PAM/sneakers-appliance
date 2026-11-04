@@ -13,3 +13,5 @@ fqdn connectrpc.com go.mod  # the Connect requirement
 fqdn connectrpc.com go.sum  # the Connect checksums
 # QEMU's user-network address for the host, how the image tests reach a listener on the host.
 private-ip 10.0.2.2 test/image/*
+# The go-pkcs12 module path, imported by the osadmin tests that build PFX files (#176 checks a wildcard PFX).
+fqdn software.sslmate.com internal/osadmin/*_test.go
