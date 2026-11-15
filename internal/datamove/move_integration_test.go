@@ -429,10 +429,21 @@ type killer struct {
 func (k *killer) kill(c productspec.DataCluster) {
 	k.once.Do(func() {
 		k.hit = true
-		script := `for p in /proc/[0-9]*; do [ "$(cat "$p/comm" 2>/dev/null)" = "` + k.tool + `" ] && kill -9 "${p#/proc/}"; done; true`
+		// The stream starts before docker has started the tool in the
+		// container, so a kill sent at once can find nothing to kill and the
+		// run then finishes cleanly. Wait for the tool, up to ten seconds,
+		// and kill it; no tool found is a failure of the test, not a pass.
+		script := `n=0; i=0
+while [ "$n" = 0 ] && [ "$i" -lt 100 ]; do
+  for p in /proc/[0-9]*; do
+    if [ "$(cat "$p/comm" 2>/dev/null)" = "` + k.tool + `" ]; then kill -9 "${p#/proc/}" && n=$((n+1)); fi
+  done
+  [ "$n" = 0 ] && { i=$((i+1)); sleep 0.1; }
+done
+echo killed=$n; [ "$n" -gt 0 ]`
 		out, err := exec.Command("docker", "exec", c.Name, "sh", "-c", script).CombinedOutput() // #nosec G204 -- test containers
 		if err != nil {
-			k.t.Errorf("kill: %v: %s", err, out)
+			k.t.Errorf("kill: no %s process to kill: %v: %s", k.tool, err, out)
 		}
 	})
 }
