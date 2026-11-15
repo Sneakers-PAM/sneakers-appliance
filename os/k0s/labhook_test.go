@@ -320,3 +320,46 @@ pods telemetry
 		t.Fatalf("without it, realci_telemetry said:\n%s\nwant:\n%s", got, plain)
 	}
 }
+
+// A pod that is Running but never Ready leaves no crash line, so at the
+// wait timeout the hook has to say why itself: the Ready condition, the last
+// 40 log lines of each container that isn't ready (this run's and the one
+// before a restart) and the pod's events. A pod that is Ready, or that has
+// finished (a phase job), is left out.
+func TestTheLabHookExplainsAPodThatIsRunningButNotReady(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := regexp.MustCompile(`(?ms)^realci_notready\(\) \{[^\n]*\n.*?^\}\n`).FindString(string(b))
+	if fn == "" {
+		t.Fatal("the lab hook has no realci_notready function")
+	}
+	stub := `say() { echo "lab-hook: $*"; }
+k() {
+  case "$*" in
+    *"get pods"*) printf 'good Running True\nmcp Running False\njob Succeeded False\n' ;;
+    *"get pod mcp"*"containerStatuses"*) echo "mcp" ;;
+    *"get pod mcp"*) echo "ContainersNotReady/containers with unready status: [mcp]" ;;
+    *"logs mcp -c mcp --previous --tail=40"*) printf 'old one\nlast words\n' ;;
+    *"logs mcp -c mcp --tail=40"*) printf 'starting\nlistening\n' ;;
+    *"get events"*"involvedObject.name=mcp"*) echo "Unhealthy Readiness probe failed: 503" ;;
+    *) echo "unexpected k $*" >&2; return 1 ;;
+  esac
+}
+`
+	out, err := exec.Command("sh", "-c", stub+fn+"\nrealci_notready\n").CombinedOutput() // #nosec G204 -- the repo's own script
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	want := "lab-hook: realci: notready mcp: ContainersNotReady/containers with unready status: [mcp]\n" +
+		"lab-hook: realci: notready mcp/mcp previous log: old one last words \n" +
+		"lab-hook: realci: notready mcp/mcp log: starting listening \n" +
+		"lab-hook: realci: notready mcp events: Unhealthy Readiness probe failed: 503\n"
+	if string(out) != want {
+		t.Fatalf("the hook printed\n%s\nwant\n%s", out, want)
+	}
+	if !strings.Contains(string(b), "realci_crashes\n        realci_notready\n") {
+		t.Fatal("the wait report doesn't call realci_notready after realci_crashes")
+	}
+}

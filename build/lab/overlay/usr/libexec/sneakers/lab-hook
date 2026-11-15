@@ -235,6 +235,23 @@ realci_crashes() {
       say "realci: crash $p/$c: $(k -n sneakers logs "$p" -c "$c" --previous --tail=5 2>/dev/null | tr '\n' ' ')"
     done
 }
+# realci_notready: why a pod that is Running but not Ready isn't (no crash
+# loop, so realci_crashes says nothing): its Ready condition, the last 40
+# log lines of each container that isn't ready (the run before a restart
+# too) and its events (a failed readiness probe shows there).
+realci_notready() {
+  k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} {.status.phase} {.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' 2>/dev/null |
+    while read -r p phase ready rest; do
+      [ "$phase" = Running ] && [ "$ready" = False ] || continue
+      say "realci: notready $p: $(k -n sneakers get pod "$p" -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}/{.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null)"
+      for c in $(k -n sneakers get pod "$p" -o jsonpath='{range .status.containerStatuses[?(@.ready==false)]}{.name}{" "}{end}' 2>/dev/null); do
+        l="$(k -n sneakers logs "$p" -c "$c" --previous --tail=40 2>/dev/null | tr '\n' ' ')"
+        [ -z "$l" ] || say "realci: notready $p/$c previous log: $l"
+        say "realci: notready $p/$c log: $(k -n sneakers logs "$p" -c "$c" --tail=40 2>/dev/null | tr '\n' ' ')"
+      done
+      say "realci: notready $p events: $(k -n sneakers get events --field-selector "involvedObject.name=$p" --sort-by=.lastTimestamp -o jsonpath='{range .items[*]}{.reason} {.message}{"; "}{end}' 2>/dev/null | tail -c 3000)"
+    done
+}
 box_state() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'
 }
@@ -304,6 +321,7 @@ realci() {
         realci_pods "$v" waiting
         realci_waits
         realci_crashes
+        realci_notready
         realci_rows "$v" waiting
         ticks=""
       fi
