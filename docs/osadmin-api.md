@@ -69,7 +69,12 @@ after setup, and invitations and Recover access codes still use the code pages.
 `EmailService` is the product's Email page ([product-email.md](product-email.md)): `GetEmail`
 answers `state` (`not installed`, `not in this product`, `not set` or `set`), the settings and
 whether a password is saved, never the password. `SetEmail` saves them and applies the product
-again (`password` absent keeps the saved one, empty clears it); `SendTestEmail` sends one message.
+again (`password` absent keeps the saved one, empty clears it); `SendTestEmail` sends one message,
+which carries a one-time 6-digit code. `CheckEmailCode` takes the code back for the same settings and
+password and records a pass for them; `SetEmail` refuses a relay without a fresh pass for exactly
+those settings and that password (`EMAIL_NOT_TESTED`), and clearing the host needs none. The code
+lives ten minutes and works once (`EMAIL_CODE_EXPIRED` when none waits; `EMAIL_CODE_WRONG` for a
+wrong one, five of which drop it), and so does the pass.
 A bad setting is `EMAIL_INVALID`, a test that didn't go out `EMAIL_SEND`. With verification on, a
 relay certificate the box doesn't trust stops the test before AUTH with `EMAIL_UNTRUSTED`, and one
 that isn't the pinned certificate with `EMAIL_PIN_MISMATCH`; both carry an `EmailCertificateRefusal`
@@ -205,6 +210,7 @@ same.
 | `EmailService.GetEmail` | admin | no | |
 | `EmailService.SetEmail` | admin | yes | `product.email.set` |
 | `EmailService.SendTestEmail` | admin | yes | `product.email.test-send` |
+| `EmailService.CheckEmailCode` | admin | yes | `product.email.code-check` |
 | `EmailService.PinEmailCertificate` | admin | yes | `product.email.pin` |
 | `ImportService.GetImport` | admin | no | |
 | `ImportService.OpenImport` | admin | yes | `import.open` |

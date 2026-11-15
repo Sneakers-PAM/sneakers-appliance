@@ -181,8 +181,9 @@ type Options struct {
 	// EmailWorkloads restart the workloads that read the email settings
 	// after a change; nil restarts none.
 	EmailWorkloads EmailWorkloads
-	// SendEmail sends the test email; nil is boxsettings.Send.
-	SendEmail func(ctx context.Context, e boxsettings.Email, to string) (string, error)
+	// SendEmail sends the test email with its one-time code; nil is
+	// boxsettings.Send.
+	SendEmail func(ctx context.Context, e boxsettings.Email, to, code string) (string, error)
 	// EmailCertificate reads the certificate the relay presents, for a pin;
 	// nil is boxsettings.Presented.
 	EmailCertificate func(ctx context.Context, e boxsettings.Email) (boxsettings.RelayCert, error)
@@ -226,6 +227,7 @@ type Server struct {
 	upgrades  upgrades
 	telemetry telemetryState
 	mirror    mirrorCheck
+	emailTest emailProof
 	github    githubState
 	checks    checks
 	progress  progress

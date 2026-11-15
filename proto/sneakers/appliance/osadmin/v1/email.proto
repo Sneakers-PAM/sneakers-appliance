@@ -21,7 +21,10 @@ service EmailService {
     option (rule) = {role: ROLE_ADMIN};
   }
   // SetEmail saves the relay and applies the product again, under the
-  // same maintenance gate as a product update.
+  // same maintenance gate as a product update. A relay (a host) is saved
+  // only with a fresh pass from CheckEmailCode for exactly these settings
+  // and password, else EMAIL_NOT_TESTED; clearing the host, which turns the
+  // product's mail off, needs none.
   rpc SetEmail(SetEmailRequest) returns (SetEmailResponse) {
     option (rule) = {
       role: ROLE_ADMIN
@@ -31,7 +34,9 @@ service EmailService {
   }
   // SendTestEmail sends a short message to one address, through the
   // settings given (with the saved password unless one is given), or
-  // through the saved ones. With verify on, a relay certificate the box
+  // through the saved ones. The message carries a one-time 6-digit code,
+  // which the box keeps for 10 minutes, bound to exactly the settings and
+  // password it was sent with; CheckEmailCode takes it back. With verify on, a relay certificate the box
   // doesn't trust stops it before AUTH with EMAIL_UNTRUSTED, and one that
   // isn't the pinned certificate with EMAIL_PIN_MISMATCH; both carry an
   // EmailCertificateRefusal detail. A failure's audit entry and log line
@@ -41,6 +46,20 @@ service EmailService {
       role: ROLE_ADMIN
       step_up: true
       audit: "product.email.test-send"
+    };
+  }
+  // CheckEmailCode checks the code the test message carried, for the same
+  // settings and password SendTestEmail used (the form's, or the saved
+  // ones). A match records a pass for exactly those settings, for 10
+  // minutes, and the code is used up. A wrong code (EMAIL_CODE_WRONG)
+  // counts against five tries, then the code is dropped; an expired or
+  // unsent code is EMAIL_CODE_EXPIRED. The code is never in the audit
+  // entry or a log line.
+  rpc CheckEmailCode(CheckEmailCodeRequest) returns (CheckEmailCodeResponse) {
+    option (rule) = {
+      role: ROLE_ADMIN
+      step_up: true
+      audit: "product.email.code-check"
     };
   }
   // PinEmailCertificate pins the relay's certificate on the settings given
@@ -156,6 +175,21 @@ message SendTestEmailRequest {
 message SendTestEmailResponse {
   // answer is the relay's answer to the message.
   string answer = 1;
+}
+
+message CheckEmailCodeRequest {
+  // settings, when present, are the form's; else the saved ones.
+  EmailSettings settings = 1;
+  // password, when present, is the one the test was sent with; else the
+  // saved one.
+  optional string password = 2;
+  // code is the 6 digits from the test message.
+  string code = 3;
+}
+
+message CheckEmailCodeResponse {
+  // valid_until is when the pass ends.
+  google.protobuf.Timestamp valid_until = 1;
 }
 
 message PinEmailCertificateRequest {

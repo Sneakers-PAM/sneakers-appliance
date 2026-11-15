@@ -91,6 +91,9 @@ shell, the console and :8443 show the same sentence.
 | 3902 | `EMAIL_SEND` | the test email didn't go out; the error gives the relay's answer or the connection's failure |
 | 3903 | `EMAIL_UNTRUSTED` | the relay's certificate isn't trusted (or a pinned one is outside its validity dates); nothing was sent, and the refusal carries the certificate to check and pin |
 | 3904 | `EMAIL_PIN_MISMATCH` | the relay presented another certificate than the pinned one; nothing was sent, and the refusal carries both fingerprints |
+| 3905 | `EMAIL_NOT_TESTED` | the relay settings being saved haven't passed a test email: send the test, then type the code from it (no pass, an expired pass, or settings or a password that changed after the code was typed) |
+| 3906 | `EMAIL_CODE_WRONG` | the code typed isn't the one the test email carried; five wrong tries drop the code |
+| 3907 | `EMAIL_CODE_EXPIRED` | no code is waiting for these settings and password: it was never sent, is older than ten minutes, was used or dropped after five wrong tries, or belongs to other settings; send the test email again |
 
 ## Product telemetry (391x)
 

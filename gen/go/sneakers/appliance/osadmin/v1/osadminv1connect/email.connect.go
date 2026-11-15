@@ -45,6 +45,9 @@ const (
 	// EmailServiceSendTestEmailProcedure is the fully-qualified name of the EmailService's
 	// SendTestEmail RPC.
 	EmailServiceSendTestEmailProcedure = "/sneakers.appliance.osadmin.v1.EmailService/SendTestEmail"
+	// EmailServiceCheckEmailCodeProcedure is the fully-qualified name of the EmailService's
+	// CheckEmailCode RPC.
+	EmailServiceCheckEmailCodeProcedure = "/sneakers.appliance.osadmin.v1.EmailService/CheckEmailCode"
 	// EmailServicePinEmailCertificateProcedure is the fully-qualified name of the EmailService's
 	// PinEmailCertificate RPC.
 	EmailServicePinEmailCertificateProcedure = "/sneakers.appliance.osadmin.v1.EmailService/PinEmailCertificate"
@@ -54,16 +57,29 @@ const (
 type EmailServiceClient interface {
 	GetEmail(context.Context, *connect.Request[v1.GetEmailRequest]) (*connect.Response[v1.GetEmailResponse], error)
 	// SetEmail saves the relay and applies the product again, under the
-	// same maintenance gate as a product update.
+	// same maintenance gate as a product update. A relay (a host) is saved
+	// only with a fresh pass from CheckEmailCode for exactly these settings
+	// and password, else EMAIL_NOT_TESTED; clearing the host, which turns the
+	// product's mail off, needs none.
 	SetEmail(context.Context, *connect.Request[v1.SetEmailRequest]) (*connect.Response[v1.SetEmailResponse], error)
 	// SendTestEmail sends a short message to one address, through the
 	// settings given (with the saved password unless one is given), or
-	// through the saved ones. With verify on, a relay certificate the box
+	// through the saved ones. The message carries a one-time 6-digit code,
+	// which the box keeps for 10 minutes, bound to exactly the settings and
+	// password it was sent with; CheckEmailCode takes it back. With verify on, a relay certificate the box
 	// doesn't trust stops it before AUTH with EMAIL_UNTRUSTED, and one that
 	// isn't the pinned certificate with EMAIL_PIN_MISMATCH; both carry an
 	// EmailCertificateRefusal detail. A failure's audit entry and log line
 	// name the step that failed and the relay's reply, without the password.
 	SendTestEmail(context.Context, *connect.Request[v1.SendTestEmailRequest]) (*connect.Response[v1.SendTestEmailResponse], error)
+	// CheckEmailCode checks the code the test message carried, for the same
+	// settings and password SendTestEmail used (the form's, or the saved
+	// ones). A match records a pass for exactly those settings, for 10
+	// minutes, and the code is used up. A wrong code (EMAIL_CODE_WRONG)
+	// counts against five tries, then the code is dropped; an expired or
+	// unsent code is EMAIL_CODE_EXPIRED. The code is never in the audit
+	// entry or a log line.
+	CheckEmailCode(context.Context, *connect.Request[v1.CheckEmailCodeRequest]) (*connect.Response[v1.CheckEmailCodeResponse], error)
 	// PinEmailCertificate pins the relay's certificate on the settings given
 	// (the form's), or the saved ones: the box connects with their TLS mode,
 	// checks that the relay presents the certificate with sha256 now, and
@@ -103,6 +119,12 @@ func NewEmailServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(emailServiceMethods.ByName("SendTestEmail")),
 			connect.WithClientOptions(opts...),
 		),
+		checkEmailCode: connect.NewClient[v1.CheckEmailCodeRequest, v1.CheckEmailCodeResponse](
+			httpClient,
+			baseURL+EmailServiceCheckEmailCodeProcedure,
+			connect.WithSchema(emailServiceMethods.ByName("CheckEmailCode")),
+			connect.WithClientOptions(opts...),
+		),
 		pinEmailCertificate: connect.NewClient[v1.PinEmailCertificateRequest, v1.PinEmailCertificateResponse](
 			httpClient,
 			baseURL+EmailServicePinEmailCertificateProcedure,
@@ -117,6 +139,7 @@ type emailServiceClient struct {
 	getEmail            *connect.Client[v1.GetEmailRequest, v1.GetEmailResponse]
 	setEmail            *connect.Client[v1.SetEmailRequest, v1.SetEmailResponse]
 	sendTestEmail       *connect.Client[v1.SendTestEmailRequest, v1.SendTestEmailResponse]
+	checkEmailCode      *connect.Client[v1.CheckEmailCodeRequest, v1.CheckEmailCodeResponse]
 	pinEmailCertificate *connect.Client[v1.PinEmailCertificateRequest, v1.PinEmailCertificateResponse]
 }
 
@@ -135,6 +158,11 @@ func (c *emailServiceClient) SendTestEmail(ctx context.Context, req *connect.Req
 	return c.sendTestEmail.CallUnary(ctx, req)
 }
 
+// CheckEmailCode calls sneakers.appliance.osadmin.v1.EmailService.CheckEmailCode.
+func (c *emailServiceClient) CheckEmailCode(ctx context.Context, req *connect.Request[v1.CheckEmailCodeRequest]) (*connect.Response[v1.CheckEmailCodeResponse], error) {
+	return c.checkEmailCode.CallUnary(ctx, req)
+}
+
 // PinEmailCertificate calls sneakers.appliance.osadmin.v1.EmailService.PinEmailCertificate.
 func (c *emailServiceClient) PinEmailCertificate(ctx context.Context, req *connect.Request[v1.PinEmailCertificateRequest]) (*connect.Response[v1.PinEmailCertificateResponse], error) {
 	return c.pinEmailCertificate.CallUnary(ctx, req)
@@ -145,16 +173,29 @@ func (c *emailServiceClient) PinEmailCertificate(ctx context.Context, req *conne
 type EmailServiceHandler interface {
 	GetEmail(context.Context, *connect.Request[v1.GetEmailRequest]) (*connect.Response[v1.GetEmailResponse], error)
 	// SetEmail saves the relay and applies the product again, under the
-	// same maintenance gate as a product update.
+	// same maintenance gate as a product update. A relay (a host) is saved
+	// only with a fresh pass from CheckEmailCode for exactly these settings
+	// and password, else EMAIL_NOT_TESTED; clearing the host, which turns the
+	// product's mail off, needs none.
 	SetEmail(context.Context, *connect.Request[v1.SetEmailRequest]) (*connect.Response[v1.SetEmailResponse], error)
 	// SendTestEmail sends a short message to one address, through the
 	// settings given (with the saved password unless one is given), or
-	// through the saved ones. With verify on, a relay certificate the box
+	// through the saved ones. The message carries a one-time 6-digit code,
+	// which the box keeps for 10 minutes, bound to exactly the settings and
+	// password it was sent with; CheckEmailCode takes it back. With verify on, a relay certificate the box
 	// doesn't trust stops it before AUTH with EMAIL_UNTRUSTED, and one that
 	// isn't the pinned certificate with EMAIL_PIN_MISMATCH; both carry an
 	// EmailCertificateRefusal detail. A failure's audit entry and log line
 	// name the step that failed and the relay's reply, without the password.
 	SendTestEmail(context.Context, *connect.Request[v1.SendTestEmailRequest]) (*connect.Response[v1.SendTestEmailResponse], error)
+	// CheckEmailCode checks the code the test message carried, for the same
+	// settings and password SendTestEmail used (the form's, or the saved
+	// ones). A match records a pass for exactly those settings, for 10
+	// minutes, and the code is used up. A wrong code (EMAIL_CODE_WRONG)
+	// counts against five tries, then the code is dropped; an expired or
+	// unsent code is EMAIL_CODE_EXPIRED. The code is never in the audit
+	// entry or a log line.
+	CheckEmailCode(context.Context, *connect.Request[v1.CheckEmailCodeRequest]) (*connect.Response[v1.CheckEmailCodeResponse], error)
 	// PinEmailCertificate pins the relay's certificate on the settings given
 	// (the form's), or the saved ones: the box connects with their TLS mode,
 	// checks that the relay presents the certificate with sha256 now, and
@@ -190,6 +231,12 @@ func NewEmailServiceHandler(svc EmailServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(emailServiceMethods.ByName("SendTestEmail")),
 		connect.WithHandlerOptions(opts...),
 	)
+	emailServiceCheckEmailCodeHandler := connect.NewUnaryHandler(
+		EmailServiceCheckEmailCodeProcedure,
+		svc.CheckEmailCode,
+		connect.WithSchema(emailServiceMethods.ByName("CheckEmailCode")),
+		connect.WithHandlerOptions(opts...),
+	)
 	emailServicePinEmailCertificateHandler := connect.NewUnaryHandler(
 		EmailServicePinEmailCertificateProcedure,
 		svc.PinEmailCertificate,
@@ -204,6 +251,8 @@ func NewEmailServiceHandler(svc EmailServiceHandler, opts ...connect.HandlerOpti
 			emailServiceSetEmailHandler.ServeHTTP(w, r)
 		case EmailServiceSendTestEmailProcedure:
 			emailServiceSendTestEmailHandler.ServeHTTP(w, r)
+		case EmailServiceCheckEmailCodeProcedure:
+			emailServiceCheckEmailCodeHandler.ServeHTTP(w, r)
 		case EmailServicePinEmailCertificateProcedure:
 			emailServicePinEmailCertificateHandler.ServeHTTP(w, r)
 		default:
@@ -225,6 +274,10 @@ func (UnimplementedEmailServiceHandler) SetEmail(context.Context, *connect.Reque
 
 func (UnimplementedEmailServiceHandler) SendTestEmail(context.Context, *connect.Request[v1.SendTestEmailRequest]) (*connect.Response[v1.SendTestEmailResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.EmailService.SendTestEmail is not implemented"))
+}
+
+func (UnimplementedEmailServiceHandler) CheckEmailCode(context.Context, *connect.Request[v1.CheckEmailCodeRequest]) (*connect.Response[v1.CheckEmailCodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.EmailService.CheckEmailCode is not implemented"))
 }
 
 func (UnimplementedEmailServiceHandler) PinEmailCertificate(context.Context, *connect.Request[v1.PinEmailCertificateRequest]) (*connect.Response[v1.PinEmailCertificateResponse], error) {

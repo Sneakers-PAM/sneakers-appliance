@@ -69,7 +69,7 @@ func sendFailed(step, what string, err error) error {
 // relay's CA, and AUTH (PLAIN, else LOGIN) when a username is set. It
 // returns the relay's answer to the message. No error carries the
 // password.
-func Send(ctx context.Context, e Email, to string) (string, error) {
+func Send(ctx context.Context, e Email, to, code string) (string, error) {
 	if !e.Configured() {
 		return "", codes.New(codes.EmailInvalid, "no relay is set")
 	}
@@ -99,7 +99,7 @@ func Send(ctx context.Context, e Email, to string) (string, error) {
 	if err != nil {
 		return "", sendFailed(StepData, "the relay refused the message", err)
 	}
-	if _, err := w.Write(message(e.From, to)); err != nil {
+	if _, err := w.Write(message(e.From, to, code)); err != nil {
 		_ = w.Close()
 		return "", sendFailed(StepData, "the message didn't go out", err)
 	}
@@ -233,10 +233,13 @@ func (a *relayAuth) Next(_ []byte, more bool) ([]byte, error) {
 	return nil, errors.New("unexpected relay challenge")
 }
 
-func message(from, to string) []byte {
+func message(from, to, code string) []byte {
 	var b strings.Builder
 	fmt.Fprintf(&b, "From: %s\r\nTo: %s\r\nSubject: Test email from the appliance\r\nDate: %s\r\n", from, to, time.Now().UTC().Format(time.RFC1123Z))
 	b.WriteString("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"utf-8\"\r\n\r\n")
 	b.WriteString("This is a test email from the appliance's Email page. The product sends its mail\r\nthrough this relay with the same settings.\r\n")
+	if code != "" {
+		fmt.Fprintf(&b, "\r\nType this code on the page to prove the settings: %s\r\nIt works once, for ten minutes.\r\n", code)
+	}
 	return []byte(b.String())
 }
