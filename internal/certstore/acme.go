@@ -25,8 +25,8 @@ const ACMEUnavailableReason = "ACME needs the product bundle's cert-manager, whi
 // External Account Binding key. Neither is returned or written to the
 // store's file.
 const (
-	acmeTokenItem = "tls-acme-dns"
-	acmeEABItem   = "tls-acme-eab"
+	acmeTokenItem = "tls-acme-dns" // #nosec G101 -- the name of a sealed item, not a credential
+	acmeEABItem   = "tls-acme-eab" // #nosec G101 -- the name of a sealed item, not a credential
 )
 
 // ACMEDriver is cert-manager on the box: the stack it's given to issue

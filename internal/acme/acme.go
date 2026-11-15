@@ -38,12 +38,12 @@ const (
 	CertName   = "box-acme"
 	// SecretName is the Secret cert-manager writes the issued pair to
 	// (tls.crt, tls.key).
-	SecretName = "box-acme-tls"
+	SecretName = "box-acme-tls" // #nosec G101 -- the name of a Secret, not a credential
 	// AccountSecret keeps the ACME account key cert-manager makes.
-	AccountSecret = "box-acme-account"
+	AccountSecret = "box-acme-account" // #nosec G101 -- the name of a Secret, not a credential
 	// DNSSecret and EABSecret carry the write-only settings.
-	DNSSecret = "box-acme-dns"
-	EABSecret = "box-acme-eab"
+	DNSSecret = "box-acme-dns" // #nosec G101 -- the name of a Secret, not a credential
+	EABSecret = "box-acme-eab" // #nosec G101 -- the name of a Secret, not a credential
 	// ReadRole is the Role and RoleBinding that let the appliance's service
 	// account (internal/kubeapi) read the issued pair and the Certificate,
 	// and nothing else.
