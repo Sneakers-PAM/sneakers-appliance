@@ -142,7 +142,8 @@ printf 'v1.21.2 %s\n' "$sum" > "$work/sums"
 if RELEASE="$work/release-no-solver.yaml" UPSTREAM="$work/upstream.yaml" SUMS="$work/sums" OUT="$work/out4" bash "$here/render.sh" 2>"$work/err"; then fail "a release without the acmesolver pin was accepted"; fi
 grep -q 'acmesolver' "$work/err" || fail "the refusal doesn't name the acmesolver: $(cat "$work/err")"
 
-# A non-empty OUT is refused.
-mkdir -p "$work/full" && touch "$work/full/x"
+# A stack folder that has something in it is refused, other stacks beside it aren't.
+mkdir -p "$work/full/cert-manager" "$work/other/edge" && touch "$work/full/cert-manager/x" "$work/other/edge/edge.yaml"
+run "$work/other" >/dev/null || fail "another stack beside it was refused"
 if run "$work/full" 2>/dev/null; then fail "a non-empty OUT was accepted"; fi
 echo "render_test: ok"

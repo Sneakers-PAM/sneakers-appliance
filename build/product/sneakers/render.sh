@@ -19,6 +19,7 @@
 #                                       the migrate service account, applied
 #                                       while an import is open (import-stack.yaml,
 #                                       docs/import.md)
+#   OUT/cert-manager/cert-manager.yaml  cert-manager, always on (build/product/cert-manager)
 #   OUT/edge/edge.yaml                  the interim edge on 443 (build/lab/stacks/edge)
 #
 # The main stack lists the migrate caller in the vault and audit and admits
@@ -83,6 +84,9 @@ go run "$root/build/tools/stack" --release "$RELEASE" --product-yaml "$here/prod
   --data /var/lib/sneakers-data --wait-job migrate
 mkdir -p "$OUT/sneakers-import"
 install -m 0644 "$here/import-stack.yaml" "$OUT/sneakers-import/sneakers-import.yaml"
+# cert-manager, always on (docs/release.md#the-sneakers-stacks): the upstream
+# manifest at the pinned version, every image by digest.
+RELEASE="$RELEASE" OUT="$OUT" bash "$root/build/product/cert-manager/render.sh"
 mkdir -p "$OUT/edge"
 install -m 0644 "$root/build/lab/stacks/edge/edge.yaml" "$OUT/edge/edge.yaml"
 echo "render: stacks $(cd "$OUT" && echo */ | tr -d /)"

@@ -30,6 +30,7 @@ components:
   - {name: Ory Hydra, image: hydra}
   - {name: Traefik, image: traefik}
   - {name: cert-manager, image: cert-manager-controller}
+  - {name: cert-manager's HTTP-01 solver, image: cert-manager-acmesolver}
   - {name: sneakers-identity, image: sneakers-identity}
   - {name: sneakers-vault, image: sneakers-vault}
   - {name: sneakers-workflow, image: sneakers-workflow}

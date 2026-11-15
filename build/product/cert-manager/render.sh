@@ -13,7 +13,7 @@
 #
 # Inputs (environment):
 #   RELEASE   the release.yaml the images are pinned in
-#   OUT       the stacks directory (empty or missing)
+#   OUT       the stacks directory; its cert-manager folder is empty or missing
 #   UPSTREAM  the upstream cert-manager.yaml (optional; a test's own, else
 #             fetched from the release's GitHub download)
 #   SUMS      the file of "<version> <sha256>" lines (default: upstream.sha256)
@@ -22,7 +22,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${RELEASE:?}" "${OUT:?}"
 sums="${SUMS:-$here/upstream.sha256}"
 fail() { echo "cert-manager: $*" >&2; exit 1; }
-if [ -e "$OUT" ] && [ -n "$(ls -A "$OUT")" ]; then fail "$OUT isn't empty"; fi
+if [ -e "$OUT/cert-manager" ] && [ -n "$(ls -A "$OUT/cert-manager")" ]; then fail "$OUT/cert-manager isn't empty"; fi
 
 # pin NAME FIELD: a field of spec.platform.NAME in release.yaml.
 pin() {
