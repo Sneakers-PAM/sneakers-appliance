@@ -3,6 +3,8 @@
 
 import { expect, type Page } from "@playwright/test";
 
+import { codeIn, waitForMail } from "@/mail";
+
 /** A source of authenticator codes, each from a step the box hasn't seen yet. */
 export type Codes = () => Promise<string>;
 
@@ -187,8 +189,12 @@ export interface Relay {
   port: string;
 }
 
-/** Sets the product's mail relay on the Email page and saves it, which applies the product again. */
-export const setMailRelay = async (page: Page, { ca, from, host, port }: Relay): Promise<void> => {
+/**
+ * Sets the product's mail relay on the Email page and saves it, which applies the product again.
+ * The box saves a relay only after a test email proved it: the test goes to `to`, and the code
+ * from that message is typed back before Save.
+ */
+export const setMailRelay = async (page: Page, { ca, from, host, port }: Relay, to: string): Promise<void> => {
   await openFromSidebar(page, "Email");
   await page.getByLabel("Relay host", { exact: true }).fill(host);
   await page.getByLabel("Port", { exact: true }).fill(port);
@@ -197,6 +203,12 @@ export const setMailRelay = async (page: Page, { ca, from, host, port }: Relay):
   await expect(page.getByRole("switch", { name: "Verify the certificate" })).toBeChecked();
   await page.getByLabel("Relay CA", { exact: true }).fill(ca);
   await expect(page.getByText("Mail and the relay password are sent unencrypted")).toBeHidden();
+  const sent = new Date(Date.now() - 5000);
+  await sendTestEmail(page, to);
+  const code = codeIn(await waitForMail(to, sent));
+  await page.getByLabel("Code from the test email", { exact: true }).fill(code);
+  await page.getByRole("button", { name: "Check code" }).click();
+  await expect(page.getByText("Code accepted: these settings can be saved")).toBeVisible();
   await page.getByRole("button", { name: "Save and apply" }).click();
   await expect(page.getByText("Saved: the product is applied again")).toBeVisible({ timeout: 10 * 60_000 });
   await expect(page.getByText("Relay set", { exact: true })).toBeVisible();
