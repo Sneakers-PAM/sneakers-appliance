@@ -113,6 +113,14 @@ func (s *Store) acmeOK() (bool, string) {
 	return s.o.ACME.Available()
 }
 
+// ACMEPending says whether ACME is set and nothing has been taken from
+// cert-manager yet, so the follower should look often.
+func (s *Store) ACMEPending() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.ACME != nil && s.st.ACME.Applied == ""
+}
+
 // acmeNames are the names the box asks the CA for: its host name.
 func (s *Store) acmeNames(ctx context.Context) ([]string, error) {
 	host, _, err := s.names(ctx)
@@ -219,12 +227,12 @@ func (s *Store) ConfigureACME(ctx context.Context, r ACMERequest) error {
 // RenewACME has cert-manager issue the endpoint's certificate again now.
 func (s *Store) RenewACME(ctx context.Context, endpoint string) error {
 	defer s.change()()
+	if ok, reason := s.acmeOK(); !ok {
+		return codes.New(codes.TLSACMEUnavailable, "%s", reason)
+	}
 	a := s.st.ACME
 	if a == nil || !slices.Contains(a.Endpoints, endpoint) {
 		return codes.New(codes.TLSInvalid, "acme: the %s endpoint isn't using ACME", endpoint)
-	}
-	if ok, reason := s.acmeOK(); !ok {
-		return codes.New(codes.TLSACMEUnavailable, "%s", reason)
 	}
 	names, err := s.acmeNames(ctx)
 	if err != nil {

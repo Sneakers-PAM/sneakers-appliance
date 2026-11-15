@@ -15,6 +15,7 @@ import (
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1/osadminv1connect"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/acme"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/certstore"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 )
@@ -195,12 +196,58 @@ func (h *tlsSvc) noteEndpoint(ctx context.Context, endpoint, id string, ep certs
 	callFrom(ctx).note(endpoint, detail...)
 }
 
-func (h *tlsSvc) SetAcme(context.Context, *connect.Request[osadminv1.SetAcmeRequest]) (*connect.Response[osadminv1.SetAcmeResponse], error) {
-	return nil, codes.New(codes.TLSACMEUnavailable, "ACME through cert-manager isn't available yet; it comes with the product bundle. Upload a certificate or use a CSR instead")
+func (h *tlsSvc) SetAcme(ctx context.Context, r *connect.Request[osadminv1.SetAcmeRequest]) (*connect.Response[osadminv1.SetAcmeResponse], error) {
+	st, err := h.store()
+	if err != nil {
+		return nil, err
+	}
+	m := r.Msg
+	cfg := acme.Config{Issuer: acmeIssuer(m.GetIssuer()), DirectoryURL: m.GetDirectoryUrl(), Email: m.GetEmail(), Challenge: acmeChallenge(m.GetChallenge()),
+		DNSProvider: m.GetDnsProvider(), DNSToken: m.GetDnsToken(), EABKeyID: m.GetEabKeyId(), EABHMACKey: m.GetEabHmacKey()}
+	err = st.ConfigureACME(ctx, certstore.ACMERequest{Config: cfg, EndpointIDs: m.GetEndpointIds()})
+	// The audit entry names the choice, never a token.
+	callFrom(ctx).note("ACME ("+cfg.Issuer+")", "issuer", cfg.Issuer, "challenge", cfg.Challenge, "endpoints", strings.Join(m.GetEndpointIds(), ","))
+	if err != nil {
+		return nil, err
+	}
+	h.s.o.Logger.Info("osadmin: ACME set", log.F("issuer", cfg.Issuer), log.F("challenge", cfg.Challenge), log.F("endpoints", strings.Join(m.GetEndpointIds(), ",")))
+	h.s.lookAtACME(0)
+	return connect.NewResponse(&osadminv1.SetAcmeResponse{}), nil
 }
 
-func (h *tlsSvc) RenewNow(context.Context, *connect.Request[osadminv1.RenewNowRequest]) (*connect.Response[osadminv1.RenewNowResponse], error) {
-	return nil, codes.New(codes.TLSACMEUnavailable, "nothing renews an assigned certificate; ACME renewal comes with the product bundle")
+func (h *tlsSvc) RenewNow(ctx context.Context, r *connect.Request[osadminv1.RenewNowRequest]) (*connect.Response[osadminv1.RenewNowResponse], error) {
+	st, err := h.store()
+	if err != nil {
+		return nil, err
+	}
+	callFrom(ctx).note(r.Msg.GetEndpointId())
+	if err := st.RenewACME(ctx, r.Msg.GetEndpointId()); err != nil {
+		return nil, err
+	}
+	h.s.lookAtACME(0)
+	return connect.NewResponse(&osadminv1.RenewNowResponse{}), nil
+}
+
+func acmeIssuer(i osadminv1.AcmeIssuer) string {
+	switch i {
+	case osadminv1.AcmeIssuer_ACME_ISSUER_LETSENCRYPT_STAGING:
+		return acme.IssuerStaging
+	case osadminv1.AcmeIssuer_ACME_ISSUER_LETSENCRYPT_PRODUCTION:
+		return acme.IssuerProduction
+	case osadminv1.AcmeIssuer_ACME_ISSUER_CUSTOM:
+		return acme.IssuerCustom
+	}
+	return ""
+}
+
+func acmeChallenge(c osadminv1.AcmeChallenge) string {
+	switch c {
+	case osadminv1.AcmeChallenge_ACME_CHALLENGE_HTTP01:
+		return acme.ChallengeHTTP01
+	case osadminv1.AcmeChallenge_ACME_CHALLENGE_DNS01:
+		return acme.ChallengeDNS01
+	}
+	return ""
 }
 
 func keyTypeOf(k osadminv1.KeyType) (certstore.KeyType, error) {
