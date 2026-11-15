@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/productspec"
 )
 
 // docs splits a rendered stack into its YAML documents by kind.
@@ -78,6 +79,31 @@ func TestHTTP01StackNamesTheBoxAndTheEdgesPort80(t *testing.T) {
 	}
 	if _, ok := d["Secret/"+DNSSecret]; ok {
 		t.Fatal("an HTTP-01 stack carries no DNS token")
+	}
+}
+
+func TestTheApplianceMayReadOnlyTheIssuedPairAndTheCertificate(t *testing.T) {
+	b, err := Render(Config{Issuer: IssuerStaging, Email: "ops@example.org", Challenge: ChallengeHTTP01}, []string{"box.example.org"}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := docs(t, b)
+	rules := dig(t, d["Role/"+ReadRole], "rules").([]any)
+	if len(rules) != 2 {
+		t.Fatalf("rules %v", rules)
+	}
+	for _, r := range rules {
+		rule := r.(map[string]any)
+		if verbs := rule["verbs"].([]any); len(verbs) != 1 || verbs[0] != "get" {
+			t.Fatalf("a read-only Role may only get: %v", rule)
+		}
+		if names := rule["resourceNames"].([]any); len(names) != 1 {
+			t.Fatalf("each rule names its one object: %v", rule)
+		}
+	}
+	subj := dig(t, d["RoleBinding/"+ReadRole], "subjects").([]any)[0].(map[string]any)
+	if subj["name"] != productspec.ServiceAccount || subj["namespace"] != productspec.Namespace {
+		t.Fatalf("the binding is for %v", subj)
 	}
 }
 
