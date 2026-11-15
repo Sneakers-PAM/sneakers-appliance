@@ -404,3 +404,46 @@ k() {
 		t.Fatal("the wait report doesn't call realci_gateway after realci_notready")
 	}
 }
+
+// A crash-looping container's report keeps the error message, which Node
+// prints before its stack (a short tail left only the last frames), and
+// the kernel's ext4 lines, so a pod that breaks after a power loss shows
+// whether its files or the volume were damaged.
+func TestTheLabHookKeepsACrashsErrorAndTheKernelsExt4Lines(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := string(b)
+	crashes := regexp.MustCompile(`(?ms)^realci_crashes\(\) \{\n.*?^\}\n`).FindString(hook)
+	ext4 := regexp.MustCompile(`(?ms)^realci_ext4\(\) \{\n.*?^\}\n`).FindString(hook)
+	if crashes == "" || ext4 == "" {
+		t.Fatal("the lab hook has no realci_crashes or realci_ext4 function")
+	}
+	script := "set -u\n" + `say() { echo "lab-hook: $*"; }
+dmesg() { printf '%s\n' "[1.0] EXT4-fs (dm-0): recovery complete" "[2.0] eth0: link up" "[3.0] EXT4-fs error (device dm-0): ext4_find_extent: bad header"; }
+k() {
+  case "$*" in
+    *"get pods"*) printf 'web-0 web\n' ;;
+    *" logs "*) for a in "$@"; do case "$a" in --tail=*) echo "$a" >> "$TAILS" ;; esac; done
+      echo "Error [ERR_MODULE_NOT_FOUND]: Cannot find module"; i=1; while [ "$i" -le 20 ]; do echo "    at frame$i"; i=$((i+1)); done; echo "Node.js v24" ;;
+  esac
+}
+` + crashes + ext4 + "realci_crashes\nrealci_ext4\n"
+	dir := t.TempDir()
+	cmd := exec.Command("sh", "-c", script) // #nosec G204 -- the repo's own script
+	cmd.Env = append(os.Environ(), "TAILS="+dir+"/tails")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("crashes: %v: %s", err, out)
+	}
+	if !strings.Contains(string(out), "crash web-0/web: Error [ERR_MODULE_NOT_FOUND]") {
+		t.Fatalf("the crash line lost the error message: %s", out)
+	}
+	if tails, _ := os.ReadFile(dir + "/tails"); strings.TrimSpace(string(tails)) != "--tail=40" {
+		t.Fatalf("the crash's log tail is %q; want --tail=40, long enough to reach Node's error line", tails)
+	}
+	if !strings.Contains(string(out), "realci: ext4 [1.0] EXT4-fs (dm-0): recovery complete") || !strings.Contains(string(out), "ext4_find_extent: bad header") || strings.Contains(string(out), "eth0") {
+		t.Fatalf("the ext4 lines: %s", out)
+	}
+}
