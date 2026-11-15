@@ -88,6 +88,9 @@ func (m *movingProbe) MoveFailed(why string) error {
 	defer m.mu.Unlock()
 	m.failed = append(m.failed, why)
 	m.unsettled = false
+	// The box goes back to the old slot from here, and the old slot is
+	// healthy. The revert starts at once, so this can't wait for the test.
+	m.set(productup.Result{})
 	return nil
 }
 
@@ -185,7 +188,6 @@ func TestAMoveThatFailsReverts(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	p.set(productup.Result{})
 	h := waitHistory(t, alice, "revert")
 	if h.GetOutcome() != "ok" || h.GetVersion() != "0.2.0" || h.GetActor() != "osadmin" {
 		t.Fatalf("revert %+v", h)
