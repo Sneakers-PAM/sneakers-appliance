@@ -18,7 +18,8 @@ On firmware with Secure Boot, the `enrol` phase opens with one console screen:
   upgrade. On VMware the screen also asks you to remove `uefi.allowAuthBypass`.
 
 The choice is kept on the ESP (`loader/sneakers/secure-boot`) until first boot fixes it in the
-LUKS2 header; after that it changes only through the :8443 setting.
+LUKS2 header; after that it changes only through the :8443 setting
+([Changing it later](#changing-it-later)).
 
 ## Enrolment
 
@@ -38,9 +39,19 @@ If Secure Boot is turned on before the keys are enrolled, the firmware refuses t
 returns to its Boot Manager without an error). Turn Secure Boot off again, clear the keys, and boot
 once.
 
+## Changing it later
+
+The setting is `StatusService.SetSecureBoot` on :8443 ([osadmin-api.md](osadmin-api.md)): an owner
+calls it with `on` and the box's host name typed as `confirm_hostname`, after the TOTP step-up, and
+the box reseals its key to match (no reinstall). It is audited as `status.secure-boot.set`. rc.7 has the call
+and the web client's `setSecureBoot`, but **no control on a :8443 page yet**: the Status page doesn't
+offer it, so until that page ships the call is the only way, and the console's and the setup's wording
+about a Status page describes where the control is going, not what rc.7 shows.
+
 ## The mismatch rule
 
 A box set to Secure Boot on whose firmware no longer enforces doesn't start the product. The
 console shows: "Secure Boot is off, but this box is set to use it. Turn it back on in the firmware.
 To run without it, turn it on, sign in to :8443 and turn Secure Boot off there." Pulling the
-firmware setting alone can't move a box to reduced protection.
+firmware setting alone can't move a box to reduced protection. Turning it off there is the call in
+[Changing it later](#changing-it-later).
