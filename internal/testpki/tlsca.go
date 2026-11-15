@@ -25,16 +25,26 @@ type TLSCA struct {
 	rootKey, intKey          *ecdsa.PrivateKey
 }
 
-// NewTLSCA makes a root and an intermediate, valid for a year around now.
+// The CA's validity is fixed, not read from the wall clock. Tests that run on
+// clock.NewFake() (a date in the past) and tests on the real clock use the same
+// CA, so it must cover both: a window of "now minus 30 days" stopped covering
+// the fake clock's date a month after it was set, and failed every run after.
+var (
+	caNotBefore  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	rootNotAfter = time.Date(2056, 1, 1, 0, 0, 0, 0, time.UTC)
+	intNotAfter  = time.Date(2055, 1, 1, 0, 0, 0, 0, time.UTC)
+)
+
+// NewTLSCA makes a root and an intermediate, valid from 2026-01-01 for thirty
+// years, so they are valid on the fake clock and on the real one.
 func NewTLSCA(t testing.TB) *TLSCA {
 	t.Helper()
 	ca := &TLSCA{rootKey: newP256(t), intKey: newP256(t)}
-	now := time.Now()
 	root := &x509.Certificate{
 		SerialNumber:          serial(t),
 		Subject:               pkix.Name{CommonName: "Sneakers-PAM LAB ephemeral NOT FOR PRODUCTION TLS root"},
-		NotBefore:             now.Add(-30 * 24 * time.Hour),
-		NotAfter:              now.Add(365 * 24 * time.Hour),
+		NotBefore:             caNotBefore,
+		NotAfter:              rootNotAfter,
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
@@ -43,8 +53,8 @@ func NewTLSCA(t testing.TB) *TLSCA {
 	inter := &x509.Certificate{
 		SerialNumber:          serial(t),
 		Subject:               pkix.Name{CommonName: "Sneakers-PAM LAB ephemeral NOT FOR PRODUCTION TLS issuing"},
-		NotBefore:             now.Add(-30 * 24 * time.Hour),
-		NotAfter:              now.Add(300 * 24 * time.Hour),
+		NotBefore:             caNotBefore,
+		NotAfter:              intNotAfter,
 		IsCA:                  true,
 		BasicConstraintsValid: true,
 		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
