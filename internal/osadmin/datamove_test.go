@@ -90,7 +90,7 @@ func (m *movingProbe) MoveFailed(why string) error {
 	m.unsettled = false
 	// The box goes back to the old slot from here, and the old slot is
 	// healthy. The revert starts at once, so this can't wait for the test.
-	m.phasedProbe.set(productup.Result{})
+	m.set(productup.Result{})
 	return nil
 }
 
