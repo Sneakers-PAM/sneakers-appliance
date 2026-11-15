@@ -23,6 +23,10 @@ type Shell interface {
 	Run(ctx context.Context, c productspec.DataCluster, argv []string, in io.Reader, out io.Writer) error
 }
 
+// Cluster is where a PostgreSQL cluster is: the descriptor the data move and
+// the backups use for it.
+type Cluster = productspec.DataCluster
+
 // Replica is one PostgreSQL server of the cluster.
 type Replica struct {
 	Name string

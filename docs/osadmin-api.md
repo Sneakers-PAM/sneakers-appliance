@@ -92,6 +92,15 @@ settings and restarts the services phase by phase, answering once that's begun;
 that doesn't answer `TELEMETRY_UNREACHABLE`, a retry with nothing failed `TELEMETRY_RESTART`, and a
 save during an import or another update `UPGRADE_BUSY`.
 
+`ResourcesService` is the product's Resources page ([resources.md](resources.md)): `GetResources`
+answers the settings in force (replicas, storage, the `postgresql.parameters` that differ from the
+defaults, PgBouncer's pool sizes) and what the cluster is doing (each replica's role, health and lag,
+the storage, every parameter the server has with its default and whether a change needs a restart).
+`PreviewResources` checks staged settings and answers each change's before and after, the warnings and
+whether a restart is needed, and changes nothing. A refused setting is `RESOURCES_INVALID`, a cluster
+that can't be read `RESOURCES_UNAVAILABLE`, and a box with no product or a product with no PostgreSQL
+cluster `NOT_AVAILABLE`.
+
 `StatusService.HideProtectionNotice` hides the reduced-protection banner
 (`WARNING_KIND_REDUCED_PROTECTION`) for every admin: any signed-in admin may call it, with no
 step-up or code. The request carries the `protection_reason` the banner was shown for; the box
@@ -202,6 +211,8 @@ same.
 | `ProductService.RemoveBackup` | owner, SSH only | every call | `product.backup.remove-request` |
 | `ProductService.RestoreBackup` | owner, SSH only | every call | `product.backup.restore` |
 | `ProductService.PrepareBackupExport` | owner, SSH only | every call | `product.backup.export-request` |
+| `ResourcesService.GetResources` | admin | no | |
+| `ResourcesService.PreviewResources` | admin | no | |
 | `TelemetryService.GetTelemetry` | admin | no | |
 | `TelemetryService.SetTelemetry` | admin | yes | `product.telemetry.set` |
 | `TelemetryService.RetryTelemetryRestart` | admin | yes | `product.telemetry.restart` |

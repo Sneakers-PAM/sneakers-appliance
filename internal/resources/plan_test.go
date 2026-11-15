@@ -192,3 +192,18 @@ func TestSizesParse(t *testing.T) {
 		t.Errorf("%s %s %s", FormatSize(20*gi), FormatSize(1536<<20), FormatSize(1000))
 	}
 }
+
+func TestPoolsTheBoxCantSayAreLeftAloneWhileTheyAreUnchanged(t *testing.T) {
+	cur := current()
+	cur.Pools = Pools{}
+	st := cur
+	st.Parameters = map[string]string{"work_mem": "8MB"}
+	if _, err := Preview(cur, st, 1); err != nil {
+		t.Fatalf("unknown pools echoed back must not be refused: %v", err)
+	}
+	st.Pools.DefaultPoolSize = 0
+	st.Pools.MaxClientConn = 5
+	if _, err := Preview(cur, st, 1); !codes.Is(err, codes.ResourcesInvalid) {
+		t.Fatalf("a changed pool is checked: %v", err)
+	}
+}

@@ -71,8 +71,12 @@ func Preview(cur, staged Settings, nodes int) (Plan, error) {
 	if staged.StorageBytes < cur.StorageBytes {
 		return p, invalid("storage: it only grows (now %s, asked for %s); a volume can't be shrunk in place", FormatSize(cur.StorageBytes), FormatSize(staged.StorageBytes))
 	}
-	if err := checkPools(staged.Pools); err != nil {
-		return p, err
+	// Pools the box can't say read as zero; echoing them back isn't a change
+	// to check.
+	if staged.Pools != cur.Pools {
+		if err := checkPools(staged.Pools); err != nil {
+			return p, err
+		}
 	}
 	if staged.Replicas > nodes && nodes > 0 {
 		p.Warnings = append(p.Warnings, fmt.Sprintf("replicas: %d is more than the %d node(s) the cluster has, so the extra replicas share a node and add no protection from losing one", staged.Replicas, nodes))

@@ -187,6 +187,10 @@ type Options struct {
 	// EmailCertificate reads the certificate the relay presents, for a pin;
 	// nil is boxsettings.Presented.
 	EmailCertificate func(ctx context.Context, e boxsettings.Email) (boxsettings.RelayCert, error)
+	// Resources reads and checks the installed product's PostgreSQL
+	// settings (docs/resources.md); nil leaves the Resources page with
+	// nothing to show.
+	Resources ResourcesBackend
 	// Telemetry keeps the product's collector settings (boxsettings.Store
 	// on the box); nil leaves the Telemetry page with nothing to set.
 	Telemetry TelemetrySettings
@@ -313,6 +317,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewEmailServiceHandler(&emailSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTelemetryServiceHandler(&telemetrySvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewResourcesServiceHandler(&resourcesSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewImportServiceHandler(&importSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))
