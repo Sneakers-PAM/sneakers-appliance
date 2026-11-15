@@ -176,7 +176,7 @@ func TestEverySetupOnlyMethodIsDocumented(t *testing.T) {
 		}
 		return true
 	})
-	if n != 3 {
-		t.Fatalf("%d setup-only methods: AcknowledgeStep, AcknowledgeSingleAdmin and Finish are", n)
+	if n != 5 {
+		t.Fatalf("%d setup-only methods: AcknowledgeStep, AcknowledgeSingleAdmin, Finish, CheckHostname and SetHostname are", n)
 	}
 }

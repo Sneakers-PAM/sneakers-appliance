@@ -58,11 +58,25 @@ is a closed-shell login's alone, which `sneakers-accessd` runs as that admin: fr
 console it's refused with `ACCESS_FORBIDDEN` and audited, and with `every call` the login gives a
 fresh code at the command on top of the one it signed in with.
 
-Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin` and
-`SetupService.Finish` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
+Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin`,
+`SetupService.Finish`, `SetupService.CheckHostname` and `SetupService.SetHostname` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
 and so is every call made with a setup code's session, so a stepper left open can't go on. The
 refusal is audited under the method's action. The recovery keys and the escrow stay an owner's
 after setup, and invitations and Recover access codes still use the code pages.
+
+The network step's host name (`SetupService.CheckHostname`, then `SetupService.SetHostname`) is
+the step's own and open only while setup stands at it (`SETUP_INCOMPLETE` before it, `SETUP_STEP_DONE`
+once it is acknowledged; the host name is Network's after that). The check asks the box's own DNS
+servers (the settings', else what DHCP and router advertisements gave) and changes nothing; it says
+whether the name points at one of the box's management addresses, at other addresses only
+(`NET_NAME_ELSEWHERE`), nowhere (`NET_NAME_NOT_FOUND`) or can't be looked up (`NET_DNS`). Setting the
+name takes a fresh authenticator code, checks the name again, keeps it at once (there is no confirm
+window), makes the box's own certificate for it and waits until :8443 serves that certificate before
+answering. The answer carries a one-time handoff code, 43 characters, good once for 2 minutes while the
+session that got it lives, and held in osadmin's memory only (a restart forgets it). The page at the
+new name swaps it for a session of its own with `SignInService.RedeemHandoff`; the code travels in the
+URL fragment (`https://<name>:8443/setup#handoff=<code>`), never in a request line, and is never
+written to a log or the audit log. A refused code is `SETUP_HANDOFF`: sign in again.
 
 ### Available in this release
 
@@ -104,6 +118,7 @@ was hidden the detail adds `hidden` `no` and what the box has `now`.
 |---|---|---|---|
 | `SignInService.SignIn` | public | no | `signin.password` |
 | `SignInService.StepUp` | admin | no | `signin.step-up` |
+| `SignInService.RedeemHandoff` | public | no | `signin.handoff.redeem` |
 | `SignInService.BeginSignIn` | public | no | |
 | `SignInService.PollSignIn` | public | no | |
 | `SignInService.GetSession` | admin | no | |
@@ -139,6 +154,8 @@ same.
 | `SetupService.BeginCredentials` | code session | no | `setup.credentials.begin` |
 | `SetupService.CompleteCredentials` | code session | no | `setup.credentials.complete` |
 | `SetupService.AcknowledgeStep` | owner | no | `setup.step.acknowledge` |
+| `SetupService.CheckHostname` | owner | no | `setup.hostname.check` |
+| `SetupService.SetHostname` | owner | every call | `setup.hostname.set` |
 | `SetupService.AddRecoveryKey` | owner | yes | `setup.recovery-key.add` |
 | `SetupService.GenerateRecoveryKey` | owner | yes | `setup.recovery-key.generate` |
 | `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |

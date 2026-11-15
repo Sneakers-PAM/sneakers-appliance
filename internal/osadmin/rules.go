@@ -425,7 +425,7 @@ func toConnect(err error) error {
 	}
 	c := connect.CodeFailedPrecondition
 	switch code {
-	case codes.AccessSession, codes.AccessCredentials:
+	case codes.AccessSession, codes.AccessCredentials, codes.SetupHandoff:
 		c = connect.CodeUnauthenticated
 	case codes.AccessForbidden, codes.AccessStepUpRequired:
 		c = connect.CodePermissionDenied

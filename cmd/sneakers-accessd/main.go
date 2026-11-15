@@ -329,13 +329,22 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		ResetRunningFile: filepath.Join(c.run, productreset.RunningFile),
 		CertDir:          paths.OwnDir(),
 		Certs:            certs,
-		Elevation:        elev,
-		RootKey:          root,
-		CodeSealer:       accessd.CustodySealer{Client: custody},
-		Lockout:          book,
-		OnFirstAdmin:     func() { go startSSHD() },
-		OnConsoleChange:  d.ConsoleChanged,
-		Shells:           &sshsession.Proc{},
+		// Setup's host name step answers once :8443 serves the certificate
+		// made for the new name.
+		CertProbe: func(ctx context.Context, fingerprint string) error {
+			st, err := netd.Status(ctx, connect.NewRequest(&netdv1.StatusRequest{}))
+			if err != nil {
+				return err
+			}
+			return certstore.HandshakeProbe(ctx, accessd.Bindable(st.Msg.GetManagementAddresses()), "8443", fingerprint)
+		},
+		Elevation:       elev,
+		RootKey:         root,
+		CodeSealer:      accessd.CustodySealer{Client: custody},
+		Lockout:         book,
+		OnFirstAdmin:    func() { go startSSHD() },
+		OnConsoleChange: d.ConsoleChanged,
+		Shells:          &sshsession.Proc{},
 		// The installed product's exposed values, read as the appliance's
 		// own service account (the admin kubeconfig only mints its token).
 		Exposed: &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount},

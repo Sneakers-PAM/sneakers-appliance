@@ -30,6 +30,13 @@ go into every CSR and into the `admin` endpoint's state. A CSR made while the bo
 also names the box's own name (`sneakers-<8 hex>`, the name the console shows), as a DNS SAN and
 its common name.
 
+Setup's network step is where a fresh box gets its host name, before the first certificate
+([osadmin-api.md](osadmin-api.md)): the owner types the fully qualified name, the box looks it up
+through its own DNS servers and says whether it points at a management address, and setting it
+(with a fresh authenticator code) keeps it at once, makes the box's own certificate for it and
+waits until :8443 serves that certificate. A wildcard for the box's domain is accepted from then on.
+After setup, the host name is Network's.
+
 A management address here is the bare address (`192.0.2.10`), never the interface prefix netd
 reports (`192.0.2.10/24`), and link-local addresses are left out. That's what a CSR names, what the
 names check and Revert compare and what the :8443 check below connects to.

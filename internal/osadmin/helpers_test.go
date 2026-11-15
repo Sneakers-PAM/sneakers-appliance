@@ -902,3 +902,8 @@ func (m *memSealer) Unseal(name string) ([]byte, bool, error) {
 	b, ok := m.items[name]
 	return slices.Clone(b), ok, nil
 }
+
+// tlsServer is a test server that speaks TLS.
+type tlsServer = httptest.Server
+
+func startTLS(h http.Handler) *tlsServer { return httptest.NewTLSServer(h) }

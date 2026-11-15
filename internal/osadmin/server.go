@@ -127,6 +127,13 @@ type Options struct {
 	// Certs is the certificate store behind TlsService; nil answers Not
 	// available.
 	Certs *certstore.Store
+	// CertProbe waits until :8443 serves the certificate with this
+	// fingerprint; setup's host name step answers only after it does. Nil
+	// skips the wait.
+	CertProbe func(ctx context.Context, fingerprint string) error
+	// Resolver looks a host name up through the box's own DNS servers for
+	// setup's host name check; nil asks netd.
+	Resolver HostResolver
 	// Upgrade configures the update flows.
 	Upgrade UpgradeOptions
 	// Elevation is the root shells; nil answers Not available.
@@ -246,6 +253,9 @@ type Server struct {
 		timer clock.Timer
 	}
 	certFollow certFollower
+	// handoffs are the one-time codes setup's host name step hands the
+	// page, in memory only.
+	handoffs handoffStore
 	// mcpFailed is why the last switch-on wasn't ready within its bound,
 	// shown until the product is ready or the switch is set again.
 	mcpFailed struct {
