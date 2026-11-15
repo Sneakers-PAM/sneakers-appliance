@@ -29,7 +29,8 @@
 # read-only but for the Ingress status; the provider watches the sneakers
 # namespace only. Every router on 443 terminates TLS, so an Ingress without
 # a tls block gets box-tls too; the hello route has the lowest priority, so
-# a product Ingress for / wins.
+# a product Ingress for / wins. Port 80 redirects to https except for the
+# ACME HTTP-01 solver's Ingress (see the http-to-https router).
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -96,6 +97,16 @@ data:
           entryPoints: [websecure]
           service: box
           tls: {}
+        # Port 80 sends everything to https, as the lowest priority router
+        # rather than an entry point redirect, so the Ingress cert-manager
+        # makes for an ACME HTTP-01 challenge (in the product namespace,
+        # entry point web) outranks it and answers the CA on 80.
+        http-to-https:
+          rule: PathPrefix(`/`)
+          priority: 1
+          entryPoints: [web]
+          middlewares: [to-https]
+          service: noop@internal
         hello:
           rule: PathPrefix(`/`)
           priority: 1
@@ -107,6 +118,10 @@ data:
         box-gate:
           forwardAuth:
             address: http://127.0.0.1:9180/_box/gate
+        to-https:
+          redirectScheme:
+            scheme: https
+            permanent: true
         box-page:
           errors:
             status: ["502-504"]
@@ -169,8 +184,6 @@ spec:
             - traefik
           args:
             - --entryPoints.web.address=:80
-            - --entryPoints.web.http.redirections.entryPoint.to=websecure
-            - --entryPoints.web.http.redirections.entryPoint.scheme=https
             - --entryPoints.websecure.address=:443
             - --entryPoints.websecure.http.tls=true
             - --entryPoints.websecure.http.middlewares=box-gate@file
