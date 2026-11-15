@@ -19,7 +19,7 @@ postgres-ha:
       existingSecret: sneakers-bundled
       passwordKey: rewind-password
   tls:
-    # No cert-manager runs on the box; product.yaml declares this certificate.
+    # The box issues this certificate, not cert-manager; product.yaml declares it.
     certManager:
       enabled: false
     existingSecret: sneakers-pgha-tls

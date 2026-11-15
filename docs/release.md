@@ -218,6 +218,7 @@ cluster, and sneakers-release's `scripts/check-chart-digest.sh` holds the chart 
 | `sneakers-front` | the front phase: the gateway and the two web apps |
 | `sneakers-mcp` | what only the on render has (the MCP server and Hydra), and the `sneakers-mcp-switch` ConfigMap with the gateway and staff web settings the switch changes, which both load (`envFromConfigMaps`, optional); placed with the front phase, before its own stack, while the MCP switch is on |
 | `sneakers-import` | the migrate service account (`build/product/sneakers/import-stack.yaml`), applied while an import is open ([import.md](import.md)) |
+| `cert-manager` | cert-manager, always on: upstream's manifest for the version `release.yaml` pins, with every image by digest and never pulled (`build/product/cert-manager`). `box-acme`, the Issuer and Certificate an ACME setup adds, is written by the box, not the bundle ([certificates.md](certificates.md#acme)) |
 | `edge` | the interim edge on 443 (`build/lab/stacks/edge`) |
 
 Each workload goes in its phase's own stack (`product.yaml` `phases`, below), labelled
@@ -469,8 +470,9 @@ box_secrets:
 
 A key is either generated (`password`, `key32` or `token`) or a `value`, which may name generated
 keys as `{key}` (the same Secret's) or `{secret/key}` (another box secret's in the same namespace).
-A Secret can hold a **certificate** instead of keys. No cert-manager runs on the box, so the box
-issues the certificate for a workload inside it, with `tls.crt`, `tls.key` and `ca.crt`:
+A Secret can hold a **certificate** instead of keys. cert-manager on the box is for the box's own
+ACME certificate ([certificates.md](certificates.md#acme)); the box issues the certificate for a
+workload inside it itself, with `tls.crt`, `tls.key` and `ca.crt`:
 
 ```yaml
   - secret: sneakers/sneakers-pgha-tls

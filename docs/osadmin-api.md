@@ -282,8 +282,10 @@ carries every check as a `ValidationReport` detail, and nothing is stored. `Assi
 :8443 serve a store certificate without a restart, checks it with a handshake to each management
 address, and answers `TLS_NOT_SERVED` with the previous certificate back in place if it isn't served
 within 15 seconds. `RevertToSelfSigned` puts the box's own certificate back. `DeleteCertificate` is
-refused while an endpoint uses the certificate. `SetAcme` and `RenewNow` answer
-`TLS_ACME_UNAVAILABLE` until the product bundle brings cert-manager. The earlier `GetTls`,
+refused while an endpoint uses the certificate. `SetAcme` writes the ACME stack for the endpoints it names and returns; `RenewNow` has cert-manager issue
+again. Both answer `TLS_ACME_UNAVAILABLE` where cert-manager can't run
+([certificates.md](certificates.md#acme)). The ACME audit entries are `tls.acme.set`, `tls.acme.issue`,
+`tls.acme.renew` and `tls.acme.fail`. The earlier `GetTls`,
 `CreateCsr`, `UploadCertificate` and `SetAdminCertificate` stay Not available; the store methods
 replace them. Every change's audit entry records the method, the store id, the fingerprint, the SANs
 and the expiry.

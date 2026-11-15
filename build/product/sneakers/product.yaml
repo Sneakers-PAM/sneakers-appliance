@@ -142,8 +142,8 @@ box_secrets:
       - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-pgha-primary:5432/sneakers_hydra?sslmode=require"}
       - {key: secretsSystem, generate: password}
       - {key: secretsCookie, generate: password}
-  # The new database cluster's TLS: no cert-manager runs on the box, so the
-  # box issues and renews it (docs/release.md#productyaml). The services
+  # The new database cluster's TLS: the box issues and renews it itself, not
+  # through cert-manager (docs/release.md#productyaml). The services
   # connect with sslmode=require.
   - secret: sneakers/sneakers-pgha-tls
     certificate:
