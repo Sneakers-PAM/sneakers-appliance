@@ -122,6 +122,7 @@ f="$out/cert-manager/cert-manager.yaml"
 for want in "cert-manager-controller@$d_ctl" "cert-manager-webhook@$d_web" "cert-manager-cainjector@$d_inj" "--acme-http01-solver-image=quay.io/jetstack/cert-manager-acmesolver@$d_sol"; do
   grep -qF -- "$want" "$f" || fail "the stack doesn't carry $want"
 done
+grep -h '^ *image: ' "$f" | grep -vq '^ *image: [^"]*@sha256:[0-9a-f]\{64\}$' && fail "an image field isn't a bare name@digest: $(grep -h '^ *image: ' "$f" | head -1)"
 if grep -E 'quay.io/jetstack/[a-z-]+:v' "$f"; then fail "an image is still named by tag"; fi
 if grep -q 'IfNotPresent\|imagePullPolicy: Always' "$f"; then fail "an image may still be pulled"; fi
 [ "$(grep -c 'imagePullPolicy: Never' "$f")" = 3 ] || fail "every container must never pull"

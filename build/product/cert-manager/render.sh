@@ -70,6 +70,8 @@ for i in "${images[@]}"; do
 done
 rm -f "$out.bak"
 sed -i.bak 's/imagePullPolicy: IfNotPresent/imagePullPolicy: Never/' "$out" && rm -f "$out.bak"
+# Upstream quotes its image fields; the bundle's checks read them bare.
+sed -i.bak -E 's#^( *image: )"([^"]*)"$#\1\2#' "$out" && rm -f "$out.bak"
 if grep -nE "quay.io/jetstack/[a-z-]+:v[0-9]" "$out"; then fail "an image is still named by tag"; fi
 grep -qF -- "--acme-http01-solver-image=${repo[acmesolver]}@${dig[acmesolver]}" "$out" || fail "the controller doesn't start solvers from the pinned acmesolver"
 
