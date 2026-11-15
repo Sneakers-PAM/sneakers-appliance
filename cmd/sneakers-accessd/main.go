@@ -47,6 +47,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accessd"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/accounts"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/acmebox"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxname"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsecrets"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/boxsettings"
@@ -233,6 +234,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	if perr != nil {
 		lg.Error(perr, "accessd: this build carries no release pins; updates can't be verified, so none will stage")
 	}
+	// The appliance's own read-only service account in the cluster: the
+	// product's exposed values, and what cert-manager has issued.
+	kube := &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount}
 	// The certificate store: keys sealed through KeyCustody, :8443's files
 	// handed to the osadmin user (docs/certificates.md).
 	certs, err := certstore.Open(certstore.Options{
@@ -249,6 +253,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// The Product (443) endpoint: the box-tls Secret k0s applies, which
 		// the edge reloads live.
 		Product: &productedge.Edge{Slot: elevated.DefaultProduct, Dir: filepath.Join(c.state, "platform", "tls"), AdminDir: paths.OwnDir(), Manifests: "/var/lib/k0s/manifests"},
+		// ACME: the product bundle's cert-manager, driven through k0s's
+		// manifests (docs/certificates.md#acme).
+		ACME: &acmebox.Box{Slot: elevated.DefaultProduct, Manifests: "/var/lib/k0s/manifests", Kube: kube},
 		// edgefall answers 443 while k0s is down, from its own copy.
 		Fallback: func() error {
 			return edgefall.Prepare(paths.OwnDir(), edgefall.TLSDir, accounts.EdgefallUID, accounts.EdgefallUID)
@@ -347,7 +354,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Shells:          &sshsession.Proc{},
 		// The installed product's exposed values, read as the appliance's
 		// own service account (the admin kubeconfig only mints its token).
-		Exposed: &kubeapi.Client{Kubeconfig: elevated.DefaultKubeconfig, Namespace: productspec.Namespace, ServiceAccount: productspec.ServiceAccount},
+		Exposed: kube,
 		// The box's FQDN the product's stacks take in place of the bundle's
 		// placeholder (docs/network.md#the-host-name).
 		BoxValues: &boxvalues.Box{
@@ -393,6 +400,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 	// the names (osadmin.FollowCerts); both look once at start as well.
 	go api.HostNameChanged(ctx)
 	go api.FollowCerts(ctx)
+	go api.FollowACME(ctx)
 	go watchNames(ctx, netdapi.NewClient(c.netdSock), lg, func() {
 		d.Rerender()
 		go api.HostNameChanged(ctx)
@@ -448,6 +456,7 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			api.UpgradeWindowTick(ctx)
 			api.RebootWatchdog()
 			go api.FollowCerts(ctx)
+			go api.FollowACME(ctx)
 			if !portsOpen {
 				portsOpen = api.OpenProductPorts(ctx) == nil
 			}
