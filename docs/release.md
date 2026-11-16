@@ -425,7 +425,21 @@ settings at install, update and revert without a rebuilt bundle:
 ```yaml
 resources:
   chart: postgres-ha    # the release.yaml spec.thirdParty entry whose chart the bundle carries
+  phase: data           # the phase whose stack holds the cluster; its workloads are the chart's
+  release: sneakers-pgha # the helm release name: it makes the selector labels, so it is the cluster's
+  namespace: sneakers   # the product's namespace
+  data: /var/lib/sneakers-data   # the directory the volumes' hostPaths go under
+  wait_job: migrate     # optional: the spec.jobs image whose wait command the workloads' init containers run
+  values: {}            # the chart's values, as in a values file
 ```
+
+When the box stages the bundle (and so on install, update and reinstall; a revert keeps the render the
+previous slot already has), it renders that chart with the slot's own `helm template`, converts the render
+as the build does a product's charts (images by digest, hostPaths for volumes, box secrets only, workloads
+labelled with the phase) and writes it as `manifests/<phase's stack>/resources-<chart>.yaml`, beside what the
+bundle put in that stack. A chart that renders a workload the phase doesn't name, a Secret that isn't a
+box secret, or fails in helm refuses the bundle. `phase`, `release`, `namespace` and `data` are required; a
+bundle with a `resources` section must carry `helm`.
 
 `release.yaml` pins that chart (`chart.name`, `chart.version`, `chart.repository` and `chart.digest`,
 the registry's manifest digest). `build/product/build.sh` fetches it by that digest

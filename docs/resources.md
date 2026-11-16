@@ -7,8 +7,10 @@ the one the product's `data_move` targets ([data-move.md](data-move.md)); a box 
 product without one, answers `NOT_AVAILABLE`.
 
 > **What is built.** Reading the cluster and checking a change are in. Saving a change is not: the
-> box doesn't yet keep an overlay on the cluster's chart values or apply one (Sneakers-PAM/sneakers-appliance#537,
-> parts 2 and 3). Until then **the settings in force are read back from the running cluster**: the
+> box doesn't yet keep an overlay on the cluster's chart values or apply one (Sneakers-PAM/sneakers-appliance#537).
+> A product whose `product.yaml` has a `resources` section has its cluster rendered by the box from the chart the
+> bundle carries when the bundle is staged ([release.md](release.md#productyaml)); the overlay and saving are not
+> built. Until then **the settings in force are read back from the running cluster**: the
 > servers connected, the volume's size and the parameters whose value isn't the server's own default.
 > PgBouncer's sizes can't be read that way, so `GetResources` says `pools_known` false and they read as 0;
 > a preview leaves pool sizes alone while they're unchanged.

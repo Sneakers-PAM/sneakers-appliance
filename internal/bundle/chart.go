@@ -38,6 +38,20 @@ type Chart struct {
 	Digest     string `yaml:"digest"`
 }
 
+// ChartFile is the path, in the bundle, of the archive of the chart a
+// product.yaml's resources section names; the bundle check has held it to
+// release.yaml's pin.
+func ChartFile(rel *Release, spec *productspec.Spec) (string, error) {
+	if spec == nil || spec.Resources == nil {
+		return "", errors.New("product.yaml names no resources chart")
+	}
+	pin := rel.Spec.ThirdParty[spec.Resources.Chart].Chart
+	if pin == nil {
+		return "", chartMismatch("the product bundle's resources chart %s isn't pinned in its release.yaml", spec.Resources.Chart)
+	}
+	return path.Join(ProductCharts, pin.Name+"-"+pin.Version+".tgz"), nil
+}
+
 // maxChartFile bounds what the check reads of a chart archive.
 const maxChartFile = 8 << 20
 

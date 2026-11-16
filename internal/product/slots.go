@@ -12,6 +12,7 @@
 package product
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 
+	log "github.com/Bugs5382/go-log"
 	"golang.org/x/mod/semver"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/bundle"
@@ -46,7 +48,14 @@ const (
 var slotNames = []string{"a", "b"}
 
 // Slots are the product slots under Dir.
-type Slots struct{ Dir string }
+type Slots struct {
+	Dir string
+	// Helm renders a product's resources chart as it is staged; nil runs
+	// the slot's own helm.
+	Helm HelmRunner
+	// Logger logs the render; nil logs nothing.
+	Logger log.Logger
+}
 
 // Status is the version each link names; empty when it names none.
 type Status struct {
@@ -126,7 +135,8 @@ func (s Slots) Unstage() (string, error) {
 // version than the installed one never stages (UPGRADE_DOWNGRADE); the
 // installed version itself does, for a reinstall. The
 // unpacked bundle must then check out against its release.yaml and key
-// (bundle.CheckProduct); only then is its header written and staged set.
+// (bundle.CheckProduct) and its resources chart, if it has one, rendered
+// into its phase's stack (RenderResources); only then is its header written and staged set.
 // Staging replaces what that slot held, a previous or an earlier staged
 // bundle.
 func (s Slots) Stage(h updatepkg.Header, fill func(dir string) error, key *ecdsa.PublicKey) error {
@@ -157,6 +167,13 @@ func (s Slots) Stage(h updatepkg.Header, fill func(dir string) error, key *ecdsa
 	err := fill(dir)
 	if err == nil {
 		err = Finish(dir, h.Arch, key)
+	}
+	if err == nil {
+		run := s.Helm
+		if run == nil {
+			run = ExecHelm
+		}
+		err = RenderResources(context.Background(), dir, run, s.Logger)
 	}
 	if err == nil {
 		err = writeHeader(dir, h)
