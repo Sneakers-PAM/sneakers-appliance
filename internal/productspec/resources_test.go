@@ -3,7 +3,10 @@
 
 package productspec
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAProductNamesTheChartItsResourcesRenderFrom(t *testing.T) {
 	s, err := Parse([]byte("format: 2\nresources:\n  chart: postgres-ha\n"))
@@ -25,5 +28,18 @@ func TestABadResourcesSectionIsRefused(t *testing.T) {
 		if _, err := Parse([]byte(y)); err == nil {
 			t.Errorf("%s: parsed", name)
 		}
+	}
+}
+
+// A base before rc.8 refuses a product.yaml with a resources section, so a
+// bundle that has one is never sealed for it.
+func TestAResourcesSectionNeedsTheBaseThatRendersIt(t *testing.T) {
+	s, err := Parse([]byte("format: 2\ntelemetry: {}\nresources:\n  chart: postgres-ha\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	floor, why := s.BaseFloor()
+	if floor != ResourcesMinBase || !strings.Contains(why, "resources") {
+		t.Fatalf("the floor: %q %q", floor, why)
 	}
 }

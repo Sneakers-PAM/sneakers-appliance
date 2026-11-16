@@ -177,7 +177,7 @@ when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
 airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
 and `manifests/<stack>/*.yaml`, the stacks k0s applies (the Sneakers stacks below, the interim edge
 and, in the lab bundle, the hello stack, [k0s.md](k0s.md)), `import/job.yaml` when `product.yaml`
-declares an import, and optionally `brand/`, the product's logo and colours for the box-state
+declares an import, `charts/` when it has a `resources` section (below), and optionally `brand/`, the product's logo and colours for the box-state
 pages ([artifact.md](artifact.md#the-brand)), and optionally `product.yaml` (below). After it
 decrypts and unpacks one, the box checks it like the kit checks a root: only those entries, `k0s` (and `helm`, which it carries if and only if
 `release.yaml` pins it) with the SHA-256 its `release.yaml` pins, exactly the pinned images, each
@@ -398,6 +398,22 @@ bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@`. `build/pro
 takes the template as `IMPORT_JOB` and the pinned migrate image as `MIGRATE_IMAGE` (by digest, and
 pinned in `release.yaml`), and writes `import/job.yaml` into the bundle.
 
+It may also name the chart its database cluster is rendered from, so the box can apply an admin's
+settings at install, update and revert without a rebuilt bundle:
+
+```yaml
+resources:
+  chart: postgres-ha    # the release.yaml spec.thirdParty entry whose chart the bundle carries
+```
+
+`release.yaml` pins that chart (`chart.name`, `chart.version`, `chart.repository` and `chart.digest`,
+the registry's manifest digest). `build/product/build.sh` fetches it by that digest
+(`build/tools/chartpull`) into `charts/<name>-<version>.tgz` and `charts/<name>-<version>.manifest.json`,
+and the bundle check refuses a bundle whose manifest doesn't hash to the pinned digest, whose archive
+isn't the chart layer that manifest names, whose `Chart.yaml` isn't the pinned name and version, that
+holds any other file in `charts/`, or that has `charts/` and no `resources` section. A base older than
+`0.1.0-rc.8` refuses the whole `product.yaml` ([below](#the-base-a-productyaml-needs)).
+
 It may also name the product's **escrow** keys, the Secret keys its data can't be opened without,
 which the box keeps in the recovery escrow ([key-custody.md](key-custody.md#product-keys)):
 
@@ -566,6 +582,7 @@ result says to update the base first. Nothing is applied, and the product keeps 
 | Section | Oldest base |
 |---|---|
 | `telemetry` | `0.1.0-rc.7` |
+| `resources` | `0.1.0-rc.8` |
 
 Lab bundles aren't checked: a lab base's version doesn't sort against a release's. A release packs
 its product for its own version and newer, which is always at or above the table.
