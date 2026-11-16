@@ -252,6 +252,16 @@ realci_notready() {
       say "realci: notready $p events: $(k -n sneakers get events --field-selector "involvedObject.name=$p" --sort-by=.lastTimestamp -o jsonpath='{range .items[*]}{.reason} {.message}{"; "}{end}' 2>/dev/null | tail -c 3000)"
     done
 }
+# realci_gateway: the gateway's side of a pod that stays not Ready because
+# the gateway is unreachable (#596): its pods' readiness, restarts and how
+# the last run ended, whether its Service has endpoints, and the node's
+# conditions and events (a kubelet restart or a changed sandbox shows there).
+realci_gateway() {
+  say "realci: gateway pods: $(k -n sneakers get pods -l app.kubernetes.io/name=sneakers-gateway -o jsonpath='{range .items[*]}{.metadata.name} ready={.status.conditions[?(@.type=="Ready")].status} restarts={.status.containerStatuses[*].restartCount} last={.status.containerStatuses[*].lastState.terminated.reason}/{.status.containerStatuses[*].lastState.terminated.exitCode}{"; "}{end}' 2>/dev/null)"
+  say "realci: gateway endpoints: $(k -n sneakers get endpoints sneakers-gateway -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)"
+  say "realci: node conditions: $(k get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {end}' 2>/dev/null)"
+  say "realci: node events: $(k get events --all-namespaces --field-selector involvedObject.kind=Node --sort-by=.lastTimestamp -o jsonpath='{range .items[*]}{.reason} {.message}{"; "}{end}' 2>/dev/null | tail -c 2000)"
+}
 box_state() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'
 }
@@ -322,6 +332,7 @@ realci() {
         realci_waits
         realci_crashes
         realci_notready
+        realci_gateway
         realci_rows "$v" waiting
         ticks=""
       fi

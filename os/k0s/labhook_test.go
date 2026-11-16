@@ -363,3 +363,44 @@ k() {
 		t.Fatal("the wait report doesn't call realci_notready after realci_crashes")
 	}
 }
+
+// A pod that stays not Ready because a dependency is unreachable needs the
+// dependency's side too (#596): the gateway pods' restarts and how their last
+// run ended, whether its Service has endpoints, and the node's conditions and
+// events (a kubelet or sandbox change shows there). It runs after
+// realci_notready at the wait timeout.
+func TestTheLabHookReportsTheGatewaySide(t *testing.T) {
+	b, err := os.ReadFile(labHook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fn := regexp.MustCompile(`(?ms)^realci_gateway\(\) \{[^\n]*\n.*?^\}\n`).FindString(string(b))
+	if fn == "" {
+		t.Fatal("the lab hook has no realci_gateway function")
+	}
+	stub := `say() { echo "lab-hook: $*"; }
+k() {
+  case "$*" in
+    *"get pods -l app.kubernetes.io/name=sneakers-gateway"*) echo "gw-1 ready=True restarts=2 last=Error/1" ;;
+    *"get endpoints sneakers-gateway"*) echo "192.0.2.9" ;;
+    *"get nodes"*) echo "Ready=True MemoryPressure=False DiskPressure=False PIDPressure=False" ;;
+    *"get events"*"involvedObject.kind=Node"*) echo "Starting kubelet; NodeReady" ;;
+    *) echo "unexpected k $*" >&2; return 1 ;;
+  esac
+}
+`
+	out, err := exec.Command("sh", "-c", stub+fn+"\nrealci_gateway\n").CombinedOutput() // #nosec G204 -- the repo's own script
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	want := "lab-hook: realci: gateway pods: gw-1 ready=True restarts=2 last=Error/1\n" +
+		"lab-hook: realci: gateway endpoints: 192.0.2.9\n" +
+		"lab-hook: realci: node conditions: Ready=True MemoryPressure=False DiskPressure=False PIDPressure=False\n" +
+		"lab-hook: realci: node events: Starting kubelet; NodeReady\n"
+	if string(out) != want {
+		t.Fatalf("the hook printed\n%s\nwant\n%s", out, want)
+	}
+	if !strings.Contains(string(b), "realci_notready\n        realci_gateway\n") {
+		t.Fatal("the wait report doesn't call realci_gateway after realci_notready")
+	}
+}
