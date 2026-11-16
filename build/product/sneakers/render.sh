@@ -5,9 +5,9 @@
 # render.sh: the Sneakers product bundle's stacks, rendered from
 # sneakers-release's charts/sneakers, the same way for every channel: two
 # helm renders (the MCP switch off and on) over the small-box example with
-# values.yaml, turned into k0s stacks by build/tools/stack, plus the edge.
-# The helm-postgres-ha cluster is not in them: the box renders it from the
-# chart the bundle carries when it stages the bundle (product.yaml resources).
+# values.yaml and values-postgres-ha.yaml, which turns on the umbrella's
+# helm-postgres-ha dependency beside the old cluster, turned into k0s stacks by
+# build/tools/stack, plus the edge.
 # Pass OUT to build/product/build.sh as STACKS, with product.yaml as
 # PRODUCT_YAML.
 #
@@ -68,7 +68,7 @@ echo "render: charts from $(git -C "$CHARTS" rev-parse HEAD 2>/dev/null || echo 
 PATH="$work/bin:$PATH" bash "$work/release/scripts/build-deps.sh" >/dev/null
 # The cluster the data move goes to is the chart release.yaml pins by digest.
 PGHA_CHART="$(echo "$chart"/charts/postgres-ha-*.tgz)" HELM="$helm" bash "$CHARTS/scripts/check-chart-digest.sh"
-values=(-f "$chart/examples/values-small-box.yaml" -f "$CHARTS/migrate/deploy/migrate-callers-values.yaml" -f "$here/values.yaml")
+values=(-f "$chart/examples/values-small-box.yaml" -f "$CHARTS/migrate/deploy/migrate-callers-values.yaml" -f "$here/values.yaml" -f "$here/values-postgres-ha.yaml")
 [ -z "${EXTRA_VALUES:-}" ] || values+=(-f "$EXTRA_VALUES")
 # The product's own version for its About: the release's.
 product_version="$(go run "$root/build/tools/bundle" version --release "$RELEASE")"

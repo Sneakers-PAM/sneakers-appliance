@@ -1,10 +1,9 @@
 # Copyright 2026 The Sneakers-PAM Authors
 # SPDX-License-Identifier: Apache-2.0
 #
-# The umbrella's postgres-ha dependency beside the old cluster, for the
-# rehearsals that install the umbrella (test/datamove, test/backups), and the
-# reference render_test.sh holds product.yaml's resources values to: the box
-# renders its cluster from those values, not from this file.
+# The box's sneakers-pgha, the umbrella's postgres-ha dependency beside the old
+# cluster (product.yaml data_move), layered over the umbrella's values and its
+# small-box example by render.sh.
 postgres-ha:
   enabled: true
   postgresql:
