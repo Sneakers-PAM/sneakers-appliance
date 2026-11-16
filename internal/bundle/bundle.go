@@ -109,6 +109,9 @@ type Image struct {
 	// Build is a service image's source, which the release builds it
 	// from; nil for an image the release pulls.
 	Build *Build `yaml:"build"`
+	// Chart is the helm chart a third-party entry installs by, when the
+	// release pins one (chart.go).
+	Chart *Chart `yaml:"chart"`
 }
 
 var digestRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
@@ -328,7 +331,7 @@ func CheckProduct(fsys fs.FS, arch string, key *ecdsa.PublicKey) (*Release, erro
 	}
 	for _, e := range top {
 		switch e.Name() {
-		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec, ProductImport, ProductDataMove:
+		case ProductRelease, ProductK0s, ProductHelm, ProductImages, ProductManifests, ProductBrand, ProductSpec, ProductImport, ProductDataMove, ProductCharts:
 		default:
 			return nil, codes.New(codes.KitBundleMismatch, "the product bundle holds %s, which it never carries", e.Name())
 		}
@@ -384,13 +387,16 @@ func checkSpec(fsys fs.FS, rel *Release) error {
 	}
 	b, err := fs.ReadFile(fsys, ProductSpec)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return checkCharts(fsys, rel, nil)
 	}
 	if err != nil {
 		return codes.New(codes.KitBundleMismatch, "product.yaml can't be read: %v", err)
 	}
 	spec, err := productspec.Parse(b)
 	if err != nil {
+		return err
+	}
+	if err := checkCharts(fsys, rel, &spec); err != nil {
 		return err
 	}
 	images, err := rel.Images()

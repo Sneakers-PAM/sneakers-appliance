@@ -126,6 +126,9 @@ type Spec struct {
 	// Support are the sections the product adds to the box's support
 	// bundle (support.go, docs/support-bundle.md).
 	Support []Support `yaml:"support"`
+	// Resources, when set, is the database cluster the box renders from a
+	// chart the bundle carries (resources.go).
+	Resources *Resources `yaml:"resources"`
 }
 
 // Ready is product.yaml's ready section.
@@ -633,6 +636,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkSupport(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkResources(); err != nil {
 		return Spec{}, err
 	}
 	return s, nil
