@@ -32,6 +32,8 @@
 #   PRODUCT_YAML the product's product.yaml (bundle format v2, optional;
 #                docs/release.md#productyaml), such as
 #                build/product/sneakers/product.yaml
+#                (a resources section also puts the chart release.yaml pins
+#                for it at charts/, fetched by digest: build/tools/chartpull)
 #   IMPORT_JOB   the product's import Job template (optional;
 #                docs/import.md), such as build/product/sneakers/import-job.yaml,
 #                put at import/job.yaml with @MIGRATE_IMAGE@ filled
@@ -88,6 +90,8 @@ fi
 if [ -n "${PRODUCT_YAML:-}" ]; then
   install -m 0644 "$PRODUCT_YAML" "$tree/product.yaml"
   echo "product: product.yaml from $PRODUCT_YAML"
+  # The chart its resources section names, by the digest release.yaml pins.
+  go run "$root/build/tools/chartpull" "$RELEASE" "$PRODUCT_YAML" "$tree/charts"
 fi
 
 if [ -n "${IMPORT_JOB:-}" ]; then

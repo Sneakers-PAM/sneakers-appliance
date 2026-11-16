@@ -196,10 +196,17 @@ func (s Spec) ReadsTelemetry() bool { return s.Telemetry != nil }
 // product.yaml, so a bundle that has one is sealed for this base or newer.
 const TelemetryMinBase = "0.1.0-rc.7"
 
+// ResourcesMinBase is the first base release that reads a product.yaml's
+// resources section; an older base refuses the whole product.yaml.
+const ResourcesMinBase = "0.1.0-rc.8"
+
 // BaseFloor is the oldest base release that can apply the product, and
 // why, from the sections it uses; "" when any base that reads format 2
 // can.
 func (s Spec) BaseFloor() (version, why string) {
+	if s.Resources != nil {
+		return ResourcesMinBase, "it has resources the box renders from a bundled chart"
+	}
 	if s.ReadsTelemetry() {
 		return TelemetryMinBase, "it reads the box's telemetry settings"
 	}
