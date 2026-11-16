@@ -25,7 +25,7 @@ const (
 	chartMedia  = "application/vnd.cncf.helm.chart.content.v1.tar+gzip"
 	chartTGZ    = "charts/valkey-1.0.2.tgz"
 	chartManif  = "charts/valkey-1.0.2.manifest.json"
-	chartSpec   = "format: 2\nresources:\n  chart: valkey\n"
+	chartSpec   = "format: 2\nphases:\n  - {name: data, label: The database, stack: data, workloads: [db]}\nresources:\n  chart: valkey\n  phase: data\n  release: db\n  namespace: sneakers\n  data: /var/lib/x\n"
 	chartRepo   = "oci://example.org/charts"
 	chartPinned = "valkey"
 )
@@ -98,6 +98,7 @@ func withChart(t *testing.T, edit func(fstest.MapFS)) func(fstest.MapFS) {
 		man := chartManifest(t, tgz)
 		pinChart(t, m, "1.0.2", sum(man))
 		m["product.yaml"] = &fstest.MapFile{Data: []byte(chartSpec), Mode: 0o644}
+		m["manifests/data/db.yaml"] = &fstest.MapFile{Data: []byte("apiVersion: v1\nkind: ConfigMap\nmetadata: {name: db}\n"), Mode: 0o644}
 		m[chartTGZ] = &fstest.MapFile{Data: tgz, Mode: 0o644}
 		m[chartManif] = &fstest.MapFile{Data: man, Mode: 0o644}
 		if edit != nil {
@@ -145,7 +146,7 @@ func TestABundleRefusesAChartThatIsNotTheOneReleaseYamlPins(t *testing.T) {
 			pinChart(t, m, "1.0.2", sum(m[chartManif].Data))
 		}, "Chart.yaml"},
 		"a chart release.yaml doesn't pin": {func(m fstest.MapFS) {
-			m["product.yaml"] = &fstest.MapFile{Data: []byte("format: 2\nresources:\n  chart: nosuch\n")}
+			m["product.yaml"] = &fstest.MapFile{Data: []byte("format: 2\nphases:\n  - {name: data, label: The database, stack: data, workloads: [db]}\nresources:\n  chart: nosuch\n  phase: data\n  release: db\n  namespace: sneakers\n  data: /var/lib/x\n")}
 		}, "nosuch"},
 		"a stray file": {func(m fstest.MapFS) { m["charts/notes.txt"] = &fstest.MapFile{Data: []byte("x")} }, "notes.txt"},
 		"charts with no resources": {func(m fstest.MapFS) {

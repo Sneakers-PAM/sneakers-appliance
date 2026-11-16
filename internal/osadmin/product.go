@@ -94,9 +94,9 @@ func (s *Server) sources(file string) []source {
 
 func (s *Server) slots() product.Slots {
 	if s.o.Upgrade.ProductDir != "" {
-		return product.Slots{Dir: s.o.Upgrade.ProductDir}
+		return product.Slots{Dir: s.o.Upgrade.ProductDir, Logger: s.o.Logger}
 	}
-	return product.Slots{Dir: product.Dir}
+	return product.Slots{Dir: product.Dir, Logger: s.o.Logger}
 }
 
 func (s *Server) arch() string {
