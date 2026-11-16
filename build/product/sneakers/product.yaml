@@ -96,6 +96,21 @@ escrow:
     secret: sneakers/sneakers-box
     key: TOTP_ENC_KEY
 
+# Internal mTLS (the chart's global.internalTLS): cert-manager issues one
+# certificate per service into the Secret sneakers-<service>-tls, which the
+# service's pod mounts whole. The box never makes or reads these; declaring
+# them is what lets the render accept a workload that mounts them.
+issued_secrets:
+  - {secret: sneakers/sneakers-identity-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-vault-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-workflow-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-audit-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-notify-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-connector-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-sshbroker-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-gateway-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-mcp-tls, keys: [tls.crt, tls.key, ca.crt]}
+
 # The box's own host name, never baked into the bundle: the bundle's values
 # set global.host to this placeholder, so every host-dependent setting
 # (Kratos's URLs and return URLs, the WebAuthn relying party, the SSH

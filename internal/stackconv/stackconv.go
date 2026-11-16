@@ -175,6 +175,17 @@ func prepare(o options) (*bundle.Release, map[string]string, productspec.Spec, m
 			box[b.SecretName()][k] = true
 		}
 	}
+	// A Secret something else issues is read like a box secret, key and
+	// all; the box never makes it.
+	for _, is := range spec.IssuedSecrets {
+		if is.Namespace() != o.Namespace {
+			continue
+		}
+		box[is.SecretName()] = map[string]bool{}
+		for _, k := range is.Keys {
+			box[is.SecretName()][k] = true
+		}
+	}
 	o.secretKeys, o.boxMaps = map[string]bool{}, map[string]bool{}
 	for _, b := range spec.BoxSecrets {
 		for _, k := range b.Keys {

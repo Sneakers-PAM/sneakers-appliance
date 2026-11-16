@@ -399,6 +399,20 @@ bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@`. `build/pro
 takes the template as `IMPORT_JOB` and the pinned migrate image as `MIGRATE_IMAGE` (by digest, and
 pinned in `release.yaml`), and writes `import/job.yaml` into the bundle.
 
+It may also name the Secrets something other than the box makes and fills, which its workloads read:
+
+```yaml
+issued_secrets:
+  - secret: sneakers/sneakers-vault-tls   # cert-manager's certificate for the service
+    keys: [tls.crt, tls.key, ca.crt]
+```
+
+The render refuses a workload that reads a Secret product.yaml declares neither as a box secret nor
+here, so a chart's internal mTLS (`global.internalTLS`, [certificates.md](certificates.md#internal-mtls))
+needs each service's `sneakers-<service>-tls` declared. The box never makes or reads these Secrets, the
+bundle carries no value for them, and a Secret both a box secret and issued is refused. A base older
+than `0.1.0-rc.8` refuses the whole `product.yaml` ([below](#the-base-a-productyaml-needs)).
+
 It may also name the chart its database cluster is rendered from, so the box can apply an admin's
 settings at install, update and revert without a rebuilt bundle:
 
@@ -585,6 +599,7 @@ result says to update the base first. Nothing is applied, and the product keeps 
 |---|---|
 | `telemetry` | `0.1.0-rc.7` |
 | `resources` | `0.1.0-rc.8` |
+| `issued_secrets` | `0.1.0-rc.8` |
 
 Lab bundles aren't checked: a lab base's version doesn't sort against a release's. A release packs
 its product for its own version and newer, which is always at or above the table.

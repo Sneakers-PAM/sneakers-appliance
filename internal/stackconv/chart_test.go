@@ -119,3 +119,40 @@ func keys(m map[string]map[string]any) []string {
 	}
 	return k
 }
+
+// A Secret something else issues (cert-manager's service certificates) is
+// read like a box secret, key and all, but the box never makes it.
+func TestRenderAcceptsAWorkloadReadingAnIssuedSecret(t *testing.T) {
+	issued := productYAML + "issued_secrets:\n  - {secret: sneakers/sneakers-audit-tls, keys: [tls.crt, tls.key, ca.crt]}\n" + `phases:
+  - {name: data, label: The database, stack: sneakers-data, workloads: [sneakers-pgha]}
+`
+	mount := func(key string) string {
+		items := ""
+		if key != "" {
+			items = "\n            items: [{key: " + key + ", path: x}]"
+		}
+		return `apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: sneakers-pgha}
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          image: "postgres:18.6@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+          volumeMounts: [{name: mtls, mountPath: /tls}]
+      volumes:
+        - name: mtls
+          secret:
+            secretName: sneakers-audit-tls` + items + "\n"
+	}
+	if _, err := renderChart(t, issued, mount("")); err != nil {
+		t.Fatalf("the whole issued Secret: %v", err)
+	}
+	if _, err := renderChart(t, issued, mount("tls.crt")); err != nil {
+		t.Fatalf("a listed key: %v", err)
+	}
+	if _, err := renderChart(t, productYAML+"phases:\n  - {name: data, label: The database, stack: sneakers-data, workloads: [sneakers-pgha]}\n", mount("")); err == nil || !strings.Contains(err.Error(), "sneakers-audit-tls") {
+		t.Fatalf("an undeclared Secret: %v", err)
+	}
+}
