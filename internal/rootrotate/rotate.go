@@ -143,7 +143,8 @@ func (r *Runner) save(st state) error {
 	if err != nil {
 		return fmt.Errorf("rootrotate: %w", err)
 	}
-	if _, err := f.Write(b); err == nil {
+	_, err = f.Write(b)
+	if err == nil {
 		err = f.Sync()
 	}
 	if cerr := f.Close(); err == nil {
@@ -302,7 +303,7 @@ func (r *Runner) applyAndRestart(ctx context.Context) (time.Time, error) {
 func (r *Runner) wait(ctx context.Context, notBefore time.Time, want string) error {
 	ctx, cancel := context.WithTimeout(ctx, r.Bound)
 	defer cancel()
-	last := "no answer"
+	var last string
 	for {
 		s, err := r.Env.Status(ctx, notBefore)
 		switch {

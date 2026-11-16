@@ -172,7 +172,9 @@ func (h *rootKeySvc) RotateRootKey(ctx context.Context, r *connect.Request[osadm
 	go func() {
 		defer s.rootRotating.Store(false)
 		defer s.endMaintenance()
-		if err := run.Run(context.Background()); err != nil {
+		// The rotation outlives the request that began it, so its context keeps the
+		// request's values and drops its cancellation.
+		if err := run.Run(context.WithoutCancel(ctx)); err != nil {
 			code := "stopped"
 			if errors.Is(err, rootrotate.ErrNotVerified) {
 				code = codes.Describe(codes.New(codes.RootRotationNotVerified, "%s", err.Error()))

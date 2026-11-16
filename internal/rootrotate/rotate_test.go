@@ -300,3 +300,21 @@ func TestTheRotationIsRecordedBeforeTheKeyChanges(t *testing.T) {
 		t.Fatalf("progress %q %v %v", step, active, err)
 	}
 }
+
+// A state file that can't be written is an error, not a rotation that went on
+// without a record.
+func TestAStateFileThatCantBeWrittenStopsTheRotation(t *testing.T) {
+	f := newFake(t)
+	dir := t.TempDir()
+	r := runner(f, dir)
+	r.StateFile = filepath.Join(dir, "missing", "deeper", "rotate.json")
+	if err := os.WriteFile(filepath.Join(dir, "missing"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Run(context.Background()); err == nil {
+		t.Fatal("the rotation went on with no state file")
+	}
+	if f.made != 0 {
+		t.Fatalf("%d keys were made before the state could be kept", f.made)
+	}
+}
