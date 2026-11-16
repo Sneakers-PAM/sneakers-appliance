@@ -104,7 +104,9 @@ func (s *Server) rotationUnfinished() bool {
 		return false
 	}
 	_, _, active, err := s.rootRotateRunner(nil, e, product).Progress()
-	return err == nil && active
+	// A previous key held with no state file is a rotation too: the store
+	// switched keys and the vault hasn't moved.
+	return (err == nil && active) || s.rotationHeld()
 }
 
 // rotationHeld reports whether the product's key is held with a previous
@@ -133,6 +135,8 @@ func (h *rootKeySvc) GetRootKeyRotation(_ context.Context, _ *connect.Request[os
 		res.State, res.Step = "running", step
 	case active:
 		res.State, res.Step, res.Why = "stopped", step, why
+	case s.rotationHeld():
+		res.State, res.Step, res.Why = "stopped", "begin", "the previous key is held and no step is recorded"
 	case s.rootRotateDone.Load():
 		res.State = "done"
 	}
@@ -144,6 +148,9 @@ func (h *rootKeySvc) RotateRootKey(ctx context.Context, r *connect.Request[osadm
 	e, product, ok := s.rotationEntry()
 	if !ok || !s.rotateAvailable() {
 		return nil, codes.New(codes.RootRotationUnavailable, "the installed product can't rotate its vault root key")
+	}
+	if len(s.o.Access.Read().RecoveryKeys) == 0 {
+		return nil, codes.New(codes.SetupIncomplete, "there is no recovery key yet; add one first, so the escrow can carry the new key")
 	}
 	if !s.rootRotating.CompareAndSwap(false, true) {
 		return nil, codes.New(codes.RootRotationUnfinished, "a root key rotation is running")
@@ -159,6 +166,7 @@ func (h *rootKeySvc) RotateRootKey(ctx context.Context, r *connect.Request[osadm
 	s.rootRotateDone.Store(false)
 	env := &rotateEnv{s: s, entry: e, product: product}
 	run := s.rootRotateRunner(env, e, product)
+	env.bound = run.Bound
 	s.holdMaintenance(8*run.Bound + time.Minute)
 	s.o.Logger.Info("osadmin: the vault root key rotation begins", log.F("key", e.Name), log.F("by", c.session.Admin))
 	go func() {
@@ -183,6 +191,8 @@ type rotateEnv struct {
 	s       *Server
 	entry   productspec.EscrowKey
 	product string
+	// bound is how long the vault may take to roll out after a restart.
+	bound time.Duration
 }
 
 func (v *rotateEnv) slot() string { return v.s.slots().Current() }
@@ -224,6 +234,8 @@ func (v *rotateEnv) Apply(ctx context.Context) error {
 // roll out; it returns the time just before the first restart, which every
 // new pod starts after.
 func (v *rotateEnv) Restart(ctx context.Context) (time.Time, error) {
+	ctx, cancel := context.WithTimeout(ctx, v.bound)
+	defer cancel()
 	w := v.s.o.TelemetryWorkloads
 	at := v.s.o.Clock.Now()
 	for _, ref := range v.entry.Restart {
@@ -242,7 +254,7 @@ func (v *rotateEnv) Restart(ctx context.Context) (time.Time, error) {
 			select {
 			case <-ctx.Done():
 				return time.Time{}, fmt.Errorf("%s isn't back: %w", ref, ctx.Err())
-			case <-time.After(time.Second):
+			case <-time.After(v.s.rolloutPoll()):
 			}
 		}
 	}
@@ -285,4 +297,12 @@ func (v *rotateEnv) Audit(event string, names ...string) {
 		d[fmt.Sprintf("item%d", i+1)] = n
 	}
 	v.s.write(osaudit.Entry{Actor: "box", Action: "product.rootkey.rotation", Target: v.entry.Name, Detail: d}, nil)
+}
+
+// rolloutPoll is how often a restarted workload is asked whether it is back.
+func (s *Server) rolloutPoll() time.Duration {
+	if s.o.RootRotatePoll > 0 {
+		return s.o.RootRotatePoll
+	}
+	return time.Second
 }

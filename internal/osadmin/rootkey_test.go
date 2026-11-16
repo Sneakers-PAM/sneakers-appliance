@@ -44,10 +44,12 @@ escrow:
 // with says: verified when it holds a previous key, none when it doesn't.
 type rootKeyBox struct {
 	*box
-	alice  *browser
-	store  *boxsecrets.Store
-	mu     sync.Mutex
-	vault  string // "ok" or "failing"
+	alice *browser
+	store *boxsecrets.Store
+	mu    sync.Mutex
+	vault string // "ok" or "failing"
+	// stuck makes the vault never roll out, as when it stops at start.
+	stuck  bool
 	startd time.Time
 	// restarts counts the vault's restarts.
 	restarts int
@@ -62,6 +64,11 @@ func (r *rootKeyBox) Restart(context.Context, string, string, string) error {
 	return nil
 }
 func (r *rootKeyBox) RolledOut(context.Context, string, string, string) (string, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stuck {
+		return "0 of 1 replicas ready", true, nil
+	}
 	return "", true, nil
 }
 
@@ -96,6 +103,12 @@ func (r *rootKeyBox) ServiceGet(context.Context, string, string, string) ([]byte
 
 func newRootKeyBox(t *testing.T) *rootKeyBox {
 	t.Helper()
+	return newRootKeyBoxWith(t, true)
+}
+
+// newRootKeyBoxWith starts the box, with a recovery key when withKey.
+func newRootKeyBoxWith(t *testing.T, withKey bool) *rootKeyBox {
+	t.Helper()
 	r := &rootKeyBox{vault: "ok"}
 	b := newBox(t, true, func(b *box, o *osadmin.Options) {
 		r.store = &boxsecrets.Store{Dir: filepath.Join(b.state, "platform"), Manifests: filepath.Join(b.state, "k0s-manifests")}
@@ -112,6 +125,9 @@ func newRootKeyBox(t *testing.T) *rootKeyBox {
 	}
 	if err := r.store.Ensure(slot); err != nil {
 		t.Fatal(err)
+	}
+	if !withKey {
+		return r
 	}
 	su := osadminv1connect.NewSetupServiceClient(r.alice.hc, b.ts.URL)
 	if _, err := su.AddRecoveryKey(context.Background(), connect.NewRequest(&osadminv1.AddRecoveryKeyRequest{PublicKey: newKey(t).line, Label: "safe"})); err != nil {
@@ -237,6 +253,65 @@ func TestAProductWithoutAPreviousKeyCantRotate(t *testing.T) {
 	}
 	res, err := c.GetRootKeyRotation(context.Background(), connect.NewRequest(&osadminv1.GetRootKeyRotationRequest{}))
 	if err != nil || res.Msg.GetAvailable() || res.Msg.GetState() != "none" {
+		t.Fatalf("%v %v", res, err)
+	}
+}
+
+// With no recovery key the escrow couldn't carry the new key, so nothing
+// starts and no key changes.
+func TestARootKeyRotationNeedsARecoveryKey(t *testing.T) {
+	r := newRootKeyBoxWith(t, false)
+	slot := filepath.Join(r.state, "product", "current")
+	old, _, _ := r.store.Value(slot, "vault-root-key")
+	if _, err := r.client().RotateRootKey(context.Background(), connect.NewRequest(&osadminv1.RotateRootKeyRequest{})); err == nil {
+		t.Fatal("rotated with no recovery key")
+	}
+	if now, _, _ := r.store.Value(slot, "vault-root-key"); now != old {
+		t.Fatal("the key changed")
+	}
+	if held, _ := r.store.Rotating(slot); held {
+		t.Fatal("a previous key is held")
+	}
+}
+
+// A vault that never rolls out (it stops at start on a bad previous key)
+// stops the rotation at the bound: maintenance ends, nothing is deleted, and
+// a request after it carries on.
+func TestAVaultThatNeverRollsOutStopsTheRotationAtTheBound(t *testing.T) {
+	r := newRootKeyBox(t)
+	slot := filepath.Join(r.state, "product", "current")
+	old, _, _ := r.store.Value(slot, "vault-root-key")
+	r.mu.Lock()
+	r.stuck = true
+	r.mu.Unlock()
+	if _, err := r.client().RotateRootKey(context.Background(), connect.NewRequest(&osadminv1.RotateRootKeyRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	st := r.waitState(t, "stopped")
+	if st.GetStep() != "apply" {
+		t.Fatalf("stopped at %q, want apply", st.GetStep())
+	}
+	if held, _ := r.store.Rotating(slot); !held || r.sealedKey("product-sneakers-vault-root-key") != old || len(r.init.retired) != 0 {
+		t.Fatal("something was deleted or replaced")
+	}
+	r.mu.Lock()
+	r.stuck = false
+	r.mu.Unlock()
+	if _, err := r.client().RotateRootKey(context.Background(), connect.NewRequest(&osadminv1.RotateRootKeyRequest{})); err != nil {
+		t.Fatalf("maintenance or the running flag stayed on: %v", err)
+	}
+	r.waitState(t, "done")
+}
+
+// A previous key held with no step recorded is a rotation that stopped.
+func TestAHeldPreviousKeyIsAnUnfinishedRotation(t *testing.T) {
+	r := newRootKeyBox(t)
+	slot := filepath.Join(r.state, "product", "current")
+	if _, err := r.store.BeginRotation(slot, "vault-root-key"); err != nil {
+		t.Fatal(err)
+	}
+	res, err := r.client().GetRootKeyRotation(context.Background(), connect.NewRequest(&osadminv1.GetRootKeyRotationRequest{}))
+	if err != nil || res.Msg.GetState() != "stopped" {
 		t.Fatalf("%v %v", res, err)
 	}
 }

@@ -49,6 +49,11 @@ func (p *Probe) RootKeyStatus(ctx context.Context, ns, kind, name string, notBef
 							Name  string `json:"name"`
 							Value string `json:"value"`
 						} `json:"env"`
+						EnvFrom []struct {
+							ConfigMapRef *struct {
+								Name string `json:"name"`
+							} `json:"configMapRef"`
+						} `json:"envFrom"`
 					} `json:"containers"`
 				} `json:"spec"`
 			} `json:"template"`
@@ -65,6 +70,22 @@ func (p *Probe) RootKeyStatus(ctx context.Context, ns, kind, name string, notBef
 		for _, e := range c.Env {
 			if e.Name == "HEALTH_PORT" && e.Value != "" {
 				port = e.Value
+			}
+		}
+		// The chart puts HEALTH_PORT in the service's ConfigMap.
+		for _, ef := range c.EnvFrom {
+			if port != "" || ef.ConfigMapRef == nil {
+				continue
+			}
+			cm, err := p.kubectl(ctx, "get", "configmap", ef.ConfigMapRef.Name, "--namespace", ns, "-o", "json")
+			if err != nil {
+				continue
+			}
+			var d struct {
+				Data map[string]string `json:"data"`
+			}
+			if json.Unmarshal(cm, &d) == nil {
+				port = d.Data["HEALTH_PORT"]
 			}
 		}
 		if port == "" && len(c.Ports) > 0 {
@@ -118,12 +139,20 @@ func (p *Probe) RootKeyStatus(ctx context.Context, ns, kind, name string, notBef
 func (p *Probe) askRootKey(ctx context.Context, addr string) (rootrotate.VaultStatus, error) {
 	ctx, cancel := context.WithTimeout(ctx, p.askTimeout())
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+addr+"/grpc.health.v1.Health/Check", bytes.NewReader([]byte(`{"service":""}`)))
+	// The vault's health check is gRPC (grpc.health.v1.Health/Check, no
+	// service), on a port without TLS: HTTP/2 in the clear, one empty message
+	// in gRPC's five-byte frame. The status is in the response's headers.
+	var protos http.Protocols
+	protos.SetUnencryptedHTTP2(true)
+	tr := &http.Transport{Protocols: &protos}
+	defer tr.CloseIdleConnections()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+addr+"/grpc.health.v1.Health/Check", bytes.NewReader(make([]byte, 5)))
 	if err != nil {
 		return rootrotate.VaultStatus{}, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: p.askTimeout()}).Do(req)
+	req.Header.Set("Content-Type", "application/grpc")
+	req.Header.Set("TE", "trailers")
+	resp, err := (&http.Client{Transport: tr, Timeout: p.askTimeout()}).Do(req)
 	if err != nil {
 		return rootrotate.VaultStatus{}, fmt.Errorf("the vault's health port doesn't answer: %w", err)
 	}

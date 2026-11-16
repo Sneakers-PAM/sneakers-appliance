@@ -141,8 +141,10 @@ key that something still needs:
 
 While a rotation is unfinished the sealed copy of the old key is not replaced from the live Secret,
 and anything else that applies the product is refused. **Every escrow file written before step 5 holds
-the old key and no longer opens the vault: destroy the older escrow files and keep the new one.** The
-SSH root key and the TOTP key are not rotated here.
+the old key, which no longer opens the current vault, and the box keeps no copy of it afterwards.**
+Download the new escrow and keep it. Keep an older escrow only as long as a backup of the product's
+data taken before the rotation might still be restored: the vault in such a backup is wrapped under
+the old key. The SSH root key and the TOTP key are not rotated here.
 
 ## Importing an escrow on new hardware
 

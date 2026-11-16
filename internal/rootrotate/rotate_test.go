@@ -283,3 +283,20 @@ type staleFake struct{ *fake }
 func (s *staleFake) Status(ctx context.Context, notBefore time.Time) (rootrotate.VaultStatus, error) {
 	return rootrotate.VaultStatus{State: rootrotate.StateVerified}, errors.New("the pod is older than the restart")
 }
+
+// The state is recorded before the key changes: a run that stops right after
+// Begin leaves a rotation the box knows is unfinished.
+func TestTheRotationIsRecordedBeforeTheKeyChanges(t *testing.T) {
+	f, dir := newFake(t), t.TempDir()
+	f.crashAt = 2 // seal-staging, the call after begin
+	if err := runner(f, dir).Run(context.Background()); !errors.Is(err, errCrash) {
+		t.Fatalf("%v", err)
+	}
+	if f.previous == "" {
+		t.Fatal("the key didn't change; the test checks nothing")
+	}
+	step, _, active, err := runner(f, dir).Progress()
+	if err != nil || !active || step != "begin" {
+		t.Fatalf("progress %q %v %v", step, active, err)
+	}
+}

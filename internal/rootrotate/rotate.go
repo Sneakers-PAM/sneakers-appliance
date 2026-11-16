@@ -179,6 +179,13 @@ func (r *Runner) Run(ctx context.Context) error {
 	for {
 		switch st.Step {
 		case stepBegin:
+			// The state is on disk before the key changes, so a stop anywhere
+			// after the new key is current is a rotation that is unfinished.
+			if !r.Active() {
+				if err := r.save(st); err != nil {
+					return err
+				}
+			}
 			keys, err := r.Env.Begin(ctx)
 			if err != nil {
 				return err
