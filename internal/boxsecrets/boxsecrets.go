@@ -282,6 +282,13 @@ func RenderAll(spec productspec.Spec, values, settings map[string]string) ([]byt
 			}
 			pair(data, k.Key, v)
 		}
+		// A key held through a rotation: the product reads it as the key it is
+		// moving off, for as long as the box keeps it (rotate.go).
+		for _, e := range spec.Escrow {
+			if e.Previous != "" && e.Secret == b.Secret && values[e.Secret+"/"+e.Previous] != "" {
+				pair(data, e.Previous, values[e.Secret+"/"+e.Previous])
+			}
+		}
 		objs = append(objs, object{"Secret", b.Namespace(), b.SecretName(), "stringData", data})
 	}
 	for _, b := range spec.BoxSettings {
