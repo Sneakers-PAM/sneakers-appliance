@@ -72,6 +72,9 @@ const (
 	// KeyCustodyServiceImportEscrowProcedure is the fully-qualified name of the KeyCustodyService's
 	// ImportEscrow RPC.
 	KeyCustodyServiceImportEscrowProcedure = "/sneakers.appliance.init.v1.KeyCustodyService/ImportEscrow"
+	// KeyCustodyServiceRetireProcedure is the fully-qualified name of the KeyCustodyService's Retire
+	// RPC.
+	KeyCustodyServiceRetireProcedure = "/sneakers.appliance.init.v1.KeyCustodyService/Retire"
 	// PlatformServiceStartPlatformProcedure is the fully-qualified name of the PlatformService's
 	// StartPlatform RPC.
 	PlatformServiceStartPlatformProcedure = "/sneakers.appliance.init.v1.PlatformService/StartPlatform"
@@ -134,6 +137,11 @@ type KeyCustodyServiceClient interface {
 	// brings nothing new is refused. The escrow is a secret: it is neither
 	// logged nor written anywhere but sealed.
 	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
+	// Retire deletes one sealed item by name, once the item that replaces it
+	// is sealed and checked: the end of a root-key rotation. An item that is
+	// not there is not an error, so a retry after a restart is safe. Only the
+	// name is logged.
+	Retire(context.Context, *connect.Request[v1.RetireRequest]) (*connect.Response[v1.RetireResponse], error)
 }
 
 // NewKeyCustodyServiceClient constructs a client for the
@@ -196,6 +204,12 @@ func NewKeyCustodyServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(keyCustodyServiceMethods.ByName("ImportEscrow")),
 			connect.WithClientOptions(opts...),
 		),
+		retire: connect.NewClient[v1.RetireRequest, v1.RetireResponse](
+			httpClient,
+			baseURL+KeyCustodyServiceRetireProcedure,
+			connect.WithSchema(keyCustodyServiceMethods.ByName("Retire")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -209,6 +223,7 @@ type keyCustodyServiceClient struct {
 	unseal        *connect.Client[v1.UnsealRequest, v1.UnsealResponse]
 	escrow        *connect.Client[v1.EscrowRequest, v1.EscrowResponse]
 	importEscrow  *connect.Client[v1.ImportEscrowRequest, v1.ImportEscrowResponse]
+	retire        *connect.Client[v1.RetireRequest, v1.RetireResponse]
 }
 
 // Initialize calls sneakers.appliance.init.v1.KeyCustodyService.Initialize.
@@ -251,6 +266,11 @@ func (c *keyCustodyServiceClient) ImportEscrow(ctx context.Context, req *connect
 	return c.importEscrow.CallUnary(ctx, req)
 }
 
+// Retire calls sneakers.appliance.init.v1.KeyCustodyService.Retire.
+func (c *keyCustodyServiceClient) Retire(ctx context.Context, req *connect.Request[v1.RetireRequest]) (*connect.Response[v1.RetireResponse], error) {
+	return c.retire.CallUnary(ctx, req)
+}
+
 // KeyCustodyServiceHandler is an implementation of the sneakers.appliance.init.v1.KeyCustodyService
 // service.
 type KeyCustodyServiceHandler interface {
@@ -275,6 +295,11 @@ type KeyCustodyServiceHandler interface {
 	// brings nothing new is refused. The escrow is a secret: it is neither
 	// logged nor written anywhere but sealed.
 	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
+	// Retire deletes one sealed item by name, once the item that replaces it
+	// is sealed and checked: the end of a root-key rotation. An item that is
+	// not there is not an error, so a retry after a restart is safe. Only the
+	// name is logged.
+	Retire(context.Context, *connect.Request[v1.RetireRequest]) (*connect.Response[v1.RetireResponse], error)
 }
 
 // NewKeyCustodyServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -332,6 +357,12 @@ func NewKeyCustodyServiceHandler(svc KeyCustodyServiceHandler, opts ...connect.H
 		connect.WithSchema(keyCustodyServiceMethods.ByName("ImportEscrow")),
 		connect.WithHandlerOptions(opts...),
 	)
+	keyCustodyServiceRetireHandler := connect.NewUnaryHandler(
+		KeyCustodyServiceRetireProcedure,
+		svc.Retire,
+		connect.WithSchema(keyCustodyServiceMethods.ByName("Retire")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.init.v1.KeyCustodyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case KeyCustodyServiceInitializeProcedure:
@@ -350,6 +381,8 @@ func NewKeyCustodyServiceHandler(svc KeyCustodyServiceHandler, opts ...connect.H
 			keyCustodyServiceEscrowHandler.ServeHTTP(w, r)
 		case KeyCustodyServiceImportEscrowProcedure:
 			keyCustodyServiceImportEscrowHandler.ServeHTTP(w, r)
+		case KeyCustodyServiceRetireProcedure:
+			keyCustodyServiceRetireHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -389,6 +422,10 @@ func (UnimplementedKeyCustodyServiceHandler) Escrow(context.Context, *connect.Re
 
 func (UnimplementedKeyCustodyServiceHandler) ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.KeyCustodyService.ImportEscrow is not implemented"))
+}
+
+func (UnimplementedKeyCustodyServiceHandler) Retire(context.Context, *connect.Request[v1.RetireRequest]) (*connect.Response[v1.RetireResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.KeyCustodyService.Retire is not implemented"))
 }
 
 // PlatformServiceClient is a client for the sneakers.appliance.init.v1.PlatformService service.

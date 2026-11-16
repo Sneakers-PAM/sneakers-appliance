@@ -123,6 +123,8 @@ type fakeInit struct {
 	// sealed are the items Seal stored, by name; seals counts the calls.
 	sealed map[string][]byte
 	seals  int
+	// retired are the items Retire deleted, in order.
+	retired []string
 	// imports are the escrows ImportEscrow was given; importRes is what it
 	// answers, and importErr fails it.
 	imports   [][]byte
@@ -149,6 +151,14 @@ func (f *fakeInit) Seal(_ context.Context, r *connect.Request[initv1.SealRequest
 	f.sealed[r.Msg.GetName()] = r.Msg.GetSecret()
 	f.seals++
 	return connect.NewResponse(&initv1.SealResponse{}), nil
+}
+
+func (f *fakeInit) Retire(_ context.Context, r *connect.Request[initv1.RetireRequest]) (*connect.Response[initv1.RetireResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sealed, r.Msg.GetName())
+	f.retired = append(f.retired, r.Msg.GetName())
+	return connect.NewResponse(&initv1.RetireResponse{}), nil
 }
 
 func (f *fakeInit) Unseal(_ context.Context, r *connect.Request[initv1.UnsealRequest]) (*connect.Response[initv1.UnsealResponse], error) {

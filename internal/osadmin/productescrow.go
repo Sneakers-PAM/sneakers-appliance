@@ -28,7 +28,15 @@ func (s *Server) sealProductKeys(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	changed := false
+	// While a key is being rotated its sealed copy is the old key, kept until
+	// the vault has verified the move: it isn't replaced from the live Secret,
+	// which already holds the new one.
+	held := s.rotationHeld()
 	for _, e := range spec.Escrow {
+		if held && e.Previous != "" {
+			s.o.Logger.Info("osadmin: a key that is being rotated keeps its sealed copy until the vault verifies", log.F("key", e.Name))
+			continue
+		}
 		val, err := s.o.Exposed.SecretKey(ctx, e.Namespace(), e.SecretName(), e.Key)
 		if err != nil {
 			s.o.Logger.Warn("osadmin: a product key for the escrow can't be read yet; it's sealed next time", log.F("key", e.Name), log.F("error", err.Error()))

@@ -334,6 +334,10 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 			},
 			probe: &productup.Probe{Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s"},
 		},
+		// The vault root key rotation (docs/key-custody.md): the box's secrets
+		// store, and the vault's status read from its pod.
+		RootKeys:         secrets,
+		RootKeyStatus:    &productup.Probe{Slot: filepath.Join(product.Dir, "current"), DataDir: "/var/lib/k0s"},
 		Paths:            paths,
 		BoxStateFile:     boxstate.File,
 		ResetRunningFile: filepath.Join(c.run, productreset.RunningFile),

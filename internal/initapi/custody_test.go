@@ -100,6 +100,32 @@ func TestKeyCustodySealsUnsealsAndEscrows(t *testing.T) {
 	}
 }
 
+// Retire deletes one sealed item by name; a second retire, or one for an item
+// never sealed, is not an error, and a name that isn't one is refused (#502).
+func TestKeyCustodyRetiresASealedItemByName(t *testing.T) {
+	c := serveCustody(t, func(uid uint32) bool { return uid == me() })
+	ctx := context.Background()
+	for _, n := range []string{"staging-key", "keep-key"} {
+		if _, err := c.Seal(ctx, connect.NewRequest(&initv1.SealRequest{Name: n, Secret: []byte("a lab-only test secret")})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := c.Retire(ctx, connect.NewRequest(&initv1.RetireRequest{Name: "staging-key"})); err != nil {
+			t.Fatalf("retire %d: %v", i, err)
+		}
+	}
+	if _, err := c.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: "staging-key"})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("the retired item is still there: %v", err)
+	}
+	if _, err := c.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: "keep-key"})); err != nil {
+		t.Fatalf("another item went with it: %v", err)
+	}
+	if _, err := c.Retire(ctx, connect.NewRequest(&initv1.RetireRequest{Name: "Not A Name"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("an invalid name: %v", err)
+	}
+}
+
 func escrowJSON(t *testing.T, items map[string]string) []byte {
 	t.Helper()
 	e := keycustody.EscrowContents{Version: 1, StateKey: make([]byte, keycustody.KeySize), Items: map[string][]byte{}}

@@ -98,7 +98,7 @@ func (s *Server) resetNames(ctx context.Context, info productinfo.Info) []string
 func (s *Server) productRecords() []string {
 	platform := filepath.Join(s.o.Paths.State, "platform")
 	return []string{
-		filepath.Join(platform, boxsecrets.ValuesFile), filepath.Join(platform, productswitch.StateFile), s.importedMarker(),
+		filepath.Join(platform, boxsecrets.ValuesFile), filepath.Join(platform, productswitch.StateFile), filepath.Join(platform, rootRotateFile), s.importedMarker(),
 		filepath.Join(s.o.Paths.State, importDir), filepath.Join(s.o.Paths.APIDir(), exposedDir),
 	}
 }
