@@ -33,6 +33,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 65532
         runAsGroup: 65532
+        # The certificate Secret's files are group-readable (mode 0440).
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -69,6 +71,16 @@ spec:
                 secretKeyRef:
                   name: sneakers-box
                   key: TOTP_ENC_KEY
+            # The certificate the chart issues the migrate caller, which the vault and the
+            # audit service require under internal mTLS (global.internalTLS, on by default):
+            # the build puts the three file paths here, or leaves them empty for a build
+            # without it (build/product/build.sh, INTERNAL_TLS). Some set is an error.
+            - name: MTLS_CERT_FILE
+              value: "@MTLS_CERT_FILE@"
+            - name: MTLS_KEY_FILE
+              value: "@MTLS_KEY_FILE@"
+            - name: MTLS_CA_FILE
+              value: "@MTLS_CA_FILE@"
             - name: MIGRATE_PRINCIPAL
               value: system:sneakers-migrate
             - name: WORKLOAD_TOKEN_FILE
@@ -96,11 +108,20 @@ spec:
             - name: workload-token
               mountPath: /var/run/secrets/sneakers
               readOnly: true
+            - name: mtls
+              mountPath: /var/run/sneakers/tls
+              readOnly: true
       volumes:
         - name: import
           hostPath:
             path: ${HOST_DIR}
             type: Directory
+        # Optional, so the Job still starts on a box built without internal mTLS.
+        - name: mtls
+          secret:
+            secretName: sneakers-migrate-tls
+            optional: true
+            defaultMode: 0440
         - name: workload-token
           projected:
             sources:

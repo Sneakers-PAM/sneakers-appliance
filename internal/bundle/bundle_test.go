@@ -218,7 +218,11 @@ func TestABundleCarriesItsImportJob(t *testing.T) {
 	if _, err := bundle.CheckProduct(tree, "amd64", pub); err != nil {
 		t.Fatal(err)
 	}
-	for name, job := range map[string]string{"no job": "", "the image unfilled": "kind: Job\nimage: \"@MIGRATE_IMAGE@\"\n"} {
+	for name, job := range map[string]string{
+		"no job":                  "",
+		"the image unfilled":      "kind: Job\nimage: \"@MIGRATE_IMAGE@\"\n",
+		"the mTLS files unfilled": "kind: Job\nimage: example.org/sneakers-migrate@sha256:00\nenv: [{name: MTLS_CERT_FILE, value: \"@MTLS_CERT_FILE@\"}]\n",
+	} {
 		tree, _ := fixtures.ProductTree(t, k, "amd64", with(job))
 		if _, err := bundle.CheckProduct(tree, "amd64", pub); !codes.Is(err, codes.KitBundleMismatch) || !strings.Contains(err.Error(), "import") {
 			t.Errorf("%s: %v", name, err)

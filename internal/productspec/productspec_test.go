@@ -376,7 +376,12 @@ func TestTheSneakersBundleTakesAnImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"${JOB_NAME}", "${ARGS}", "${HOST_DIR}", "MIGRATE_OUTPUT_FILE", "MIGRATE_OWNER_PASSWORD_FILE", "serviceAccountName: sneakers-migrate"} {
+	for _, want := range []string{"${JOB_NAME}", "${ARGS}", "${HOST_DIR}", "MIGRATE_OUTPUT_FILE", "MIGRATE_OWNER_PASSWORD_FILE", "serviceAccountName: sneakers-migrate",
+		// The certificate the chart issues the migrate caller, which the vault and the audit
+		// service require under internal mTLS; the build fills the three files, or empties
+		// them for a build without it, and the Secret is optional so the Job still starts.
+		`value: "@MTLS_CERT_FILE@"`, `value: "@MTLS_KEY_FILE@"`, `value: "@MTLS_CA_FILE@"`,
+		"secretName: sneakers-migrate-tls", "optional: true", "mountPath: /var/run/sneakers/tls", "fsGroup: 65532"} {
 		if !strings.Contains(string(job), want) {
 			t.Errorf("the job template lacks %s", want)
 		}
@@ -716,4 +721,23 @@ func TestTheSneakersBundleDeclaresItsHealthCheck(t *testing.T) {
 	if h := s.Health(); h == nil || h.Service != "sneakers/sneakers-gateway:http" || h.Path != "/readyz" {
 		t.Fatalf("%+v", h)
 	}
+}
+
+// The Import page's Job dials the vault and the audit service, which need a
+// client certificate under internal mTLS: the chart issues it as
+// sneakers-migrate-tls, which the product declares so the box never makes it.
+func TestTheSneakersBundleDeclaresTheMigrateCertificate(t *testing.T) {
+	s, err := productspec.Load(filepath.Join("..", "..", "build", "product", "sneakers"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, is := range s.IssuedSecrets {
+		if is.Secret == "sneakers/sneakers-migrate-tls" {
+			if strings.Join(is.Keys, ",") != "tls.crt,tls.key,ca.crt" {
+				t.Fatalf("the migrate certificate's keys: %v", is.Keys)
+			}
+			return
+		}
+	}
+	t.Fatal("product.yaml doesn't declare sneakers/sneakers-migrate-tls as an issued secret")
 }
