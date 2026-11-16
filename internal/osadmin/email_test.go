@@ -52,6 +52,8 @@ type emailBox struct {
 	man      string
 	mu       sync.Mutex
 	sent     []boxsettings.Email
+	// code is the one-time code the last test message carried.
+	code     string
 	sendErr  error
 	restarts chan string
 	applied  int
@@ -86,10 +88,11 @@ func newEmailBox(t *testing.T, spec string) *emailBox {
 		o.Email = e.settings
 		o.BoxSecrets = &boxsecrets.Store{Dir: filepath.Join(b.state, "platform"), Manifests: e.man, Settings: e.settings}
 		o.EmailWorkloads = e
-		o.SendEmail = func(_ context.Context, m boxsettings.Email, to string) (string, error) {
+		o.SendEmail = func(_ context.Context, m boxsettings.Email, to, code string) (string, error) {
 			e.mu.Lock()
 			defer e.mu.Unlock()
 			e.sent = append(e.sent, m)
+			e.code = code
 			if e.sendErr != nil {
 				return "", e.sendErr
 			}
@@ -163,6 +166,10 @@ func TestSavingTheEmailSettingsAppliesTheProductAgain(t *testing.T) {
 	_, err = ec.SetEmail(ctx, connect.NewRequest(req))
 	symbolIn(t, err, connect.CodePermissionDenied, "ACCESS_STEPUP_REQUIRED")
 	e.alice.stepUp("alice")
+	// The box saves only settings a test email proved.
+	_, err = ec.SetEmail(ctx, connect.NewRequest(req))
+	symbolIn(t, err, connect.CodeFailedPrecondition, "EMAIL_NOT_TESTED")
+	e.passFor(t, relaySettings(), &pass)
 	before := len(e.services.log())
 	if _, err := ec.SetEmail(ctx, connect.NewRequest(req)); err != nil {
 		t.Fatal(err)
@@ -213,6 +220,7 @@ func TestSavingTheEmailSettingsAppliesTheProductAgain(t *testing.T) {
 	// saved, and reported as unencrypted.
 	s := relaySettings()
 	s.Tls, s.Verify = osadminv1.EmailTls_EMAIL_TLS_NONE, false
+	e.passFor(t, s, nil)
 	if _, err := ec.SetEmail(ctx, connect.NewRequest(&osadminv1.SetEmailRequest{Settings: s})); err != nil {
 		t.Fatal(err)
 	}
@@ -230,6 +238,7 @@ func TestSavingTheEmailSettingsAppliesTheProductAgain(t *testing.T) {
 	}
 	// An empty password clears it.
 	empty := ""
+	e.passFor(t, relaySettings(), &empty)
 	if _, err := ec.SetEmail(ctx, connect.NewRequest(&osadminv1.SetEmailRequest{Settings: relaySettings(), Password: &empty})); err != nil {
 		t.Fatal(err)
 	}
@@ -317,5 +326,27 @@ func TestSendTestEmail(t *testing.T) {
 	// The saved settings didn't change, and nothing restarted.
 	if saved, _ := e.settings.Email(); saved.Host != "relay.example.org" {
 		t.Fatalf("a test changed the saved settings: %+v", saved)
+	}
+}
+
+// lastCode is the code the last test message carried.
+func (e *emailBox) lastCode() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.code
+}
+
+// passFor proves settings the way an admin does: the test message goes out
+// with its code and the admin types the code back. password is the typed
+// password, nil for the saved one.
+func (e *emailBox) passFor(t *testing.T, s *osadminv1.EmailSettings, password *string) {
+	t.Helper()
+	ctx, ec := context.Background(), e.client(e.alice)
+	e.alice.stepUp("alice")
+	if _, err := ec.SendTestEmail(ctx, connect.NewRequest(&osadminv1.SendTestEmailRequest{To: "admin@example.org", Settings: s, Password: password})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ec.CheckEmailCode(ctx, connect.NewRequest(&osadminv1.CheckEmailCodeRequest{Settings: s, Password: password, Code: e.lastCode()})); err != nil {
+		t.Fatal(err)
 	}
 }

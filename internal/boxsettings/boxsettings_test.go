@@ -167,7 +167,7 @@ func TestSendTestEmailInEveryMode(t *testing.T) {
 			if c.ca {
 				e.CA = r.caPEM
 			}
-			if _, err := Send(context.Background(), e, "admin@example.org"); err != nil {
+			if _, err := Send(context.Background(), e, "admin@example.org", ""); err != nil {
 				t.Fatalf("Send: %v", err)
 			}
 			s := onlySession(t, r)
@@ -178,21 +178,37 @@ func TestSendTestEmailInEveryMode(t *testing.T) {
 	}
 }
 
+// The one-time code is in the message the relay gets, and a send without a
+// code says nothing of one.
+func TestSendTestEmailCarriesTheCode(t *testing.T) {
+	for _, code := range []string{"481516", ""} {
+		r := newRelay(t, false, true, "PLAIN")
+		e := Email{Host: "127.0.0.1", Port: r.port(), From: "no-reply@sneakers.example.org", Username: r.user, Password: r.pass, TLS: TLSStartTLS, Verify: true, CA: r.caPEM}
+		if _, err := Send(context.Background(), e, "admin@example.org", code); err != nil {
+			t.Fatalf("Send: %v", err)
+		}
+		s := onlySession(t, r)
+		if got := strings.Contains(s.data, "code on the page to prove the settings: "+code); (code != "") != got {
+			t.Fatalf("code %q: message %q", code, s.data)
+		}
+	}
+}
+
 func TestSendTestEmailSaysWhatWentWrong(t *testing.T) {
 	r := newRelay(t, false, true, "PLAIN")
 	e := Email{Host: "127.0.0.1", Port: r.port(), From: "no-reply@sneakers.example.org", TLS: TLSStartTLS, Verify: true}
-	if _, err := Send(context.Background(), e, "admin@example.org"); err == nil || !strings.Contains(err.Error(), "certificate") {
+	if _, err := Send(context.Background(), e, "admin@example.org", ""); err == nil || !strings.Contains(err.Error(), "certificate") {
 		t.Fatalf("an unknown CA: %v", err)
 	}
 	e.TLS = TLSNone
 	e.Username, e.Password = r.user, "wrong"
-	if _, err := Send(context.Background(), e, "admin@example.org"); err == nil || strings.Contains(err.Error(), "wrong") {
+	if _, err := Send(context.Background(), e, "admin@example.org", ""); err == nil || strings.Contains(err.Error(), "wrong") {
 		t.Fatalf("bad credentials: %v (the password must never be in the error)", err)
 	}
-	if _, err := Send(context.Background(), relayEmail(), "not an address"); err == nil {
+	if _, err := Send(context.Background(), relayEmail(), "not an address", ""); err == nil {
 		t.Fatal("a bad recipient is accepted")
 	}
-	if _, err := Send(context.Background(), Email{Port: 587, TLS: TLSStartTLS}, "admin@example.org"); err == nil {
+	if _, err := Send(context.Background(), Email{Port: 587, TLS: TLSStartTLS}, "admin@example.org", ""); err == nil {
 		t.Fatal("no relay sends")
 	}
 }

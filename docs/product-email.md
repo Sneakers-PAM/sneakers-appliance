@@ -32,6 +32,27 @@ names (`email.restart`). **Send test email** sends a short message to an address
 the settings on the page (with the saved password unless you type one), the same way the product
 sends; it needs a step-up and is audited as `product.email.test-send`. The test changes nothing.
 
+## Saving needs a test first
+
+The box saves a relay only after a test email proved it, so a page can't skip the test:
+
+1. **Send test email** puts a one-time 6-digit code in the message. The box keeps the code for ten
+   minutes, bound to exactly the settings and password the test was sent with (the saved password
+   counts when none is typed).
+2. Type the code from the message into the page (`CheckEmailCode`, audited as
+   `product.email.code-check`). A match uses the code up and gives a pass, for ten minutes, for those
+   settings and that password only.
+3. **Save** (`SetEmail`) is refused with `EMAIL_NOT_TESTED` unless a fresh pass holds for exactly the
+   settings and password being saved. Any edit after the code, or another password, needs a new test.
+   The pass isn't used up by a save, so a save whose apply failed can be tried again within the ten
+   minutes.
+
+A wrong code is `EMAIL_CODE_WRONG`; the fifth wrong try drops the code. A code that was never sent,
+is older than ten minutes, was used, was dropped, or belongs to other settings is
+`EMAIL_CODE_EXPIRED`: send the test again. Clearing the host, which turns the product's mail off, needs
+no test. The code and the password are never in an audit entry or a log line. The pending code and the
+pass are kept in memory, so a restart of the box asks for a new test.
+
 ## Pinning the relay's certificate
 
 A relay with a self-signed certificate (or one signed by a CA you'd rather not paste) is trusted by

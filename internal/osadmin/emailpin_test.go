@@ -167,6 +167,7 @@ func TestThePinIsSavedWithTheSettings(t *testing.T) {
 	_, err := ec.SetEmail(ctx, connect.NewRequest(&osadminv1.SetEmailRequest{Settings: s}))
 	symbolIn(t, err, connect.CodeInvalidArgument, "EMAIL_INVALID")
 	s.PinSha256 = pinA
+	e.passFor(t, s, nil)
 	if _, err := ec.SetEmail(ctx, connect.NewRequest(&osadminv1.SetEmailRequest{Settings: s})); err != nil {
 		t.Fatal(err)
 	}
@@ -179,6 +180,7 @@ func TestThePinIsSavedWithTheSettings(t *testing.T) {
 	}
 	e.restarted(t)
 	s.PinSha256 = ""
+	e.passFor(t, s, nil)
 	if _, err := ec.SetEmail(ctx, connect.NewRequest(&osadminv1.SetEmailRequest{Settings: s})); err != nil {
 		t.Fatal(err)
 	}

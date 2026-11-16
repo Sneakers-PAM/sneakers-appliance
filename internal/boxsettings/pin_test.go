@@ -46,7 +46,7 @@ func TestAnUntrustedRelayStopsBeforeAuth(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			r := newRelay(t, c.implicit, c.starttls, "PLAIN")
-			_, err := Send(context.Background(), pinnedEmail(r, c.mode), "admin@example.org")
+			_, err := Send(context.Background(), pinnedEmail(r, c.mode), "admin@example.org", "")
 			if !codes.Is(err, codes.EmailUntrusted) {
 				t.Fatalf("want EMAIL_UNTRUSTED, got %v", err)
 			}
@@ -72,7 +72,7 @@ func TestAPinnedRelayPasses(t *testing.T) {
 	if !e.Encrypted() {
 		t.Fatal("a pinned relay with verification on reads as unencrypted")
 	}
-	if _, err := Send(context.Background(), e, "admin@example.org"); err != nil {
+	if _, err := Send(context.Background(), e, "admin@example.org", ""); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	if s := onlySession(t, r); !s.tls || s.authUser != r.user || s.rcpt != "admin@example.org" {
@@ -89,7 +89,7 @@ func TestAChangedCertificateFailsWithBothFingerprints(t *testing.T) {
 	e.PinSHA256 = old
 	next, _ := testCert(t)
 	r.setCert(next)
-	_, err := Send(context.Background(), e, "admin@example.org")
+	_, err := Send(context.Background(), e, "admin@example.org", "")
 	if !codes.Is(err, codes.EmailPinMismatch) {
 		t.Fatalf("want EMAIL_PIN_MISMATCH, got %v", err)
 	}
@@ -112,7 +112,7 @@ func TestAPinnedCertificatePastItsDatesFails(t *testing.T) {
 	r.setCert(expired)
 	e := pinnedEmail(r, TLSStartTLS)
 	e.PinSHA256 = certstore.Fingerprint(leafOf(t, r).Raw)
-	_, err := Send(context.Background(), e, "admin@example.org")
+	_, err := Send(context.Background(), e, "admin@example.org", "")
 	if !codes.Is(err, codes.EmailUntrusted) || !strings.Contains(err.Error(), "expired") {
 		t.Fatalf("an expired pinned certificate: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestVerifyOffIgnoresAStoredCA(t *testing.T) {
 	if err := e.Check(); err != nil {
 		t.Fatalf("Check: %v", err)
 	}
-	if _, err := Send(context.Background(), e, "admin@example.org"); err != nil {
+	if _, err := Send(context.Background(), e, "admin@example.org", ""); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 }
@@ -157,13 +157,13 @@ func TestAFailedSendNamesTheStepAndReply(t *testing.T) {
 	r := newRelay(t, false, false, "PLAIN")
 	e := Email{Host: "127.0.0.1", Port: r.port(), From: "no-reply@sneakers.example.org", Username: r.user, TLS: TLSNone}
 	e.Password = r.pass + "-not"
-	_, err := Send(context.Background(), e, "admin@example.org")
+	_, err := Send(context.Background(), e, "admin@example.org", "")
 	step, reply := FailureOf(err)
 	if step != StepAuth || !strings.Contains(reply, "535") || strings.Contains(reply, e.Password) {
 		t.Fatalf("step %q reply %q (%v)", step, reply, err)
 	}
 	r2 := newRelay(t, false, true, "PLAIN")
-	_, err = Send(context.Background(), pinnedEmail(r2, TLSStartTLS), "admin@example.org")
+	_, err = Send(context.Background(), pinnedEmail(r2, TLSStartTLS), "admin@example.org", "")
 	if step, _ := FailureOf(err); step != StepTLS {
 		t.Fatalf("an untrusted relay's step %q", step)
 	}

@@ -160,6 +160,10 @@ func (h *emailSvc) SetEmail(ctx context.Context, r *connect.Request[osadminv1.Se
 	if err := e.Check(); err != nil {
 		return nil, err
 	}
+	if !s.emailTest.passed(e, s.o.Clock.Now()) {
+		s.o.Logger.Warn("osadmin: the email settings weren't saved: no fresh test email pass for them", log.F("host", e.Host), log.F("by", c.session.Admin))
+		return nil, codes.New(codes.EmailNotTested, "these relay settings haven't passed a test email in the last %d minutes: send the test email and type its code", int(emailCodeLife/time.Minute))
+	}
 	by := c.by("product.email.set")
 	v := s.slots().Status().Installed
 	overrode, err := s.beginMaintenance(ctx, "product email settings apply", edgefall.KindProductApply, by, r.Msg.GetElevationOverride())
@@ -239,8 +243,12 @@ func (h *emailSvc) SendTestEmail(ctx context.Context, r *connect.Request[osadmin
 	if send == nil {
 		send = boxsettings.Send
 	}
+	code, err := newEmailCode()
+	if err != nil {
+		return nil, err
+	}
 	started := time.Now()
-	answer, err := send(ctx, e, r.Msg.GetTo())
+	answer, err := send(ctx, e, r.Msg.GetTo(), code)
 	if err != nil {
 		step, reply := boxsettings.FailureOf(err)
 		if ce, ok := boxsettings.CertErrorOf(err); ok {
@@ -253,8 +261,37 @@ func (h *emailSvc) SendTestEmail(ctx context.Context, r *connect.Request[osadmin
 			log.F("step", step), log.F("reply", reply), log.F("by", c.session.Admin))
 		return nil, err
 	}
-	s.o.Logger.Info("osadmin: test email", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", true), log.F("by", c.session.Admin))
+	s.emailTest.issue(e, code, s.o.Clock.Now())
+	s.o.Logger.Info("osadmin: test email", log.F("host", e.Host), log.F("port", e.Port), log.F("tls", e.TLS), log.F("ms", time.Since(started).Milliseconds()), log.F("ok", true), log.F("codeValidMinutes", int(emailCodeLife/time.Minute)), log.F("by", c.session.Admin))
 	return connect.NewResponse(&osadminv1.SendTestEmailResponse{Answer: answer}), nil
+}
+
+// CheckEmailCode takes back the code the test email carried. A match records
+// a pass for exactly those settings and that password, which SetEmail asks
+// for; the code and the password stay out of the audit entry and the logs.
+func (h *emailSvc) CheckEmailCode(ctx context.Context, r *connect.Request[osadminv1.CheckEmailCodeRequest]) (*connect.Response[osadminv1.CheckEmailCodeResponse], error) {
+	s, c := h.s, callFrom(ctx)
+	if _, _, err := s.emailProduct(); err != nil {
+		return nil, err
+	}
+	saved, err := s.o.Email.Email()
+	if err != nil {
+		return nil, err
+	}
+	e := saved
+	if r.Msg.GetSettings() != nil {
+		e = fromWire(r.Msg.GetSettings(), r.Msg.Password, saved)
+	} else if r.Msg.Password != nil {
+		e.Password = *r.Msg.Password
+	}
+	c.note("product email", "host", e.Host, "port", strconv.Itoa(e.Port), "tls", e.TLS)
+	until, err := s.emailTest.check(e, r.Msg.GetCode(), s.o.Clock.Now())
+	if err != nil {
+		s.o.Logger.Warn("osadmin: the test email's code wasn't accepted", log.F("host", e.Host), log.F("error", codes.Describe(err)), log.F("by", c.session.Admin))
+		return nil, err
+	}
+	s.o.Logger.Info("osadmin: the test email's code matched; these settings may be saved", log.F("host", e.Host), log.F("validUntil", until.UTC().Format(time.RFC3339)), log.F("by", c.session.Admin))
+	return connect.NewResponse(&osadminv1.CheckEmailCodeResponse{ValidUntil: timestamppb.New(until)}), nil
 }
 
 // scrubPassword keeps the relay password out of a reply that echoed it.

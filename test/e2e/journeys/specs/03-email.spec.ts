@@ -14,7 +14,7 @@ test("Email: the relay set with STARTTLS and its CA, and a test email that arriv
   test.setTimeout(20 * 60_000);
   await signedInToAppliance(page);
   const { ca, host, port } = relay();
-  await setMailRelay(page, { ca, from: FROM, host, port });
+  await setMailRelay(page, { ca, from: FROM, host, port }, TO);
   await shot("the relay saved");
   const sent = new Date(Date.now() - 5000);
   await sendTestEmail(page, TO);
