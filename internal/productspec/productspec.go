@@ -129,6 +129,9 @@ type Spec struct {
 	// Resources, when set, is the database cluster the box renders from a
 	// chart the bundle carries (resources.go).
 	Resources *Resources `yaml:"resources"`
+	// IssuedSecrets are the Secrets something else issues, which the
+	// product's workloads read (issued.go).
+	IssuedSecrets []IssuedSecret `yaml:"issued_secrets"`
 }
 
 // Ready is product.yaml's ready section.
@@ -639,6 +642,9 @@ func Parse(b []byte) (Spec, error) {
 		return Spec{}, err
 	}
 	if err := s.checkResources(); err != nil {
+		return Spec{}, err
+	}
+	if err := s.checkIssuedSecrets(); err != nil {
 		return Spec{}, err
 	}
 	return s, nil

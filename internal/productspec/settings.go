@@ -204,6 +204,9 @@ const ResourcesMinBase = "0.1.0-rc.8"
 // why, from the sections it uses; "" when any base that reads format 2
 // can.
 func (s Spec) BaseFloor() (version, why string) {
+	if len(s.IssuedSecrets) > 0 {
+		return IssuedSecretsMinBase, "it reads Secrets that something else issues"
+	}
 	if s.Resources != nil {
 		return ResourcesMinBase, "it has resources the box renders from a bundled chart"
 	}

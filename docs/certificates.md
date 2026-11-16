@@ -198,6 +198,26 @@ store, so one `SetAcme` may name both and they then share one certificate. The :
 is still the one an owner reaches the Certificates page on, so try ACME on `product` first and check
 that the box's name resolves for the CA before naming `admin`.
 
+## Internal mTLS
+
+The Sneakers services speak mutual TLS to each other (the chart's `global.internalTLS`, on by
+default; the box's cert-manager runs it, see [ACME](#acme) for the same controller's other job).
+cert-manager issues one certificate per service from a CA it creates in the product namespace: a
+self-signed bootstrap Issuer (`sneakers-mtls-bootstrap`), a ten-year root (`sneakers-mtls-ca`), the CA
+Issuer `sneakers-mtls` and a 30-day certificate per service in the Secret `sneakers-<service>-tls`
+(`tls.crt`, `tls.key`, `ca.crt`), renewed by cert-manager at two thirds of its life. These objects
+are in the always-on stack, the MCP service's with its switch; the cert-manager stack brings the CRDs
+and the webhook. A pod waits in `ContainerCreating` until its certificate exists.
+
+The kubelet cannot present a client certificate, so each gRPC service answers its probes on a plain
+health-only port, and its pods are probed there; the main port needs a client certificate. The box
+makes none of these Secrets and never reads them (`issued_secrets` in product.yaml,
+[release.md](release.md#productyaml) declares them so the render accepts the workloads that mount
+them). What the box does **not** do: it does not rotate the root (a manual runbook), and it does not
+cover the hop from the edge to a service, nor a verified certificate on the PostgreSQL connection
+(both documented exclusions of the design). A build can render without it by setting
+`global.internalTLS.enabled: false` in a values overlay (`EXTRA_VALUES` of `render.sh`).
+
 ## Update trust
 
 The update mirror's own trust, kept apart from the store: one or more private CA certificates
