@@ -1,0 +1,126 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The product's Resources page: the PostgreSQL cluster's settings.
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// ResourcesService shows and checks the settings of the installed product's
+// PostgreSQL cluster: the replica count, every postgresql.parameters entry,
+// PgBouncer's pool sizes and the storage size (docs/resources.md).
+service ResourcesService {
+  // GetResources answers the settings in force and what the cluster is
+  // doing now: each replica's role, health and lag, the storage, and every
+  // parameter the server has with its value, default and whether a change
+  // needs a restart.
+  rpc GetResources(GetResourcesRequest) returns (GetResourcesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+  // PreviewResources checks staged settings against the ones in force and
+  // answers what would change, with a before and an after for each, and
+  // the warnings. It changes nothing. A refused setting is
+  // RESOURCES_INVALID and names the setting.
+  rpc PreviewResources(PreviewResourcesRequest) returns (PreviewResourcesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_ADMIN};
+  }
+}
+
+// PgBouncerPools are PgBouncer's pool sizes.
+message PgBouncerPools {
+  int32 default_pool_size = 1;
+  int32 min_pool_size = 2;
+  int32 reserve_pool_size = 3;
+  int32 max_client_conn = 4;
+  int32 max_db_connections = 5;
+}
+
+// ResourceSettings are the settings the page edits.
+message ResourceSettings {
+  int32 replicas = 1;
+  // storage_bytes is the data volume's size; it only grows.
+  int64 storage_bytes = 2;
+  // parameters are the postgresql.parameters entries that differ from the
+  // chart's defaults.
+  map<string, string> parameters = 3;
+  PgBouncerPools pools = 4;
+}
+
+// ResourceReplica is one PostgreSQL server.
+message ResourceReplica {
+  string name = 1;
+  // role is primary or replica.
+  string role = 2;
+  // state is the replication state the primary reports (streaming,
+  // catchup); empty for the primary.
+  string state = 3;
+  bool healthy = 4;
+  // lag_bytes is how far its replay is behind what the primary sent.
+  int64 lag_bytes = 5;
+}
+
+// ResourceStorage is the data volume.
+message ResourceStorage {
+  // size_bytes is the volume's size; 0 when it can't be read.
+  int64 size_bytes = 1;
+  // used_bytes is what the databases hold.
+  int64 used_bytes = 2;
+}
+
+// ResourceParameter is one PostgreSQL setting the server has.
+message ResourceParameter {
+  string name = 1;
+  string value = 2;
+  // unit is the unit value is in (8kB, kB, ms); empty for none.
+  string unit = 3;
+  // default_value is the server's built-in value, in the same unit.
+  string default_value = 4;
+  // needs_restart is true for a setting PostgreSQL reads only at start.
+  bool needs_restart = 5;
+  // pending_restart is true when the configuration holds a value the
+  // running server doesn't have yet.
+  bool pending_restart = 6;
+  // known is true when the box checks edits to this parameter.
+  bool known = 7;
+}
+
+message GetResourcesRequest {}
+
+message GetResourcesResponse {
+  // settings are the settings in force. pools_known is false while the box
+  // can't say PgBouncer's sizes (they read as 0).
+  ResourceSettings settings = 1;
+  bool pools_known = 2;
+  repeated ResourceReplica replicas = 3;
+  ResourceStorage storage = 4;
+  repeated ResourceParameter parameters = 5;
+  // nodes is how many nodes the cluster has.
+  int32 nodes = 6;
+}
+
+message PreviewResourcesRequest {
+  // staged are the complete settings wanted, not a patch.
+  ResourceSettings staged = 1;
+}
+
+// ResourceChange is one setting that would change.
+message ResourceChange {
+  // field is replicas, storage, parameters.<name> or pgbouncer.<name>.
+  string field = 1;
+  string before = 2;
+  string after = 3;
+  bool restart_required = 4;
+}
+
+message PreviewResourcesResponse {
+  repeated ResourceChange changes = 1;
+  repeated string warnings = 2;
+  // restart_required is true when any change needs PostgreSQL to restart.
+  bool restart_required = 3;
+}

@@ -287,6 +287,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		// far the product has come up after an apply (docs/upgrades.md).
 		ProductUp: followingProbe(c, lg, audit, backups),
 		Backups:   backups,
+		// The Resources page: the product's PostgreSQL cluster, read with
+		// the installed bundle's k0s (docs/resources.md).
+		Resources: &resourcesBackend{k0s: filepath.Join(product.Dir, "current", "k0s"), kubeconfig: elevated.DefaultKubeconfig, lg: lg},
 		// edgefall's push socket: the box state goes to every open product
 		// tab before an update, a reboot or a shutdown stops anything
 		// (docs/edge-fallback.md#the-event-stream).

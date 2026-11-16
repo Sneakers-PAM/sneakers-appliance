@@ -100,6 +100,13 @@ shell, the console and :8443 show the same sentence.
 | 3906 | `EMAIL_CODE_WRONG` | the code typed isn't the one the test email carried; five wrong tries drop the code |
 | 3907 | `EMAIL_CODE_EXPIRED` | no code is waiting for these settings and password: it was never sent, is older than ten minutes, was used or dropped after five wrong tries, or belongs to other settings; send the test email again |
 
+## Product resources (392x)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3920 | `RESOURCES_INVALID` | a setting fails validation (the error names it): no replicas, storage that would shrink, a malformed parameter or a pool size out of range |
+| 3921 | `RESOURCES_UNAVAILABLE` | the product's PostgreSQL cluster can't be read |
+
 ## Product telemetry (391x)
 
 | Code | Symbol | Cause |

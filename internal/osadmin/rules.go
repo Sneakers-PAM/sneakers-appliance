@@ -429,7 +429,7 @@ func toConnect(err error) error {
 		c = connect.CodeUnauthenticated
 	case codes.AccessForbidden, codes.AccessStepUpRequired:
 		c = connect.CodePermissionDenied
-	case codes.TelemetryInvalid, codes.AccessKeyType, codes.AccessKeyWeak, codes.AccessName, codes.AccessConfirm, codes.NetInvalid, codes.AccessPassword, codes.AccessPolicy, codes.AccessQuorum, codes.EmailInvalid, codes.EmailCodeWrong:
+	case codes.TelemetryInvalid, codes.ResourcesInvalid, codes.AccessKeyType, codes.AccessKeyWeak, codes.AccessName, codes.AccessConfirm, codes.NetInvalid, codes.AccessPassword, codes.AccessPolicy, codes.AccessQuorum, codes.EmailInvalid, codes.EmailCodeWrong:
 		c = connect.CodeInvalidArgument
 	case codes.AccessLocked, codes.AccessThrottled:
 		c = connect.CodeResourceExhausted
