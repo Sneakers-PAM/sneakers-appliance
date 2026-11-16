@@ -395,9 +395,15 @@ import:
 
 The box refuses an import whose switch isn't declared, whose job isn't a `.yaml` path inside the
 slot, whose uid is root, or whose setup isn't a `one_time` exposed value; the bundle check refuses a
-bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@`. `build/product/build.sh`
-takes the template as `IMPORT_JOB` and the pinned migrate image as `MIGRATE_IMAGE` (by digest, and
-pinned in `release.yaml`), and writes `import/job.yaml` into the bundle.
+bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@` or one of the `@MTLS_*@` file
+placeholders. `build/product/build.sh` takes the template as `IMPORT_JOB` and the pinned migrate
+image as `MIGRATE_IMAGE` (by digest, and pinned in `release.yaml`), and writes `import/job.yaml`
+into the bundle. Under the chart's internal mTLS (`global.internalTLS`, on by default) the vault and
+the audit service need a client certificate, so the Job mounts the Secret `sneakers-migrate-tls`
+the chart issues it and `build.sh` puts the three file paths in `MTLS_CERT_FILE`, `MTLS_KEY_FILE`
+and `MTLS_CA_FILE`; a build rendered with the chart switch off sets `INTERNAL_TLS=off`, which leaves
+them empty (the migrate tool then dials in plaintext, and the Secret mount is optional, so the Job
+still starts). The Secret is declared under `issued_secrets` below.
 
 It may also name the Secrets something other than the box makes and fills, which its workloads read:
 

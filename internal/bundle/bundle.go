@@ -116,6 +116,10 @@ type Image struct {
 
 var digestRE = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
+// unfilledRE is a placeholder the product build fills in the import Job
+// template, which a bundle must not still hold.
+var unfilledRE = regexp.MustCompile(`@MTLS_[A-Z_]+@`)
+
 // ParseRelease reads release.yaml.
 func ParseRelease(b []byte) (*Release, error) {
 	var r Release
@@ -436,6 +440,9 @@ func checkSpec(fsys fs.FS, rel *Release) error {
 		}
 		if bytes.Contains(job, []byte("@MIGRATE_IMAGE@")) {
 			return codes.New(codes.KitBundleMismatch, "the product bundle's import Job template %s doesn't name the migrate image (the build fills @MIGRATE_IMAGE@)", im.Job)
+		}
+		if m := unfilledRE.Find(job); m != nil {
+			return codes.New(codes.KitBundleMismatch, "the product bundle's import Job template %s still has the build's placeholder %s", im.Job, m)
 		}
 	}
 	return nil

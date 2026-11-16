@@ -110,6 +110,8 @@ issued_secrets:
   - {secret: sneakers/sneakers-sshbroker-tls, keys: [tls.crt, tls.key, ca.crt]}
   - {secret: sneakers/sneakers-gateway-tls, keys: [tls.crt, tls.key, ca.crt]}
   - {secret: sneakers/sneakers-mcp-tls, keys: [tls.crt, tls.key, ca.crt]}
+  # The Import page's Job (import-job.yaml), where the chart issues the migrate caller one.
+  - {secret: sneakers/sneakers-migrate-tls, keys: [tls.crt, tls.key, ca.crt]}
 
 # The box's own host name, never baked into the bundle: the bundle's values
 # set global.host to this placeholder, so every host-dependent setting
