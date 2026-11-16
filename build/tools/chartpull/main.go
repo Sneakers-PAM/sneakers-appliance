@@ -41,7 +41,7 @@ func main() {
 }
 
 func run(releasePath, productPath, out string) error {
-	b, err := os.ReadFile(releasePath) // #nosec G304 -- a build tool reading the file it was handed
+	b, err := os.ReadFile(releasePath) // #nosec G304 G703 -- a build tool reading the file it was handed
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func run(releasePath, productPath, out string) error {
 	if err != nil {
 		return err
 	}
-	pb, err := os.ReadFile(productPath) // #nosec G304 -- a build tool reading the file it was handed
+	pb, err := os.ReadFile(productPath) // #nosec G304 G703 -- a build tool reading the file it was handed
 	if err != nil {
 		return err
 	}
@@ -79,14 +79,14 @@ func run(releasePath, productPath, out string) error {
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", pin.Name, pin.Version, err)
 	}
-	if err := os.MkdirAll(out, 0o750); err != nil {
+	if err := os.MkdirAll(out, 0o750); err != nil { // #nosec G703 -- a build tool writing under the folder it was handed
 		return err
 	}
 	base := filepath.Join(out, pin.Name+"-"+pin.Version)
-	if err := os.WriteFile(base+".manifest.json", man, 0o644); err != nil { // #nosec G306 -- a bundle file, read by the box
+	if err := os.WriteFile(base+".manifest.json", man, 0o644); err != nil { // #nosec G306 G703 -- a bundle file under the folder the build handed it, read by the box
 		return err
 	}
-	return os.WriteFile(base+".tgz", tgz, 0o644) // #nosec G306 -- a bundle file, read by the box
+	return os.WriteFile(base+".tgz", tgz, 0o644) // #nosec G306 G703 -- a bundle file under the folder the build handed it, read by the box
 }
 
 // pull fetches the manifest with the digest d and the one chart layer it
