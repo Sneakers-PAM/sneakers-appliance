@@ -83,7 +83,7 @@ func TestConsoleOnlyCommandRefusedOverSSH(t *testing.T) {
 }
 
 func TestSSHOnlyCommandRefusedOnConsole(t *testing.T) {
-	for _, line := range []string{"shell --reason x", "setup recovery-key", "logs export", "support-bundle"} {
+	for _, line := range []string{"shell --reason x", "setup recovery-key", "setup escrow-import", "logs export", "support-bundle"} {
 		_, err := runShell(t, shell.OriginConsole, line)
 		assertCode(t, err, "ACCESS_FORBIDDEN")
 	}
@@ -111,6 +111,7 @@ func TestEveryCommandParses(t *testing.T) {
 		line, stdin string
 	}{
 		{shell.OriginSSH, "setup recovery-key --label safe", "ssh-ed25519 AAAA k\n"},
+		{shell.OriginSSH, "setup escrow-import", "{\"version\":1}\n"},
 		{shell.OriginConsole, "recovery-key add", "ssh-ed25519 AAAA k\n"},
 		{shell.OriginSSH, "network set hostname=appliance.example.org", "y\n"},
 		{shell.OriginConsole, "network allow-list reset", "reset\n"},

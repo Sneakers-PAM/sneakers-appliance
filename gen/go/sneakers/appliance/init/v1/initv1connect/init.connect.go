@@ -69,6 +69,9 @@ const (
 	// KeyCustodyServiceEscrowProcedure is the fully-qualified name of the KeyCustodyService's Escrow
 	// RPC.
 	KeyCustodyServiceEscrowProcedure = "/sneakers.appliance.init.v1.KeyCustodyService/Escrow"
+	// KeyCustodyServiceImportEscrowProcedure is the fully-qualified name of the KeyCustodyService's
+	// ImportEscrow RPC.
+	KeyCustodyServiceImportEscrowProcedure = "/sneakers.appliance.init.v1.KeyCustodyService/ImportEscrow"
 	// PlatformServiceStartPlatformProcedure is the fully-qualified name of the PlatformService's
 	// StartPlatform RPC.
 	PlatformServiceStartPlatformProcedure = "/sneakers.appliance.init.v1.PlatformService/StartPlatform"
@@ -124,6 +127,13 @@ type KeyCustodyServiceClient interface {
 	Unseal(context.Context, *connect.Request[v1.UnsealRequest]) (*connect.Response[v1.UnsealResponse], error)
 	// Escrow returns the escrow bundle encrypted to the recovery keys.
 	Escrow(context.Context, *connect.Request[v1.EscrowRequest]) (*connect.Response[v1.EscrowResponse], error)
+	// ImportEscrow seals the items of an escrow, already decrypted with a
+	// recovery key, onto this box: a restore onto new hardware. It runs only
+	// in firstboot. An item this box has already sealed (its own SSH root
+	// key, pepper and host CA) is kept, never overwritten; an escrow that
+	// brings nothing new is refused. The escrow is a secret: it is neither
+	// logged nor written anywhere but sealed.
+	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
 }
 
 // NewKeyCustodyServiceClient constructs a client for the
@@ -180,6 +190,12 @@ func NewKeyCustodyServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(keyCustodyServiceMethods.ByName("Escrow")),
 			connect.WithClientOptions(opts...),
 		),
+		importEscrow: connect.NewClient[v1.ImportEscrowRequest, v1.ImportEscrowResponse](
+			httpClient,
+			baseURL+KeyCustodyServiceImportEscrowProcedure,
+			connect.WithSchema(keyCustodyServiceMethods.ByName("ImportEscrow")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -192,6 +208,7 @@ type keyCustodyServiceClient struct {
 	seal          *connect.Client[v1.SealRequest, v1.SealResponse]
 	unseal        *connect.Client[v1.UnsealRequest, v1.UnsealResponse]
 	escrow        *connect.Client[v1.EscrowRequest, v1.EscrowResponse]
+	importEscrow  *connect.Client[v1.ImportEscrowRequest, v1.ImportEscrowResponse]
 }
 
 // Initialize calls sneakers.appliance.init.v1.KeyCustodyService.Initialize.
@@ -229,6 +246,11 @@ func (c *keyCustodyServiceClient) Escrow(ctx context.Context, req *connect.Reque
 	return c.escrow.CallUnary(ctx, req)
 }
 
+// ImportEscrow calls sneakers.appliance.init.v1.KeyCustodyService.ImportEscrow.
+func (c *keyCustodyServiceClient) ImportEscrow(ctx context.Context, req *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
+	return c.importEscrow.CallUnary(ctx, req)
+}
+
 // KeyCustodyServiceHandler is an implementation of the sneakers.appliance.init.v1.KeyCustodyService
 // service.
 type KeyCustodyServiceHandler interface {
@@ -246,6 +268,13 @@ type KeyCustodyServiceHandler interface {
 	Unseal(context.Context, *connect.Request[v1.UnsealRequest]) (*connect.Response[v1.UnsealResponse], error)
 	// Escrow returns the escrow bundle encrypted to the recovery keys.
 	Escrow(context.Context, *connect.Request[v1.EscrowRequest]) (*connect.Response[v1.EscrowResponse], error)
+	// ImportEscrow seals the items of an escrow, already decrypted with a
+	// recovery key, onto this box: a restore onto new hardware. It runs only
+	// in firstboot. An item this box has already sealed (its own SSH root
+	// key, pepper and host CA) is kept, never overwritten; an escrow that
+	// brings nothing new is refused. The escrow is a secret: it is neither
+	// logged nor written anywhere but sealed.
+	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
 }
 
 // NewKeyCustodyServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -297,6 +326,12 @@ func NewKeyCustodyServiceHandler(svc KeyCustodyServiceHandler, opts ...connect.H
 		connect.WithSchema(keyCustodyServiceMethods.ByName("Escrow")),
 		connect.WithHandlerOptions(opts...),
 	)
+	keyCustodyServiceImportEscrowHandler := connect.NewUnaryHandler(
+		KeyCustodyServiceImportEscrowProcedure,
+		svc.ImportEscrow,
+		connect.WithSchema(keyCustodyServiceMethods.ByName("ImportEscrow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.init.v1.KeyCustodyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case KeyCustodyServiceInitializeProcedure:
@@ -313,6 +348,8 @@ func NewKeyCustodyServiceHandler(svc KeyCustodyServiceHandler, opts ...connect.H
 			keyCustodyServiceUnsealHandler.ServeHTTP(w, r)
 		case KeyCustodyServiceEscrowProcedure:
 			keyCustodyServiceEscrowHandler.ServeHTTP(w, r)
+		case KeyCustodyServiceImportEscrowProcedure:
+			keyCustodyServiceImportEscrowHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -348,6 +385,10 @@ func (UnimplementedKeyCustodyServiceHandler) Unseal(context.Context, *connect.Re
 
 func (UnimplementedKeyCustodyServiceHandler) Escrow(context.Context, *connect.Request[v1.EscrowRequest]) (*connect.Response[v1.EscrowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.KeyCustodyService.Escrow is not implemented"))
+}
+
+func (UnimplementedKeyCustodyServiceHandler) ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.init.v1.KeyCustodyService.ImportEscrow is not implemented"))
 }
 
 // PlatformServiceClient is a client for the sneakers.appliance.init.v1.PlatformService service.

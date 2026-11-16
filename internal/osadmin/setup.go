@@ -118,6 +118,28 @@ func (h *setup) AddRecoveryKey(ctx context.Context, r *connect.Request[osadminv1
 	return connect.NewResponse(&osadminv1.AddRecoveryKeyResponse{RecoveryKey: recoveryToWire(rk)}), nil
 }
 
+// ImportEscrow hands init the decrypted escrow of another box, which comes
+// over the closed shell's standard input and goes nowhere but to init, which
+// seals what this box hasn't sealed yet. The audit entry names the items
+// imported and the items kept, never a value, and the escrow is neither
+// logged nor stored here.
+func (h *setup) ImportEscrow(ctx context.Context, r *connect.Request[osadminv1.ImportEscrowRequest]) (*connect.Response[osadminv1.ImportEscrowResponse], error) {
+	c := callFrom(ctx)
+	c.note("escrow")
+	if len(r.Msg.GetEscrow()) == 0 {
+		return nil, codes.New(codes.KeyCustodyInvalid, "the escrow is empty: pipe the decrypted escrow to this command")
+	}
+	out, err := h.s.o.KeyCustody.ImportEscrow(ctx, connect.NewRequest(&initv1.ImportEscrowRequest{Escrow: r.Msg.GetEscrow()}))
+	if err != nil {
+		h.s.o.Logger.Warn("osadmin: escrow import refused", log.F("admin", c.session.Admin))
+		return nil, err
+	}
+	imported, kept := out.Msg.GetImported(), out.Msg.GetKept()
+	c.note("escrow", "imported", strings.Join(imported, ","), "kept", strings.Join(kept, ","))
+	h.s.o.Logger.Info("osadmin: escrow imported", log.F("admin", c.session.Admin), log.F("imported", len(imported)), log.F("kept", len(kept)))
+	return connect.NewResponse(&osadminv1.ImportEscrowResponse{Imported: imported, Kept: kept}), nil
+}
+
 // GenerateRecoveryKey makes an ed25519 key pair, adds its public half as a
 // recovery key exactly as AddRecoveryKey does, and returns the private key
 // this once. It never reaches the store, the audit entry or the log.

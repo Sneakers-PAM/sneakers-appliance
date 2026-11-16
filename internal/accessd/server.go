@@ -217,6 +217,7 @@ var shellMethods = map[string]bool{
 	accessv1connect.NetworkServiceConfirmNetworkProcedure:       true,
 	accessv1connect.SetupServiceGetSetupProcedure:               true,
 	accessv1connect.SetupServiceSetRecoveryKeyProcedure:         true,
+	accessv1connect.SetupServiceImportEscrowProcedure:           true,
 	accessv1connect.ElevationServiceListElevationsProcedure:     true,
 	accessv1connect.ElevationServiceBeginRootShellProcedure:     true,
 	accessv1connect.ElevationServiceOpenRootShellProcedure:      true,

@@ -140,6 +140,10 @@ service SetupService {
   }
   // SetRecoveryKey sets a recovery key during setup (an owner's shell).
   rpc SetRecoveryKey(SetRecoveryKeyRequest) returns (SetRecoveryKeyResponse);
+  // ImportEscrow brings another box's decrypted escrow onto this box at first
+  // boot (an owner's shell, over SSH): the items this box hasn't sealed are
+  // sealed, the ones it has stay. The escrow is a secret on standard input.
+  rpc ImportEscrow(ImportEscrowRequest) returns (ImportEscrowResponse);
   // AcknowledgeSingleAdmin records, from the console (root only), that the
   // operator confirmed the single-admin warning.
   rpc AcknowledgeSingleAdmin(AcknowledgeSingleAdminRequest) returns (AcknowledgeSingleAdminResponse);
@@ -415,6 +419,18 @@ message SetRecoveryKeyRequest {
 
 message SetRecoveryKeyResponse {
   sneakers.appliance.osadmin.v1.RecoveryKey recovery_key = 1;
+}
+
+message ImportEscrowRequest {
+  // escrow is the decrypted escrow bundle (JSON), a secret.
+  bytes escrow = 1;
+}
+
+message ImportEscrowResponse {
+  // imported are the names of the items sealed on this box.
+  repeated string imported = 1;
+  // kept are the names of the escrow's items this box had already sealed.
+  repeated string kept = 2;
 }
 
 message AcknowledgeSingleAdminRequest {}

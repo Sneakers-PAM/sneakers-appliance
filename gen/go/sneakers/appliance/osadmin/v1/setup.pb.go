@@ -1282,6 +1282,106 @@ func (x *AddRecoveryKeyRequest) GetLabel() string {
 	return ""
 }
 
+type ImportEscrowRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// escrow is the decrypted escrow bundle (JSON), a secret.
+	Escrow        []byte `protobuf:"bytes,1,opt,name=escrow,proto3" json:"escrow,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportEscrowRequest) Reset() {
+	*x = ImportEscrowRequest{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportEscrowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportEscrowRequest) ProtoMessage() {}
+
+func (x *ImportEscrowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportEscrowRequest.ProtoReflect.Descriptor instead.
+func (*ImportEscrowRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ImportEscrowRequest) GetEscrow() []byte {
+	if x != nil {
+		return x.Escrow
+	}
+	return nil
+}
+
+type ImportEscrowResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// imported are the names of the items sealed on this box.
+	Imported []string `protobuf:"bytes,1,rep,name=imported,proto3" json:"imported,omitempty"`
+	// kept are the names of the escrow's items this box had already sealed,
+	// which stay as they are.
+	Kept          []string `protobuf:"bytes,2,rep,name=kept,proto3" json:"kept,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportEscrowResponse) Reset() {
+	*x = ImportEscrowResponse{}
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportEscrowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportEscrowResponse) ProtoMessage() {}
+
+func (x *ImportEscrowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportEscrowResponse.ProtoReflect.Descriptor instead.
+func (*ImportEscrowResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ImportEscrowResponse) GetImported() []string {
+	if x != nil {
+		return x.Imported
+	}
+	return nil
+}
+
+func (x *ImportEscrowResponse) GetKept() []string {
+	if x != nil {
+		return x.Kept
+	}
+	return nil
+}
+
 type AddRecoveryKeyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	RecoveryKey   *RecoveryKey           `protobuf:"bytes,1,opt,name=recovery_key,json=recoveryKey,proto3" json:"recovery_key,omitempty"`
@@ -1291,7 +1391,7 @@ type AddRecoveryKeyResponse struct {
 
 func (x *AddRecoveryKeyResponse) Reset() {
 	*x = AddRecoveryKeyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1303,7 +1403,7 @@ func (x *AddRecoveryKeyResponse) String() string {
 func (*AddRecoveryKeyResponse) ProtoMessage() {}
 
 func (x *AddRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[16]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1316,7 +1416,7 @@ func (x *AddRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddRecoveryKeyResponse.ProtoReflect.Descriptor instead.
 func (*AddRecoveryKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{16}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *AddRecoveryKeyResponse) GetRecoveryKey() *RecoveryKey {
@@ -1336,7 +1436,7 @@ type GenerateRecoveryKeyRequest struct {
 
 func (x *GenerateRecoveryKeyRequest) Reset() {
 	*x = GenerateRecoveryKeyRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1348,7 +1448,7 @@ func (x *GenerateRecoveryKeyRequest) String() string {
 func (*GenerateRecoveryKeyRequest) ProtoMessage() {}
 
 func (x *GenerateRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[17]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1361,7 +1461,7 @@ func (x *GenerateRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateRecoveryKeyRequest.ProtoReflect.Descriptor instead.
 func (*GenerateRecoveryKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{17}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GenerateRecoveryKeyRequest) GetLabel() string {
@@ -1386,7 +1486,7 @@ type GenerateRecoveryKeyResponse struct {
 
 func (x *GenerateRecoveryKeyResponse) Reset() {
 	*x = GenerateRecoveryKeyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1398,7 +1498,7 @@ func (x *GenerateRecoveryKeyResponse) String() string {
 func (*GenerateRecoveryKeyResponse) ProtoMessage() {}
 
 func (x *GenerateRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[18]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1411,7 +1511,7 @@ func (x *GenerateRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateRecoveryKeyResponse.ProtoReflect.Descriptor instead.
 func (*GenerateRecoveryKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{18}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *GenerateRecoveryKeyResponse) GetRecoveryKey() *RecoveryKey {
@@ -1451,7 +1551,7 @@ type RemoveRecoveryKeyRequest struct {
 
 func (x *RemoveRecoveryKeyRequest) Reset() {
 	*x = RemoveRecoveryKeyRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1463,7 +1563,7 @@ func (x *RemoveRecoveryKeyRequest) String() string {
 func (*RemoveRecoveryKeyRequest) ProtoMessage() {}
 
 func (x *RemoveRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[19]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1476,7 +1576,7 @@ func (x *RemoveRecoveryKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRecoveryKeyRequest.ProtoReflect.Descriptor instead.
 func (*RemoveRecoveryKeyRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{19}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RemoveRecoveryKeyRequest) GetFingerprint() string {
@@ -1494,7 +1594,7 @@ type RemoveRecoveryKeyResponse struct {
 
 func (x *RemoveRecoveryKeyResponse) Reset() {
 	*x = RemoveRecoveryKeyResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1506,7 +1606,7 @@ func (x *RemoveRecoveryKeyResponse) String() string {
 func (*RemoveRecoveryKeyResponse) ProtoMessage() {}
 
 func (x *RemoveRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[20]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1519,7 +1619,7 @@ func (x *RemoveRecoveryKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveRecoveryKeyResponse.ProtoReflect.Descriptor instead.
 func (*RemoveRecoveryKeyResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{20}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{22}
 }
 
 type DownloadEscrowRequest struct {
@@ -1530,7 +1630,7 @@ type DownloadEscrowRequest struct {
 
 func (x *DownloadEscrowRequest) Reset() {
 	*x = DownloadEscrowRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1542,7 +1642,7 @@ func (x *DownloadEscrowRequest) String() string {
 func (*DownloadEscrowRequest) ProtoMessage() {}
 
 func (x *DownloadEscrowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[21]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1555,7 +1655,7 @@ func (x *DownloadEscrowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadEscrowRequest.ProtoReflect.Descriptor instead.
 func (*DownloadEscrowRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{21}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{23}
 }
 
 type DownloadEscrowResponse struct {
@@ -1568,7 +1668,7 @@ type DownloadEscrowResponse struct {
 
 func (x *DownloadEscrowResponse) Reset() {
 	*x = DownloadEscrowResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1580,7 +1680,7 @@ func (x *DownloadEscrowResponse) String() string {
 func (*DownloadEscrowResponse) ProtoMessage() {}
 
 func (x *DownloadEscrowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[22]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1593,7 +1693,7 @@ func (x *DownloadEscrowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadEscrowResponse.ProtoReflect.Descriptor instead.
 func (*DownloadEscrowResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{22}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DownloadEscrowResponse) GetFileName() string {
@@ -1618,7 +1718,7 @@ type AcknowledgeSingleAdminRequest struct {
 
 func (x *AcknowledgeSingleAdminRequest) Reset() {
 	*x = AcknowledgeSingleAdminRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1630,7 +1730,7 @@ func (x *AcknowledgeSingleAdminRequest) String() string {
 func (*AcknowledgeSingleAdminRequest) ProtoMessage() {}
 
 func (x *AcknowledgeSingleAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[23]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1643,7 +1743,7 @@ func (x *AcknowledgeSingleAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeSingleAdminRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeSingleAdminRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{23}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{25}
 }
 
 type AcknowledgeSingleAdminResponse struct {
@@ -1654,7 +1754,7 @@ type AcknowledgeSingleAdminResponse struct {
 
 func (x *AcknowledgeSingleAdminResponse) Reset() {
 	*x = AcknowledgeSingleAdminResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1666,7 +1766,7 @@ func (x *AcknowledgeSingleAdminResponse) String() string {
 func (*AcknowledgeSingleAdminResponse) ProtoMessage() {}
 
 func (x *AcknowledgeSingleAdminResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[24]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1679,7 +1779,7 @@ func (x *AcknowledgeSingleAdminResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeSingleAdminResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeSingleAdminResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{24}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{26}
 }
 
 type FinishRequest struct {
@@ -1690,7 +1790,7 @@ type FinishRequest struct {
 
 func (x *FinishRequest) Reset() {
 	*x = FinishRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1702,7 +1802,7 @@ func (x *FinishRequest) String() string {
 func (*FinishRequest) ProtoMessage() {}
 
 func (x *FinishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[25]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1715,7 +1815,7 @@ func (x *FinishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishRequest.ProtoReflect.Descriptor instead.
 func (*FinishRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{25}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{27}
 }
 
 type FinishResponse struct {
@@ -1727,7 +1827,7 @@ type FinishResponse struct {
 
 func (x *FinishResponse) Reset() {
 	*x = FinishResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1739,7 +1839,7 @@ func (x *FinishResponse) String() string {
 func (*FinishResponse) ProtoMessage() {}
 
 func (x *FinishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[26]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1752,7 +1852,7 @@ func (x *FinishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinishResponse.ProtoReflect.Descriptor instead.
 func (*FinishResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{26}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *FinishResponse) GetProductSetupUrl() string {
@@ -1771,7 +1871,7 @@ type CheckHostnameRequest struct {
 
 func (x *CheckHostnameRequest) Reset() {
 	*x = CheckHostnameRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1783,7 +1883,7 @@ func (x *CheckHostnameRequest) String() string {
 func (*CheckHostnameRequest) ProtoMessage() {}
 
 func (x *CheckHostnameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[27]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1796,7 +1896,7 @@ func (x *CheckHostnameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckHostnameRequest.ProtoReflect.Descriptor instead.
 func (*CheckHostnameRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{27}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *CheckHostnameRequest) GetHostname() string {
@@ -1818,7 +1918,7 @@ type HostnameAddress struct {
 
 func (x *HostnameAddress) Reset() {
 	*x = HostnameAddress{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1830,7 +1930,7 @@ func (x *HostnameAddress) String() string {
 func (*HostnameAddress) ProtoMessage() {}
 
 func (x *HostnameAddress) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[28]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1843,7 +1943,7 @@ func (x *HostnameAddress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HostnameAddress.ProtoReflect.Descriptor instead.
 func (*HostnameAddress) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{28}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *HostnameAddress) GetAddress() string {
@@ -1879,7 +1979,7 @@ type CheckHostnameResponse struct {
 
 func (x *CheckHostnameResponse) Reset() {
 	*x = CheckHostnameResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[29]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1891,7 +1991,7 @@ func (x *CheckHostnameResponse) String() string {
 func (*CheckHostnameResponse) ProtoMessage() {}
 
 func (x *CheckHostnameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[29]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1904,7 +2004,7 @@ func (x *CheckHostnameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckHostnameResponse.ProtoReflect.Descriptor instead.
 func (*CheckHostnameResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{29}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CheckHostnameResponse) GetHostname() string {
@@ -1960,7 +2060,7 @@ type SetHostnameRequest struct {
 
 func (x *SetHostnameRequest) Reset() {
 	*x = SetHostnameRequest{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[30]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1972,7 +2072,7 @@ func (x *SetHostnameRequest) String() string {
 func (*SetHostnameRequest) ProtoMessage() {}
 
 func (x *SetHostnameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[30]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1985,7 +2085,7 @@ func (x *SetHostnameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetHostnameRequest.ProtoReflect.Descriptor instead.
 func (*SetHostnameRequest) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{30}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetHostnameRequest) GetHostname() string {
@@ -2024,7 +2124,7 @@ type SetHostnameResponse struct {
 
 func (x *SetHostnameResponse) Reset() {
 	*x = SetHostnameResponse{}
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[31]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2036,7 +2136,7 @@ func (x *SetHostnameResponse) String() string {
 func (*SetHostnameResponse) ProtoMessage() {}
 
 func (x *SetHostnameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[31]
+	mi := &file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2049,7 +2149,7 @@ func (x *SetHostnameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetHostnameResponse.ProtoReflect.Descriptor instead.
 func (*SetHostnameResponse) Descriptor() ([]byte, []int) {
-	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{31}
+	return file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SetHostnameResponse) GetHostname() string {
@@ -2178,7 +2278,12 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x15AddRecoveryKeyRequest\x12\x1d\n" +
 	"\n" +
 	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\"g\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"-\n" +
+	"\x13ImportEscrowRequest\x12\x16\n" +
+	"\x06escrow\x18\x01 \x01(\fR\x06escrow\"F\n" +
+	"\x14ImportEscrowResponse\x12\x1a\n" +
+	"\bimported\x18\x01 \x03(\tR\bimported\x12\x12\n" +
+	"\x04kept\x18\x02 \x03(\tR\x04kept\"g\n" +
 	"\x16AddRecoveryKeyResponse\x12M\n" +
 	"\frecovery_key\x18\x01 \x01(\v2*.sneakers.appliance.osadmin.v1.RecoveryKeyR\vrecoveryKey\"2\n" +
 	"\x1aGenerateRecoveryKeyRequest\x12\x14\n" +
@@ -2242,7 +2347,7 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x14HOSTNAME_CHECK_MATCH\x10\x01\x12\x1c\n" +
 	"\x18HOSTNAME_CHECK_ELSEWHERE\x10\x02\x12\x1c\n" +
 	"\x18HOSTNAME_CHECK_NOT_FOUND\x10\x03\x12\x1b\n" +
-	"\x17HOSTNAME_CHECK_DNS_DOWN\x10\x042\xba\x11\n" +
+	"\x17HOSTNAME_CHECK_DNS_DOWN\x10\x042\xd5\x12\n" +
 	"\fSetupService\x12x\n" +
 	"\bGetSetup\x12..sneakers.appliance.osadmin.v1.GetSetupRequest\x1a/.sneakers.appliance.osadmin.v1.GetSetupResponse\"\v\xc2\xf3\x18\x04\x10\x01(\x01\x90\x02\x01\x12\x8c\x01\n" +
 	"\n" +
@@ -2253,7 +2358,8 @@ const file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc = "" +
 	"\x0fAcknowledgeStep\x125.sneakers.appliance.osadmin.v1.AcknowledgeStepRequest\x1a6.sneakers.appliance.osadmin.v1.AcknowledgeStepResponse\" \xc2\xf3\x18\x1c\x10\x02\"\x16setup.step.acknowledge0\x01\x12\x9a\x01\n" +
 	"\rCheckHostname\x123.sneakers.appliance.osadmin.v1.CheckHostnameRequest\x1a4.sneakers.appliance.osadmin.v1.CheckHostnameResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x14setup.hostname.check0\x01\x12\x94\x01\n" +
 	"\vSetHostname\x121.sneakers.appliance.osadmin.v1.SetHostnameRequest\x1a2.sneakers.appliance.osadmin.v1.SetHostnameResponse\"\x1e\xc2\xf3\x18\x1a\x10\x02\"\x12setup.hostname.set0\x018\x01\x12\x9f\x01\n" +
-	"\x0eAddRecoveryKey\x124.sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest\x1a5.sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16setup.recovery-key.add\x12\xb3\x01\n" +
+	"\x0eAddRecoveryKey\x124.sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest\x1a5.sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse\" \xc2\xf3\x18\x1c\x10\x02\x18\x01\"\x16setup.recovery-key.add\x12\x98\x01\n" +
+	"\fImportEscrow\x122.sneakers.appliance.osadmin.v1.ImportEscrowRequest\x1a3.sneakers.appliance.osadmin.v1.ImportEscrowResponse\"\x1f\xc2\xf3\x18\x1b\x10\x02\x18\x01\"\x13setup.escrow.import@\x01\x12\xb3\x01\n" +
 	"\x13GenerateRecoveryKey\x129.sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest\x1a:.sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse\"%\xc2\xf3\x18!\x10\x02\x18\x01\"\x1bsetup.recovery-key.generate\x12\xab\x01\n" +
 	"\x11RemoveRecoveryKey\x127.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest\x1a8.sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse\"#\xc2\xf3\x18\x1f\x10\x02\x18\x01\"\x19setup.recovery-key.remove\x12\x9c\x01\n" +
 	"\x0eDownloadEscrow\x124.sneakers.appliance.osadmin.v1.DownloadEscrowRequest\x1a5.sneakers.appliance.osadmin.v1.DownloadEscrowResponse\"\x1d\xc2\xf3\x18\x19\x10\x02\"\x15setup.escrow.download\x12\xbf\x01\n" +
@@ -2273,7 +2379,7 @@ func file_sneakers_appliance_osadmin_v1_setup_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_osadmin_v1_setup_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
+var file_sneakers_appliance_osadmin_v1_setup_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_sneakers_appliance_osadmin_v1_setup_proto_goTypes = []any{
 	(SetupStepKind)(0),                     // 0: sneakers.appliance.osadmin.v1.SetupStepKind
 	(CodeKind)(0),                          // 1: sneakers.appliance.osadmin.v1.CodeKind
@@ -2294,73 +2400,77 @@ var file_sneakers_appliance_osadmin_v1_setup_proto_goTypes = []any{
 	(*AcknowledgeStepRequest)(nil),         // 16: sneakers.appliance.osadmin.v1.AcknowledgeStepRequest
 	(*AcknowledgeStepResponse)(nil),        // 17: sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
 	(*AddRecoveryKeyRequest)(nil),          // 18: sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest
-	(*AddRecoveryKeyResponse)(nil),         // 19: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
-	(*GenerateRecoveryKeyRequest)(nil),     // 20: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
-	(*GenerateRecoveryKeyResponse)(nil),    // 21: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
-	(*RemoveRecoveryKeyRequest)(nil),       // 22: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
-	(*RemoveRecoveryKeyResponse)(nil),      // 23: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
-	(*DownloadEscrowRequest)(nil),          // 24: sneakers.appliance.osadmin.v1.DownloadEscrowRequest
-	(*DownloadEscrowResponse)(nil),         // 25: sneakers.appliance.osadmin.v1.DownloadEscrowResponse
-	(*AcknowledgeSingleAdminRequest)(nil),  // 26: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
-	(*AcknowledgeSingleAdminResponse)(nil), // 27: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
-	(*FinishRequest)(nil),                  // 28: sneakers.appliance.osadmin.v1.FinishRequest
-	(*FinishResponse)(nil),                 // 29: sneakers.appliance.osadmin.v1.FinishResponse
-	(*CheckHostnameRequest)(nil),           // 30: sneakers.appliance.osadmin.v1.CheckHostnameRequest
-	(*HostnameAddress)(nil),                // 31: sneakers.appliance.osadmin.v1.HostnameAddress
-	(*CheckHostnameResponse)(nil),          // 32: sneakers.appliance.osadmin.v1.CheckHostnameResponse
-	(*SetHostnameRequest)(nil),             // 33: sneakers.appliance.osadmin.v1.SetHostnameRequest
-	(*SetHostnameResponse)(nil),            // 34: sneakers.appliance.osadmin.v1.SetHostnameResponse
-	(*timestamppb.Timestamp)(nil),          // 35: google.protobuf.Timestamp
-	(*Session)(nil),                        // 36: sneakers.appliance.osadmin.v1.Session
+	(*ImportEscrowRequest)(nil),            // 19: sneakers.appliance.osadmin.v1.ImportEscrowRequest
+	(*ImportEscrowResponse)(nil),           // 20: sneakers.appliance.osadmin.v1.ImportEscrowResponse
+	(*AddRecoveryKeyResponse)(nil),         // 21: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
+	(*GenerateRecoveryKeyRequest)(nil),     // 22: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
+	(*GenerateRecoveryKeyResponse)(nil),    // 23: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
+	(*RemoveRecoveryKeyRequest)(nil),       // 24: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
+	(*RemoveRecoveryKeyResponse)(nil),      // 25: sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
+	(*DownloadEscrowRequest)(nil),          // 26: sneakers.appliance.osadmin.v1.DownloadEscrowRequest
+	(*DownloadEscrowResponse)(nil),         // 27: sneakers.appliance.osadmin.v1.DownloadEscrowResponse
+	(*AcknowledgeSingleAdminRequest)(nil),  // 28: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
+	(*AcknowledgeSingleAdminResponse)(nil), // 29: sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
+	(*FinishRequest)(nil),                  // 30: sneakers.appliance.osadmin.v1.FinishRequest
+	(*FinishResponse)(nil),                 // 31: sneakers.appliance.osadmin.v1.FinishResponse
+	(*CheckHostnameRequest)(nil),           // 32: sneakers.appliance.osadmin.v1.CheckHostnameRequest
+	(*HostnameAddress)(nil),                // 33: sneakers.appliance.osadmin.v1.HostnameAddress
+	(*CheckHostnameResponse)(nil),          // 34: sneakers.appliance.osadmin.v1.CheckHostnameResponse
+	(*SetHostnameRequest)(nil),             // 35: sneakers.appliance.osadmin.v1.SetHostnameRequest
+	(*SetHostnameResponse)(nil),            // 36: sneakers.appliance.osadmin.v1.SetHostnameResponse
+	(*timestamppb.Timestamp)(nil),          // 37: google.protobuf.Timestamp
+	(*Session)(nil),                        // 38: sneakers.appliance.osadmin.v1.Session
 }
 var file_sneakers_appliance_osadmin_v1_setup_proto_depIdxs = []int32{
-	35, // 0: sneakers.appliance.osadmin.v1.RecoveryKey.set:type_name -> google.protobuf.Timestamp
+	37, // 0: sneakers.appliance.osadmin.v1.RecoveryKey.set:type_name -> google.protobuf.Timestamp
 	3,  // 1: sneakers.appliance.osadmin.v1.GetSetupResponse.recovery_keys:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
 	6,  // 2: sneakers.appliance.osadmin.v1.GetSetupResponse.steps:type_name -> sneakers.appliance.osadmin.v1.SetupStep
 	1,  // 3: sneakers.appliance.osadmin.v1.GetSetupResponse.code_kind:type_name -> sneakers.appliance.osadmin.v1.CodeKind
-	35, // 4: sneakers.appliance.osadmin.v1.GetSetupResponse.code_session_expires:type_name -> google.protobuf.Timestamp
+	37, // 4: sneakers.appliance.osadmin.v1.GetSetupResponse.code_session_expires:type_name -> google.protobuf.Timestamp
 	0,  // 5: sneakers.appliance.osadmin.v1.SetupStep.kind:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
 	1,  // 6: sneakers.appliance.osadmin.v1.RedeemCodeResponse.kind:type_name -> sneakers.appliance.osadmin.v1.CodeKind
-	35, // 7: sneakers.appliance.osadmin.v1.RedeemCodeResponse.expires:type_name -> google.protobuf.Timestamp
-	35, // 8: sneakers.appliance.osadmin.v1.TotpEnrolment.expires:type_name -> google.protobuf.Timestamp
+	37, // 7: sneakers.appliance.osadmin.v1.RedeemCodeResponse.expires:type_name -> google.protobuf.Timestamp
+	37, // 8: sneakers.appliance.osadmin.v1.TotpEnrolment.expires:type_name -> google.protobuf.Timestamp
 	12, // 9: sneakers.appliance.osadmin.v1.BeginCredentialsResponse.totp:type_name -> sneakers.appliance.osadmin.v1.TotpEnrolment
-	36, // 10: sneakers.appliance.osadmin.v1.CompleteCredentialsResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
+	38, // 10: sneakers.appliance.osadmin.v1.CompleteCredentialsResponse.session:type_name -> sneakers.appliance.osadmin.v1.Session
 	0,  // 11: sneakers.appliance.osadmin.v1.AcknowledgeStepRequest.step:type_name -> sneakers.appliance.osadmin.v1.SetupStepKind
 	3,  // 12: sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
 	3,  // 13: sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse.recovery_key:type_name -> sneakers.appliance.osadmin.v1.RecoveryKey
 	2,  // 14: sneakers.appliance.osadmin.v1.CheckHostnameResponse.result:type_name -> sneakers.appliance.osadmin.v1.HostnameCheck
-	31, // 15: sneakers.appliance.osadmin.v1.CheckHostnameResponse.addresses:type_name -> sneakers.appliance.osadmin.v1.HostnameAddress
-	35, // 16: sneakers.appliance.osadmin.v1.SetHostnameResponse.handoff_expires:type_name -> google.protobuf.Timestamp
+	33, // 15: sneakers.appliance.osadmin.v1.CheckHostnameResponse.addresses:type_name -> sneakers.appliance.osadmin.v1.HostnameAddress
+	37, // 16: sneakers.appliance.osadmin.v1.SetHostnameResponse.handoff_expires:type_name -> google.protobuf.Timestamp
 	4,  // 17: sneakers.appliance.osadmin.v1.SetupService.GetSetup:input_type -> sneakers.appliance.osadmin.v1.GetSetupRequest
 	7,  // 18: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:input_type -> sneakers.appliance.osadmin.v1.RedeemCodeRequest
 	9,  // 19: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:input_type -> sneakers.appliance.osadmin.v1.CheckPasswordRequest
 	11, // 20: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:input_type -> sneakers.appliance.osadmin.v1.BeginCredentialsRequest
 	14, // 21: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:input_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsRequest
 	16, // 22: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepRequest
-	30, // 23: sneakers.appliance.osadmin.v1.SetupService.CheckHostname:input_type -> sneakers.appliance.osadmin.v1.CheckHostnameRequest
-	33, // 24: sneakers.appliance.osadmin.v1.SetupService.SetHostname:input_type -> sneakers.appliance.osadmin.v1.SetHostnameRequest
+	32, // 23: sneakers.appliance.osadmin.v1.SetupService.CheckHostname:input_type -> sneakers.appliance.osadmin.v1.CheckHostnameRequest
+	35, // 24: sneakers.appliance.osadmin.v1.SetupService.SetHostname:input_type -> sneakers.appliance.osadmin.v1.SetHostnameRequest
 	18, // 25: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyRequest
-	20, // 26: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
-	22, // 27: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
-	24, // 28: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:input_type -> sneakers.appliance.osadmin.v1.DownloadEscrowRequest
-	26, // 29: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
-	28, // 30: sneakers.appliance.osadmin.v1.SetupService.Finish:input_type -> sneakers.appliance.osadmin.v1.FinishRequest
-	5,  // 31: sneakers.appliance.osadmin.v1.SetupService.GetSetup:output_type -> sneakers.appliance.osadmin.v1.GetSetupResponse
-	8,  // 32: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:output_type -> sneakers.appliance.osadmin.v1.RedeemCodeResponse
-	10, // 33: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:output_type -> sneakers.appliance.osadmin.v1.CheckPasswordResponse
-	13, // 34: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:output_type -> sneakers.appliance.osadmin.v1.BeginCredentialsResponse
-	15, // 35: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:output_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsResponse
-	17, // 36: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
-	32, // 37: sneakers.appliance.osadmin.v1.SetupService.CheckHostname:output_type -> sneakers.appliance.osadmin.v1.CheckHostnameResponse
-	34, // 38: sneakers.appliance.osadmin.v1.SetupService.SetHostname:output_type -> sneakers.appliance.osadmin.v1.SetHostnameResponse
-	19, // 39: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
-	21, // 40: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
-	23, // 41: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
-	25, // 42: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:output_type -> sneakers.appliance.osadmin.v1.DownloadEscrowResponse
-	27, // 43: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
-	29, // 44: sneakers.appliance.osadmin.v1.SetupService.Finish:output_type -> sneakers.appliance.osadmin.v1.FinishResponse
-	31, // [31:45] is the sub-list for method output_type
-	17, // [17:31] is the sub-list for method input_type
+	19, // 26: sneakers.appliance.osadmin.v1.SetupService.ImportEscrow:input_type -> sneakers.appliance.osadmin.v1.ImportEscrowRequest
+	22, // 27: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyRequest
+	24, // 28: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:input_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyRequest
+	26, // 29: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:input_type -> sneakers.appliance.osadmin.v1.DownloadEscrowRequest
+	28, // 30: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:input_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminRequest
+	30, // 31: sneakers.appliance.osadmin.v1.SetupService.Finish:input_type -> sneakers.appliance.osadmin.v1.FinishRequest
+	5,  // 32: sneakers.appliance.osadmin.v1.SetupService.GetSetup:output_type -> sneakers.appliance.osadmin.v1.GetSetupResponse
+	8,  // 33: sneakers.appliance.osadmin.v1.SetupService.RedeemCode:output_type -> sneakers.appliance.osadmin.v1.RedeemCodeResponse
+	10, // 34: sneakers.appliance.osadmin.v1.SetupService.CheckPassword:output_type -> sneakers.appliance.osadmin.v1.CheckPasswordResponse
+	13, // 35: sneakers.appliance.osadmin.v1.SetupService.BeginCredentials:output_type -> sneakers.appliance.osadmin.v1.BeginCredentialsResponse
+	15, // 36: sneakers.appliance.osadmin.v1.SetupService.CompleteCredentials:output_type -> sneakers.appliance.osadmin.v1.CompleteCredentialsResponse
+	17, // 37: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeStepResponse
+	34, // 38: sneakers.appliance.osadmin.v1.SetupService.CheckHostname:output_type -> sneakers.appliance.osadmin.v1.CheckHostnameResponse
+	36, // 39: sneakers.appliance.osadmin.v1.SetupService.SetHostname:output_type -> sneakers.appliance.osadmin.v1.SetHostnameResponse
+	21, // 40: sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.AddRecoveryKeyResponse
+	20, // 41: sneakers.appliance.osadmin.v1.SetupService.ImportEscrow:output_type -> sneakers.appliance.osadmin.v1.ImportEscrowResponse
+	23, // 42: sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.GenerateRecoveryKeyResponse
+	25, // 43: sneakers.appliance.osadmin.v1.SetupService.RemoveRecoveryKey:output_type -> sneakers.appliance.osadmin.v1.RemoveRecoveryKeyResponse
+	27, // 44: sneakers.appliance.osadmin.v1.SetupService.DownloadEscrow:output_type -> sneakers.appliance.osadmin.v1.DownloadEscrowResponse
+	29, // 45: sneakers.appliance.osadmin.v1.SetupService.AcknowledgeSingleAdmin:output_type -> sneakers.appliance.osadmin.v1.AcknowledgeSingleAdminResponse
+	31, // 46: sneakers.appliance.osadmin.v1.SetupService.Finish:output_type -> sneakers.appliance.osadmin.v1.FinishResponse
+	32, // [32:47] is the sub-list for method output_type
+	17, // [17:32] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
 	17, // [17:17] is the sub-list for extension extendee
 	0,  // [0:17] is the sub-list for field type_name
@@ -2379,7 +2489,7 @@ func file_sneakers_appliance_osadmin_v1_setup_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc), len(file_sneakers_appliance_osadmin_v1_setup_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   32,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

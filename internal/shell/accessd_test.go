@@ -27,6 +27,7 @@ import (
 
 // fakeAccessd is accessd's local API as the shell sees it.
 type fakeAccessd struct {
+	accessv1connect.UnimplementedSetupServiceHandler
 	accessv1connect.UnimplementedAccessServiceHandler
 	accessv1connect.UnimplementedNetworkServiceHandler
 	mu       sync.Mutex
@@ -40,6 +41,19 @@ type fakeAccessd struct {
 	commitErr error
 	committed []string
 	discarded int
+	// escrow is what ImportEscrow was given; importErr refuses it.
+	escrow    []byte
+	importErr error
+}
+
+func (f *fakeAccessd) ImportEscrow(_ context.Context, r *connect.Request[accessv1.ImportEscrowRequest]) (*connect.Response[accessv1.ImportEscrowResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.escrow = r.Msg.GetEscrow()
+	if f.importErr != nil {
+		return nil, f.importErr
+	}
+	return connect.NewResponse(&accessv1.ImportEscrowResponse{Imported: []string{"product-sneakers-totp-key", "product-sneakers-vault-root-key"}, Kept: []string{"root-key"}}), nil
 }
 
 func (f *fakeAccessd) saw(h http.Header) {
@@ -106,6 +120,7 @@ func withAccessd(t *testing.T, f *fakeAccessd) (*shell.Services, *httptest.Serve
 	mux := http.NewServeMux()
 	mux.Handle(accessv1connect.NewAccessServiceHandler(f))
 	mux.Handle(accessv1connect.NewNetworkServiceHandler(f))
+	mux.Handle(accessv1connect.NewSetupServiceHandler(f))
 	mux.Handle(accessv1connect.NewElevationServiceHandler(accessv1connect.UnimplementedElevationServiceHandler{}))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -320,5 +335,38 @@ func TestNetworkDiscardThroughAccessd(t *testing.T) {
 	s, _ := withAccessd(t, f)
 	if _, _, err := runWith(t, s, "network discard", ""); err != nil || f.discarded != 1 {
 		t.Fatalf("%v %d", err, f.discarded)
+	}
+}
+
+// "setup escrow-import" hands accessd the decrypted escrow from standard
+// input and prints which items came over and which the box kept, by name;
+// the escrow itself is never printed.
+func TestSetupEscrowImportSendsStandardInputAndReportsNames(t *testing.T) {
+	f := &fakeAccessd{}
+	s, _ := withAccessd(t, f)
+	const escrow = `{"version":1,"items":{"x":"c2VjcmV0"}}`
+	out, _, err := runWith(t, s, "setup escrow-import", escrow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(f.escrow) != escrow {
+		t.Fatalf("accessd was given %q", f.escrow)
+	}
+	for _, want := range []string{"product-sneakers-totp-key", "product-sneakers-vault-root-key", "Kept", "root-key"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the answer lacks %q: %q", want, out)
+		}
+	}
+	if strings.Contains(out, "c2VjcmV0") {
+		t.Errorf("the answer carries the escrow: %q", out)
+	}
+}
+
+func TestSetupEscrowImportShowsTheRefusal(t *testing.T) {
+	f := &fakeAccessd{importErr: connect.NewError(connect.CodeFailedPrecondition, errors.New("KEYCUSTODY_PHASE (2307): an escrow is imported only in firstboot"))}
+	s, _ := withAccessd(t, f)
+	_, stderr, err := runWith(t, s, "setup escrow-import", `{"version":1}`)
+	if !codes.Is(err, codes.KeyCustodyPhase) || !strings.Contains(stderr, "only in firstboot") {
+		t.Fatalf("%v %q", err, stderr)
 	}
 }
