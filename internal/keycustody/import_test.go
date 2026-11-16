@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"slices"
 	"testing"
 
 	"filippo.io/age"
@@ -59,7 +60,7 @@ func TestImportEscrowOnNewHardware(t *testing.T) {
 	plain := escrowPlaintext(t, a)
 
 	b := custodyIn(t, phase.Firstboot)
-	if err := b.ImportEscrow(plain); err != nil {
+	if _, err := b.ImportEscrow(plain); err != nil {
 		t.Fatal(err)
 	}
 	for name, want := range map[string]string{"vault-root": "box A root", "audit-key": "box A audit"} {
@@ -68,8 +69,43 @@ func TestImportEscrowOnNewHardware(t *testing.T) {
 			t.Fatalf("%s: %q %v", name, got, err)
 		}
 	}
-	if err := b.ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyPhase) {
+	if _, err := b.ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyPhase) {
 		t.Fatalf("a second import must be refused once root secrets exist, got %v", err)
+	}
+}
+
+// A real box has sealed its own items before an admin can reach it (the SSH
+// root key, the pepper, the host CA). The import keeps those, and brings in
+// the old box's other items.
+func TestImportEscrowKeepsTheItemsTheBoxSealedForItself(t *testing.T) {
+	a := custodyIn(t, phase.Normal)
+	for name, v := range map[string]string{"root-key": "box A ssh", "product-sneakers-vault-root-key": "box A vault"} {
+		if err := a.Seal(name, []byte(v)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	plain := escrowPlaintext(t, a)
+
+	b := custodyIn(t, phase.Firstboot)
+	if err := b.Seal("root-key", []byte("box B ssh")); err != nil {
+		t.Fatal(err)
+	}
+	res, err := b.ImportEscrow(plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(res.Imported, []string{"product-sneakers-vault-root-key"}) || !slices.Equal(res.Kept, []string{"root-key"}) {
+		t.Fatalf("imported %v, kept %v", res.Imported, res.Kept)
+	}
+	for name, want := range map[string]string{"root-key": "box B ssh", "product-sneakers-vault-root-key": "box A vault"} {
+		got, err := b.Unseal(name)
+		if err != nil || string(got) != want {
+			t.Fatalf("%s: %q %v", name, got, err)
+		}
+	}
+	// Everything the escrow holds is sealed now: a second import has nothing to bring.
+	if _, err := b.ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyPhase) {
+		t.Fatalf("a second import must be refused, got %v", err)
 	}
 }
 
@@ -80,7 +116,7 @@ func TestImportEscrowOnlyInFirstboot(t *testing.T) {
 	}
 	plain := escrowPlaintext(t, a)
 	for _, p := range []phase.Phase{phase.Normal, phase.Install, phase.Enrol, phase.Mismatch} {
-		if err := custodyIn(t, p).ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyPhase) {
+		if _, err := custodyIn(t, p).ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyPhase) {
 			t.Errorf("%s: want KEYCUSTODY_PHASE, got %v", p, err)
 		}
 	}
@@ -94,7 +130,7 @@ func TestImportEscrowRefusesBadContents(t *testing.T) {
 	}
 	for name, plain := range bad {
 		kc := custodyIn(t, phase.Firstboot)
-		if err := kc.ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyInvalid) {
+		if _, err := kc.ImportEscrow(plain); !codes.Is(err, codes.KeyCustodyInvalid) {
 			t.Errorf("%s: want KEYCUSTODY_INVALID, got %v", name, err)
 		}
 		if _, err := kc.Unseal("x"); !codes.Is(err, codes.KeyCustodyNotFound) {
