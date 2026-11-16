@@ -85,51 +85,9 @@ func Render(o Options, w io.Writer) error { return render(o, w) }
 type doc = map[string]any
 
 func render(o options, w io.Writer) error {
-	relYAML, err := os.ReadFile(o.Release) // #nosec G304 G703 -- a build tool reading the file it was handed
+	rel, pins, spec, box, o, err := prepare(o)
 	if err != nil {
 		return err
-	}
-	rel, err := bundle.ParseRelease(relYAML)
-	if err != nil {
-		return err
-	}
-	pins, err := pinned(rel)
-	if err != nil {
-		return err
-	}
-	pb, err := os.ReadFile(o.ProductYAML) // #nosec G304 G703 -- as above
-	if err != nil {
-		return err
-	}
-	spec, err := productspec.Parse(pb)
-	if err != nil {
-		return err
-	}
-	if spec.Backups != nil {
-		o.backupClaim, o.backupDir = spec.Backups.Claim, spec.Backups.HostDir()
-	}
-	box := map[string]map[string]bool{}
-	for _, b := range spec.BoxSecrets {
-		if b.Namespace() != o.Namespace {
-			continue
-		}
-		box[b.SecretName()] = map[string]bool{}
-		for _, k := range b.KeyNames() {
-			box[b.SecretName()][k] = true
-		}
-	}
-	o.secretKeys, o.boxMaps = map[string]bool{}, map[string]bool{}
-	for _, b := range spec.BoxSecrets {
-		for _, k := range b.Keys {
-			if _, secret := productspec.IsSetting(k.Setting); secret {
-				o.secretKeys[k.Key] = true
-			}
-		}
-	}
-	for _, b := range spec.BoxSettings {
-		if b.Namespace() == o.Namespace {
-			o.boxMaps[b.ConfigMapName()] = true
-		}
 	}
 	images := map[string]bool{}
 	offDocs, err := convert(o, o.Off, pins, box, images)
@@ -175,6 +133,62 @@ func render(o options, w io.Writer) error {
 	sort.Strings(list)
 	_, err = fmt.Fprintf(w, "stack: %s %d objects, %s %d objects, %d images\n%s\n", o.Stack, len(offDocs)+1, o.SwitchStack, len(switchDocs), len(list), strings.Join(list, "\n"))
 	return err
+}
+
+// prepare reads release.yaml and product.yaml and fills in what convert needs
+// from them: the images pinned, the box secrets of o's namespace, the keys
+// that hold a secret setting and the ConfigMaps the box writes.
+func prepare(o options) (*bundle.Release, map[string]string, productspec.Spec, map[string]map[string]bool, options, error) {
+	fail := func(err error) (*bundle.Release, map[string]string, productspec.Spec, map[string]map[string]bool, options, error) {
+		return nil, nil, productspec.Spec{}, nil, o, err
+	}
+	relYAML, err := os.ReadFile(o.Release) // #nosec G304 G703 -- a build tool reading the file it was handed
+	if err != nil {
+		return fail(err)
+	}
+	rel, err := bundle.ParseRelease(relYAML)
+	if err != nil {
+		return fail(err)
+	}
+	pins, err := pinned(rel)
+	if err != nil {
+		return fail(err)
+	}
+	pb, err := os.ReadFile(o.ProductYAML) // #nosec G304 G703 -- as above
+	if err != nil {
+		return fail(err)
+	}
+	spec, err := productspec.Parse(pb)
+	if err != nil {
+		return fail(err)
+	}
+	if spec.Backups != nil {
+		o.backupClaim, o.backupDir = spec.Backups.Claim, spec.Backups.HostDir()
+	}
+	box := map[string]map[string]bool{}
+	for _, b := range spec.BoxSecrets {
+		if b.Namespace() != o.Namespace {
+			continue
+		}
+		box[b.SecretName()] = map[string]bool{}
+		for _, k := range b.KeyNames() {
+			box[b.SecretName()][k] = true
+		}
+	}
+	o.secretKeys, o.boxMaps = map[string]bool{}, map[string]bool{}
+	for _, b := range spec.BoxSecrets {
+		for _, k := range b.Keys {
+			if _, secret := productspec.IsSetting(k.Setting); secret {
+				o.secretKeys[k.Key] = true
+			}
+		}
+	}
+	for _, b := range spec.BoxSettings {
+		if b.Namespace() == o.Namespace {
+			o.boxMaps[b.ConfigMapName()] = true
+		}
+	}
+	return rel, pins, spec, box, o, nil
 }
 
 // pinned maps every image release.yaml pins (services, third party,
