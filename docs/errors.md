@@ -46,9 +46,13 @@ shell, the console and :8443 show the same sentence.
 | 3405 | `NET_DNS` | a DNS server didn't answer |
 | 3406 | `NET_NTP` | no NTP server gave a usable time |
 | 3407 | `NET_REVERTED` | a change wasn't confirmed in 120 seconds and was undone |
+| 3408 | `NET_NAME_NOT_FOUND` | the host name isn't in the box's DNS, or has no A or AAAA record |
+| 3409 | `NET_NAME_ELSEWHERE` | the host name points at other addresses, not the box's management address |
 | 3501 | `SETUP_INCOMPLETE` | a setup step is still open (the error names it) |
 | 3502 | `SETUP_CODE` | a wrong, used or expired one-time code (setup, invitation or Recover access) |
 | 3503 | `SETUP_DONE` | setup is done: a setup-only call, or a call with a setup code's session |
+| 3504 | `SETUP_STEP_DONE` | that setup step is done already; change it on its own page (the network step's host name on Network) |
+| 3505 | `SETUP_HANDOFF` | the handoff link from setting the host name is expired, used, unknown or its session ended; sign in to carry on |
 | 3601 | `RESET_UNAVAILABLE` | no factory reset: a single admin, a roster that can't reach its threshold, or one already in progress |
 | 3602 | `RESET_APPROVED` | this admin's approval is already counted, or they aren't on the roster |
 | 3603 | `RESET_CANCELLED` | the factory reset was cancelled, expired or never started |
@@ -80,8 +84,9 @@ shell, the console and :8443 show the same sentence.
 | 3811 | `TLS_LIMIT` | the store already holds 32 certificates or 8 pending CSRs |
 | 3812 | `TLS_ENDPOINT_UNAVAILABLE` | the endpoint isn't on this box yet (the product endpoint needs the product installed) |
 | 3813 | `TLS_NOT_SERVED` | the new certificate wasn't served in time (15 seconds on :8443, 3 minutes on 443), so the previous one was put back |
-| 3814 | `TLS_ACME_UNAVAILABLE` | ACME through cert-manager isn't available yet; it comes with the product bundle |
+| 3814 | `TLS_ACME_UNAVAILABLE` | ACME can't run on this box: no product is installed, or its bundle carries no cert-manager (the error says which) |
 | 3815 | `TLS_NO_HOSTNAME` | the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network |
+| 3816 | `TLS_ACME_FAILED` | cert-manager couldn't issue or renew the certificate, or the box couldn't serve the one it issued (the audit entry carries the reason) |
 
 ## Product email (39xx)
 
@@ -95,6 +100,13 @@ shell, the console and :8443 show the same sentence.
 | 3906 | `EMAIL_CODE_WRONG` | the code typed isn't the one the test email carried; five wrong tries drop the code |
 | 3907 | `EMAIL_CODE_EXPIRED` | no code is waiting for these settings and password: it was never sent, is older than ten minutes, was used or dropped after five wrong tries, or belongs to other settings; send the test email again |
 
+## Product resources (392x)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3920 | `RESOURCES_INVALID` | a setting fails validation (the error names it): no replicas, storage that would shrink, a malformed parameter or a pool size out of range |
+| 3921 | `RESOURCES_UNAVAILABLE` | the product's PostgreSQL cluster can't be read |
+
 ## Product telemetry (391x)
 
 | Code | Symbol | Cause |
@@ -102,6 +114,14 @@ shell, the console and :8443 show the same sentence.
 | 3910 | `TELEMETRY_INVALID` | a telemetry setting fails validation (the error names it) |
 | 3911 | `TELEMETRY_UNREACHABLE` | the collector didn't answer a TLS handshake when the settings were saved; nothing was saved |
 | 3912 | `TELEMETRY_RESTART` | there's no failed restart to retry, or a workload didn't come back in time |
+
+## Vault root key rotation (393x)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3930 | `ROOTKEY_UNAVAILABLE` | the installed product can't rotate the vault root key (its bundle names no previous key), or the box can't reach the vault's status |
+| 3931 | `ROOTKEY_UNFINISHED` | a root key rotation is under way or stopped half way; finish it (rotate again) before anything that applies the product |
+| 3932 | `ROOTKEY_NOT_VERIFIED` | the vault didn't verify the move to the new root key in time, or reported it failed; both keys are kept and nothing was deleted |
 
 ## Build kit and boot (1xxx and 2xxx)
 

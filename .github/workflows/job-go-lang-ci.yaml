@@ -157,5 +157,7 @@ jobs:
           bash build/lab/build_test.sh
           bash build/lab/pages_test.sh
           bash build/lab/units_test.sh
+      - name: The cert-manager stack takes the pinned upstream and the pinned images
+        run: bash build/product/cert-manager/render_test.sh
       - name: The production product bundle's stacks are complete and carry no lab value
         run: bash build/product/sneakers/render_test.sh

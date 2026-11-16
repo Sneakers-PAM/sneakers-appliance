@@ -43,6 +43,9 @@ type candidate struct {
 	// pub is the key the leaf must be for; keyDesc names it in errors.
 	pub     crypto.PublicKey
 	keyDesc string
+	// acme marks a certificate cert-manager issued: the CA's chain is
+	// taken as it comes, with no root to build to.
+	acme bool
 }
 
 type equaler interface{ Equal(crypto.PublicKey) bool }
@@ -79,7 +82,13 @@ func validate(c candidate, host string, addrs []string, now time.Time) ([]*x509.
 		pass("usage", "TLS server")
 	}
 
-	built, err := buildChain(c, now)
+	var built []*x509.Certificate
+	var err error
+	if c.acme {
+		built = append([]*x509.Certificate{c.leaf}, c.chain...)
+	} else {
+		built, err = buildChain(c, now)
+	}
 	if err != nil {
 		fail("chain", err)
 	} else {

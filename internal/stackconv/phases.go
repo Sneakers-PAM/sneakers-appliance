@@ -1,7 +1,7 @@
 // Copyright 2026 The Sneakers-PAM Authors
 // SPDX-License-Identifier: Apache-2.0
 
-package main
+package stackconv
 
 import (
 	"fmt"
@@ -25,28 +25,7 @@ func phaseSplit(o options, spec productspec.Spec, offDocs, switchDocs []doc, wai
 	if len(spec.Phases) == 0 {
 		return offDocs, nil, nil
 	}
-	label := func(d doc, kind, name string) (int, error) {
-		i, ok := spec.PhaseOf(name)
-		if !ok {
-			return 0, fmt.Errorf("the %s %s is in no phase: product.yaml's phases name every workload, so nothing starts unordered", kind, name)
-		}
-		l := map[string]any{productspec.PhaseLabel: spec.Phases[i].Name, productspec.PhaseOrderLabel: strconv.Itoa(i + 1)}
-		addLabels(dig(d, "metadata"), l)
-		tmpl := dig(d, "spec", "template")
-		if tmpl == nil {
-			return 0, fmt.Errorf("the %s %s has no pod template", kind, name)
-		}
-		if tmpl["metadata"] == nil {
-			tmpl["metadata"] = doc{}
-		}
-		addLabels(dig(tmpl, "metadata"), l)
-		if wait != "" {
-			ps := dig(tmpl, "spec")
-			inits, _ := ps["initContainers"].([]any)
-			ps["initContainers"] = append([]any{waitContainer(wait, o.Namespace, spec.Phases[i].Needs[name])}, inits...)
-		}
-		return i, nil
-	}
+	label := phaseLabeller(o, spec, wait)
 	phased := map[string][]doc{}
 	var rest []doc
 	for _, d := range offDocs {
@@ -77,6 +56,34 @@ func phaseSplit(o options, spec productspec.Spec, offDocs, switchDocs []doc, wai
 		}
 	}
 	return rest, phased, nil
+}
+
+// phaseLabeller labels a workload with its phase and its place in the order,
+// on the workload and on its pods, and puts the wait in front of its init
+// containers; it returns the phase's index.
+func phaseLabeller(o options, spec productspec.Spec, wait string) func(d doc, kind, name string) (int, error) {
+	return func(d doc, kind, name string) (int, error) {
+		i, ok := spec.PhaseOf(name)
+		if !ok {
+			return 0, fmt.Errorf("the %s %s is in no phase: product.yaml's phases name every workload, so nothing starts unordered", kind, name)
+		}
+		l := map[string]any{productspec.PhaseLabel: spec.Phases[i].Name, productspec.PhaseOrderLabel: strconv.Itoa(i + 1)}
+		addLabels(dig(d, "metadata"), l)
+		tmpl := dig(d, "spec", "template")
+		if tmpl == nil {
+			return 0, fmt.Errorf("the %s %s has no pod template", kind, name)
+		}
+		if tmpl["metadata"] == nil {
+			tmpl["metadata"] = doc{}
+		}
+		addLabels(dig(tmpl, "metadata"), l)
+		if wait != "" {
+			ps := dig(tmpl, "spec")
+			inits, _ := ps["initContainers"].([]any)
+			ps["initContainers"] = append([]any{waitContainer(wait, o.Namespace, spec.Phases[i].Needs[name])}, inits...)
+		}
+		return i, nil
+	}
 }
 
 // waitDNS is the name the wait resolves first: the cluster's DNS answers.

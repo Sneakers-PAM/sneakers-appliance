@@ -226,14 +226,49 @@ realci_waits() {
     [ -z "$l" ] || say "realci: wait-phase $p: $(printf '%s' "$l" | tr '\n' ' ')"
   done
 }
-# realci_crashes: the last lines of each crash-looping container's
-# previous run, so a pod that won't stay up shows why.
+# realci_crashes: the last 40 lines of each crash-looping container's
+# previous run, so a pod that won't stay up shows why. A short tail kept
+# only the last stack frames of a Node crash and lost its error message,
+# which comes first (#579).
 realci_crashes() {
   k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name}{range .status.containerStatuses[?(@.state.waiting.reason=="CrashLoopBackOff")]}{" "}{.name}{end}{"\n"}{end}' 2>/dev/null |
     while read -r p c rest; do
       [ -n "$c" ] || continue
-      say "realci: crash $p/$c: $(k -n sneakers logs "$p" -c "$c" --previous --tail=5 2>/dev/null | tr '\n' ' ')"
+      say "realci: crash $p/$c: $(k -n sneakers logs "$p" -c "$c" --previous --tail=40 2>/dev/null | tr '\n' ' ')"
     done
+}
+# realci_notready: why a pod that is Running but not Ready isn't (no crash
+# loop, so realci_crashes says nothing): its Ready condition, the last 40
+# log lines of each container that isn't ready (the run before a restart
+# too) and its events (a failed readiness probe shows there).
+realci_notready() {
+  k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} {.status.phase} {.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' 2>/dev/null |
+    while read -r p phase ready rest; do
+      [ "$phase" = Running ] && [ "$ready" = False ] || continue
+      say "realci: notready $p: $(k -n sneakers get pod "$p" -o jsonpath='{.status.conditions[?(@.type=="Ready")].reason}/{.status.conditions[?(@.type=="Ready")].message}' 2>/dev/null)"
+      for c in $(k -n sneakers get pod "$p" -o jsonpath='{range .status.containerStatuses[?(@.ready==false)]}{.name}{" "}{end}' 2>/dev/null); do
+        l="$(k -n sneakers logs "$p" -c "$c" --previous --tail=40 2>/dev/null | tr '\n' ' ')"
+        [ -z "$l" ] || say "realci: notready $p/$c previous log: $l"
+        say "realci: notready $p/$c log: $(k -n sneakers logs "$p" -c "$c" --tail=40 2>/dev/null | tr '\n' ' ')"
+      done
+      say "realci: notready $p events: $(k -n sneakers get events --field-selector "involvedObject.name=$p" --sort-by=.lastTimestamp -o jsonpath='{range .items[*]}{.reason} {.message}{"; "}{end}' 2>/dev/null | tail -c 3000)"
+    done
+}
+# realci_gateway: the gateway's side of a pod that stays not Ready because
+# the gateway is unreachable (#596): its pods' readiness, restarts and how
+# the last run ended, whether its Service has endpoints, and the node's
+# conditions and events (a kubelet restart or a changed sandbox shows there).
+realci_gateway() {
+  say "realci: gateway pods: $(k -n sneakers get pods -l app.kubernetes.io/name=sneakers-gateway -o jsonpath='{range .items[*]}{.metadata.name} ready={.status.conditions[?(@.type=="Ready")].status} restarts={.status.containerStatuses[*].restartCount} last={.status.containerStatuses[*].lastState.terminated.reason}/{.status.containerStatuses[*].lastState.terminated.exitCode}{"; "}{end}' 2>/dev/null)"
+  say "realci: gateway endpoints: $(k -n sneakers get endpoints sneakers-gateway -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null)"
+  say "realci: node conditions: $(k get nodes -o jsonpath='{range .items[*].status.conditions[*]}{.type}={.status} {end}' 2>/dev/null)"
+  say "realci: node events: $(k get events --all-namespaces --field-selector involvedObject.kind=Node --sort-by=.lastTimestamp -o jsonpath='{range .items[*]}{.reason} {.message}{"; "}{end}' 2>/dev/null | tail -c 2000)"
+}
+# realci_ext4: the kernel's ext4 and I/O error lines, so a box that came
+# back from a power loss shows whether the state volume was damaged (#579).
+realci_ext4() {
+  dmesg 2>/dev/null | grep -E 'EXT4-fs|I/O error|Buffer I/O' | tail -20 |
+    while read -r l; do say "realci: ext4 $l"; done
 }
 box_state() {
   printf 'GET /_box/state HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n' | nc -w 5 127.0.0.1 9180 2>/dev/null | sed -n 's/.*"state":"\([^"]*\)".*/\1/p'
@@ -304,6 +339,9 @@ realci() {
         realci_pods "$v" waiting
         realci_waits
         realci_crashes
+        realci_notready
+        realci_gateway
+        realci_ext4
         realci_rows "$v" waiting
         ticks=""
       fi

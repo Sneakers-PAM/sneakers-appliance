@@ -449,6 +449,15 @@ func (h *setupH) SetRecoveryKey(ctx context.Context, r *connect.Request[accessv1
 	return connect.NewResponse(&accessv1.SetRecoveryKeyResponse{RecoveryKey: out.GetRecoveryKey()}), nil
 }
 
+func (h *setupH) ImportEscrow(ctx context.Context, r *connect.Request[accessv1.ImportEscrowRequest]) (*connect.Response[accessv1.ImportEscrowResponse], error) {
+	out, err := run(ctx, h.s, r.Header(), accessv1connect.SetupServiceImportEscrowProcedure, osadminv1connect.SetupServiceImportEscrowProcedure, h.s.h.Setup.ImportEscrow,
+		&osadminv1.ImportEscrowRequest{Escrow: r.Msg.GetEscrow()})
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&accessv1.ImportEscrowResponse{Imported: out.GetImported(), Kept: out.GetKept()}), nil
+}
+
 func (h *setupH) AcknowledgeSingleAdmin(ctx context.Context, r *connect.Request[accessv1.AcknowledgeSingleAdminRequest]) (*connect.Response[accessv1.AcknowledgeSingleAdminResponse], error) {
 	if _, err := run(ctx, h.s, r.Header(), accessv1connect.SetupServiceAcknowledgeSingleAdminProcedure, osadminv1connect.SetupServiceAcknowledgeSingleAdminProcedure, h.s.h.Setup.AcknowledgeSingleAdmin, &osadminv1.AcknowledgeSingleAdminRequest{}); err != nil {
 		return nil, err

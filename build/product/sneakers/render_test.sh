@@ -72,7 +72,7 @@ done < "$charts/manifest/release.yaml" > "$work/release.yaml"
 
 out="$work/stacks"
 CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > "$work/render.log"
-for st in sneakers sneakers-mcp sneakers-import edge; do
+for st in sneakers sneakers-mcp sneakers-import cert-manager edge; do
   [ -s "$out/$st/$st.yaml" ] || fail "no $st stack"
 done
 echo "ok: rendered $(cd "$out" && echo */ | tr -d /)"
@@ -388,6 +388,49 @@ for svc in identity vault workflow audit notify connector sshbroker gateway mcp;
   grep -q 'optional: true' <<< "$vol" || fail "sneakers-$svc's otlp-ca volume isn't optional"
 done
 echo "ok: every service mounts the collector's CA"
+
+# Internal mTLS (the chart's global.internalTLS, on by default): cert-manager's
+# Issuers and Certificates come with the always-on stack (the MCP service's
+# with its switch), every service mounts its own Secret, which product.yaml
+# declares as issued (the box makes none of them), and the kubelet probes each
+# gRPC service on its plain health port, never the port that needs a client
+# certificate. A chart without the switch (an older pin) has none of it.
+if grep -q 'internalTLS' "$charts/charts/sneakers/values.yaml"; then
+  objects() { awk '/^kind: /{k=$2} /^metadata:/{m=1; next} m && /^ +name: /{print k " " $2; m=0}' "$1"; }
+  main_objs="$(objects "$out/sneakers/sneakers.yaml")"
+  for want in "Issuer sneakers-mtls-bootstrap" "Certificate sneakers-mtls-ca" "Issuer sneakers-mtls"; do
+    grep -qx "$want" <<<"$main_objs" || fail "the always-on stack lacks $want"
+  done
+  for svc in identity vault workflow audit notify connector sshbroker gateway; do
+    grep -qx "Certificate sneakers-$svc" <<<"$main_objs" || fail "the always-on stack has no Certificate for sneakers-$svc"
+    grep -q "^  - {secret: sneakers/sneakers-$svc-tls," "$here/product.yaml" || fail "product.yaml doesn't declare sneakers-$svc-tls as an issued secret"
+  done
+  grep -qx 'Certificate sneakers-mcp' <<<"$(objects "$out/sneakers-mcp/sneakers-mcp.yaml")" || fail "the MCP switch's stack has no Certificate for sneakers-mcp"
+  if grep -qx 'Certificate sneakers-mcp' <<<"$main_objs"; then fail "the MCP service's Certificate is in the always-on stack: it belongs to the switch"; fi
+  if grep -q '^kind: \(Issuer\|Certificate\|ClusterIssuer\)$' "$out"/sneakers-data/*.yaml "$out"/sneakers-identity/*.yaml "$out"/sneakers-services/*.yaml "$out"/sneakers-front/*.yaml; then fail "a phase stack holds an issuer or a certificate: they come with the always-on stack"; fi
+  for f in "$out"/sneakers-data/*.yaml "$out"/sneakers-identity/*.yaml "$out"/sneakers-services/*.yaml "$out"/sneakers-front/*.yaml "$out"/sneakers-mcp/*.yaml; do
+    bad="$(awk '
+      function flush(  i) { for (i = 1; i <= np; i++) if (health != "" && probes[i] != health) print wl " probes " probes[i] ", its health port is " health; np = 0; health = ""; cp = ""; wl = "" }
+      /^---/ { flush() }
+      /^    name: / && wl == "" { wl = $2 }
+      /- containerPort: / { cp = $3 }
+      /^ +name: health$/ && cp != "" { health = cp }
+      /^ +grpc:$/ { g = 1; next }
+      g && /port: / { probes[++np] = $2; g = 0 }
+      END { flush() }' "$f")"
+    [ -z "$bad" ] || fail "$f: a gRPC probe isn't on the plain health port: $bad"
+  done
+  echo "ok: internal mTLS: the issuers and certificates come with the always-on stack, every service mounts its issued Secret and is probed on its health port"
+  # A box that runs without it: the chart switch off renders no issuer, no
+  # certificate and no certificate mount.
+  printf 'global:\n  internalTLS:\n    enabled: false\n' > "$work/tls-off.yaml"
+  CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" EXTRA_VALUES="$work/tls-off.yaml" OUT="$work/tls-off" bash "$here/render.sh" > "$work/tls-off.log" 2>&1 || fail "the render with internalTLS off failed: $(tail -3 "$work/tls-off.log")"
+  if grep -rq '^kind: \(Issuer\|Certificate\)$' "$work/tls-off"; then fail "internalTLS is off, and a stack still holds an issuer or a certificate"; fi
+  if grep -rq 'mountPath: /var/run/sneakers/tls' "$work/tls-off"; then fail "internalTLS is off, and a pod still mounts a certificate"; fi
+  echo "ok: internalTLS off renders no issuer, no certificate and no certificate mount"
+else
+  echo "skip: the pinned chart has no internalTLS"
+fi
 
 # Refusals.
 if CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > /dev/null 2>&1; then

@@ -8,8 +8,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -20,6 +22,7 @@ import (
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/initapi"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/keycustody/keycustodytest"
+	"github.com/Sneakers-PAM/sneakers-appliance/internal/phase"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/secureboot"
 )
 
@@ -27,7 +30,13 @@ import (
 // a box with Secure Boot off, to peers allow admits.
 func serveCustody(t *testing.T, allow func(uint32) bool) initv1connect.KeyCustodyServiceClient {
 	t.Helper()
-	kc := keycustody.New(keycustody.Deps{Disk: &keycustodytest.Disk{}, SealedDir: t.TempDir()})
+	return serveCustodyIn(t, allow, phase.Normal)
+}
+
+// serveCustodyIn is serveCustody on a box in the boot phase p.
+func serveCustodyIn(t *testing.T, allow func(uint32) bool, p phase.Phase) initv1connect.KeyCustodyServiceClient {
+	t.Helper()
+	kc := keycustody.New(keycustody.Deps{Disk: &keycustodytest.Disk{}, SealedDir: t.TempDir(), Phase: func() phase.Phase { return p }})
 	if err := kc.Initialize(context.Background(), keycustody.ModeKeyfile, keycustody.SBOff); err != nil {
 		t.Fatal(err)
 	}
@@ -88,6 +97,96 @@ func TestKeyCustodySealsUnsealsAndEscrows(t *testing.T) {
 	e, err := c.Escrow(ctx, connect.NewRequest(&initv1.EscrowRequest{Recipients: []string{string(ssh.MarshalAuthorizedKey(spk))}}))
 	if err != nil || len(e.Msg.GetBundle()) == 0 {
 		t.Fatalf("escrow %v", err)
+	}
+}
+
+// Retire deletes one sealed item by name; a second retire, or one for an item
+// never sealed, is not an error, and a name that isn't one is refused (#502).
+func TestKeyCustodyRetiresASealedItemByName(t *testing.T) {
+	c := serveCustody(t, func(uid uint32) bool { return uid == me() })
+	ctx := context.Background()
+	for _, n := range []string{"staging-key", "keep-key"} {
+		if _, err := c.Seal(ctx, connect.NewRequest(&initv1.SealRequest{Name: n, Secret: []byte("a lab-only test secret")})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := c.Retire(ctx, connect.NewRequest(&initv1.RetireRequest{Name: "staging-key"})); err != nil {
+			t.Fatalf("retire %d: %v", i, err)
+		}
+	}
+	if _, err := c.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: "staging-key"})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("the retired item is still there: %v", err)
+	}
+	if _, err := c.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: "keep-key"})); err != nil {
+		t.Fatalf("another item went with it: %v", err)
+	}
+	if _, err := c.Retire(ctx, connect.NewRequest(&initv1.RetireRequest{Name: "Not A Name"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("an invalid name: %v", err)
+	}
+}
+
+func escrowJSON(t *testing.T, items map[string]string) []byte {
+	t.Helper()
+	e := keycustody.EscrowContents{Version: 1, StateKey: make([]byte, keycustody.KeySize), Items: map[string][]byte{}}
+	for n, v := range items {
+		e.Items[n] = []byte(v)
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// An escrow comes in at first boot: what the box hasn't sealed is sealed
+// from it, what it has stays, and the answer names both and never a value.
+func TestKeyCustodyImportsAnEscrowInFirstboot(t *testing.T) {
+	c := serveCustodyIn(t, func(uid uint32) bool { return uid == me() }, phase.Firstboot)
+	ctx := context.Background()
+	if _, err := c.Seal(ctx, connect.NewRequest(&initv1.SealRequest{Name: "root-key", Secret: []byte("this box's own")})); err != nil {
+		t.Fatal(err)
+	}
+	out, err := c.ImportEscrow(ctx, connect.NewRequest(&initv1.ImportEscrowRequest{Escrow: escrowJSON(t, map[string]string{
+		"root-key": "the old box's", "product-sneakers-vault-root-key": "old vault key",
+	})}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(out.Msg.GetImported(), ","); got != "product-sneakers-vault-root-key" {
+		t.Errorf("imported %q", got)
+	}
+	if got := strings.Join(out.Msg.GetKept(), ","); got != "root-key" {
+		t.Errorf("kept %q", got)
+	}
+	for name, want := range map[string]string{"root-key": "this box's own", "product-sneakers-vault-root-key": "old vault key"} {
+		u, err := c.Unseal(ctx, connect.NewRequest(&initv1.UnsealRequest{Name: name}))
+		if err != nil || string(u.Msg.GetSecret()) != want {
+			t.Errorf("%s: %q %v", name, u.Msg.GetSecret(), err)
+		}
+	}
+}
+
+func TestKeyCustodyRefusesAnImportOutsideFirstbootOrWithNothingNew(t *testing.T) {
+	ctx := context.Background()
+	allow := func(uid uint32) bool { return uid == me() }
+	esc := escrowJSON(t, map[string]string{"product-sneakers-totp-key": "secret value"})
+	normal := serveCustodyIn(t, allow, phase.Normal)
+	_, err := normal.ImportEscrow(ctx, connect.NewRequest(&initv1.ImportEscrowRequest{Escrow: esc}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "KEYCUSTODY_PHASE") {
+		t.Fatalf("outside firstboot: %v", err)
+	}
+	first := serveCustodyIn(t, allow, phase.Firstboot)
+	if _, err := first.ImportEscrow(ctx, connect.NewRequest(&initv1.ImportEscrowRequest{Escrow: esc})); err != nil {
+		t.Fatal(err)
+	}
+	_, err = first.ImportEscrow(ctx, connect.NewRequest(&initv1.ImportEscrowRequest{Escrow: esc}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || strings.Contains(err.Error(), "secret value") {
+		t.Fatalf("a second import: %v", err)
+	}
+	_, err = first.ImportEscrow(ctx, connect.NewRequest(&initv1.ImportEscrowRequest{Escrow: []byte("not an escrow secret-in-error?")}))
+	if connect.CodeOf(err) != connect.CodeInvalidArgument || strings.Contains(err.Error(), "not an escrow secret-in-error?") {
+		t.Fatalf("a bad escrow must be invalid and must not echo its bytes: %v", err)
 	}
 }
 

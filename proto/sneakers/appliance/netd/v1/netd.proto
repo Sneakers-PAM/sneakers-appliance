@@ -48,6 +48,16 @@ service NetworkService {
   // Watch sends the live addresses once, then again on every change, so
   // sshd and osadmin rebind.
   rpc Watch(WatchRequest) returns (stream WatchResponse);
+  // Resolve looks a name up through the box's own DNS servers (the
+  // settings', else what DHCP and router advertisements gave), each in
+  // turn until one answers, over UDP and then TCP. None answering is
+  // NET_DNS.
+  rpc Resolve(ResolveRequest) returns (ResolveResponse);
+  // SetHostname sets the host name alone and keeps it at once: no window,
+  // no stage, no confirm, and every other setting stays as it is. It's
+  // refused (NET_INVALID, field pending) while a change waits for its
+  // confirm.
+  rpc SetHostname(SetHostnameRequest) returns (SetHostnameResponse);
 }
 
 // Ipv4Mode is how an interface gets its IPv4 address.
@@ -282,3 +292,28 @@ message SetServicePortsRequest {
 }
 
 message SetServicePortsResponse {}
+
+message ResolveRequest {
+  string name = 1;
+}
+
+message ResolveResponse {
+  // addresses are the name's A and AAAA records; empty when found is
+  // false.
+  repeated string addresses = 1;
+  // found is false when the server said the name doesn't exist, or has no
+  // A or AAAA record.
+  bool found = 2;
+  // server is the DNS server that answered.
+  string server = 3;
+}
+
+message SetHostnameRequest {
+  // hostname is a fully qualified name, or empty for whatever DHCP offers.
+  string hostname = 1;
+}
+
+message SetHostnameResponse {
+  // previous is the host name the settings held before.
+  string previous = 1;
+}

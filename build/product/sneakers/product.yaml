@@ -30,6 +30,7 @@ components:
   - {name: Ory Hydra, image: hydra}
   - {name: Traefik, image: traefik}
   - {name: cert-manager, image: cert-manager-controller}
+  - {name: cert-manager's HTTP-01 solver, image: cert-manager-acmesolver}
   - {name: sneakers-identity, image: sneakers-identity}
   - {name: sneakers-vault, image: sneakers-vault}
   - {name: sneakers-workflow, image: sneakers-workflow}
@@ -91,9 +92,31 @@ escrow:
   - name: vault-root-key
     secret: sneakers/sneakers-box
     key: VAULT_ROOT_KEK
+    # What the vault reads as the key being replaced while the box rotates
+    # the root key; the box fills it only during a rotation.
+    previous: VAULT_ROOT_KEK_PREVIOUS
+    restart:
+      - sneakers/deployment/sneakers-vault
   - name: totp-key
     secret: sneakers/sneakers-box
     key: TOTP_ENC_KEY
+
+# Internal mTLS (the chart's global.internalTLS): cert-manager issues one
+# certificate per service into the Secret sneakers-<service>-tls, which the
+# service's pod mounts whole. The box never makes or reads these; declaring
+# them is what lets the render accept a workload that mounts them.
+issued_secrets:
+  - {secret: sneakers/sneakers-identity-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-vault-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-workflow-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-audit-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-notify-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-connector-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-sshbroker-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-gateway-tls, keys: [tls.crt, tls.key, ca.crt]}
+  - {secret: sneakers/sneakers-mcp-tls, keys: [tls.crt, tls.key, ca.crt]}
+  # The Import page's Job (import-job.yaml), where the chart issues the migrate caller one.
+  - {secret: sneakers/sneakers-migrate-tls, keys: [tls.crt, tls.key, ca.crt]}
 
 # The box's own host name, never baked into the bundle: the bundle's values
 # set global.host to this placeholder, so every host-dependent setting
@@ -142,8 +165,8 @@ box_secrets:
       - {key: dsn, value: "postgres://sneakers:{sneakers-bundled/password}@sneakers-pgha-primary:5432/sneakers_hydra?sslmode=require"}
       - {key: secretsSystem, generate: password}
       - {key: secretsCookie, generate: password}
-  # The new database cluster's TLS: no cert-manager runs on the box, so the
-  # box issues and renews it (docs/release.md#productyaml). The services
+  # The new database cluster's TLS: the box issues and renews it itself, not
+  # through cert-manager (docs/release.md#productyaml). The services
   # connect with sslmode=require.
   - secret: sneakers/sneakers-pgha-tls
     certificate:

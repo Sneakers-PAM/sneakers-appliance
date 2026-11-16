@@ -58,11 +58,25 @@ is a closed-shell login's alone, which `sneakers-accessd` runs as that admin: fr
 console it's refused with `ACCESS_FORBIDDEN` and audited, and with `every call` the login gives a
 fresh code at the command on top of the one it signed in with.
 
-Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin` and
-`SetupService.Finish` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
+Setup only: `SetupService.AcknowledgeStep`, `SetupService.AcknowledgeSingleAdmin`,
+`SetupService.Finish`, `SetupService.CheckHostname` and `SetupService.SetHostname` are refused with `SETUP_DONE` once setup is done (the rule's `setup_only`),
 and so is every call made with a setup code's session, so a stepper left open can't go on. The
 refusal is audited under the method's action. The recovery keys and the escrow stay an owner's
 after setup, and invitations and Recover access codes still use the code pages.
+
+The network step's host name (`SetupService.CheckHostname`, then `SetupService.SetHostname`) is
+the step's own and open only while setup stands at it (`SETUP_INCOMPLETE` before it, `SETUP_STEP_DONE`
+once it is acknowledged; the host name is Network's after that). The check asks the box's own DNS
+servers (the settings', else what DHCP and router advertisements gave) and changes nothing; it says
+whether the name points at one of the box's management addresses, at other addresses only
+(`NET_NAME_ELSEWHERE`), nowhere (`NET_NAME_NOT_FOUND`) or can't be looked up (`NET_DNS`). Setting the
+name takes a fresh authenticator code, checks the name again, keeps it at once (there is no confirm
+window), makes the box's own certificate for it and waits until :8443 serves that certificate before
+answering. The answer carries a one-time handoff code, 43 characters, good once for 2 minutes while the
+session that got it lives, and held in osadmin's memory only (a restart forgets it). The page at the
+new name swaps it for a session of its own with `SignInService.RedeemHandoff`; the code travels in the
+URL fragment (`https://<name>:8443/setup#handoff=<code>`), never in a request line, and is never
+written to a log or the audit log. A refused code is `SETUP_HANDOFF`: sign in again.
 
 ### Available in this release
 
@@ -83,6 +97,14 @@ why). `PinEmailCertificate` checks the relay presents the certificate given and 
 settings with `pin_sha256` set and verification on; `SetEmail` saves the pin
 ([product-email.md](product-email.md#pinning-the-relays-certificate)).
 
+`RootKeyService` rotates the installed product's vault root key
+([key-custody.md](key-custody.md#rotating-the-vault-root-key)). `GetRootKeyRotation` answers whether
+the product can (`available`), and `state`: `none`, `running`, `stopped` (with the `step` it will
+carry on from and `why`, never a key) or `done`. `RotateRootKey` begins the rotation or, after a stop,
+carries it on, under the same maintenance gate as a product update, and answers once it has begun.
+While a rotation is unfinished, anything else that applies the product is refused with
+`ROOTKEY_UNFINISHED`; a product whose bundle names no previous key is `ROOTKEY_UNAVAILABLE`.
+
 `TelemetryService` is the product's Telemetry page ([product-telemetry.md](product-telemetry.md)):
 `GetTelemetry` answers `state` (`not installed`, `not in this product`, `off` or `on`), the settings
 (with `ca_pem`, the collector's CA, when one is set),
@@ -91,6 +113,15 @@ settings and restarts the services phase by phase, answering once that's begun;
 `RetryTelemetryRestart` carries a failed restart on. A bad setting is `TELEMETRY_INVALID`, a collector
 that doesn't answer `TELEMETRY_UNREACHABLE`, a retry with nothing failed `TELEMETRY_RESTART`, and a
 save during an import or another update `UPGRADE_BUSY`.
+
+`ResourcesService` is the product's Resources page ([resources.md](resources.md)): `GetResources`
+answers the settings in force (replicas, storage, the `postgresql.parameters` that differ from the
+defaults, PgBouncer's pool sizes) and what the cluster is doing (each replica's role, health and lag,
+the storage, every parameter the server has with its default and whether a change needs a restart).
+`PreviewResources` checks staged settings and answers each change's before and after, the warnings and
+whether a restart is needed, and changes nothing. A refused setting is `RESOURCES_INVALID`, a cluster
+that can't be read `RESOURCES_UNAVAILABLE`, and a box with no product or a product with no PostgreSQL
+cluster `NOT_AVAILABLE`.
 
 `StatusService.HideProtectionNotice` hides the reduced-protection banner
 (`WARNING_KIND_REDUCED_PROTECTION`) for every admin: any signed-in admin may call it, with no
@@ -109,6 +140,7 @@ was hidden the detail adds `hidden` `no` and what the box has `now`.
 |---|---|---|---|
 | `SignInService.SignIn` | public | no | `signin.password` |
 | `SignInService.StepUp` | admin | no | `signin.step-up` |
+| `SignInService.RedeemHandoff` | public | no | `signin.handoff.redeem` |
 | `SignInService.BeginSignIn` | public | no | |
 | `SignInService.PollSignIn` | public | no | |
 | `SignInService.GetSession` | admin | no | |
@@ -144,7 +176,10 @@ same.
 | `SetupService.BeginCredentials` | code session | no | `setup.credentials.begin` |
 | `SetupService.CompleteCredentials` | code session | no | `setup.credentials.complete` |
 | `SetupService.AcknowledgeStep` | owner | no | `setup.step.acknowledge` |
+| `SetupService.CheckHostname` | owner | no | `setup.hostname.check` |
+| `SetupService.SetHostname` | owner | every call | `setup.hostname.set` |
 | `SetupService.AddRecoveryKey` | owner | yes | `setup.recovery-key.add` |
+| `SetupService.ImportEscrow` | owner, SSH only | yes | `setup.escrow.import` |
 | `SetupService.GenerateRecoveryKey` | owner | yes | `setup.recovery-key.generate` |
 | `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |
 | `SetupService.DownloadEscrow` | owner | no | `setup.escrow.download` |
@@ -202,9 +237,13 @@ same.
 | `ProductService.RemoveBackup` | owner, SSH only | every call | `product.backup.remove-request` |
 | `ProductService.RestoreBackup` | owner, SSH only | every call | `product.backup.restore` |
 | `ProductService.PrepareBackupExport` | owner, SSH only | every call | `product.backup.export-request` |
+| `ResourcesService.GetResources` | admin | no | |
+| `ResourcesService.PreviewResources` | admin | no | |
 | `TelemetryService.GetTelemetry` | admin | no | |
 | `TelemetryService.SetTelemetry` | admin | yes | `product.telemetry.set` |
 | `TelemetryService.RetryTelemetryRestart` | admin | yes | `product.telemetry.restart` |
+| `RootKeyService.GetRootKeyRotation` | owner | no | |
+| `RootKeyService.RotateRootKey` | owner | yes | `product.rootkey.rotate` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `EmailService.GetEmail` | admin | no | |
@@ -265,8 +304,10 @@ carries every check as a `ValidationReport` detail, and nothing is stored. `Assi
 :8443 serve a store certificate without a restart, checks it with a handshake to each management
 address, and answers `TLS_NOT_SERVED` with the previous certificate back in place if it isn't served
 within 15 seconds. `RevertToSelfSigned` puts the box's own certificate back. `DeleteCertificate` is
-refused while an endpoint uses the certificate. `SetAcme` and `RenewNow` answer
-`TLS_ACME_UNAVAILABLE` until the product bundle brings cert-manager. The earlier `GetTls`,
+refused while an endpoint uses the certificate. `SetAcme` writes the ACME stack for the endpoints it names and returns; `RenewNow` has cert-manager issue
+again. Both answer `TLS_ACME_UNAVAILABLE` where cert-manager can't run
+([certificates.md](certificates.md#acme)). The ACME audit entries are `tls.acme.set`, `tls.acme.issue`,
+`tls.acme.renew` and `tls.acme.fail`. The earlier `GetTls`,
 `CreateCsr`, `UploadCertificate` and `SetAdminCertificate` stay Not available; the store methods
 replace them. Every change's audit entry records the method, the store id, the fingerprint, the SANs
 and the expiry.

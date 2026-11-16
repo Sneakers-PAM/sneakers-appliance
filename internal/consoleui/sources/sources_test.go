@@ -101,6 +101,12 @@ func (c netdClient) Confirm(ctx context.Context, r *connect.Request[netdv1.Confi
 	c.h.calls = append(c.h.calls, "confirm "+r.Msg.GetToken())
 	return connect.NewResponse(&netdv1.ConfirmResponse{}), nil
 }
+func (c netdClient) Resolve(ctx context.Context, r *connect.Request[netdv1.ResolveRequest]) (*connect.Response[netdv1.ResolveResponse], error) {
+	return c.h.Resolve(ctx, r)
+}
+func (c netdClient) SetHostname(ctx context.Context, r *connect.Request[netdv1.SetHostnameRequest]) (*connect.Response[netdv1.SetHostnameResponse], error) {
+	return c.h.SetHostname(ctx, r)
+}
 func (c netdClient) Checks(ctx context.Context, r *connect.Request[netdv1.ChecksRequest]) (*connect.Response[netdv1.ChecksResponse], error) {
 	return c.h.Checks(ctx, r)
 }

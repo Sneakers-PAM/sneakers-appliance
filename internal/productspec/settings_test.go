@@ -310,12 +310,12 @@ func TestAProductThatReadsTelemetryNeedsABaseThatDoes(t *testing.T) {
 	}
 }
 
-func TestTheSneakersBundleNeedsATelemetryBase(t *testing.T) {
+func TestTheSneakersBundleNeedsTheBaseOfItsNewestSection(t *testing.T) {
 	s, err := productspec.Load(filepath.Join("..", "..", "build", "product", "sneakers"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if floor, _ := s.BaseFloor(); floor != productspec.TelemetryMinBase {
+	if floor, _ := s.BaseFloor(); floor != productspec.IssuedSecretsMinBase {
 		t.Fatalf("the Sneakers bundle's floor: %q", floor)
 	}
 }

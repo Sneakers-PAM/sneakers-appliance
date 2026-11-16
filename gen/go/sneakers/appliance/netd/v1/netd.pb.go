@@ -2015,6 +2015,205 @@ func (*SetServicePortsResponse) Descriptor() ([]byte, []int) {
 	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{32}
 }
 
+type ResolveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveRequest) Reset() {
+	*x = ResolveRequest{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveRequest) ProtoMessage() {}
+
+func (x *ResolveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveRequest.ProtoReflect.Descriptor instead.
+func (*ResolveRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *ResolveRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type ResolveResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// addresses are the name's A and AAAA records; empty when found is
+	// false.
+	Addresses []string `protobuf:"bytes,1,rep,name=addresses,proto3" json:"addresses,omitempty"`
+	// found is false when the server said the name doesn't exist, or has no
+	// A or AAAA record.
+	Found bool `protobuf:"varint,2,opt,name=found,proto3" json:"found,omitempty"`
+	// server is the DNS server that answered.
+	Server        string `protobuf:"bytes,3,opt,name=server,proto3" json:"server,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveResponse) Reset() {
+	*x = ResolveResponse{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveResponse) ProtoMessage() {}
+
+func (x *ResolveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveResponse.ProtoReflect.Descriptor instead.
+func (*ResolveResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *ResolveResponse) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
+}
+
+func (x *ResolveResponse) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *ResolveResponse) GetServer() string {
+	if x != nil {
+		return x.Server
+	}
+	return ""
+}
+
+type SetHostnameRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// hostname is a fully qualified name, or empty for whatever DHCP offers.
+	Hostname      string `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetHostnameRequest) Reset() {
+	*x = SetHostnameRequest{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetHostnameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetHostnameRequest) ProtoMessage() {}
+
+func (x *SetHostnameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetHostnameRequest.ProtoReflect.Descriptor instead.
+func (*SetHostnameRequest) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SetHostnameRequest) GetHostname() string {
+	if x != nil {
+		return x.Hostname
+	}
+	return ""
+}
+
+type SetHostnameResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// previous is the host name the settings held before.
+	Previous      string `protobuf:"bytes,1,opt,name=previous,proto3" json:"previous,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetHostnameResponse) Reset() {
+	*x = SetHostnameResponse{}
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetHostnameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetHostnameResponse) ProtoMessage() {}
+
+func (x *SetHostnameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_sneakers_appliance_netd_v1_netd_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetHostnameResponse.ProtoReflect.Descriptor instead.
+func (*SetHostnameResponse) Descriptor() ([]byte, []int) {
+	return file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *SetHostnameResponse) GetPrevious() string {
+	if x != nil {
+		return x.Previous
+	}
+	return ""
+}
+
 var File_sneakers_appliance_netd_v1_netd_proto protoreflect.FileDescriptor
 
 const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
@@ -2141,7 +2340,17 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\x05allow\x18\x03 \x03(\tR\x05allow\"T\n" +
 	"\x16SetServicePortsRequest\x12:\n" +
 	"\x05rules\x18\x01 \x03(\v2$.sneakers.appliance.netd.v1.PortRuleR\x05rules\"\x19\n" +
-	"\x17SetServicePortsResponse*b\n" +
+	"\x17SetServicePortsResponse\"$\n" +
+	"\x0eResolveRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"]\n" +
+	"\x0fResolveResponse\x12\x1c\n" +
+	"\taddresses\x18\x01 \x03(\tR\taddresses\x12\x14\n" +
+	"\x05found\x18\x02 \x01(\bR\x05found\x12\x16\n" +
+	"\x06server\x18\x03 \x01(\tR\x06server\"0\n" +
+	"\x12SetHostnameRequest\x12\x1a\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\"1\n" +
+	"\x13SetHostnameResponse\x12\x1a\n" +
+	"\bprevious\x18\x01 \x01(\tR\bprevious*b\n" +
 	"\bIpv4Mode\x12\x19\n" +
 	"\x15IPV4_MODE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eIPV4_MODE_DHCP\x10\x01\x12\x14\n" +
@@ -2158,7 +2367,7 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\x17CHECK_STATE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eCHECK_STATE_OK\x10\x01\x12\x14\n" +
 	"\x10CHECK_STATE_WARN\x10\x02\x12\x16\n" +
-	"\x12CHECK_STATE_FAILED\x10\x032\xf6\t\n" +
+	"\x12CHECK_STATE_FAILED\x10\x032\xca\v\n" +
 	"\x0eNetworkService\x12V\n" +
 	"\x03Get\x12&.sneakers.appliance.netd.v1.GetRequest\x1a'.sneakers.appliance.netd.v1.GetResponse\x12V\n" +
 	"\x03Set\x12&.sneakers.appliance.netd.v1.SetRequest\x1a'.sneakers.appliance.netd.v1.SetResponse\x12b\n" +
@@ -2171,7 +2380,9 @@ const file_sneakers_appliance_netd_v1_netd_proto_rawDesc = "" +
 	"\x06Status\x12).sneakers.appliance.netd.v1.StatusRequest\x1a*.sneakers.appliance.netd.v1.StatusResponse\x12w\n" +
 	"\x0eListInterfaces\x121.sneakers.appliance.netd.v1.ListInterfacesRequest\x1a2.sneakers.appliance.netd.v1.ListInterfacesResponse\x12\x83\x01\n" +
 	"\x12SetManagementPorts\x125.sneakers.appliance.netd.v1.SetManagementPortsRequest\x1a6.sneakers.appliance.netd.v1.SetManagementPortsResponse\x12^\n" +
-	"\x05Watch\x12(.sneakers.appliance.netd.v1.WatchRequest\x1a).sneakers.appliance.netd.v1.WatchResponse0\x01BUZSgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1;netdv1b\x06proto3"
+	"\x05Watch\x12(.sneakers.appliance.netd.v1.WatchRequest\x1a).sneakers.appliance.netd.v1.WatchResponse0\x01\x12b\n" +
+	"\aResolve\x12*.sneakers.appliance.netd.v1.ResolveRequest\x1a+.sneakers.appliance.netd.v1.ResolveResponse\x12n\n" +
+	"\vSetHostname\x12..sneakers.appliance.netd.v1.SetHostnameRequest\x1a/.sneakers.appliance.netd.v1.SetHostnameResponseBUZSgithub.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/netd/v1;netdv1b\x06proto3"
 
 var (
 	file_sneakers_appliance_netd_v1_netd_proto_rawDescOnce sync.Once
@@ -2186,7 +2397,7 @@ func file_sneakers_appliance_netd_v1_netd_proto_rawDescGZIP() []byte {
 }
 
 var file_sneakers_appliance_netd_v1_netd_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_sneakers_appliance_netd_v1_netd_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_sneakers_appliance_netd_v1_netd_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
 var file_sneakers_appliance_netd_v1_netd_proto_goTypes = []any{
 	(Ipv4Mode)(0),                      // 0: sneakers.appliance.netd.v1.Ipv4Mode
 	(Ipv6Mode)(0),                      // 1: sneakers.appliance.netd.v1.Ipv6Mode
@@ -2224,6 +2435,10 @@ var file_sneakers_appliance_netd_v1_netd_proto_goTypes = []any{
 	(*PortRule)(nil),                   // 33: sneakers.appliance.netd.v1.PortRule
 	(*SetServicePortsRequest)(nil),     // 34: sneakers.appliance.netd.v1.SetServicePortsRequest
 	(*SetServicePortsResponse)(nil),    // 35: sneakers.appliance.netd.v1.SetServicePortsResponse
+	(*ResolveRequest)(nil),             // 36: sneakers.appliance.netd.v1.ResolveRequest
+	(*ResolveResponse)(nil),            // 37: sneakers.appliance.netd.v1.ResolveResponse
+	(*SetHostnameRequest)(nil),         // 38: sneakers.appliance.netd.v1.SetHostnameRequest
+	(*SetHostnameResponse)(nil),        // 39: sneakers.appliance.netd.v1.SetHostnameResponse
 }
 var file_sneakers_appliance_netd_v1_netd_proto_depIdxs = []int32{
 	0,  // 0: sneakers.appliance.netd.v1.Ipv4.mode:type_name -> sneakers.appliance.netd.v1.Ipv4Mode
@@ -2254,20 +2469,24 @@ var file_sneakers_appliance_netd_v1_netd_proto_depIdxs = []int32{
 	26, // 25: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:input_type -> sneakers.appliance.netd.v1.ListInterfacesRequest
 	29, // 26: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:input_type -> sneakers.appliance.netd.v1.SetManagementPortsRequest
 	31, // 27: sneakers.appliance.netd.v1.NetworkService.Watch:input_type -> sneakers.appliance.netd.v1.WatchRequest
-	9,  // 28: sneakers.appliance.netd.v1.NetworkService.Get:output_type -> sneakers.appliance.netd.v1.GetResponse
-	12, // 29: sneakers.appliance.netd.v1.NetworkService.Set:output_type -> sneakers.appliance.netd.v1.SetResponse
-	14, // 30: sneakers.appliance.netd.v1.NetworkService.Confirm:output_type -> sneakers.appliance.netd.v1.ConfirmResponse
-	16, // 31: sneakers.appliance.netd.v1.NetworkService.Stage:output_type -> sneakers.appliance.netd.v1.StageResponse
-	18, // 32: sneakers.appliance.netd.v1.NetworkService.DiscardStaged:output_type -> sneakers.appliance.netd.v1.DiscardStagedResponse
-	20, // 33: sneakers.appliance.netd.v1.NetworkService.Commit:output_type -> sneakers.appliance.netd.v1.CommitResponse
-	23, // 34: sneakers.appliance.netd.v1.NetworkService.Checks:output_type -> sneakers.appliance.netd.v1.ChecksResponse
-	35, // 35: sneakers.appliance.netd.v1.NetworkService.SetServicePorts:output_type -> sneakers.appliance.netd.v1.SetServicePortsResponse
-	25, // 36: sneakers.appliance.netd.v1.NetworkService.Status:output_type -> sneakers.appliance.netd.v1.StatusResponse
-	28, // 37: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:output_type -> sneakers.appliance.netd.v1.ListInterfacesResponse
-	30, // 38: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:output_type -> sneakers.appliance.netd.v1.SetManagementPortsResponse
-	32, // 39: sneakers.appliance.netd.v1.NetworkService.Watch:output_type -> sneakers.appliance.netd.v1.WatchResponse
-	28, // [28:40] is the sub-list for method output_type
-	16, // [16:28] is the sub-list for method input_type
+	36, // 28: sneakers.appliance.netd.v1.NetworkService.Resolve:input_type -> sneakers.appliance.netd.v1.ResolveRequest
+	38, // 29: sneakers.appliance.netd.v1.NetworkService.SetHostname:input_type -> sneakers.appliance.netd.v1.SetHostnameRequest
+	9,  // 30: sneakers.appliance.netd.v1.NetworkService.Get:output_type -> sneakers.appliance.netd.v1.GetResponse
+	12, // 31: sneakers.appliance.netd.v1.NetworkService.Set:output_type -> sneakers.appliance.netd.v1.SetResponse
+	14, // 32: sneakers.appliance.netd.v1.NetworkService.Confirm:output_type -> sneakers.appliance.netd.v1.ConfirmResponse
+	16, // 33: sneakers.appliance.netd.v1.NetworkService.Stage:output_type -> sneakers.appliance.netd.v1.StageResponse
+	18, // 34: sneakers.appliance.netd.v1.NetworkService.DiscardStaged:output_type -> sneakers.appliance.netd.v1.DiscardStagedResponse
+	20, // 35: sneakers.appliance.netd.v1.NetworkService.Commit:output_type -> sneakers.appliance.netd.v1.CommitResponse
+	23, // 36: sneakers.appliance.netd.v1.NetworkService.Checks:output_type -> sneakers.appliance.netd.v1.ChecksResponse
+	35, // 37: sneakers.appliance.netd.v1.NetworkService.SetServicePorts:output_type -> sneakers.appliance.netd.v1.SetServicePortsResponse
+	25, // 38: sneakers.appliance.netd.v1.NetworkService.Status:output_type -> sneakers.appliance.netd.v1.StatusResponse
+	28, // 39: sneakers.appliance.netd.v1.NetworkService.ListInterfaces:output_type -> sneakers.appliance.netd.v1.ListInterfacesResponse
+	30, // 40: sneakers.appliance.netd.v1.NetworkService.SetManagementPorts:output_type -> sneakers.appliance.netd.v1.SetManagementPortsResponse
+	32, // 41: sneakers.appliance.netd.v1.NetworkService.Watch:output_type -> sneakers.appliance.netd.v1.WatchResponse
+	37, // 42: sneakers.appliance.netd.v1.NetworkService.Resolve:output_type -> sneakers.appliance.netd.v1.ResolveResponse
+	39, // 43: sneakers.appliance.netd.v1.NetworkService.SetHostname:output_type -> sneakers.appliance.netd.v1.SetHostnameResponse
+	30, // [30:44] is the sub-list for method output_type
+	16, // [16:30] is the sub-list for method input_type
 	16, // [16:16] is the sub-list for extension type_name
 	16, // [16:16] is the sub-list for extension extendee
 	0,  // [0:16] is the sub-list for field type_name
@@ -2284,7 +2503,7 @@ func file_sneakers_appliance_netd_v1_netd_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_sneakers_appliance_netd_v1_netd_proto_rawDesc), len(file_sneakers_appliance_netd_v1_netd_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   33,
+			NumMessages:   37,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

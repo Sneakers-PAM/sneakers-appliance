@@ -65,6 +65,9 @@ type System interface {
 	// QueryDNS asks server for name; an answer of any kind, NXDOMAIN too,
 	// means the server works.
 	QueryDNS(ctx context.Context, server netip.Addr, name string) error
+	// LookupDNS asks server for name's A and AAAA records (Lookup);
+	// ErrNoSuchName when it has none.
+	LookupDNS(ctx context.Context, server netip.Addr, name string) ([]netip.Addr, error)
 	// Subscribe sends whenever a link, address or route changes.
 	Subscribe(ctx context.Context) (<-chan struct{}, error)
 }

@@ -123,6 +123,23 @@ type fakeInit struct {
 	// sealed are the items Seal stored, by name; seals counts the calls.
 	sealed map[string][]byte
 	seals  int
+	// retired are the items Retire deleted, in order.
+	retired []string
+	// imports are the escrows ImportEscrow was given; importRes is what it
+	// answers, and importErr fails it.
+	imports   [][]byte
+	importRes *initv1.ImportEscrowResponse
+	importErr error
+}
+
+func (f *fakeInit) ImportEscrow(_ context.Context, r *connect.Request[initv1.ImportEscrowRequest]) (*connect.Response[initv1.ImportEscrowResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.imports = append(f.imports, r.Msg.GetEscrow())
+	if f.importErr != nil {
+		return nil, f.importErr
+	}
+	return connect.NewResponse(f.importRes), nil
 }
 
 func (f *fakeInit) Seal(_ context.Context, r *connect.Request[initv1.SealRequest]) (*connect.Response[initv1.SealResponse], error) {
@@ -134,6 +151,14 @@ func (f *fakeInit) Seal(_ context.Context, r *connect.Request[initv1.SealRequest
 	f.sealed[r.Msg.GetName()] = r.Msg.GetSecret()
 	f.seals++
 	return connect.NewResponse(&initv1.SealResponse{}), nil
+}
+
+func (f *fakeInit) Retire(_ context.Context, r *connect.Request[initv1.RetireRequest]) (*connect.Response[initv1.RetireResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sealed, r.Msg.GetName())
+	f.retired = append(f.retired, r.Msg.GetName())
+	return connect.NewResponse(&initv1.RetireResponse{}), nil
 }
 
 func (f *fakeInit) Unseal(_ context.Context, r *connect.Request[initv1.UnsealRequest]) (*connect.Response[initv1.UnsealResponse], error) {
@@ -369,6 +394,34 @@ type fakeNetd struct {
 	// one is in.
 	commitGate chan struct{}
 	committing bool
+	// hostnameSets are the names SetHostname set, in order.
+	hostnameSets []string
+	// names are what Resolve answers, as netd's lookup through the box's
+	// DNS servers would; dnsDown makes it answer NET_DNS.
+	names   map[string][]string
+	dnsDown bool
+}
+
+func (n *fakeNetd) SetHostname(_ context.Context, r *connect.Request[netdv1.SetHostnameRequest]) (*connect.Response[netdv1.SetHostnameResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.pending != "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, codes.New(codes.NetInvalid, "pending: a network change is waiting for its confirmation"))
+	}
+	prev := n.settings.GetHostname()
+	n.settings.Hostname, n.hostname = r.Msg.GetHostname(), r.Msg.GetHostname()
+	n.hostnameSets = append(n.hostnameSets, r.Msg.GetHostname())
+	return connect.NewResponse(&netdv1.SetHostnameResponse{Previous: prev}), nil
+}
+
+func (n *fakeNetd) Resolve(_ context.Context, r *connect.Request[netdv1.ResolveRequest]) (*connect.Response[netdv1.ResolveResponse], error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.dnsDown {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(codes.Describe(codes.New(codes.NetDNS, "none of the box's DNS servers answered"))))
+	}
+	a, ok := n.names[r.Msg.GetName()]
+	return connect.NewResponse(&netdv1.ResolveResponse{Addresses: a, Found: ok && len(a) > 0, Server: "192.0.2.53"}), nil
 }
 
 func (n *fakeNetd) waitCommitting(t *testing.T) {
@@ -874,3 +927,8 @@ func (m *memSealer) Unseal(name string) ([]byte, bool, error) {
 	b, ok := m.items[name]
 	return slices.Clone(b), ok, nil
 }
+
+// tlsServer is a test server that speaks TLS.
+type tlsServer = httptest.Server
+
+func startTLS(h http.Handler) *tlsServer { return httptest.NewTLSServer(h) }

@@ -65,6 +65,13 @@ func newAPI(t *testing.T) (*apiServer, string) {
 				"SETUP_TOKEN": base64.StdEncoding.EncodeToString([]byte("stp_value")),
 				"OTHER":       base64.StdEncoding.EncodeToString([]byte("not this one")),
 			}})
+		case r.URL.Path == "/api/v1/namespaces/sneakers/secrets/box-acme-tls":
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]string{
+				"tls.crt": base64.StdEncoding.EncodeToString([]byte("CRT")),
+				"tls.key": base64.StdEncoding.EncodeToString([]byte("KEY")),
+			}})
+		case r.URL.Path == "/apis/cert-manager.io/v1/namespaces/sneakers/certificates/box-acme": // scrub:allow=fqdn -- a Kubernetes API group
+			_, _ = w.Write([]byte(`{"status":{"conditions":[{"type":"Ready","status":"True"}]}}`))
 		case r.URL.Path == "/api/v1/namespaces/sneakers/services/sneakers-gateway:http/proxy/setup/state":
 			_, _ = w.Write([]byte(`{"needsSetup": false}`))
 		default:
@@ -174,5 +181,25 @@ func TestNoKubeconfigIsAnError(t *testing.T) {
 	c := &kubeapi.Client{Kubeconfig: filepath.Join(t.TempDir(), "none"), Namespace: "n", ServiceAccount: "s"}
 	if _, err := c.SecretKey(context.Background(), "a", "b", "c"); err == nil {
 		t.Fatal("read without a kubeconfig")
+	}
+}
+
+func TestASecretComesBackWholeAndAnObjectAsItsJSON(t *testing.T) {
+	_, kc := newAPI(t)
+	c := &kubeapi.Client{Kubeconfig: kc, Namespace: "sneakers-appliance", ServiceAccount: "exposed-values"}
+	ctx := context.Background()
+	got, err := c.Secret(ctx, "sneakers", "box-acme-tls")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got["tls.crt"]) != "CRT" || string(got["tls.key"]) != "KEY" {
+		t.Fatalf("secret %q", got)
+	}
+	b, err := c.Object(ctx, "/apis/cert-manager.io/v1/namespaces/sneakers/certificates/box-acme") // scrub:allow=fqdn -- a Kubernetes API group
+	if err != nil || !strings.Contains(string(b), `"Ready"`) {
+		t.Fatalf("object %s %v", b, err)
+	}
+	if _, err := c.Secret(ctx, "sneakers", "no-such"); !kubeapi.IsNotFound(err) {
+		t.Fatalf("a missing Secret is not-found, got %v", err)
 	}
 }

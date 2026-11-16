@@ -842,12 +842,32 @@ setup <command>
 
 Its commands:
 
+- `setup escrow-import`: Import another box's decrypted escrow, read from standard input
 - `setup recovery-key`: Set a recovery key during setup, read from standard input
 
 Example:
 
 ```text
+  age -d -i recovery.key escrow.age | ssh -t admin@box1.sneakers.example.org setup escrow-import
   ssh -t admin@box1.sneakers.example.org setup recovery-key --label safe < recovery.pub
+```
+
+## `setup escrow-import`
+
+Import another box's decrypted escrow, read from standard input.
+
+Restores onto new hardware: reads another box's escrow, already decrypted with a recovery key off this box, from standard input (up to 64 KiB) and seals what this box doesn't have yet. The items the old box made for the product (its keys, sealed as product-<product>-<name>) come over, so restored data opens. The items this box sealed for itself when it first started (its SSH root key, password pepper and host CA) are kept and never overwritten, whatever the escrow holds. Over SSH, first boot only, before the product is installed; an escrow that brings nothing new is refused. The audit entry lists the items imported and kept by name, never a value, and the escrow isn't written to the box's disk.
+
+Offered over: SSH.
+
+```text
+setup escrow-import
+```
+
+Example:
+
+```text
+  age -d -i recovery.key escrow.age | ssh -t admin@box1.sneakers.example.org setup escrow-import
 ```
 
 ## `setup recovery-key`

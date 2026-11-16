@@ -376,7 +376,12 @@ func TestTheSneakersBundleTakesAnImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"${JOB_NAME}", "${ARGS}", "${HOST_DIR}", "MIGRATE_OUTPUT_FILE", "MIGRATE_OWNER_PASSWORD_FILE", "serviceAccountName: sneakers-migrate"} {
+	for _, want := range []string{"${JOB_NAME}", "${ARGS}", "${HOST_DIR}", "MIGRATE_OUTPUT_FILE", "MIGRATE_OWNER_PASSWORD_FILE", "serviceAccountName: sneakers-migrate",
+		// The certificate the chart issues the migrate caller, which the vault and the audit
+		// service require under internal mTLS; the build fills the three files, or empties
+		// them for a build without it, and the Secret is optional so the Job still starts.
+		`value: "@MTLS_CERT_FILE@"`, `value: "@MTLS_KEY_FILE@"`, `value: "@MTLS_CA_FILE@"`,
+		"secretName: sneakers-migrate-tls", "optional: true", "mountPath: /var/run/sneakers/tls", "fsGroup: 65532"} {
 		if !strings.Contains(string(job), want) {
 			t.Errorf("the job template lacks %s", want)
 		}
@@ -415,6 +420,41 @@ func TestTheEscrowKeysParseAndReachTheRBAC(t *testing.T) {
 	}
 }
 
+// An escrow key names, under previous, the Secret key the product's chart reads
+// while the box moves the key to a new value (#502). A bundle that has one needs
+// a base that rotates, and a bad one is refused.
+func TestAnEscrowKeyNamesTheKeyItReadsWhileItRotates(t *testing.T) {
+	doc := good + `escrow:
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: VAULT_ROOT_KEK, previous: VAULT_ROOT_KEK_PREVIOUS, restart: [sneakers/deployment/sneakers-vault]}
+  - {name: totp-key, secret: sneakers/sneakers-box, key: TOTP_ENC_KEY}
+`
+	s, err := productspec.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Escrow[0].Restart) != 1 || s.Escrow[0].Restart[0] != "sneakers/deployment/sneakers-vault" {
+		t.Fatalf("%+v", s.Escrow[0])
+	}
+	if s.Escrow[0].Previous != "VAULT_ROOT_KEK_PREVIOUS" || s.Escrow[1].Previous != "" {
+		t.Fatalf("%+v", s.Escrow)
+	}
+	if floor, why := s.BaseFloor(); floor != productspec.RotationMinBase || !strings.Contains(why, "rotat") {
+		t.Fatalf("the floor: %q %q", floor, why)
+	}
+	for name, bad := range map[string]string{
+		"a bad key":      good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: \"K K\", restart: [sneakers/deployment/v]}\n",
+		"the key itself": good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: K, restart: [sneakers/deployment/v]}\n",
+		"twice":          good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P, restart: [sneakers/deployment/v]}\n  - {name: b, secret: sneakers/s, key: L, previous: P, restart: [sneakers/deployment/v]}\n",
+		"a bad workload": good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P, restart: [vault]}\n",
+		"no workload":    good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P}\n",
+		"no previous":    good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, restart: [sneakers/deployment/v]}\n",
+	} {
+		if _, err := productspec.Parse([]byte(bad)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestTheSneakersBundleEscrowsItsVaultAndTOTPKeys(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
 	if err != nil {
@@ -430,6 +470,11 @@ func TestTheSneakersBundleEscrowsItsVaultAndTOTPKeys(t *testing.T) {
 	}
 	if !names["vault-root-key"] || !names["totp-key"] {
 		t.Fatalf("escrow %+v", s.Escrow)
+	}
+	for _, e := range s.Escrow {
+		if e.Name == "vault-root-key" && e.Previous != "VAULT_ROOT_KEK_PREVIOUS" {
+			t.Errorf("the vault root key doesn't name the key the vault reads while it moves: %+v", e)
+		}
 	}
 }
 
@@ -716,4 +761,23 @@ func TestTheSneakersBundleDeclaresItsHealthCheck(t *testing.T) {
 	if h := s.Health(); h == nil || h.Service != "sneakers/sneakers-gateway:http" || h.Path != "/readyz" {
 		t.Fatalf("%+v", h)
 	}
+}
+
+// The Import page's Job dials the vault and the audit service, which need a
+// client certificate under internal mTLS: the chart issues it as
+// sneakers-migrate-tls, which the product declares so the box never makes it.
+func TestTheSneakersBundleDeclaresTheMigrateCertificate(t *testing.T) {
+	s, err := productspec.Load(filepath.Join("..", "..", "build", "product", "sneakers"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, is := range s.IssuedSecrets {
+		if is.Secret == "sneakers/sneakers-migrate-tls" {
+			if strings.Join(is.Keys, ",") != "tls.crt,tls.key,ca.crt" {
+				t.Fatalf("the migrate certificate's keys: %v", is.Keys)
+			}
+			return
+		}
+	}
+	t.Fatal("product.yaml doesn't declare sneakers/sneakers-migrate-tls as an issued secret")
 }

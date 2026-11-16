@@ -127,6 +127,13 @@ type Options struct {
 	// Certs is the certificate store behind TlsService; nil answers Not
 	// available.
 	Certs *certstore.Store
+	// CertProbe waits until :8443 serves the certificate with this
+	// fingerprint; setup's host name step answers only after it does. Nil
+	// skips the wait.
+	CertProbe func(ctx context.Context, fingerprint string) error
+	// Resolver looks a host name up through the box's own DNS servers for
+	// setup's host name check; nil asks netd.
+	Resolver HostResolver
 	// Upgrade configures the update flows.
 	Upgrade UpgradeOptions
 	// Elevation is the root shells; nil answers Not available.
@@ -175,6 +182,15 @@ type Options struct {
 	// (boxsecrets.Store on the box) at each product apply and revert,
 	// before the product restarts; nil makes none.
 	BoxSecrets BoxSecrets
+	// RootKeys and RootKeyStatus rotate the installed product's vault root
+	// key (boxsecrets.Store on the box, and a reader of the vault's status);
+	// the workloads restart through TelemetryWorkloads. Any nil leaves the
+	// rotation unavailable. RootRotatePoll and RootRotateBound are how often
+	// and how long a wait of the rotation asks; zero takes the defaults.
+	RootKeys        RootKeyStore
+	RootKeyStatus   RootKeyStatus
+	RootRotatePoll  time.Duration
+	RootRotateBound time.Duration
 	// Email keeps the product's mail relay (boxsettings.Store on the box);
 	// nil leaves the Email page with nothing to set.
 	Email EmailSettings
@@ -187,6 +203,10 @@ type Options struct {
 	// EmailCertificate reads the certificate the relay presents, for a pin;
 	// nil is boxsettings.Presented.
 	EmailCertificate func(ctx context.Context, e boxsettings.Email) (boxsettings.RelayCert, error)
+	// Resources reads and checks the installed product's PostgreSQL
+	// settings (docs/resources.md); nil leaves the Resources page with
+	// nothing to show.
+	Resources ResourcesBackend
 	// Telemetry keeps the product's collector settings (boxsettings.Store
 	// on the box); nil leaves the Telemetry page with nothing to set.
 	Telemetry TelemetrySettings
@@ -218,20 +238,23 @@ type Options struct {
 
 // Server is the appliance admin.
 type Server struct {
-	o         Options
-	sessions  *weblogin.Sessions
-	codes     *onetime.Codes
-	creds     credentialFlows
-	certMu    sync.Mutex
-	resets    resets
-	upgrades  upgrades
-	telemetry telemetryState
-	mirror    mirrorCheck
-	emailTest emailProof
-	github    githubState
-	checks    checks
-	progress  progress
-	ready     readiness
+	o Options
+	// rootRotating is true while a vault root key rotation runs; rootRotateDone
+	// says the last one finished since the box started.
+	rootRotating, rootRotateDone atomic.Bool
+	sessions                     *weblogin.Sessions
+	codes                        *onetime.Codes
+	creds                        credentialFlows
+	certMu                       sync.Mutex
+	resets                       resets
+	upgrades                     upgrades
+	telemetry                    telemetryState
+	mirror                       mirrorCheck
+	emailTest                    emailProof
+	github                       githubState
+	checks                       checks
+	progress                     progress
+	ready                        readiness
 	// resetting: a product reset runs in this process; resetFinishing: the
 	// box is finishing a cut-off one by itself, from before it starts.
 	resetting      atomic.Bool
@@ -248,6 +271,11 @@ type Server struct {
 		timer clock.Timer
 	}
 	certFollow certFollower
+	// handoffs are the one-time codes setup's host name step hands the
+	// page, in memory only.
+	handoffs handoffStore
+	// acmeFollow is the ACME follower, which uses only its mutex and timer.
+	acmeFollow certFollower
 	// mcpFailed is why the last switch-on wasn't ready within its bound,
 	// shown until the product is ready or the switch is set again.
 	mcpFailed struct {
@@ -313,6 +341,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewEmailServiceHandler(&emailSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTelemetryServiceHandler(&telemetrySvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewRootKeyServiceHandler(&rootKeySvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewResourcesServiceHandler(&resourcesSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewImportServiceHandler(&importSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))
 	mux.Handle(osadminv1connect.NewUpgradeServiceHandler(&upgradeSvc{s: s}, opts))

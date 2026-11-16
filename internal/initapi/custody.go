@@ -71,6 +71,17 @@ func (h *custodyHandler) Unseal(_ context.Context, r *connect.Request[initv1.Uns
 	return connect.NewResponse(&initv1.UnsealResponse{Secret: secret}), nil
 }
 
+func (h *custodyHandler) Retire(_ context.Context, r *connect.Request[initv1.RetireRequest]) (*connect.Response[initv1.RetireResponse], error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if err := h.c.Retire(r.Msg.GetName()); err != nil {
+		h.log.Warn("initapi: KeyCustody.Retire refused", log.F("item", r.Msg.GetName()), log.F("error", codes.Describe(err)))
+		return nil, custodyError(err)
+	}
+	h.log.Info("initapi: KeyCustody.Retire", log.F("item", r.Msg.GetName()))
+	return connect.NewResponse(&initv1.RetireResponse{}), nil
+}
+
 func (h *custodyHandler) Escrow(_ context.Context, r *connect.Request[initv1.EscrowRequest]) (*connect.Response[initv1.EscrowResponse], error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -81,6 +92,22 @@ func (h *custodyHandler) Escrow(_ context.Context, r *connect.Request[initv1.Esc
 	}
 	h.log.Info("initapi: KeyCustody.Escrow", log.F("recipients", len(r.Msg.GetRecipients())))
 	return connect.NewResponse(&initv1.EscrowResponse{Bundle: b}), nil
+}
+
+// ImportEscrow seals the items of a decrypted escrow onto this box
+// (Custody.ImportEscrow). The escrow is a secret: it is never logged, and
+// what is logged and answered is item names and counts only.
+func (h *custodyHandler) ImportEscrow(_ context.Context, r *connect.Request[initv1.ImportEscrowRequest]) (*connect.Response[initv1.ImportEscrowResponse], error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	res, err := h.c.ImportEscrow(r.Msg.GetEscrow())
+	if err != nil {
+		h.log.Warn("initapi: KeyCustody.ImportEscrow refused", log.F("error", codes.Describe(err)))
+		return nil, custodyError(err)
+	}
+	h.log.Info("initapi: KeyCustody.ImportEscrow", log.F("imported", len(res.Imported)), log.F("kept", len(res.Kept)))
+	h.log.Debug("initapi: KeyCustody.ImportEscrow items", log.F("imported", res.Imported), log.F("kept", res.Kept))
+	return connect.NewResponse(&initv1.ImportEscrowResponse{Imported: res.Imported, Kept: res.Kept}), nil
 }
 
 func modeProto(m keycustody.Mode) initv1.CustodyMode {

@@ -177,7 +177,7 @@ when `release.yaml` pins one (`spec.kubernetes.helm`), `images/` (the
 airgap images, each with its release-key signature, [root-image.md](root-image.md#the-airgap-bundle))
 and `manifests/<stack>/*.yaml`, the stacks k0s applies (the Sneakers stacks below, the interim edge
 and, in the lab bundle, the hello stack, [k0s.md](k0s.md)), `import/job.yaml` when `product.yaml`
-declares an import, and optionally `brand/`, the product's logo and colours for the box-state
+declares an import, `charts/` when it has a `resources` section (below), and optionally `brand/`, the product's logo and colours for the box-state
 pages ([artifact.md](artifact.md#the-brand)), and optionally `product.yaml` (below). After it
 decrypts and unpacks one, the box checks it like the kit checks a root: only those entries, `k0s` (and `helm`, which it carries if and only if
 `release.yaml` pins it) with the SHA-256 its `release.yaml` pins, exactly the pinned images, each
@@ -218,6 +218,7 @@ cluster, and sneakers-release's `scripts/check-chart-digest.sh` holds the chart 
 | `sneakers-front` | the front phase: the gateway and the two web apps |
 | `sneakers-mcp` | what only the on render has (the MCP server and Hydra), and the `sneakers-mcp-switch` ConfigMap with the gateway and staff web settings the switch changes, which both load (`envFromConfigMaps`, optional); placed with the front phase, before its own stack, while the MCP switch is on |
 | `sneakers-import` | the migrate service account (`build/product/sneakers/import-stack.yaml`), applied while an import is open ([import.md](import.md)) |
+| `cert-manager` | cert-manager, always on: upstream's manifest for the version `release.yaml` pins, with every image by digest and never pulled (`build/product/cert-manager`). `box-acme`, the Issuer and Certificate an ACME setup adds, is written by the box, not the bundle ([certificates.md](certificates.md#acme)) |
 | `edge` | the interim edge on 443 (`build/lab/stacks/edge`) |
 
 Each workload goes in its phase's own stack (`product.yaml` `phases`, below), labelled
@@ -394,9 +395,59 @@ import:
 
 The box refuses an import whose switch isn't declared, whose job isn't a `.yaml` path inside the
 slot, whose uid is root, or whose setup isn't a `one_time` exposed value; the bundle check refuses a
-bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@`. `build/product/build.sh`
-takes the template as `IMPORT_JOB` and the pinned migrate image as `MIGRATE_IMAGE` (by digest, and
-pinned in `release.yaml`), and writes `import/job.yaml` into the bundle.
+bundle that lacks the job, or whose job still says `@MIGRATE_IMAGE@` or one of the `@MTLS_*@` file
+placeholders. `build/product/build.sh` takes the template as `IMPORT_JOB` and the pinned migrate
+image as `MIGRATE_IMAGE` (by digest, and pinned in `release.yaml`), and writes `import/job.yaml`
+into the bundle. Under the chart's internal mTLS (`global.internalTLS`, on by default) the vault and
+the audit service need a client certificate, so the Job mounts the Secret `sneakers-migrate-tls`
+the chart issues it and `build.sh` puts the three file paths in `MTLS_CERT_FILE`, `MTLS_KEY_FILE`
+and `MTLS_CA_FILE`; a build rendered with the chart switch off sets `INTERNAL_TLS=off`, which leaves
+them empty (the migrate tool then dials in plaintext, and the Secret mount is optional, so the Job
+still starts). The Secret is declared under `issued_secrets` below.
+
+It may also name the Secrets something other than the box makes and fills, which its workloads read:
+
+```yaml
+issued_secrets:
+  - secret: sneakers/sneakers-vault-tls   # cert-manager's certificate for the service
+    keys: [tls.crt, tls.key, ca.crt]
+```
+
+The render refuses a workload that reads a Secret product.yaml declares neither as a box secret nor
+here, so a chart's internal mTLS (`global.internalTLS`, [certificates.md](certificates.md#internal-mtls))
+needs each service's `sneakers-<service>-tls` declared. The box never makes or reads these Secrets, the
+bundle carries no value for them, and a Secret both a box secret and issued is refused. A base older
+than `0.1.0-rc.8` refuses the whole `product.yaml` ([below](#the-base-a-productyaml-needs)).
+
+It may also name the chart its database cluster is rendered from, so the box can apply an admin's
+settings at install, update and revert without a rebuilt bundle:
+
+```yaml
+resources:
+  chart: postgres-ha    # the release.yaml spec.thirdParty entry whose chart the bundle carries
+  phase: data           # the phase whose stack holds the cluster; its workloads are the chart's
+  release: sneakers-pgha # the helm release name: it makes the selector labels, so it is the cluster's
+  namespace: sneakers   # the product's namespace
+  data: /var/lib/sneakers-data   # the directory the volumes' hostPaths go under
+  wait_job: migrate     # optional: the spec.jobs image whose wait command the workloads' init containers run
+  values: {}            # the chart's values, as in a values file
+```
+
+When the box stages the bundle (and so on install, update and reinstall; a revert keeps the render the
+previous slot already has), it renders that chart with the slot's own `helm template`, converts the render
+as the build does a product's charts (images by digest, hostPaths for volumes, box secrets only, workloads
+labelled with the phase) and writes it as `manifests/<phase's stack>/resources-<chart>.yaml`, beside what the
+bundle put in that stack. A chart that renders a workload the phase doesn't name, a Secret that isn't a
+box secret, or fails in helm refuses the bundle. `phase`, `release`, `namespace` and `data` are required; a
+bundle with a `resources` section must carry `helm`.
+
+`release.yaml` pins that chart (`chart.name`, `chart.version`, `chart.repository` and `chart.digest`,
+the registry's manifest digest). `build/product/build.sh` fetches it by that digest
+(`build/tools/chartpull`) into `charts/<name>-<version>.tgz` and `charts/<name>-<version>.manifest.json`,
+and the bundle check refuses a bundle whose manifest doesn't hash to the pinned digest, whose archive
+isn't the chart layer that manifest names, whose `Chart.yaml` isn't the pinned name and version, that
+holds any other file in `charts/`, or that has `charts/` and no `resources` section. A base older than
+`0.1.0-rc.8` refuses the whole `product.yaml` ([below](#the-base-a-productyaml-needs)).
 
 It may also name the product's **escrow** keys, the Secret keys its data can't be opened without,
 which the box keeps in the recovery escrow ([key-custody.md](key-custody.md#product-keys)):
@@ -406,7 +457,16 @@ escrow:
   - name: vault-root-key            # sealed as product-<product>-vault-root-key
     secret: sneakers/sneakers-box
     key: VAULT_ROOT_KEK
+    previous: VAULT_ROOT_KEK_PREVIOUS   # what the chart reads as the key being replaced
+    restart: [sneakers/deployment/sneakers-vault]   # the workloads that read the key
 ```
+
+`previous` and `restart` go together and make the key rotatable
+([key-custody.md](key-custody.md#rotating-the-vault-root-key)): while the box rotates it, it adds the
+old value to the Secret under `previous` and restarts the `restart` workloads, and reads the move's
+status from the first. The chart must read `previous` as an optional reference to the same Secret,
+and the key is never declared as a box secret key. A bundle that names them needs `0.1.0-rc.8` or newer
+and refuses an older base.
 
 The appliance's Role may `get` those Secrets too. The box refuses a name that isn't a lower-case
 word or is named twice, a secret that isn't `<namespace>/<name>` and a key that isn't a Secret data
@@ -469,8 +529,9 @@ box_secrets:
 
 A key is either generated (`password`, `key32` or `token`) or a `value`, which may name generated
 keys as `{key}` (the same Secret's) or `{secret/key}` (another box secret's in the same namespace).
-A Secret can hold a **certificate** instead of keys. No cert-manager runs on the box, so the box
-issues the certificate for a workload inside it, with `tls.crt`, `tls.key` and `ca.crt`:
+A Secret can hold a **certificate** instead of keys. cert-manager on the box is for the box's own
+ACME certificate ([certificates.md](certificates.md#acme)); the box issues the certificate for a
+workload inside it itself, with `tls.crt`, `tls.key` and `ca.crt`:
 
 ```yaml
   - secret: sneakers/sneakers-pgha-tls
@@ -566,6 +627,9 @@ result says to update the base first. Nothing is applied, and the product keeps 
 | Section | Oldest base |
 |---|---|
 | `telemetry` | `0.1.0-rc.7` |
+| `resources` | `0.1.0-rc.8` |
+| `issued_secrets` | `0.1.0-rc.8` |
+| `escrow` with `previous` | `0.1.0-rc.8` |
 
 Lab bundles aren't checked: a lab base's version doesn't sort against a release's. A release packs
 its product for its own version and newer, which is always at or above the table.

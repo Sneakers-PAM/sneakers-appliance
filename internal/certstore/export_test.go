@@ -30,3 +30,6 @@ func (s *Store) SetFallback(f func() error) { s.o.Fallback = f }
 func (s *Store) SetProduct(e ProductEdge, probe func(ctx context.Context, fingerprint string) error) {
 	s.o.Product, s.o.ProductProbe = e, probe
 }
+
+// SetACMEDriver sets Options.ACME on an opened store, for a test.
+func (s *Store) SetACMEDriver(d ACMEDriver) { s.o.ACME = d }

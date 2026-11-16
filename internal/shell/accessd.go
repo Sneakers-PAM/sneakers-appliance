@@ -116,6 +116,12 @@ func (s *Services) accessd(ctx context.Context, r Request) (Result, bool, error)
 		if err == nil {
 			res = Result{Text: "Recovery key " + out.Msg.GetRecoveryKey().GetFingerprint() + " set; a new escrow file was written."}
 		}
+	case "setup.escrow":
+		var out *connect.Response[accessv1.ImportEscrowResponse]
+		out, err = s.Setup.ImportEscrow(ctx, connect.NewRequest(&accessv1.ImportEscrowRequest{Escrow: r.Stdin}))
+		if err == nil {
+			res = Result{Text: escrowImported(out.Msg.GetImported(), out.Msg.GetKept())}
+		}
 	case "rootshell.begin", "rootshell.open":
 		res, err = s.rootShell(ctx, r)
 	case "product.value":
@@ -671,4 +677,20 @@ func roleWord(r osadminv1.Role) string {
 		return "admin"
 	}
 	return "?"
+}
+
+// escrowImported says which items an escrow import sealed and which the box
+// kept, by name.
+func escrowImported(imported, kept []string) string {
+	items := func(n int) string {
+		if n == 1 {
+			return "item"
+		}
+		return "items"
+	}
+	text := fmt.Sprintf("Imported %d %s: %s.", len(imported), items(len(imported)), strings.Join(imported, ", "))
+	if len(kept) > 0 {
+		text += fmt.Sprintf("\nKept %d %s this box already had, not overwritten: %s.", len(kept), items(len(kept)), strings.Join(kept, ", "))
+	}
+	return text
 }

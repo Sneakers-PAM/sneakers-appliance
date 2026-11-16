@@ -30,6 +30,18 @@ service KeyCustodyService {
   rpc Unseal(UnsealRequest) returns (UnsealResponse);
   // Escrow returns the escrow bundle encrypted to the recovery keys.
   rpc Escrow(EscrowRequest) returns (EscrowResponse);
+  // ImportEscrow seals the items of an escrow, already decrypted with a
+  // recovery key, onto this box: a restore onto new hardware. It runs only
+  // in firstboot. An item this box has already sealed (its own SSH root
+  // key, pepper and host CA) is kept, never overwritten; an escrow that
+  // brings nothing new is refused. The escrow is a secret: it is neither
+  // logged nor written anywhere but sealed.
+  rpc ImportEscrow(ImportEscrowRequest) returns (ImportEscrowResponse);
+  // Retire deletes one sealed item by name, once the item that replaces it
+  // is sealed and checked: the end of a root-key rotation. An item that is
+  // not there is not an error, so a retry after a restart is safe. Only the
+  // name is logged.
+  rpc Retire(RetireRequest) returns (RetireResponse);
 }
 
 // CustodyMode is where the state key is kept.
@@ -88,6 +100,12 @@ message SealRequest {
 
 message SealResponse {}
 
+message RetireRequest {
+  string name = 1;
+}
+
+message RetireResponse {}
+
 message UnsealRequest {
   string name = 1;
 }
@@ -103,6 +121,19 @@ message EscrowRequest {
 
 message EscrowResponse {
   bytes bundle = 1;
+}
+
+message ImportEscrowRequest {
+  // escrow is the decrypted escrow bundle (JSON).
+  bytes escrow = 1;
+}
+
+message ImportEscrowResponse {
+  // imported are the names of the items sealed on this box.
+  repeated string imported = 1;
+  // kept are the names of the escrow's items this box had already sealed,
+  // which stay as they are.
+  repeated string kept = 2;
 }
 
 // Platform starts and stops k0s.

@@ -227,7 +227,9 @@ jobs:
         env:
           UNDER_TEST: ${{ inputs.under_test }}
           CONTROL: ${{ matrix.leg == 'control' && '1' || '' }}
-          NEXT_RELEASE: ${{ steps.pins.outputs.next }}
+          # The control leg builds the old code, which predates the issued_secrets
+          # section the next release's mTLS chart needs, so it takes .13's release.
+          NEXT_RELEASE: ${{ matrix.leg == 'control' && steps.pins.outputs.p13 || steps.pins.outputs.next }}
         run: |
           start="$(date +%s)"
           keys="$RUNNER_TEMP/labkeys"

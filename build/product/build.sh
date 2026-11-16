@@ -32,11 +32,17 @@
 #   PRODUCT_YAML the product's product.yaml (bundle format v2, optional;
 #                docs/release.md#productyaml), such as
 #                build/product/sneakers/product.yaml
+#                (a resources section also puts the chart release.yaml pins
+#                for it at charts/, fetched by digest: build/tools/chartpull)
 #   IMPORT_JOB   the product's import Job template (optional;
 #                docs/import.md), such as build/product/sneakers/import-job.yaml,
 #                put at import/job.yaml with @MIGRATE_IMAGE@ filled
 #   MIGRATE_IMAGE the sneakers-migrate image by digest, which release.yaml
 #                pins (required with IMPORT_JOB)
+#   INTERNAL_TLS on (default) or off: whether the Import Job dials the vault and
+#                audit over mutual TLS with the chart's sneakers-migrate-tls
+#                certificate; off for a build rendered with the chart's
+#                global.internalTLS turned off
 #   DATAMOVE     the product's data-move checks (optional; docs/data-move.md),
 #                such as build/product/sneakers/datamove, put at datamove/
 #   PLAIN_HTTP   1 to talk to a lab registry without TLS
@@ -88,6 +94,8 @@ fi
 if [ -n "${PRODUCT_YAML:-}" ]; then
   install -m 0644 "$PRODUCT_YAML" "$tree/product.yaml"
   echo "product: product.yaml from $PRODUCT_YAML"
+  # The chart its resources section names, by the digest release.yaml pins.
+  go run "$root/build/tools/chartpull" "$RELEASE" "$PRODUCT_YAML" "$tree/charts"
 fi
 
 if [ -n "${IMPORT_JOB:-}" ]; then
@@ -95,7 +103,19 @@ if [ -n "${IMPORT_JOB:-}" ]; then
   case "$MIGRATE_IMAGE" in *@sha256:*) ;; *) echo "product: MIGRATE_IMAGE $MIGRATE_IMAGE isn't pinned by digest" >&2; exit 1 ;; esac
   grep -qF "${MIGRATE_IMAGE#*@}" "$RELEASE" || { echo "product: release.yaml doesn't pin $MIGRATE_IMAGE" >&2; exit 1; }
   mkdir -p "$tree/import"
-  sed "s|@MIGRATE_IMAGE@|$MIGRATE_IMAGE|g" "$IMPORT_JOB" > "$tree/import/job.yaml"
+  # The Job's client certificate under internal mTLS (the chart's global.internalTLS, on
+  # by default): the files the chart's sneakers-migrate-tls Secret holds. A build rendered
+  # without it (INTERNAL_TLS=off, with the values overlay that turns the chart switch off)
+  # leaves the three empty, which sneakers-migrate reads as plaintext.
+  case "${INTERNAL_TLS:-on}" in
+    on) mtls_dir=/var/run/sneakers/tls ;;
+    off) mtls_dir="" ;;
+    *) echo "product: INTERNAL_TLS is on or off, not ${INTERNAL_TLS}" >&2; exit 1 ;;
+  esac
+  sed -e "s|@MIGRATE_IMAGE@|$MIGRATE_IMAGE|g" \
+    -e "s|@MTLS_CERT_FILE@|${mtls_dir:+$mtls_dir/tls.crt}|g" \
+    -e "s|@MTLS_KEY_FILE@|${mtls_dir:+$mtls_dir/tls.key}|g" \
+    -e "s|@MTLS_CA_FILE@|${mtls_dir:+$mtls_dir/ca.crt}|g" "$IMPORT_JOB" > "$tree/import/job.yaml"
   chmod 0644 "$tree/import/job.yaml"
   echo "product: import Job from $IMPORT_JOB ($MIGRATE_IMAGE)"
 fi

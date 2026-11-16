@@ -95,7 +95,7 @@ func TestAReplacementBoxGetsTheOldBoxsProductKeysFromTheEscrow(t *testing.T) {
 
 	// A replacement box imports it at first boot, then applies the product.
 	custodyB := custodyIn(t, phase.Firstboot)
-	if err := custodyB.ImportEscrow(plain); err != nil {
+	if _, err := custodyB.ImportEscrow(plain); err != nil {
 		t.Fatal(err)
 	}
 	b := boxsecrets.Store{Dir: t.TempDir(), Manifests: t.TempDir(), Restore: func(name string) (string, bool, error) {

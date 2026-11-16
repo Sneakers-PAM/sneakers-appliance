@@ -146,11 +146,20 @@ func do(hc *http.Client, req *http.Request) ([]byte, error) {
 	if resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, errRefused)
 	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, fmt.Errorf("%s %s: %w", req.Method, req.URL.Path, ErrNotFound)
+	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("%s %s: %s", req.Method, req.URL.Path, resp.Status)
 	}
 	return b, nil
 }
+
+// ErrNotFound is a read of an object that isn't there (yet).
+var ErrNotFound = errors.New("404 Not Found")
+
+// IsNotFound says whether err is a read of an object that isn't there.
+func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }
 
 // errRefused is a read the API server refused the token for.
 var errRefused = errors.New("401 Unauthorized")
@@ -218,6 +227,37 @@ func (c *Client) SecretKey(ctx context.Context, namespace, name, key string) (st
 		return "", fmt.Errorf("kubeapi: the Secret %s/%s's key %s doesn't decode", namespace, name, key)
 	}
 	return string(v), nil
+}
+
+// Secret reads one Secret's data, decoded. The service account's Role
+// decides which Secrets it may read; the caller names one it may.
+func (c *Client) Secret(ctx context.Context, namespace, name string) (map[string][]byte, error) {
+	b, err := c.get(ctx, "/api/v1/namespaces/"+url.PathEscape(namespace)+"/secrets/"+url.PathEscape(name))
+	if err != nil {
+		return nil, err
+	}
+	var s struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal(b, &s); err != nil {
+		return nil, errors.New("kubeapi: the Secret doesn't parse")
+	}
+	out := make(map[string][]byte, len(s.Data))
+	for k, enc := range s.Data {
+		v, err := base64.StdEncoding.DecodeString(enc)
+		if err != nil {
+			return nil, fmt.Errorf("kubeapi: the Secret %s/%s's key %s doesn't decode", namespace, name, k)
+		}
+		out[k] = v
+	}
+	return out, nil
+}
+
+// Object reads the object at path (an API path such as
+// /apis/cert-manager.io/v1/namespaces/<ns>/certificates/<name>) and returns // scrub:allow=fqdn -- a Kubernetes API group
+// its JSON. The Role decides what may be read.
+func (c *Client) Object(ctx context.Context, path string) ([]byte, error) {
+	return c.get(ctx, path)
 }
 
 // ServiceGet is a GET of path on a service through the API server's

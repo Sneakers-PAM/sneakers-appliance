@@ -5,6 +5,8 @@ package fixtures
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
@@ -46,19 +48,47 @@ func StartRegistry(t testing.TB) *LabRegistry {
 	must(t, err)
 	host := strings.TrimSpace(strings.Split(strings.TrimSpace(string(port)), "\n")[0])
 	r := &LabRegistry{Host: host}
-	deadline := time.Now().Add(30 * time.Second)
+	if err := waitRegistry(context.Background(), host, 30*time.Second); err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// waitRegistry returns once the registry answers GET /v2/ with 200. A port
+// that is open is not enough: docker's port proxy accepts the connection and
+// drops it (EOF) until the registry inside the container listens, and a
+// request that lands then fails with an EOF the caller can't retry.
+func waitRegistry(ctx context.Context, host string, bound time.Duration) error {
+	deadline := time.Now().Add(bound)
+	var last error
 	for {
-		repo, err := remote.NewRepository(host + "/probe")
-		must(t, err)
-		repo.PlainHTTP = true
-		if err := repo.Tags(context.Background(), "", func([]string) error { return nil }); err == nil || !strings.Contains(err.Error(), "connect") {
-			return r
+		last = probeRegistry(ctx, host)
+		if last == nil {
+			return nil
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("registry at %s didn't come up", host)
+			return fmt.Errorf("registry at %s didn't come up: %w", host, last)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+func probeRegistry(ctx context.Context, host string) error {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+host+"/v2/", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("GET /v2/: %s", resp.Status)
+	}
+	return nil
 }
 
 // Ref is the reference of repo:tag on the registry.

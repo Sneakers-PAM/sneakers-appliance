@@ -28,5 +28,9 @@ grep -qF 'uses: ./.github/workflows/real-bundle.yml' "$wf" || bad "release.yml's
 sed -n '/^  images:$/,/^    if:/p' "$wf" | grep -qE '^    needs: \[guard, realbundles\]$' || bad "release.yml's images job doesn't wait for the real bundles"
 line="$(grep -E '^[[:space:]]+cancel-in-progress:' "$root/.github/workflows/real-bundle.yml" | head -1 | sed -E 's/^[[:space:]]+cancel-in-progress:[[:space:]]*//')"
 [ "$line" = "\${{ github.event_name == 'pull_request' }}" ] || bad "real-bundle.yml cancel-in-progress is '$line'; a merge would cancel the job running on main"
+# The control leg builds the old code (CONTROL_COMMIT), whose stack check predates the
+# issued_secrets section, so its "next" product takes .13's release, not the one with
+# internal mTLS.
+grep -qF "NEXT_RELEASE: \${{ matrix.leg == 'control' && steps.pins.outputs.p13 || steps.pins.outputs.next }}" "$root/.github/workflows/real-bundle.yml" || bad "real-bundle.yml's control leg doesn't build next with .13's release"
 [ "$fail" = 0 ] && echo "ok: the real-bundle pins are full commits, the release waits for the job, and main's run is never cancelled"
 exit "$fail"

@@ -99,6 +99,9 @@ step "the cluster, with the box's values"
 # The umbrella with only the cluster on: no service runs in this rehearsal, and
 # the Secrets above stand in for the box's.
 cat > "$work/kind.yaml" <<'YAML'
+# No service runs, so no service certificate is issued: with internal mTLS on, the
+# umbrella's own mtls.yaml needs the library chart that only a service subchart pulls in.
+global: {internalTLS: {enabled: false}}
 bundledSecrets: {enabled: false}
 bundledNetworkPolicies: {enabled: false}
 postgres: {enabled: false}

@@ -245,3 +245,102 @@ func TestEnsureStopsWhenTheEscrowCantBeRead(t *testing.T) {
 		t.Fatalf("values written: %v", err)
 	}
 }
+
+const rotating = spec + `escrow:
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: KEK, previous: KEK_PREVIOUS, restart: [sneakers/deployment/sneakers-vault]}
+`
+
+// A rotation moves the key to a new value and keeps the old one as the
+// previous key, in one write; the stack carries the previous key only while
+// it lasts, and the end of the rotation drops it (#502).
+func TestARotationKeepsTheOldKeyAsThePreviousUntilItEnds(t *testing.T) {
+	st := boxsecrets.Store{Dir: t.TempDir(), Manifests: t.TempDir()}
+	dir := slot(t, rotating)
+	if err := st.Ensure(dir); err != nil {
+		t.Fatal(err)
+	}
+	before := readStack(t, st.Manifests)["sneakers/sneakers-box"].StringData
+	if _, has := before["KEK_PREVIOUS"]; has {
+		t.Fatal("a previous key with no rotation")
+	}
+	r, err := st.BeginRotation(dir, "vault-root-key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Previous != before["KEK"] || r.Current == "" || r.Current == r.Previous || r.Resumed {
+		t.Fatalf("begin: resumed=%v, the old key kept=%v, new key made=%v", r.Resumed, r.Previous == before["KEK"], r.Current != "")
+	}
+	if err := st.Ensure(dir); err != nil {
+		t.Fatal(err)
+	}
+	during := readStack(t, st.Manifests)["sneakers/sneakers-box"].StringData
+	if during["KEK"] != r.Current || during["KEK_PREVIOUS"] != r.Previous {
+		t.Fatal("the stack doesn't carry the new key and the previous one")
+	}
+	if during["SETUP_TOKEN"] != before["SETUP_TOKEN"] {
+		t.Fatal("another key changed")
+	}
+	// A second begin, as after a restart, finds the rotation and makes no new key.
+	again, err := st.BeginRotation(dir, "vault-root-key")
+	if err != nil || !again.Resumed || again.Current != r.Current || again.Previous != r.Previous {
+		t.Fatalf("resume: %+v %v", again, err)
+	}
+	if err := st.EndRotation(dir, "vault-root-key"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Ensure(dir); err != nil {
+		t.Fatal(err)
+	}
+	after := readStack(t, st.Manifests)["sneakers/sneakers-box"].StringData
+	if _, has := after["KEK_PREVIOUS"]; has || after["KEK"] != r.Current {
+		t.Fatal("the previous key stayed, or the new key was lost")
+	}
+	if err := st.EndRotation(dir, "vault-root-key"); err != nil {
+		t.Fatalf("ending twice: %v", err)
+	}
+}
+
+// A bundle that doesn't name a previous key can't rotate, and the box
+// doesn't change any value to find out.
+func TestARotationNeedsABundleThatNamesThePreviousKey(t *testing.T) {
+	st := boxsecrets.Store{Dir: t.TempDir(), Manifests: t.TempDir()}
+	dir := slot(t, spec+"escrow:\n  - {name: vault-root-key, secret: sneakers/sneakers-box, key: KEK}\n")
+	if err := st.Ensure(dir); err != nil {
+		t.Fatal(err)
+	}
+	before := readStack(t, st.Manifests)["sneakers/sneakers-box"].StringData["KEK"]
+	if _, err := st.BeginRotation(dir, "vault-root-key"); err == nil {
+		t.Fatal("rotated a key the bundle doesn't name a previous key for")
+	}
+	if _, err := st.BeginRotation(dir, "no-such-key"); err == nil {
+		t.Fatal("rotated a key the bundle doesn't escrow")
+	}
+	if err := st.Ensure(dir); err != nil || readStack(t, st.Manifests)["sneakers/sneakers-box"].StringData["KEK"] != before {
+		t.Fatalf("the key changed: %v", err)
+	}
+}
+
+// Rotating is what a caller asks before it touches the sealed copy of a key
+// that a rotation is still moving.
+func TestRotatingSaysWhileThePreviousKeyIsHeld(t *testing.T) {
+	st := boxsecrets.Store{Dir: t.TempDir(), Manifests: t.TempDir()}
+	dir := slot(t, rotating)
+	if err := st.Ensure(dir); err != nil {
+		t.Fatal(err)
+	}
+	if on, err := st.Rotating(dir); err != nil || on {
+		t.Fatalf("before: %v %v", on, err)
+	}
+	if _, err := st.BeginRotation(dir, "vault-root-key"); err != nil {
+		t.Fatal(err)
+	}
+	if on, err := st.Rotating(dir); err != nil || !on {
+		t.Fatalf("during: %v %v", on, err)
+	}
+	if err := st.EndRotation(dir, "vault-root-key"); err != nil {
+		t.Fatal(err)
+	}
+	if on, err := st.Rotating(dir); err != nil || on {
+		t.Fatalf("after: %v %v", on, err)
+	}
+}
