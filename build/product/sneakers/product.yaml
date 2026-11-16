@@ -439,3 +439,160 @@ phases:
         - sneakers-notify:9195
         - sneakers-sshbroker:9096
       sneakers-hydra: [sneakers-pgha-primary:5432]
+
+
+# The helm-postgres-ha cluster the services run on, once the box has moved its
+# data there (data_move). The box renders it itself from the chart the bundle
+# carries when it stages the bundle (docs/release.md#productyaml), so an
+# admin's settings can apply without a rebuilt bundle; the release name is the
+# one the umbrella renders it under. These values are the umbrella's
+# postgres-ha block (its defaults, the small-box example and
+# values-postgres-ha.yaml) as render_test.sh checks.
+resources:
+  chart: postgres-ha
+  phase: data
+  release: sneakers
+  namespace: sneakers
+  data: /var/lib/sneakers-data
+  wait_job: migrate
+  values:
+    affinity:
+      zoneSpread: false
+    agent:
+      image:
+        digest: sha256:fb3d536548571d67106f6140da144a9e9a53218196feadeda544b5d710e467d4
+        tag: 1.0.0
+      initResources:
+        limits:
+          memory: 256Mi
+        requests:
+          cpu: 10m
+          memory: 32Mi
+    backup:
+      enabled: true
+      env:
+        WALG_DOWNLOAD_CONCURRENCY: "1"
+        WALG_UPLOAD_CONCURRENCY: "1"
+        WALG_UPLOAD_DISK_CONCURRENCY: "1"
+      file:
+        persistence:
+          accessModes:
+            - ReadWriteOnce
+          size: 20Gi
+        prefix: walg
+      retainDays: 0
+      retainFull: 7
+      schedule: 15 1 * * *
+      source: primary
+      storage: file
+      verify:
+        database: sneakers_audit
+        enabled: true
+        resources:
+          limits:
+            cpu: "1"
+            memory: 512Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+        schedule: 45 3 * * *
+    credentials:
+      replication:
+        existingSecret: sneakers-bundled
+        passwordKey: replication-password
+      rewind:
+        existingSecret: sneakers-bundled
+        passwordKey: rewind-password
+      superuser:
+        existingSecret: sneakers-bundled
+        passwordKey: postgres-password
+    databases:
+      - name: sneakers_identity
+        owner: sneakers
+      - name: sneakers_vault
+        owner: sneakers
+      - name: sneakers_workflow
+        owner: sneakers
+      - name: sneakers_audit
+        owner: sneakers
+      - name: sneakers_kratos
+        owner: sneakers
+      - name: sneakers_hydra
+        owner: sneakers
+    fullnameOverride: sneakers-pgha
+    image:
+      digest: sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+      repository: library/postgres
+      tag: "18.6"
+    networkPolicy:
+      allowedClients:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: identity
+              app.kubernetes.io/part-of: sneakers
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: vault
+              app.kubernetes.io/part-of: sneakers
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: workflow
+              app.kubernetes.io/part-of: sneakers
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: audit
+              app.kubernetes.io/part-of: sneakers
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kratos
+              app.kubernetes.io/part-of: sneakers
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: hydra
+              app.kubernetes.io/part-of: sneakers
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: migrate
+              app.kubernetes.io/part-of: sneakers
+    pgbouncer:
+      enabled: false
+    podDisruptionBudget:
+      enabled: false
+    podLabels:
+      app.kubernetes.io/component: postgres
+      app.kubernetes.io/part-of: sneakers
+    postgresql:
+      allowedCIDRs:
+        - 10.244.0.0/16  # scrub:allow=private-ip -- k0s's default pod network
+      initdbArgs: --encoding=UTF8 --locale=en_US.UTF-8 --data-checksums
+      parameters:
+        effective_cache_size: 192MB
+        maintenance_work_mem: 32MB
+        max_connections: "50"
+        max_parallel_workers_per_gather: "0"
+        max_slot_wal_keep_size: 256MB
+        max_wal_size: 512MB
+        min_wal_size: 64MB
+        shared_buffers: 64MB
+        wal_keep_size: "0"
+        work_mem: 2MB
+      synchronous:
+        mode: "off"
+    replicas: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 512Mi
+      requests:
+        cpu: 50m
+        memory: 192Mi
+    roles:
+      - existingSecret: sneakers-bundled
+        name: sneakers
+        passwordKey: password
+    storage:
+      size: 20Gi
+    tls:
+      certManager:
+        enabled: false
+      existingSecret: sneakers-pgha-tls

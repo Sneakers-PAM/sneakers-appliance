@@ -77,6 +77,51 @@ for st in sneakers sneakers-mcp sneakers-import cert-manager edge; do
 done
 echo "ok: rendered $(cd "$out" && echo */ | tr -d /)"
 
+# The cluster the services run on is not in the render: the box renders it
+# from the chart the bundle carries when it stages the bundle. Stage it here
+# the same way (the bundle's files in a slot, then the box's own render),
+# with the chart pulled by the digest release.yaml pins, and put the result
+# in the stacks the checks below read.
+block="$(awk '/^    postgres-ha:$/ { on = 1; next } on && /^    [^ ]/ { on = 0 } on' "$work/release.yaml")"
+pgha_repo="$(sed -n 's/^ *repository: //p' <<<"$block")"
+pgha_version="$(sed -n '/^ *chart:/,/repository:/s/^ *version: //p' <<<"$block")"
+pgha_digest="$(sed -n '/repository:/{n;s/^ *digest: //p;}' <<<"$block")"
+[ -n "$pgha_repo" ] && [ -n "$pgha_version" ] && [ -n "$pgha_digest" ] || fail "release.yaml pins no postgres-ha chart"
+export HELM_CACHE_HOME="$work/helm/cache" HELM_CONFIG_HOME="$work/helm/config" HELM_DATA_HOME="$work/helm/data"
+slot="$work/slot"
+mkdir -p "$slot/charts" "$work/pull"
+"$helm" pull "$pgha_repo/postgres-ha@$pgha_digest" --destination "$work/pull" > /dev/null
+install -m 0644 "$work/pull/"*.tgz "$slot/charts/postgres-ha-$pgha_version.tgz"
+install -m 0644 "$work/release.yaml" "$slot/release.yaml"
+install -m 0644 "$here/product.yaml" "$slot/product.yaml"
+ln -s "$(command -v "$helm")" "$slot/helm"
+cp -r "$out" "$slot/manifests"
+go run "$root/build/tools/resrender" render "$slot" || fail "the box's own render of the resources chart failed"
+cp "$slot/manifests/sneakers-data/resources-postgres-ha.yaml" "$out/sneakers-data/"
+grep -q 'sneakers-appliance/phase: data' "$out/sneakers-data/resources-postgres-ha.yaml" || fail "the box's cluster isn't labelled with the data phase"
+echo "ok: the box renders the cluster into the data phase's stack"
+
+# The values product.yaml carries for the cluster are the umbrella's own: the
+# umbrella with the cluster on (values-postgres-ha.yaml) and the chart on its
+# own with product.yaml's values render the same objects, text for text.
+umb="$work/umbrella"
+mkdir -p "$umb/scripts"
+cp -r "$charts/charts" "$umb/charts"
+install -m 0755 "$charts/scripts/build-deps.sh" "$umb/scripts/"
+mkdir -p "$work/bin"
+ln -sf "$(command -v "$helm")" "$work/bin/helm"
+PATH="$work/bin:$PATH" bash "$umb/scripts/build-deps.sh" > /dev/null
+uchart="$umb/charts/sneakers"
+"$helm" template sneakers "$uchart" -n sneakers --skip-tests -f "$uchart/examples/values-small-box.yaml" -f "$charts/migrate/deploy/migrate-callers-values.yaml" \
+  -f "$here/values.yaml" -f "$here/values-postgres-ha.yaml" > "$work/umbrella.yaml"
+go run "$root/build/tools/resrender" values "$here/product.yaml" > "$work/pgha-values.yaml"
+"$helm" template sneakers "$slot/charts/postgres-ha-$pgha_version.tgz" -n sneakers --skip-tests -f "$work/pgha-values.yaml" > "$work/pgha-alone.yaml"
+go run "$root/build/tools/resrender" docs "$work/umbrella.yaml" postgres-ha > "$work/pgha-umbrella.objects"
+go run "$root/build/tools/resrender" docs "$work/pgha-alone.yaml" postgres-ha > "$work/pgha-alone.objects"
+[ "$(wc -l < "$work/pgha-alone.objects")" -ge 10 ] || fail "the chart on its own renders too few objects: $(cat "$work/pgha-alone.objects")"
+diff "$work/pgha-umbrella.objects" "$work/pgha-alone.objects" > "$work/pgha.diff" || fail "product.yaml's values for the cluster render other than the umbrella's: $(cat "$work/pgha.diff")"
+echo "ok: product.yaml's cluster values render what the umbrella does ($(wc -l < "$work/pgha-alone.objects") objects)"
+
 # Phased: each phase's own stack holds its workloads, labelled with the
 # phase on the workload and its pods, and the always-on stack holds none
 # (build/tools/stack refuses a workload no phase names).
@@ -91,7 +136,8 @@ fi
 grep -q 'sneakers-appliance/phase: front' "$out/sneakers-mcp/sneakers-mcp.yaml" || fail "the MCP switch's workloads aren't in the front phase"
 # The data move: both clusters in the data phase, each on its own volume, and
 # every connection going to the new one over TLS.
-data="$out/sneakers-data/sneakers-data.yaml"
+data="$work/data-phase.yaml"
+cat "$out"/sneakers-data/*.yaml > "$data"
 for w in sneakers-postgres sneakers-pgha; do
   grep -q "^    name: $w$" "$data" || fail "the data phase has no $w: the move needs both clusters"
 done
@@ -100,7 +146,7 @@ grep -q 'path: /var/lib/sneakers-data/pgha$' "$data" || fail "the new cluster ha
 # The backups are on the encrypted backup partition, for the members and the
 # restore check alike, and no pod writes them to the data volume.
 grep -q 'path: /var/lib/sneakers/backup/postgres$' "$data" || fail "the cluster's backups aren't on the backup partition"
-grep -q 'path: /var/lib/sneakers/backup/postgres$' "$out/sneakers/sneakers.yaml" || fail "the restore check doesn't read the backup partition"
+grep -q 'path: /var/lib/sneakers/backup/postgres$' "$out/sneakers-data/resources-postgres-ha.yaml" || fail "the restore check doesn't read the backup partition"
 if grep -rq 'path: /var/lib/sneakers-data/pgha-backup' "$out"; then fail "a backup claim went to the data volume"; fi
 dsns="$(grep -h 'postgres://' "$out"/*/*.yaml || true)"
 [ -n "$dsns" ] || fail "no stack names a database"
@@ -113,9 +159,8 @@ fi
 for f in "$here/product.yaml" "$here/import-job.yaml"; do
   if grep -v '^ *#' "$f" | grep -q 'sneakers-postgres:5432\|sslmode=disable'; then fail "$f still names the old address"; fi
 done
-# One render: the cluster comes from the umbrella, at the version release.yaml pins.
-pgha_version="$(awk '/^    postgres-ha:$/ { on = 1 } on && /^ *version: / { print $2; exit }' "$work/release.yaml")"
-grep -q "helm.sh/chart: postgres-ha-$pgha_version\$" "$data" || fail "the cluster isn't the chart at $pgha_version"
+# The cluster is the chart at the version release.yaml pins.
+grep -q "helm.sh/chart: postgres-ha-$pgha_version\$" "$out/sneakers-data/resources-postgres-ha.yaml" || fail "the cluster isn't the chart at $pgha_version"
 echo "ok: both clusters in the data phase, every connection on the new one over TLS"
 
 # Each phased workload waits for the cluster's DNS and its needs first,
