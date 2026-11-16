@@ -425,12 +425,15 @@ func TestTheEscrowKeysParseAndReachTheRBAC(t *testing.T) {
 // a base that rotates, and a bad one is refused.
 func TestAnEscrowKeyNamesTheKeyItReadsWhileItRotates(t *testing.T) {
 	doc := good + `escrow:
-  - {name: vault-root-key, secret: sneakers/sneakers-box, key: VAULT_ROOT_KEK, previous: VAULT_ROOT_KEK_PREVIOUS}
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: VAULT_ROOT_KEK, previous: VAULT_ROOT_KEK_PREVIOUS, restart: [sneakers/deployment/sneakers-vault]}
   - {name: totp-key, secret: sneakers/sneakers-box, key: TOTP_ENC_KEY}
 `
 	s, err := productspec.Parse([]byte(doc))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(s.Escrow[0].Restart) != 1 || s.Escrow[0].Restart[0] != "sneakers/deployment/sneakers-vault" {
+		t.Fatalf("%+v", s.Escrow[0])
 	}
 	if s.Escrow[0].Previous != "VAULT_ROOT_KEK_PREVIOUS" || s.Escrow[1].Previous != "" {
 		t.Fatalf("%+v", s.Escrow)
@@ -439,9 +442,12 @@ func TestAnEscrowKeyNamesTheKeyItReadsWhileItRotates(t *testing.T) {
 		t.Fatalf("the floor: %q %q", floor, why)
 	}
 	for name, bad := range map[string]string{
-		"a bad key":      good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: \"K K\"}\n",
-		"the key itself": good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: K}\n",
-		"twice":          good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P}\n  - {name: b, secret: sneakers/s, key: L, previous: P}\n",
+		"a bad key":      good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: \"K K\", restart: [sneakers/deployment/v]}\n",
+		"the key itself": good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: K, restart: [sneakers/deployment/v]}\n",
+		"twice":          good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P, restart: [sneakers/deployment/v]}\n  - {name: b, secret: sneakers/s, key: L, previous: P, restart: [sneakers/deployment/v]}\n",
+		"a bad workload": good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P, restart: [vault]}\n",
+		"no workload":    good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P}\n",
+		"no previous":    good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, restart: [sneakers/deployment/v]}\n",
 	} {
 		if _, err := productspec.Parse([]byte(bad)); !codes.Is(err, codes.KitBundleMismatch) {
 			t.Errorf("%s: %v", name, err)

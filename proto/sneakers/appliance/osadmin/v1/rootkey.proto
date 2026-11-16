@@ -1,0 +1,57 @@
+// Copyright 2026 The Sneakers-PAM Authors
+// SPDX-License-Identifier: Apache-2.0
+
+// The vault root key rotation: an owner moves the installed product's vault
+// to a new root key (docs/key-custody.md#rotating-the-vault-root-key).
+syntax = "proto3";
+
+package sneakers.appliance.osadmin.v1;
+
+import "sneakers/appliance/osadmin/v1/options.proto";
+import "sneakers/appliance/osadmin/v1/upgrade.proto";
+
+option go_package = "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1;osadminv1";
+
+// RootKeyService rotates the vault's root key on the box.
+service RootKeyService {
+  // GetRootKeyRotation says where a rotation is, if one is.
+  rpc GetRootKeyRotation(GetRootKeyRotationRequest) returns (GetRootKeyRotationResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (rule) = {role: ROLE_OWNER};
+  }
+  // RotateRootKey makes a new root key, has the vault move its working keys
+  // to it, checks that every one opens under the new key alone, and only
+  // then retires the old key; a new escrow carries only the new key, and an
+  // older escrow no longer opens the vault. It runs under the same
+  // maintenance gate as a product update and answers once it has begun;
+  // GetRootKeyRotation follows it. A rotation that stopped carries on where
+  // it stopped, and nothing is deleted before the vault has verified.
+  rpc RotateRootKey(RotateRootKeyRequest) returns (RotateRootKeyResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      audit: "product.rootkey.rotate"
+    };
+  }
+}
+
+message GetRootKeyRotationRequest {}
+
+message GetRootKeyRotationResponse {
+  // available is false when the installed product can't rotate its root
+  // key.
+  bool available = 1;
+  // state is "none", "running", "stopped" or "done".
+  string state = 2;
+  // step is the step it is at or stopped at; empty for none.
+  string step = 3;
+  // why says why it stopped, without any key.
+  string why = 4;
+}
+
+message RotateRootKeyRequest {
+  // elevation_override is an owner's override of an open elevated shell.
+  ElevationOverride elevation_override = 1;
+}
+
+message RotateRootKeyResponse {}

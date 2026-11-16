@@ -247,7 +247,7 @@ func TestEnsureStopsWhenTheEscrowCantBeRead(t *testing.T) {
 }
 
 const rotating = spec + `escrow:
-  - {name: vault-root-key, secret: sneakers/sneakers-box, key: KEK, previous: KEK_PREVIOUS}
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: KEK, previous: KEK_PREVIOUS, restart: [sneakers/deployment/sneakers-vault]}
 `
 
 // A rotation moves the key to a new value and keeps the old one as the

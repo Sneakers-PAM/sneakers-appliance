@@ -115,6 +115,14 @@ shell, the console and :8443 show the same sentence.
 | 3911 | `TELEMETRY_UNREACHABLE` | the collector didn't answer a TLS handshake when the settings were saved; nothing was saved |
 | 3912 | `TELEMETRY_RESTART` | there's no failed restart to retry, or a workload didn't come back in time |
 
+## Vault root key rotation (393x)
+
+| Code | Symbol | Cause |
+|---|---|---|
+| 3930 | `ROOTKEY_UNAVAILABLE` | the installed product can't rotate the vault root key (its bundle names no previous key), or the box can't reach the vault's status |
+| 3931 | `ROOTKEY_UNFINISHED` | a root key rotation is under way or stopped half way; finish it (rotate again) before anything that applies the product |
+| 3932 | `ROOTKEY_NOT_VERIFIED` | the vault didn't verify the move to the new root key in time, or reported it failed; both keys are kept and nothing was deleted |
+
 ## Build kit and boot (1xxx and 2xxx)
 
 | Code | Symbol | Meaning |

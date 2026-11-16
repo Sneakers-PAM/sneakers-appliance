@@ -281,6 +281,11 @@ type EscrowKey struct {
 	// (docs/key-custody.md#rotating-the-vault-root-key); empty when the
 	// product can't rotate it.
 	Previous string `yaml:"previous"`
+	// Restart are the workloads that read the key,
+	// <namespace>/<deployment|statefulset|daemonset>/<name>: the box
+	// restarts them to move them to a new value, and reads the move's status
+	// from the first. Required with previous.
+	Restart []string `yaml:"restart"`
 }
 
 // Namespace is the Secret's namespace.
@@ -303,6 +308,14 @@ func (s Spec) checkEscrow() error {
 			return bad("escrow[%d]: the key %q isn't a Secret data key", i, e.Key)
 		case e.Previous != "" && (!keyRE.MatchString(e.Previous) || e.Previous == e.Key || previous[e.Secret+"/"+e.Previous]):
 			return bad("escrow[%d]: previous %q isn't a Secret data key of its own, or is named twice", i, e.Previous)
+		}
+		if (e.Previous == "") != (len(e.Restart) == 0) {
+			return bad("escrow[%d]: previous and restart go together: the box restarts the workloads that read a key to rotate it", i)
+		}
+		for _, ref := range e.Restart {
+			if _, _, _, ok := SplitRestart(ref); !ok {
+				return bad("escrow[%d]: the workload %q isn't <namespace>/<deployment|statefulset|daemonset>/<name>", i, ref)
+			}
 		}
 		if e.Previous != "" {
 			previous[e.Secret+"/"+e.Previous] = true
