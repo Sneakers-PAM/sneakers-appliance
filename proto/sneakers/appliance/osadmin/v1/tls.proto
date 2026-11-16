@@ -106,9 +106,12 @@ service TlsService {
       audit: "tls.endpoint.revert"
     };
   }
-  // SetAcme chooses the ACME issuer, account and challenge for cert-manager.
-  // It answers TLS_ACME_UNAVAILABLE until the product bundle brings
-  // cert-manager (spec 3, Section 2.7.2).
+  // SetAcme chooses the ACME issuer, account and challenge for cert-manager
+  // and the endpoints that take its certificate. It writes the stack and
+  // returns; the certificate is assigned, with the same served-certificate
+  // check and rollback as an uploaded one, once the CA has issued it.
+  // TLS_ACME_UNAVAILABLE where cert-manager can't run (no product, or a
+  // bundle without it).
   rpc SetAcme(SetAcmeRequest) returns (SetAcmeResponse) {
     option (rule) = {
       role: ROLE_OWNER
@@ -116,7 +119,7 @@ service TlsService {
     };
   }
   // RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
-  // TLS_ACME_UNAVAILABLE until then.
+  // TLS_ACME_UNAVAILABLE where cert-manager can't run.
   rpc RenewNow(RenewNowRequest) returns (RenewNowResponse) {
     option (rule) = {
       role: ROLE_OWNER

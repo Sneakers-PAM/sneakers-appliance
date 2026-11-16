@@ -272,3 +272,86 @@ func TestTheEdgeGatesEveryRequestOn443OnEdgefall(t *testing.T) {
 		t.Fatalf("box-gate is %+v; want a forwardAuth to edgefall's /_box/gate", fa)
 	}
 }
+
+// ACME's HTTP-01 challenge is answered on port 80 by the solver Ingress
+// cert-manager makes. An entry point redirect sends every request on 80 to
+// https before any router sees it, so the CA would follow the redirect to
+// 443, where box-gate may answer 503. The redirect is therefore the lowest
+// priority router on 80, which the solver's own router outranks.
+func TestPort80RedirectsToHTTPSOnlyAsTheLowestPriorityRouter(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("..", "..", "build", "lab", "stacks", "edge", "edge.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	var dyn string
+	var args []string
+	for {
+		var d struct {
+			Kind string            `yaml:"kind"`
+			Data map[string]string `yaml:"data"`
+			Spec struct {
+				Template struct {
+					Spec struct {
+						Containers []struct {
+							Name string   `yaml:"name"`
+							Args []string `yaml:"args"`
+						} `yaml:"containers"`
+					} `yaml:"spec"`
+				} `yaml:"template"`
+			} `yaml:"spec"`
+		}
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind == "ConfigMap" && d.Data["dynamic.yaml"] != "" {
+			dyn = d.Data["dynamic.yaml"]
+		}
+		for _, c := range d.Spec.Template.Spec.Containers {
+			if c.Name == "traefik" {
+				args = c.Args
+			}
+		}
+	}
+	for _, a := range args {
+		if strings.Contains(a, "redirections") {
+			t.Fatalf("%s: an entry point redirect outranks the ACME solver's router", a)
+		}
+	}
+	var cfg struct {
+		HTTP struct {
+			Routers map[string]struct {
+				Rule        string   `yaml:"rule"`
+				Priority    int      `yaml:"priority"`
+				EntryPoints []string `yaml:"entryPoints"`
+				Middlewares []string `yaml:"middlewares"`
+				Service     string   `yaml:"service"`
+			} `yaml:"routers"`
+			Middlewares map[string]struct {
+				RedirectScheme *struct {
+					Scheme    string `yaml:"scheme"`
+					Permanent bool   `yaml:"permanent"`
+				} `yaml:"redirectScheme"`
+			} `yaml:"middlewares"`
+		} `yaml:"http"`
+	}
+	if err := yaml.Unmarshal([]byte(dyn), &cfg); err != nil {
+		t.Fatal(err)
+	}
+	r, ok := cfg.HTTP.Routers["http-to-https"]
+	if !ok {
+		t.Fatal("no router sends port 80 to https")
+	}
+	if r.Rule != "PathPrefix(`/`)" || r.Priority != 1 || len(r.EntryPoints) != 1 || r.EntryPoints[0] != "web" || r.Service != "noop@internal" {
+		t.Fatalf("router %+v", r)
+	}
+	if len(r.Middlewares) != 1 {
+		t.Fatalf("middlewares %v", r.Middlewares)
+	}
+	m := cfg.HTTP.Middlewares[r.Middlewares[0]]
+	if m.RedirectScheme == nil || m.RedirectScheme.Scheme != "https" || !m.RedirectScheme.Permanent {
+		t.Fatalf("middleware %+v", m)
+	}
+}

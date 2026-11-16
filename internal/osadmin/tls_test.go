@@ -41,8 +41,22 @@ type certBox struct {
 
 // newCertBox starts it; staticProbe points the store's self-test at a
 // listener that never changes its certificate, so every swap rolls back.
-func newCertBox(t *testing.T, withBob, staticProbe bool, mods ...func(*box, *osadmin.Options)) *certBox {
+// mods are either a func(*box, *osadmin.Options), which changes the box, or a
+// func(*certstore.Options), which changes the certificate store.
+func newCertBox(t *testing.T, withBob, staticProbe bool, mods ...any) *certBox {
 	t.Helper()
+	var boxMods []func(*box, *osadmin.Options)
+	var opts []func(*certstore.Options)
+	for _, m := range mods {
+		switch f := m.(type) {
+		case func(*box, *osadmin.Options):
+			boxMods = append(boxMods, f)
+		case func(*certstore.Options):
+			opts = append(opts, f)
+		default:
+			t.Fatalf("newCertBox: %T is neither a box nor a certificate store option", m)
+		}
+	}
 	cb := &certBox{ca: testpki.NewTLSCA(t), sealer: newMemSealer()}
 	cb.box = newBox(t, withBob, append([]func(*box, *osadmin.Options){func(b *box, o *osadmin.Options) {
 		cb.adminDir = filepath.Join(b.state, "osadmin")
@@ -56,7 +70,7 @@ func newCertBox(t *testing.T, withBob, staticProbe bool, mods ...func(*box, *osa
 			probeAddr = serveTLS(t, func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &c, nil })
 		}
 		host, port, _ := net.SplitHostPort(probeAddr)
-		store, err := certstore.Open(certstore.Options{
+		so := certstore.Options{
 			Dir: filepath.Join(b.state, "osadmin-api", "tls"), AdminDir: cb.adminDir, Sealer: cb.sealer, Now: b.clk.Now,
 			Names: func(context.Context) (string, []string, error) {
 				b.netd.mu.Lock()
@@ -69,7 +83,11 @@ func newCertBox(t *testing.T, withBob, staticProbe bool, mods ...func(*box, *osa
 				return certstore.HandshakeProbe(pctx, []string{host}, port, fp)
 			},
 			Logger: log.Nop(),
-		})
+		}
+		for _, opt := range opts {
+			opt(&so)
+		}
+		store, err := certstore.Open(so)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -79,7 +97,7 @@ func newCertBox(t *testing.T, withBob, staticProbe bool, mods ...func(*box, *osa
 		o.CertProbe = func(ctx context.Context, fp string) error {
 			return certstore.HandshakeProbe(ctx, []string{served}, servedPort, fp)
 		}
-	}}, mods...)...)
+	}}, boxMods...)...)
 	return cb
 }
 
@@ -269,7 +287,7 @@ func TestAnUnservedCertificateIsRolledBack(t *testing.T) {
 	}
 }
 
-func TestACMEAndTheProductEndpointAreNotAvailableYet(t *testing.T) {
+func TestACMEAndTheProductEndpointAreNotAvailableWithoutAProduct(t *testing.T) {
 	cb := newCertBox(t, false, false)
 	br := cb.browser()
 	br.signIn("alice")
@@ -293,7 +311,7 @@ func TestACMEAndTheProductEndpointAreNotAvailableYet(t *testing.T) {
 	if p.GetId() != "product" || p.GetAvailable() || p.GetUnavailableReason() != "Available when the product is installed." {
 		t.Fatalf("%+v", p)
 	}
-	if !strings.HasPrefix(st.Msg.GetAcme().GetReason(), "Not available yet") {
+	if a := st.Msg.GetAcme(); a.GetAvailable() || a.GetReason() != certstore.ACMEUnavailableReason {
 		t.Fatalf("%+v", st.Msg.GetAcme())
 	}
 }

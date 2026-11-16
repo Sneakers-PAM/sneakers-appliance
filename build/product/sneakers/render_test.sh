@@ -72,7 +72,7 @@ done < "$charts/manifest/release.yaml" > "$work/release.yaml"
 
 out="$work/stacks"
 CHARTS="$charts" RELEASE="$work/release.yaml" HELM="$helm" OUT="$out" bash "$here/render.sh" > "$work/render.log"
-for st in sneakers sneakers-mcp sneakers-import edge; do
+for st in sneakers sneakers-mcp sneakers-import cert-manager edge; do
   [ -s "$out/$st/$st.yaml" ] || fail "no $st stack"
 done
 echo "ok: rendered $(cd "$out" && echo */ | tr -d /)"

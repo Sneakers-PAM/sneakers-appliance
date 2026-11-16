@@ -111,7 +111,9 @@ func TestTheProductRoutesFallBackToTheBoxStatePage(t *testing.T) {
 		}
 	}
 	for name, r := range cfg.HTTP.Routers {
-		if r.Service == box {
+		// The box-state page's own router, and the router that only sends
+		// port 80 to https, have no product behind them.
+		if r.Service == box || r.Service == "noop@internal" {
 			continue
 		}
 		found := false

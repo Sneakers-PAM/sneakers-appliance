@@ -84,8 +84,9 @@ shell, the console and :8443 show the same sentence.
 | 3811 | `TLS_LIMIT` | the store already holds 32 certificates or 8 pending CSRs |
 | 3812 | `TLS_ENDPOINT_UNAVAILABLE` | the endpoint isn't on this box yet (the product endpoint needs the product installed) |
 | 3813 | `TLS_NOT_SERVED` | the new certificate wasn't served in time (15 seconds on :8443, 3 minutes on 443), so the previous one was put back |
-| 3814 | `TLS_ACME_UNAVAILABLE` | ACME through cert-manager isn't available yet; it comes with the product bundle |
+| 3814 | `TLS_ACME_UNAVAILABLE` | ACME can't run on this box: no product is installed, or its bundle carries no cert-manager (the error says which) |
 | 3815 | `TLS_NO_HOSTNAME` | the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network |
+| 3816 | `TLS_ACME_FAILED` | cert-manager couldn't issue or renew the certificate, or the box couldn't serve the one it issued (the audit entry carries the reason) |
 
 ## Product email (39xx)
 

@@ -258,6 +258,8 @@ type Server struct {
 	// handoffs are the one-time codes setup's host name step hands the
 	// page, in memory only.
 	handoffs handoffStore
+	// acmeFollow is the ACME follower, which uses only its mutex and timer.
+	acmeFollow certFollower
 	// mcpFailed is why the last switch-on wasn't ready within its bound,
 	// shown until the product is ready or the switch is set again.
 	mcpFailed struct {

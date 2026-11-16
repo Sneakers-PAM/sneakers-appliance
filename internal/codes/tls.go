@@ -22,6 +22,7 @@ const (
 	TLSNotServed           = 3813
 	TLSACMEUnavailable     = 3814
 	TLSNoHostname          = 3815
+	TLSACMEFailed          = 3816
 )
 
 var tlsEntries = []apperr.Entry{
@@ -38,7 +39,8 @@ var tlsEntries = []apperr.Entry{
 	{Code: TLSLimit, Symbol: "TLS_LIMIT", Title: "tls", Cause: "the store already holds 32 certificates or 8 pending CSRs"},
 	{Code: TLSEndpointUnavailable, Symbol: "TLS_ENDPOINT_UNAVAILABLE", Title: "tls", Cause: "the endpoint isn't on this box yet (the product endpoint needs the product installed)"},
 	{Code: TLSNotServed, Symbol: "TLS_NOT_SERVED", Title: "tls", Cause: "the new certificate wasn't served in time (15 seconds on :8443, 3 minutes on 443), so the previous one was put back"},
-	{Code: TLSACMEUnavailable, Symbol: "TLS_ACME_UNAVAILABLE", Title: "tls", Cause: "ACME through cert-manager isn't available yet; it comes with the product bundle"},
+	{Code: TLSACMEUnavailable, Symbol: "TLS_ACME_UNAVAILABLE", Title: "tls", Cause: "ACME can't run on this box: no product is installed, or its bundle carries no cert-manager (the error says which)"},
+	{Code: TLSACMEFailed, Symbol: "TLS_ACME_FAILED", Title: "tls", Cause: "cert-manager couldn't issue or renew the certificate, or the box couldn't serve the one it issued (the audit entry carries the reason)"},
 	{Code: TLSNoHostname, Symbol: "TLS_NO_HOSTNAME", Title: "tls", Cause: "the box has no host name, so the certificate was checked against the management addresses only and covers none of them; set the host name on Network"},
 }
 

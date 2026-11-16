@@ -47,6 +47,8 @@ const (
 	SourceSelfSigned Source = "self-signed"
 	SourceCSRSigned  Source = "csr-signed"
 	SourceUploaded   Source = "uploaded"
+	// SourceACME is a certificate cert-manager issued for the box.
+	SourceACME Source = "acme"
 )
 
 // EndpointSource is where an endpoint's certificate comes from.
@@ -104,9 +106,6 @@ const (
 	selfSignedID = "self-signed"
 )
 
-// ACMEReason is why ACME isn't offered in this release.
-const ACMEReason = "Not available yet: ACME through cert-manager comes with the product bundle."
-
 // probePort is the port the default check dials: :8443.
 var probePort = "8443"
 
@@ -146,6 +145,9 @@ type Options struct {
 	// ProductProbe checks 443 serves the certificate with this
 	// fingerprint, within ProductProbeTimeout; nil dials 127.0.0.1:443.
 	ProductProbe func(ctx context.Context, fingerprint string) error
+	// ACME is cert-manager on the box (internal/acmebox); nil keeps ACME
+	// unavailable.
+	ACME ACMEDriver
 	// Fallback hands edgefall, which answers 443 while k0s is down, the
 	// box's own certificate after it changes; nil skips it.
 	Fallback func() error
@@ -271,7 +273,10 @@ type state struct {
 	// Previous is the box's own certificate before the last change to it,
 	// and Last that change (internal/certstore/follow.go).
 	Previous *storedCert `json:"previousSelfSigned,omitempty"`
-	Last     *OwnChange  `json:"lastOwnChange,omitempty"`
+	// ACME is the ACME setup, when an endpoint takes its certificate from
+	// cert-manager; it holds no secret.
+	ACME *acmeState `json:"acme,omitempty"`
+	Last *OwnChange `json:"lastOwnChange,omitempty"`
 }
 
 type storedCert struct {
@@ -379,7 +384,11 @@ func (s *Store) snapshot(host string, addrs []string) Snapshot {
 		out.CSRs = append(out.CSRs, CSR{ID: r.ID, Subject: r.Subject, KeyType: r.KeyType, PEM: r.PEM, Names: slices.Clone(r.Names), Created: r.Created})
 	}
 	out.Endpoints = []Endpoint{s.adminEndpoint(host, addrs), s.productEndpoint(host, addrs)}
-	out.ACME = ACMEState{Reason: ACMEReason}
+	for i := range out.Endpoints {
+		s.decorateACME(&out.Endpoints[i])
+	}
+	ok, reason := s.acmeOK()
+	out.ACME = ACMEState{Available: ok, Reason: reason}
 	return out
 }
 
@@ -828,6 +837,17 @@ func (s *Store) Assign(ctx context.Context, endpoint, id string) (Endpoint, erro
 	if err := s.checkEndpoint(endpoint); err != nil {
 		return Endpoint{}, err
 	}
+	ep, err := s.assign(ctx, endpoint, id)
+	if err == nil {
+		s.acmeLeave(ctx, endpoint)
+		err = s.save()
+	}
+	return ep, err
+}
+
+// assign is Assign holding the store: the check, the swap and the
+// rollback.
+func (s *Store) assign(ctx context.Context, endpoint, id string) (Endpoint, error) {
 	if endpoint == EndpointProduct {
 		return s.assignProduct(ctx, id)
 	}
@@ -883,10 +903,18 @@ func (s *Store) Revert(ctx context.Context, endpoint string) (Endpoint, error) {
 	if err := s.checkEndpoint(endpoint); err != nil {
 		return Endpoint{}, err
 	}
+	var ep Endpoint
+	var err error
 	if endpoint == EndpointProduct {
-		return s.revertProduct(ctx)
+		ep, err = s.revertProduct(ctx)
+	} else {
+		ep, err = s.revert(ctx)
 	}
-	return s.revert(ctx)
+	if err == nil {
+		s.acmeLeave(ctx, endpoint)
+		err = s.save()
+	}
+	return ep, err
 }
 
 func (s *Store) revert(ctx context.Context) (Endpoint, error) {

@@ -112,12 +112,15 @@ type TlsServiceClient interface {
 	// RevertToSelfSigned puts an endpoint back on the box's own self-signed
 	// certificate.
 	RevertToSelfSigned(context.Context, *connect.Request[v1.RevertToSelfSignedRequest]) (*connect.Response[v1.RevertToSelfSignedResponse], error)
-	// SetAcme chooses the ACME issuer, account and challenge for cert-manager.
-	// It answers TLS_ACME_UNAVAILABLE until the product bundle brings
-	// cert-manager (spec 3, Section 2.7.2).
+	// SetAcme chooses the ACME issuer, account and challenge for cert-manager
+	// and the endpoints that take its certificate. It writes the stack and
+	// returns; the certificate is assigned, with the same served-certificate
+	// check and rollback as an uploaded one, once the CA has issued it.
+	// TLS_ACME_UNAVAILABLE where cert-manager can't run (no product, or a
+	// bundle without it).
 	SetAcme(context.Context, *connect.Request[v1.SetAcmeRequest]) (*connect.Response[v1.SetAcmeResponse], error)
 	// RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
-	// TLS_ACME_UNAVAILABLE until then.
+	// TLS_ACME_UNAVAILABLE where cert-manager can't run.
 	RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error)
 	// SetUpdateTrust sets the update trust: the private CA certificates an
 	// https:// update mirror may chain to, added to the system roots for the
@@ -373,12 +376,15 @@ type TlsServiceHandler interface {
 	// RevertToSelfSigned puts an endpoint back on the box's own self-signed
 	// certificate.
 	RevertToSelfSigned(context.Context, *connect.Request[v1.RevertToSelfSignedRequest]) (*connect.Response[v1.RevertToSelfSignedResponse], error)
-	// SetAcme chooses the ACME issuer, account and challenge for cert-manager.
-	// It answers TLS_ACME_UNAVAILABLE until the product bundle brings
-	// cert-manager (spec 3, Section 2.7.2).
+	// SetAcme chooses the ACME issuer, account and challenge for cert-manager
+	// and the endpoints that take its certificate. It writes the stack and
+	// returns; the certificate is assigned, with the same served-certificate
+	// check and rollback as an uploaded one, once the CA has issued it.
+	// TLS_ACME_UNAVAILABLE where cert-manager can't run (no product, or a
+	// bundle without it).
 	SetAcme(context.Context, *connect.Request[v1.SetAcmeRequest]) (*connect.Response[v1.SetAcmeResponse], error)
 	// RenewNow asks cert-manager to renew an ACME endpoint's certificate now;
-	// TLS_ACME_UNAVAILABLE until then.
+	// TLS_ACME_UNAVAILABLE where cert-manager can't run.
 	RenewNow(context.Context, *connect.Request[v1.RenewNowRequest]) (*connect.Response[v1.RenewNowResponse], error)
 	// SetUpdateTrust sets the update trust: the private CA certificates an
 	// https:// update mirror may chain to, added to the system roots for the
