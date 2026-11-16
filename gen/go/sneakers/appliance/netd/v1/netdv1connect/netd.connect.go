@@ -68,6 +68,11 @@ const (
 	NetworkServiceSetManagementPortsProcedure = "/sneakers.appliance.netd.v1.NetworkService/SetManagementPorts"
 	// NetworkServiceWatchProcedure is the fully-qualified name of the NetworkService's Watch RPC.
 	NetworkServiceWatchProcedure = "/sneakers.appliance.netd.v1.NetworkService/Watch"
+	// NetworkServiceResolveProcedure is the fully-qualified name of the NetworkService's Resolve RPC.
+	NetworkServiceResolveProcedure = "/sneakers.appliance.netd.v1.NetworkService/Resolve"
+	// NetworkServiceSetHostnameProcedure is the fully-qualified name of the NetworkService's
+	// SetHostname RPC.
+	NetworkServiceSetHostnameProcedure = "/sneakers.appliance.netd.v1.NetworkService/SetHostname"
 )
 
 // NetworkServiceClient is a client for the sneakers.appliance.netd.v1.NetworkService service.
@@ -107,6 +112,16 @@ type NetworkServiceClient interface {
 	// Watch sends the live addresses once, then again on every change, so
 	// sshd and osadmin rebind.
 	Watch(context.Context, *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.WatchResponse], error)
+	// Resolve looks a name up through the box's own DNS servers (the
+	// settings', else what DHCP and router advertisements gave), each in
+	// turn until one answers, over UDP and then TCP. None answering is
+	// NET_DNS.
+	Resolve(context.Context, *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error)
+	// SetHostname sets the host name alone and keeps it at once: no window,
+	// no stage, no confirm, and every other setting stays as it is. It's
+	// refused (NET_INVALID, field pending) while a change waits for its
+	// confirm.
+	SetHostname(context.Context, *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error)
 }
 
 // NewNetworkServiceClient constructs a client for the sneakers.appliance.netd.v1.NetworkService
@@ -192,6 +207,18 @@ func NewNetworkServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(networkServiceMethods.ByName("Watch")),
 			connect.WithClientOptions(opts...),
 		),
+		resolve: connect.NewClient[v1.ResolveRequest, v1.ResolveResponse](
+			httpClient,
+			baseURL+NetworkServiceResolveProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("Resolve")),
+			connect.WithClientOptions(opts...),
+		),
+		setHostname: connect.NewClient[v1.SetHostnameRequest, v1.SetHostnameResponse](
+			httpClient,
+			baseURL+NetworkServiceSetHostnameProcedure,
+			connect.WithSchema(networkServiceMethods.ByName("SetHostname")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -209,6 +236,8 @@ type networkServiceClient struct {
 	listInterfaces     *connect.Client[v1.ListInterfacesRequest, v1.ListInterfacesResponse]
 	setManagementPorts *connect.Client[v1.SetManagementPortsRequest, v1.SetManagementPortsResponse]
 	watch              *connect.Client[v1.WatchRequest, v1.WatchResponse]
+	resolve            *connect.Client[v1.ResolveRequest, v1.ResolveResponse]
+	setHostname        *connect.Client[v1.SetHostnameRequest, v1.SetHostnameResponse]
 }
 
 // Get calls sneakers.appliance.netd.v1.NetworkService.Get.
@@ -271,6 +300,16 @@ func (c *networkServiceClient) Watch(ctx context.Context, req *connect.Request[v
 	return c.watch.CallServerStream(ctx, req)
 }
 
+// Resolve calls sneakers.appliance.netd.v1.NetworkService.Resolve.
+func (c *networkServiceClient) Resolve(ctx context.Context, req *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error) {
+	return c.resolve.CallUnary(ctx, req)
+}
+
+// SetHostname calls sneakers.appliance.netd.v1.NetworkService.SetHostname.
+func (c *networkServiceClient) SetHostname(ctx context.Context, req *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error) {
+	return c.setHostname.CallUnary(ctx, req)
+}
+
 // NetworkServiceHandler is an implementation of the sneakers.appliance.netd.v1.NetworkService
 // service.
 type NetworkServiceHandler interface {
@@ -309,6 +348,16 @@ type NetworkServiceHandler interface {
 	// Watch sends the live addresses once, then again on every change, so
 	// sshd and osadmin rebind.
 	Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.WatchResponse]) error
+	// Resolve looks a name up through the box's own DNS servers (the
+	// settings', else what DHCP and router advertisements gave), each in
+	// turn until one answers, over UDP and then TCP. None answering is
+	// NET_DNS.
+	Resolve(context.Context, *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error)
+	// SetHostname sets the host name alone and keeps it at once: no window,
+	// no stage, no confirm, and every other setting stays as it is. It's
+	// refused (NET_INVALID, field pending) while a change waits for its
+	// confirm.
+	SetHostname(context.Context, *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error)
 }
 
 // NewNetworkServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -390,6 +439,18 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 		connect.WithSchema(networkServiceMethods.ByName("Watch")),
 		connect.WithHandlerOptions(opts...),
 	)
+	networkServiceResolveHandler := connect.NewUnaryHandler(
+		NetworkServiceResolveProcedure,
+		svc.Resolve,
+		connect.WithSchema(networkServiceMethods.ByName("Resolve")),
+		connect.WithHandlerOptions(opts...),
+	)
+	networkServiceSetHostnameHandler := connect.NewUnaryHandler(
+		NetworkServiceSetHostnameProcedure,
+		svc.SetHostname,
+		connect.WithSchema(networkServiceMethods.ByName("SetHostname")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/sneakers.appliance.netd.v1.NetworkService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NetworkServiceGetProcedure:
@@ -416,6 +477,10 @@ func NewNetworkServiceHandler(svc NetworkServiceHandler, opts ...connect.Handler
 			networkServiceSetManagementPortsHandler.ServeHTTP(w, r)
 		case NetworkServiceWatchProcedure:
 			networkServiceWatchHandler.ServeHTTP(w, r)
+		case NetworkServiceResolveProcedure:
+			networkServiceResolveHandler.ServeHTTP(w, r)
+		case NetworkServiceSetHostnameProcedure:
+			networkServiceSetHostnameHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -471,4 +536,12 @@ func (UnimplementedNetworkServiceHandler) SetManagementPorts(context.Context, *c
 
 func (UnimplementedNetworkServiceHandler) Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.WatchResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Watch is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) Resolve(context.Context, *connect.Request[v1.ResolveRequest]) (*connect.Response[v1.ResolveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.Resolve is not implemented"))
+}
+
+func (UnimplementedNetworkServiceHandler) SetHostname(context.Context, *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.netd.v1.NetworkService.SetHostname is not implemented"))
 }

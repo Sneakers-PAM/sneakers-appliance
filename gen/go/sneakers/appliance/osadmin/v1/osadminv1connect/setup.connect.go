@@ -63,6 +63,12 @@ const (
 	// SetupServiceAcknowledgeStepProcedure is the fully-qualified name of the SetupService's
 	// AcknowledgeStep RPC.
 	SetupServiceAcknowledgeStepProcedure = "/sneakers.appliance.osadmin.v1.SetupService/AcknowledgeStep"
+	// SetupServiceCheckHostnameProcedure is the fully-qualified name of the SetupService's
+	// CheckHostname RPC.
+	SetupServiceCheckHostnameProcedure = "/sneakers.appliance.osadmin.v1.SetupService/CheckHostname"
+	// SetupServiceSetHostnameProcedure is the fully-qualified name of the SetupService's SetHostname
+	// RPC.
+	SetupServiceSetHostnameProcedure = "/sneakers.appliance.osadmin.v1.SetupService/SetHostname"
 	// SetupServiceAddRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// AddRecoveryKey RPC.
 	SetupServiceAddRecoveryKeyProcedure = "/sneakers.appliance.osadmin.v1.SetupService/AddRecoveryKey"
@@ -110,6 +116,21 @@ type SetupServiceClient interface {
 	// AcknowledgeStep marks the optional network step (4) and the read-only
 	// protection step (5) as seen.
 	AcknowledgeStep(context.Context, *connect.Request[v1.AcknowledgeStepRequest]) (*connect.Response[v1.AcknowledgeStepResponse], error)
+	// CheckHostname says whether a host name for the box resolves, through
+	// the box's own DNS servers, to its management address. It changes
+	// nothing. A name that isn't fully qualified is refused (NET_INVALID, as
+	// on Network); one that isn't in DNS, points elsewhere or can't be looked
+	// up is answered with the reason. Only before the network step (4) is
+	// done (SETUP_STEP_DONE after).
+	CheckHostname(context.Context, *connect.Request[v1.CheckHostnameRequest]) (*connect.Response[v1.CheckHostnameResponse], error)
+	// SetHostname takes a fresh code from the owner's authenticator, checks
+	// the name again on the box, sets it as the host name (kept at once:
+	// there's no confirm window and no going back but Network) and waits
+	// until :8443 serves the self-signed certificate made for it. It answers
+	// with a one-time handoff code for the page at the new name
+	// (SignInService.RedeemHandoff): single use, 2 minutes, for this
+	// session's admin. The network step is still open after it.
+	SetHostname(context.Context, *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error)
 	// AddRecoveryKey adds one of up to three recovery keys and writes a new
 	// escrow to the whole set.
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
@@ -179,6 +200,18 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("AcknowledgeStep")),
 			connect.WithClientOptions(opts...),
 		),
+		checkHostname: connect.NewClient[v1.CheckHostnameRequest, v1.CheckHostnameResponse](
+			httpClient,
+			baseURL+SetupServiceCheckHostnameProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("CheckHostname")),
+			connect.WithClientOptions(opts...),
+		),
+		setHostname: connect.NewClient[v1.SetHostnameRequest, v1.SetHostnameResponse](
+			httpClient,
+			baseURL+SetupServiceSetHostnameProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("SetHostname")),
+			connect.WithClientOptions(opts...),
+		),
 		addRecoveryKey: connect.NewClient[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse](
 			httpClient,
 			baseURL+SetupServiceAddRecoveryKeyProcedure,
@@ -226,6 +259,8 @@ type setupServiceClient struct {
 	beginCredentials       *connect.Client[v1.BeginCredentialsRequest, v1.BeginCredentialsResponse]
 	completeCredentials    *connect.Client[v1.CompleteCredentialsRequest, v1.CompleteCredentialsResponse]
 	acknowledgeStep        *connect.Client[v1.AcknowledgeStepRequest, v1.AcknowledgeStepResponse]
+	checkHostname          *connect.Client[v1.CheckHostnameRequest, v1.CheckHostnameResponse]
+	setHostname            *connect.Client[v1.SetHostnameRequest, v1.SetHostnameResponse]
 	addRecoveryKey         *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
 	generateRecoveryKey    *connect.Client[v1.GenerateRecoveryKeyRequest, v1.GenerateRecoveryKeyResponse]
 	removeRecoveryKey      *connect.Client[v1.RemoveRecoveryKeyRequest, v1.RemoveRecoveryKeyResponse]
@@ -262,6 +297,16 @@ func (c *setupServiceClient) CompleteCredentials(ctx context.Context, req *conne
 // AcknowledgeStep calls sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep.
 func (c *setupServiceClient) AcknowledgeStep(ctx context.Context, req *connect.Request[v1.AcknowledgeStepRequest]) (*connect.Response[v1.AcknowledgeStepResponse], error) {
 	return c.acknowledgeStep.CallUnary(ctx, req)
+}
+
+// CheckHostname calls sneakers.appliance.osadmin.v1.SetupService.CheckHostname.
+func (c *setupServiceClient) CheckHostname(ctx context.Context, req *connect.Request[v1.CheckHostnameRequest]) (*connect.Response[v1.CheckHostnameResponse], error) {
+	return c.checkHostname.CallUnary(ctx, req)
+}
+
+// SetHostname calls sneakers.appliance.osadmin.v1.SetupService.SetHostname.
+func (c *setupServiceClient) SetHostname(ctx context.Context, req *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error) {
+	return c.setHostname.CallUnary(ctx, req)
 }
 
 // AddRecoveryKey calls sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey.
@@ -323,6 +368,21 @@ type SetupServiceHandler interface {
 	// AcknowledgeStep marks the optional network step (4) and the read-only
 	// protection step (5) as seen.
 	AcknowledgeStep(context.Context, *connect.Request[v1.AcknowledgeStepRequest]) (*connect.Response[v1.AcknowledgeStepResponse], error)
+	// CheckHostname says whether a host name for the box resolves, through
+	// the box's own DNS servers, to its management address. It changes
+	// nothing. A name that isn't fully qualified is refused (NET_INVALID, as
+	// on Network); one that isn't in DNS, points elsewhere or can't be looked
+	// up is answered with the reason. Only before the network step (4) is
+	// done (SETUP_STEP_DONE after).
+	CheckHostname(context.Context, *connect.Request[v1.CheckHostnameRequest]) (*connect.Response[v1.CheckHostnameResponse], error)
+	// SetHostname takes a fresh code from the owner's authenticator, checks
+	// the name again on the box, sets it as the host name (kept at once:
+	// there's no confirm window and no going back but Network) and waits
+	// until :8443 serves the self-signed certificate made for it. It answers
+	// with a one-time handoff code for the page at the new name
+	// (SignInService.RedeemHandoff): single use, 2 minutes, for this
+	// session's admin. The network step is still open after it.
+	SetHostname(context.Context, *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error)
 	// AddRecoveryKey adds one of up to three recovery keys and writes a new
 	// escrow to the whole set.
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
@@ -388,6 +448,18 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("AcknowledgeStep")),
 		connect.WithHandlerOptions(opts...),
 	)
+	setupServiceCheckHostnameHandler := connect.NewUnaryHandler(
+		SetupServiceCheckHostnameProcedure,
+		svc.CheckHostname,
+		connect.WithSchema(setupServiceMethods.ByName("CheckHostname")),
+		connect.WithHandlerOptions(opts...),
+	)
+	setupServiceSetHostnameHandler := connect.NewUnaryHandler(
+		SetupServiceSetHostnameProcedure,
+		svc.SetHostname,
+		connect.WithSchema(setupServiceMethods.ByName("SetHostname")),
+		connect.WithHandlerOptions(opts...),
+	)
 	setupServiceAddRecoveryKeyHandler := connect.NewUnaryHandler(
 		SetupServiceAddRecoveryKeyProcedure,
 		svc.AddRecoveryKey,
@@ -438,6 +510,10 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceCompleteCredentialsHandler.ServeHTTP(w, r)
 		case SetupServiceAcknowledgeStepProcedure:
 			setupServiceAcknowledgeStepHandler.ServeHTTP(w, r)
+		case SetupServiceCheckHostnameProcedure:
+			setupServiceCheckHostnameHandler.ServeHTTP(w, r)
+		case SetupServiceSetHostnameProcedure:
+			setupServiceSetHostnameHandler.ServeHTTP(w, r)
 		case SetupServiceAddRecoveryKeyProcedure:
 			setupServiceAddRecoveryKeyHandler.ServeHTTP(w, r)
 		case SetupServiceGenerateRecoveryKeyProcedure:
@@ -481,6 +557,14 @@ func (UnimplementedSetupServiceHandler) CompleteCredentials(context.Context, *co
 
 func (UnimplementedSetupServiceHandler) AcknowledgeStep(context.Context, *connect.Request[v1.AcknowledgeStepRequest]) (*connect.Response[v1.AcknowledgeStepResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.AcknowledgeStep is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) CheckHostname(context.Context, *connect.Request[v1.CheckHostnameRequest]) (*connect.Response[v1.CheckHostnameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.CheckHostname is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) SetHostname(context.Context, *connect.Request[v1.SetHostnameRequest]) (*connect.Response[v1.SetHostnameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.SetHostname is not implemented"))
 }
 
 func (UnimplementedSetupServiceHandler) AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {

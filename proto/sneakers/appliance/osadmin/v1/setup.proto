@@ -83,6 +83,34 @@ service SetupService {
       setup_only: true
     };
   }
+  // CheckHostname says whether a host name for the box resolves, through
+  // the box's own DNS servers, to its management address. It changes
+  // nothing. A name that isn't fully qualified is refused (NET_INVALID, as
+  // on Network); one that isn't in DNS, points elsewhere or can't be looked
+  // up is answered with the reason. Only before the network step (4) is
+  // done (SETUP_STEP_DONE after).
+  rpc CheckHostname(CheckHostnameRequest) returns (CheckHostnameResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "setup.hostname.check"
+      setup_only: true
+    };
+  }
+  // SetHostname takes a fresh code from the owner's authenticator, checks
+  // the name again on the box, sets it as the host name (kept at once:
+  // there's no confirm window and no going back but Network) and waits
+  // until :8443 serves the self-signed certificate made for it. It answers
+  // with a one-time handoff code for the page at the new name
+  // (SignInService.RedeemHandoff): single use, 2 minutes, for this
+  // session's admin. The network step is still open after it.
+  rpc SetHostname(SetHostnameRequest) returns (SetHostnameResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      audit: "setup.hostname.set"
+      setup_only: true
+      code_each_call: true
+    };
+  }
   // AddRecoveryKey adds one of up to three recovery keys and writes a new
   // escrow to the whole set.
   rpc AddRecoveryKey(AddRecoveryKeyRequest) returns (AddRecoveryKeyResponse) {
@@ -179,6 +207,9 @@ message GetSetupResponse {
   google.protobuf.Timestamp code_session_expires = 14;
   // first_admin is set once the first admin exists.
   string first_admin = 15;
+  // hostname is the box's host name now: the one set, or the one DHCP
+  // gave; empty when it has none. The network step starts with it.
+  string hostname = 16;
 }
 
 // SetupStepKind names a stepper step.
@@ -341,4 +372,67 @@ message FinishRequest {}
 
 message FinishResponse {
   string product_setup_url = 1;
+}
+
+message CheckHostnameRequest {
+  string hostname = 1;
+}
+
+// HostnameCheck is what the box's DNS servers say about a host name.
+enum HostnameCheck {
+  HOSTNAME_CHECK_UNSPECIFIED = 0;
+  // HOSTNAME_CHECK_MATCH: one of the addresses is the box's management
+  // address.
+  HOSTNAME_CHECK_MATCH = 1;
+  // HOSTNAME_CHECK_ELSEWHERE: the name points at other addresses only.
+  HOSTNAME_CHECK_ELSEWHERE = 2;
+  // HOSTNAME_CHECK_NOT_FOUND: the name isn't in DNS, or has no A or AAAA
+  // record.
+  HOSTNAME_CHECK_NOT_FOUND = 3;
+  // HOSTNAME_CHECK_DNS_DOWN: none of the box's DNS servers answered.
+  HOSTNAME_CHECK_DNS_DOWN = 4;
+}
+
+// HostnameAddress is one address a host name resolves to.
+message HostnameAddress {
+  string address = 1;
+  // this_box: it's one of the box's management addresses.
+  bool this_box = 2;
+}
+
+message CheckHostnameResponse {
+  // hostname is the name as the box keeps it: lower case, no final dot.
+  string hostname = 1;
+  HostnameCheck result = 2;
+  // addresses are every address the name resolves to.
+  repeated HostnameAddress addresses = 3;
+  // management_addresses are the box's own, which a match needs one of.
+  repeated string management_addresses = 4;
+  // code is the NET_* symbol when the result isn't a match.
+  string code = 5;
+  // message is one plain sentence about the result.
+  string message = 6;
+}
+
+message SetHostnameRequest {
+  string hostname = 1;
+  // totp_code is a fresh 6-digit code from the owner's authenticator.
+  string totp_code = 2;
+}
+
+message SetHostnameResponse {
+  string hostname = 1;
+  // previous is the host name the settings held before; empty when DHCP
+  // or nothing named the box.
+  string previous = 2;
+  // handoff_code goes to SignInService.RedeemHandoff from the new name.
+  string handoff_code = 3;
+  google.protobuf.Timestamp handoff_expires = 4;
+  // url is where the page goes: https://<hostname>:8443/setup with the
+  // code in the fragment (#handoff=<code>), so it's never sent in a
+  // request line or a Referer.
+  string url = 5;
+  // fingerprint is the SHA-256 fingerprint of the certificate :8443
+  // serves now, made for the name; the browser asks about it once.
+  string fingerprint = 6;
 }

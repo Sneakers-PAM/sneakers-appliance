@@ -43,9 +43,13 @@ const (
 	NetDNS                 = 3405
 	NetNTP                 = 3406
 	NetReverted            = 3407
+	NetNameNotFound        = 3408
+	NetNameElsewhere       = 3409
 	SetupIncomplete        = 3501
 	SetupCode              = 3502
 	SetupDone              = 3503
+	SetupStepDone          = 3504
+	SetupHandoff           = 3505
 	ResetUnavailable       = 3601
 	ResetApproved          = 3602
 	ResetCancelled         = 3603
@@ -95,7 +99,11 @@ var accessEntries = []apperr.Entry{
 	{Code: NetGateway, Symbol: "NET_GATEWAY", Title: "network", Cause: "the gateway didn't answer ARP or neighbour discovery"},
 	{Code: NetDNS, Symbol: "NET_DNS", Title: "network", Cause: "a DNS server didn't answer"},
 	{Code: NetNTP, Symbol: "NET_NTP", Title: "network", Cause: "no NTP server gave a usable time"},
+	{Code: NetNameNotFound, Symbol: "NET_NAME_NOT_FOUND", Title: "network", Cause: "the host name isn't in the box's DNS, or has no A or AAAA record"},
+	{Code: NetNameElsewhere, Symbol: "NET_NAME_ELSEWHERE", Title: "network", Cause: "the host name points at other addresses, not the box's management address"},
 	{Code: NetReverted, Symbol: "NET_REVERTED", Title: "network", Cause: "a change wasn't confirmed in 120 seconds and was undone"},
+	{Code: SetupStepDone, Symbol: "SETUP_STEP_DONE", Title: "setup", Cause: "that setup step is done already; change it on its own page (the network step's host name on Network)"},
+	{Code: SetupHandoff, Symbol: "SETUP_HANDOFF", Title: "setup", Cause: "the handoff link from setting the host name is expired, used, unknown or its session ended; sign in to carry on"},
 	{Code: SetupIncomplete, Symbol: "SETUP_INCOMPLETE", Title: "setup", Cause: "a setup step is still open (the error names it)"},
 	{Code: SetupCode, Symbol: "SETUP_CODE", Title: "setup", Cause: "a wrong, used or expired one-time code (setup, invitation or Recover access)"},
 	{Code: SetupDone, Symbol: "SETUP_DONE", Title: "setup", Cause: "setup is done: a setup-only call, or a call with a setup code's session"},

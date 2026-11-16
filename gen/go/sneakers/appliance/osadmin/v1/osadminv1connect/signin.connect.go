@@ -44,6 +44,9 @@ const (
 	SignInServiceSignInProcedure = "/sneakers.appliance.osadmin.v1.SignInService/SignIn"
 	// SignInServiceStepUpProcedure is the fully-qualified name of the SignInService's StepUp RPC.
 	SignInServiceStepUpProcedure = "/sneakers.appliance.osadmin.v1.SignInService/StepUp"
+	// SignInServiceRedeemHandoffProcedure is the fully-qualified name of the SignInService's
+	// RedeemHandoff RPC.
+	SignInServiceRedeemHandoffProcedure = "/sneakers.appliance.osadmin.v1.SignInService/RedeemHandoff"
 	// SignInServiceBeginSignInProcedure is the fully-qualified name of the SignInService's BeginSignIn
 	// RPC.
 	SignInServiceBeginSignInProcedure = "/sneakers.appliance.osadmin.v1.SignInService/BeginSignIn"
@@ -70,6 +73,12 @@ type SignInServiceClient interface {
 	// session's step_up_until 5 minutes ahead. Failures count toward the
 	// lockout like a sign-in.
 	StepUp(context.Context, *connect.Request[v1.StepUpRequest]) (*connect.Response[v1.StepUpResponse], error)
+	// RedeemHandoff swaps a handoff code from SetupService.SetHostname for a
+	// new session for the same admin, with its cookie, on the name the page
+	// moved to. The code works once, for 2 minutes, while the session that
+	// got it lives; a box that restarted has forgotten it. A refusal is
+	// SETUP_HANDOFF: sign in again. It confirms nothing else.
+	RedeemHandoff(context.Context, *connect.Request[v1.RedeemHandoffRequest]) (*connect.Response[v1.RedeemHandoffResponse], error)
 	// BeginSignIn is no longer served: SignIn replaced the sign-in code
 	// approved over SSH. It answers Not available.
 	//
@@ -108,6 +117,12 @@ func NewSignInServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(signInServiceMethods.ByName("StepUp")),
 			connect.WithClientOptions(opts...),
 		),
+		redeemHandoff: connect.NewClient[v1.RedeemHandoffRequest, v1.RedeemHandoffResponse](
+			httpClient,
+			baseURL+SignInServiceRedeemHandoffProcedure,
+			connect.WithSchema(signInServiceMethods.ByName("RedeemHandoff")),
+			connect.WithClientOptions(opts...),
+		),
 		beginSignIn: connect.NewClient[v1.BeginSignInRequest, v1.BeginSignInResponse](
 			httpClient,
 			baseURL+SignInServiceBeginSignInProcedure,
@@ -138,12 +153,13 @@ func NewSignInServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // signInServiceClient implements SignInServiceClient.
 type signInServiceClient struct {
-	signIn      *connect.Client[v1.SignInRequest, v1.SignInResponse]
-	stepUp      *connect.Client[v1.StepUpRequest, v1.StepUpResponse]
-	beginSignIn *connect.Client[v1.BeginSignInRequest, v1.BeginSignInResponse]
-	pollSignIn  *connect.Client[v1.PollSignInRequest, v1.PollSignInResponse]
-	getSession  *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
-	signOut     *connect.Client[v1.SignOutRequest, v1.SignOutResponse]
+	signIn        *connect.Client[v1.SignInRequest, v1.SignInResponse]
+	stepUp        *connect.Client[v1.StepUpRequest, v1.StepUpResponse]
+	redeemHandoff *connect.Client[v1.RedeemHandoffRequest, v1.RedeemHandoffResponse]
+	beginSignIn   *connect.Client[v1.BeginSignInRequest, v1.BeginSignInResponse]
+	pollSignIn    *connect.Client[v1.PollSignInRequest, v1.PollSignInResponse]
+	getSession    *connect.Client[v1.GetSessionRequest, v1.GetSessionResponse]
+	signOut       *connect.Client[v1.SignOutRequest, v1.SignOutResponse]
 }
 
 // SignIn calls sneakers.appliance.osadmin.v1.SignInService.SignIn.
@@ -154,6 +170,11 @@ func (c *signInServiceClient) SignIn(ctx context.Context, req *connect.Request[v
 // StepUp calls sneakers.appliance.osadmin.v1.SignInService.StepUp.
 func (c *signInServiceClient) StepUp(ctx context.Context, req *connect.Request[v1.StepUpRequest]) (*connect.Response[v1.StepUpResponse], error) {
 	return c.stepUp.CallUnary(ctx, req)
+}
+
+// RedeemHandoff calls sneakers.appliance.osadmin.v1.SignInService.RedeemHandoff.
+func (c *signInServiceClient) RedeemHandoff(ctx context.Context, req *connect.Request[v1.RedeemHandoffRequest]) (*connect.Response[v1.RedeemHandoffResponse], error) {
+	return c.redeemHandoff.CallUnary(ctx, req)
 }
 
 // BeginSignIn calls sneakers.appliance.osadmin.v1.SignInService.BeginSignIn.
@@ -194,6 +215,12 @@ type SignInServiceHandler interface {
 	// session's step_up_until 5 minutes ahead. Failures count toward the
 	// lockout like a sign-in.
 	StepUp(context.Context, *connect.Request[v1.StepUpRequest]) (*connect.Response[v1.StepUpResponse], error)
+	// RedeemHandoff swaps a handoff code from SetupService.SetHostname for a
+	// new session for the same admin, with its cookie, on the name the page
+	// moved to. The code works once, for 2 minutes, while the session that
+	// got it lives; a box that restarted has forgotten it. A refusal is
+	// SETUP_HANDOFF: sign in again. It confirms nothing else.
+	RedeemHandoff(context.Context, *connect.Request[v1.RedeemHandoffRequest]) (*connect.Response[v1.RedeemHandoffResponse], error)
 	// BeginSignIn is no longer served: SignIn replaced the sign-in code
 	// approved over SSH. It answers Not available.
 	//
@@ -228,6 +255,12 @@ func NewSignInServiceHandler(svc SignInServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(signInServiceMethods.ByName("StepUp")),
 		connect.WithHandlerOptions(opts...),
 	)
+	signInServiceRedeemHandoffHandler := connect.NewUnaryHandler(
+		SignInServiceRedeemHandoffProcedure,
+		svc.RedeemHandoff,
+		connect.WithSchema(signInServiceMethods.ByName("RedeemHandoff")),
+		connect.WithHandlerOptions(opts...),
+	)
 	signInServiceBeginSignInHandler := connect.NewUnaryHandler(
 		SignInServiceBeginSignInProcedure,
 		svc.BeginSignIn,
@@ -259,6 +292,8 @@ func NewSignInServiceHandler(svc SignInServiceHandler, opts ...connect.HandlerOp
 			signInServiceSignInHandler.ServeHTTP(w, r)
 		case SignInServiceStepUpProcedure:
 			signInServiceStepUpHandler.ServeHTTP(w, r)
+		case SignInServiceRedeemHandoffProcedure:
+			signInServiceRedeemHandoffHandler.ServeHTTP(w, r)
 		case SignInServiceBeginSignInProcedure:
 			signInServiceBeginSignInHandler.ServeHTTP(w, r)
 		case SignInServicePollSignInProcedure:
@@ -282,6 +317,10 @@ func (UnimplementedSignInServiceHandler) SignIn(context.Context, *connect.Reques
 
 func (UnimplementedSignInServiceHandler) StepUp(context.Context, *connect.Request[v1.StepUpRequest]) (*connect.Response[v1.StepUpResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SignInService.StepUp is not implemented"))
+}
+
+func (UnimplementedSignInServiceHandler) RedeemHandoff(context.Context, *connect.Request[v1.RedeemHandoffRequest]) (*connect.Response[v1.RedeemHandoffResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SignInService.RedeemHandoff is not implemented"))
 }
 
 func (UnimplementedSignInServiceHandler) BeginSignIn(context.Context, *connect.Request[v1.BeginSignInRequest]) (*connect.Response[v1.BeginSignInResponse], error) {

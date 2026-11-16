@@ -41,10 +41,10 @@ type certBox struct {
 
 // newCertBox starts it; staticProbe points the store's self-test at a
 // listener that never changes its certificate, so every swap rolls back.
-func newCertBox(t *testing.T, withBob, staticProbe bool) *certBox {
+func newCertBox(t *testing.T, withBob, staticProbe bool, mods ...func(*box, *osadmin.Options)) *certBox {
 	t.Helper()
 	cb := &certBox{ca: testpki.NewTLSCA(t), sealer: newMemSealer()}
-	cb.box = newBox(t, withBob, func(b *box, o *osadmin.Options) {
+	cb.box = newBox(t, withBob, append([]func(*box, *osadmin.Options){func(b *box, o *osadmin.Options) {
 		cb.adminDir = filepath.Join(b.state, "osadmin")
 		c, _, err := osadmin.EnsureCert(cb.adminDir, boxHost, []string{"192.0.2.10"}, b.clk.Now())
 		if err != nil {
@@ -61,7 +61,7 @@ func newCertBox(t *testing.T, withBob, staticProbe bool) *certBox {
 			Names: func(context.Context) (string, []string, error) {
 				b.netd.mu.Lock()
 				defer b.netd.mu.Unlock()
-				return boxHost, slices.Clone(b.netd.mgmt), nil
+				return b.netd.hostname, slices.Clone(b.netd.mgmt), nil
 			},
 			Probe: func(ctx context.Context, fp string) error {
 				pctx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -74,7 +74,12 @@ func newCertBox(t *testing.T, withBob, staticProbe bool) *certBox {
 			t.Fatal(err)
 		}
 		o.Certs, o.CertDir = store, cb.adminDir
-	})
+		// Setup's host name waits for :8443 to serve the new certificate.
+		served, servedPort, _ := net.SplitHostPort(cb.addr)
+		o.CertProbe = func(ctx context.Context, fp string) error {
+			return certstore.HandshakeProbe(ctx, []string{served}, servedPort, fp)
+		}
+	}}, mods...)...)
 	return cb
 }
 
