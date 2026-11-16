@@ -83,6 +83,22 @@ func (h *custodyHandler) Escrow(_ context.Context, r *connect.Request[initv1.Esc
 	return connect.NewResponse(&initv1.EscrowResponse{Bundle: b}), nil
 }
 
+// ImportEscrow seals the items of a decrypted escrow onto this box
+// (Custody.ImportEscrow). The escrow is a secret: it is never logged, and
+// what is logged and answered is item names and counts only.
+func (h *custodyHandler) ImportEscrow(_ context.Context, r *connect.Request[initv1.ImportEscrowRequest]) (*connect.Response[initv1.ImportEscrowResponse], error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	res, err := h.c.ImportEscrow(r.Msg.GetEscrow())
+	if err != nil {
+		h.log.Warn("initapi: KeyCustody.ImportEscrow refused", log.F("error", codes.Describe(err)))
+		return nil, custodyError(err)
+	}
+	h.log.Info("initapi: KeyCustody.ImportEscrow", log.F("imported", len(res.Imported)), log.F("kept", len(res.Kept)))
+	h.log.Debug("initapi: KeyCustody.ImportEscrow items", log.F("imported", res.Imported), log.F("kept", res.Kept))
+	return connect.NewResponse(&initv1.ImportEscrowResponse{Imported: res.Imported, Kept: res.Kept}), nil
+}
+
 func modeProto(m keycustody.Mode) initv1.CustodyMode {
 	switch m {
 	case keycustody.ModeTPM:

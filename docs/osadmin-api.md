@@ -171,6 +171,7 @@ same.
 | `SetupService.CheckHostname` | owner | no | `setup.hostname.check` |
 | `SetupService.SetHostname` | owner | every call | `setup.hostname.set` |
 | `SetupService.AddRecoveryKey` | owner | yes | `setup.recovery-key.add` |
+| `SetupService.ImportEscrow` | owner, SSH only | yes | `setup.escrow.import` |
 | `SetupService.GenerateRecoveryKey` | owner | yes | `setup.recovery-key.generate` |
 | `SetupService.RemoveRecoveryKey` | owner | yes | `setup.recovery-key.remove` |
 | `SetupService.DownloadEscrow` | owner | no | `setup.escrow.download` |

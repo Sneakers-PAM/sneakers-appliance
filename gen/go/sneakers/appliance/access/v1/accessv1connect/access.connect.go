@@ -153,6 +153,9 @@ const (
 	// SetupServiceSetRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// SetRecoveryKey RPC.
 	SetupServiceSetRecoveryKeyProcedure = "/sneakers.appliance.access.v1.SetupService/SetRecoveryKey"
+	// SetupServiceImportEscrowProcedure is the fully-qualified name of the SetupService's ImportEscrow
+	// RPC.
+	SetupServiceImportEscrowProcedure = "/sneakers.appliance.access.v1.SetupService/ImportEscrow"
 	// SetupServiceAcknowledgeSingleAdminProcedure is the fully-qualified name of the SetupService's
 	// AcknowledgeSingleAdmin RPC.
 	SetupServiceAcknowledgeSingleAdminProcedure = "/sneakers.appliance.access.v1.SetupService/AcknowledgeSingleAdmin"
@@ -1222,6 +1225,10 @@ type SetupServiceClient interface {
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
 	// SetRecoveryKey sets a recovery key during setup (an owner's shell).
 	SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error)
+	// ImportEscrow brings another box's decrypted escrow onto this box at first
+	// boot (an owner's shell, over SSH): the items this box hasn't sealed are
+	// sealed, the ones it has stay. The escrow is a secret on standard input.
+	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
 	// AcknowledgeSingleAdmin records, from the console (root only), that the
 	// operator confirmed the single-admin warning.
 	AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error)
@@ -1270,6 +1277,12 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+SetupServiceSetRecoveryKeyProcedure,
 			connect.WithSchema(setupServiceMethods.ByName("SetRecoveryKey")),
+			connect.WithClientOptions(opts...),
+		),
+		importEscrow: connect.NewClient[v1.ImportEscrowRequest, v1.ImportEscrowResponse](
+			httpClient,
+			baseURL+SetupServiceImportEscrowProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("ImportEscrow")),
 			connect.WithClientOptions(opts...),
 		),
 		acknowledgeSingleAdmin: connect.NewClient[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse](
@@ -1323,6 +1336,7 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type setupServiceClient struct {
 	getSetup               *connect.Client[v1.GetSetupRequest, v1.GetSetupResponse]
 	setRecoveryKey         *connect.Client[v1.SetRecoveryKeyRequest, v1.SetRecoveryKeyResponse]
+	importEscrow           *connect.Client[v1.ImportEscrowRequest, v1.ImportEscrowResponse]
 	acknowledgeSingleAdmin *connect.Client[v1.AcknowledgeSingleAdminRequest, v1.AcknowledgeSingleAdminResponse]
 	complete               *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
 	getConsoleInfo         *connect.Client[v1.GetConsoleInfoRequest, v1.GetConsoleInfoResponse]
@@ -1340,6 +1354,11 @@ func (c *setupServiceClient) GetSetup(ctx context.Context, req *connect.Request[
 // SetRecoveryKey calls sneakers.appliance.access.v1.SetupService.SetRecoveryKey.
 func (c *setupServiceClient) SetRecoveryKey(ctx context.Context, req *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error) {
 	return c.setRecoveryKey.CallUnary(ctx, req)
+}
+
+// ImportEscrow calls sneakers.appliance.access.v1.SetupService.ImportEscrow.
+func (c *setupServiceClient) ImportEscrow(ctx context.Context, req *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
+	return c.importEscrow.CallUnary(ctx, req)
 }
 
 // AcknowledgeSingleAdmin calls sneakers.appliance.access.v1.SetupService.AcknowledgeSingleAdmin.
@@ -1383,6 +1402,10 @@ type SetupServiceHandler interface {
 	GetSetup(context.Context, *connect.Request[v1.GetSetupRequest]) (*connect.Response[v1.GetSetupResponse], error)
 	// SetRecoveryKey sets a recovery key during setup (an owner's shell).
 	SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error)
+	// ImportEscrow brings another box's decrypted escrow onto this box at first
+	// boot (an owner's shell, over SSH): the items this box hasn't sealed are
+	// sealed, the ones it has stay. The escrow is a secret on standard input.
+	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
 	// AcknowledgeSingleAdmin records, from the console (root only), that the
 	// operator confirmed the single-admin warning.
 	AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error)
@@ -1427,6 +1450,12 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		SetupServiceSetRecoveryKeyProcedure,
 		svc.SetRecoveryKey,
 		connect.WithSchema(setupServiceMethods.ByName("SetRecoveryKey")),
+		connect.WithHandlerOptions(opts...),
+	)
+	setupServiceImportEscrowHandler := connect.NewUnaryHandler(
+		SetupServiceImportEscrowProcedure,
+		svc.ImportEscrow,
+		connect.WithSchema(setupServiceMethods.ByName("ImportEscrow")),
 		connect.WithHandlerOptions(opts...),
 	)
 	setupServiceAcknowledgeSingleAdminHandler := connect.NewUnaryHandler(
@@ -1479,6 +1508,8 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceGetSetupHandler.ServeHTTP(w, r)
 		case SetupServiceSetRecoveryKeyProcedure:
 			setupServiceSetRecoveryKeyHandler.ServeHTTP(w, r)
+		case SetupServiceImportEscrowProcedure:
+			setupServiceImportEscrowHandler.ServeHTTP(w, r)
 		case SetupServiceAcknowledgeSingleAdminProcedure:
 			setupServiceAcknowledgeSingleAdminHandler.ServeHTTP(w, r)
 		case SetupServiceCompleteProcedure:
@@ -1508,6 +1539,10 @@ func (UnimplementedSetupServiceHandler) GetSetup(context.Context, *connect.Reque
 
 func (UnimplementedSetupServiceHandler) SetRecoveryKey(context.Context, *connect.Request[v1.SetRecoveryKeyRequest]) (*connect.Response[v1.SetRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.SetupService.SetRecoveryKey is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.access.v1.SetupService.ImportEscrow is not implemented"))
 }
 
 func (UnimplementedSetupServiceHandler) AcknowledgeSingleAdmin(context.Context, *connect.Request[v1.AcknowledgeSingleAdminRequest]) (*connect.Response[v1.AcknowledgeSingleAdminResponse], error) {

@@ -72,6 +72,9 @@ const (
 	// SetupServiceAddRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// AddRecoveryKey RPC.
 	SetupServiceAddRecoveryKeyProcedure = "/sneakers.appliance.osadmin.v1.SetupService/AddRecoveryKey"
+	// SetupServiceImportEscrowProcedure is the fully-qualified name of the SetupService's ImportEscrow
+	// RPC.
+	SetupServiceImportEscrowProcedure = "/sneakers.appliance.osadmin.v1.SetupService/ImportEscrow"
 	// SetupServiceGenerateRecoveryKeyProcedure is the fully-qualified name of the SetupService's
 	// GenerateRecoveryKey RPC.
 	SetupServiceGenerateRecoveryKeyProcedure = "/sneakers.appliance.osadmin.v1.SetupService/GenerateRecoveryKey"
@@ -134,6 +137,15 @@ type SetupServiceClient interface {
 	// AddRecoveryKey adds one of up to three recovery keys and writes a new
 	// escrow to the whole set.
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// ImportEscrow brings the sealed items of another box's escrow, decrypted
+	// with a recovery key off this box, onto this one at first boot (a restore
+	// onto new hardware; docs/key-custody.md#importing-an-escrow-on-new-hardware).
+	// An item this box has already sealed (its own SSH root key, pepper and
+	// host CA) is kept, never overwritten; the rest are sealed here. The
+	// closed shell's "setup escrow-import" only, by an owner: the decrypted
+	// escrow comes on standard input and is never written to the box's disk,
+	// logged or audited; the audit entry names the items imported and kept.
+	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
 	// GenerateRecoveryKey has the box make an ed25519 key pair and add its
 	// public half as a recovery key, with a new escrow, under the same rule
 	// and the same limit of three as AddRecoveryKey. The OpenSSH private key
@@ -218,6 +230,12 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("AddRecoveryKey")),
 			connect.WithClientOptions(opts...),
 		),
+		importEscrow: connect.NewClient[v1.ImportEscrowRequest, v1.ImportEscrowResponse](
+			httpClient,
+			baseURL+SetupServiceImportEscrowProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("ImportEscrow")),
+			connect.WithClientOptions(opts...),
+		),
 		generateRecoveryKey: connect.NewClient[v1.GenerateRecoveryKeyRequest, v1.GenerateRecoveryKeyResponse](
 			httpClient,
 			baseURL+SetupServiceGenerateRecoveryKeyProcedure,
@@ -262,6 +280,7 @@ type setupServiceClient struct {
 	checkHostname          *connect.Client[v1.CheckHostnameRequest, v1.CheckHostnameResponse]
 	setHostname            *connect.Client[v1.SetHostnameRequest, v1.SetHostnameResponse]
 	addRecoveryKey         *connect.Client[v1.AddRecoveryKeyRequest, v1.AddRecoveryKeyResponse]
+	importEscrow           *connect.Client[v1.ImportEscrowRequest, v1.ImportEscrowResponse]
 	generateRecoveryKey    *connect.Client[v1.GenerateRecoveryKeyRequest, v1.GenerateRecoveryKeyResponse]
 	removeRecoveryKey      *connect.Client[v1.RemoveRecoveryKeyRequest, v1.RemoveRecoveryKeyResponse]
 	downloadEscrow         *connect.Client[v1.DownloadEscrowRequest, v1.DownloadEscrowResponse]
@@ -312,6 +331,11 @@ func (c *setupServiceClient) SetHostname(ctx context.Context, req *connect.Reque
 // AddRecoveryKey calls sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey.
 func (c *setupServiceClient) AddRecoveryKey(ctx context.Context, req *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {
 	return c.addRecoveryKey.CallUnary(ctx, req)
+}
+
+// ImportEscrow calls sneakers.appliance.osadmin.v1.SetupService.ImportEscrow.
+func (c *setupServiceClient) ImportEscrow(ctx context.Context, req *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
+	return c.importEscrow.CallUnary(ctx, req)
 }
 
 // GenerateRecoveryKey calls sneakers.appliance.osadmin.v1.SetupService.GenerateRecoveryKey.
@@ -386,6 +410,15 @@ type SetupServiceHandler interface {
 	// AddRecoveryKey adds one of up to three recovery keys and writes a new
 	// escrow to the whole set.
 	AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error)
+	// ImportEscrow brings the sealed items of another box's escrow, decrypted
+	// with a recovery key off this box, onto this one at first boot (a restore
+	// onto new hardware; docs/key-custody.md#importing-an-escrow-on-new-hardware).
+	// An item this box has already sealed (its own SSH root key, pepper and
+	// host CA) is kept, never overwritten; the rest are sealed here. The
+	// closed shell's "setup escrow-import" only, by an owner: the decrypted
+	// escrow comes on standard input and is never written to the box's disk,
+	// logged or audited; the audit entry names the items imported and kept.
+	ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error)
 	// GenerateRecoveryKey has the box make an ed25519 key pair and add its
 	// public half as a recovery key, with a new escrow, under the same rule
 	// and the same limit of three as AddRecoveryKey. The OpenSSH private key
@@ -466,6 +499,12 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("AddRecoveryKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	setupServiceImportEscrowHandler := connect.NewUnaryHandler(
+		SetupServiceImportEscrowProcedure,
+		svc.ImportEscrow,
+		connect.WithSchema(setupServiceMethods.ByName("ImportEscrow")),
+		connect.WithHandlerOptions(opts...),
+	)
 	setupServiceGenerateRecoveryKeyHandler := connect.NewUnaryHandler(
 		SetupServiceGenerateRecoveryKeyProcedure,
 		svc.GenerateRecoveryKey,
@@ -516,6 +555,8 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 			setupServiceSetHostnameHandler.ServeHTTP(w, r)
 		case SetupServiceAddRecoveryKeyProcedure:
 			setupServiceAddRecoveryKeyHandler.ServeHTTP(w, r)
+		case SetupServiceImportEscrowProcedure:
+			setupServiceImportEscrowHandler.ServeHTTP(w, r)
 		case SetupServiceGenerateRecoveryKeyProcedure:
 			setupServiceGenerateRecoveryKeyHandler.ServeHTTP(w, r)
 		case SetupServiceRemoveRecoveryKeyProcedure:
@@ -569,6 +610,10 @@ func (UnimplementedSetupServiceHandler) SetHostname(context.Context, *connect.Re
 
 func (UnimplementedSetupServiceHandler) AddRecoveryKey(context.Context, *connect.Request[v1.AddRecoveryKeyRequest]) (*connect.Response[v1.AddRecoveryKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.AddRecoveryKey is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) ImportEscrow(context.Context, *connect.Request[v1.ImportEscrowRequest]) (*connect.Response[v1.ImportEscrowResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("sneakers.appliance.osadmin.v1.SetupService.ImportEscrow is not implemented"))
 }
 
 func (UnimplementedSetupServiceHandler) GenerateRecoveryKey(context.Context, *connect.Request[v1.GenerateRecoveryKeyRequest]) (*connect.Response[v1.GenerateRecoveryKeyResponse], error) {

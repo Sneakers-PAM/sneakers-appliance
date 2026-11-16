@@ -120,6 +120,22 @@ service SetupService {
       audit: "setup.recovery-key.add"
     };
   }
+  // ImportEscrow brings the sealed items of another box's escrow, decrypted
+  // with a recovery key off this box, onto this one at first boot (a restore
+  // onto new hardware; docs/key-custody.md#importing-an-escrow-on-new-hardware).
+  // An item this box has already sealed (its own SSH root key, pepper and
+  // host CA) is kept, never overwritten; the rest are sealed here. The
+  // closed shell's "setup escrow-import" only, by an owner: the decrypted
+  // escrow comes on standard input and is never written to the box's disk,
+  // logged or audited; the audit entry names the items imported and kept.
+  rpc ImportEscrow(ImportEscrowRequest) returns (ImportEscrowResponse) {
+    option (rule) = {
+      role: ROLE_OWNER
+      step_up: true
+      ssh_only: true
+      audit: "setup.escrow.import"
+    };
+  }
   // GenerateRecoveryKey has the box make an ed25519 key pair and add its
   // public half as a recovery key, with a new escrow, under the same rule
   // and the same limit of three as AddRecoveryKey. The OpenSSH private key
@@ -330,6 +346,19 @@ message AddRecoveryKeyRequest {
   // or more.
   string public_key = 1;
   string label = 2;
+}
+
+message ImportEscrowRequest {
+  // escrow is the decrypted escrow bundle (JSON), a secret.
+  bytes escrow = 1;
+}
+
+message ImportEscrowResponse {
+  // imported are the names of the items sealed on this box.
+  repeated string imported = 1;
+  // kept are the names of the escrow's items this box had already sealed,
+  // which stay as they are.
+  repeated string kept = 2;
 }
 
 message AddRecoveryKeyResponse {

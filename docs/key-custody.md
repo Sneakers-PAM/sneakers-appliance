@@ -100,7 +100,7 @@ anything that changes the keys. A key the product hasn't made yet is sealed next
 
 Restoring the product onto a replacement box: decrypt the escrow with one recovery key
 (`age -d -i <private key> escrow-*.age`). It is JSON: `items` maps each sealed item's name to its
-value (base64). Bring it in at the new box's first boot with `KeyCustody.ImportEscrow` (below),
+value (base64). Bring it in at the new box's first boot with `setup escrow-import` (below),
 **before the product is installed**. When the product's first apply makes its box secrets
 ([release.md](release.md#productyaml)), a key the bundle names under `escrow` that the box hasn't
 made yet is read from the sealed item `product-<product>-<name>` instead of made anew, so the new
@@ -116,12 +116,35 @@ has to be enrolled again.
 
 ## Importing an escrow on new hardware
 
-A restore onto new hardware brings the old box's sealed items back with
-`KeyCustody.ImportEscrow`. It takes the escrow already decrypted with one recovery key and seals
-each item again under the new box's own state key; the old box's state key is never used. It runs
-only in `firstboot` and only while nothing is sealed on the new box yet; anything else is refused
-with `KEYCUSTODY_PHASE`. An escrow that doesn't parse, has an unknown version or names an invalid
-item is refused with `KEYCUSTODY_INVALID` and nothing is sealed.
+A restore onto new hardware brings the old box's sealed items back. At the new box's first boot,
+after its first owner has signed in over SSH, decrypt the escrow with one recovery key on a machine
+you trust and pipe it in:
+
+```sh
+age -d -i recovery.key escrow-*.age | ssh -t admin@box1.sneakers.example.org setup escrow-import
+```
+
+The decrypted escrow goes over the SSH connection's standard input (up to 64 KiB) to
+`KeyCustody.ImportEscrow` in init, which seals each item under the new box's own state key; the old
+box's state key is never used. The plaintext is never written to the box's disk, logged or
+audited. Only an owner may run it, only over SSH, with a fresh step-up; it is audited as
+`setup.escrow.import`.
+
+**What is imported and what is kept.** An item the new box has not sealed yet is imported: the old
+box's product keys (`product-<product>-<name>`, such as the vault's root key and the TOTP key) come
+over, so the restored data opens once the product is installed. An item the new box has **already
+sealed is kept and never overwritten**, whatever the escrow holds. The new box seals its own SSH
+root key, password pepper and host CA the moment it first starts, before any admin can reach it, so
+these always stay the new box's own (replacing them would leave the running SSH service and the
+admins' stored credentials out of step with what is sealed). The command prints the names of the
+items imported and kept, and the audit entry lists the same names, never a value.
+
+It runs only in `firstboot`; anything else is refused with `KEYCUSTODY_PHASE`, and so is an escrow
+that brings nothing the box has not sealed already (a second import). An escrow that doesn't parse,
+has an unknown version or names an invalid item is refused with `KEYCUSTODY_INVALID` and nothing is
+sealed. Restore **before the product is installed**: a product key the box has already sealed for
+itself is kept like any other item, so the old key would not come over and the old data would not
+open.
 
 ## Turning Secure Boot off and on later
 

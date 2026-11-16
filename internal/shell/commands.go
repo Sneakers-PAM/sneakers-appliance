@@ -186,6 +186,13 @@ var specs = []spec{
 	{path: "setup recovery-key", owner: true, short: "Set a recovery key during setup, read from standard input", action: "setup.recovery", origins: []Origin{OriginSSH}, stdin: true, flags: []flagSpec{{"label", "a label such as \"offline safe\"", ""}},
 		long:    "Sets the first recovery key during setup: an SSH public key read from standard input. Over SSH, first boot only; it writes a new escrow file.",
 		example: "  ssh -t admin@box1.sneakers.example.org setup recovery-key --label safe < recovery.pub"},
+	{path: "setup escrow-import", owner: true, short: "Import another box's decrypted escrow, read from standard input", action: "setup.escrow", origins: []Origin{OriginSSH}, stdin: true,
+		long: "Restores onto new hardware: reads another box's escrow, already decrypted with a recovery key off this box, from standard input (up to 64 KiB) and seals what this box doesn't have yet. " +
+			"The items the old box made for the product (its keys, sealed as product-<product>-<name>) come over, so restored data opens. " +
+			"The items this box sealed for itself when it first started (its SSH root key, password pepper and host CA) are kept and never overwritten, whatever the escrow holds. " +
+			"Over SSH, first boot only, before the product is installed; an escrow that brings nothing new is refused. " +
+			"The audit entry lists the items imported and kept by name, never a value, and the escrow isn't written to the box's disk.",
+		example: "  age -d -i recovery.key escrow.age | ssh -t admin@box1.sneakers.example.org setup escrow-import"},
 	{path: "shell", short: "Open the root shell (root operators): a challenge, then the code :8443 gives for it", action: "rootshell.begin", origins: []Origin{OriginSSH}, run: runRootShell,
 		flags:   []flagSpec{{"reason", "why, for the audit log", ""}},
 		long:    "Opens the root shell, for root operators. It prints a challenge; paste it on the Root shell page on :8443, give a fresh authenticator code there, and type the code that page gives you here. The session is time-boxed, recorded and audited. Needs a terminal (ssh -t).",

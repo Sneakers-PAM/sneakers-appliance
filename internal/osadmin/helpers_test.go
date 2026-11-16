@@ -123,6 +123,21 @@ type fakeInit struct {
 	// sealed are the items Seal stored, by name; seals counts the calls.
 	sealed map[string][]byte
 	seals  int
+	// imports are the escrows ImportEscrow was given; importRes is what it
+	// answers, and importErr fails it.
+	imports   [][]byte
+	importRes *initv1.ImportEscrowResponse
+	importErr error
+}
+
+func (f *fakeInit) ImportEscrow(_ context.Context, r *connect.Request[initv1.ImportEscrowRequest]) (*connect.Response[initv1.ImportEscrowResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.imports = append(f.imports, r.Msg.GetEscrow())
+	if f.importErr != nil {
+		return nil, f.importErr
+	}
+	return connect.NewResponse(f.importRes), nil
 }
 
 func (f *fakeInit) Seal(_ context.Context, r *connect.Request[initv1.SealRequest]) (*connect.Response[initv1.SealResponse], error) {
