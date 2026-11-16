@@ -60,6 +60,13 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Create the cluster
         run: kind create cluster --name sneakers --image "$KIND_NODE_IMAGE" --wait 180s
+      - name: Build the chart dependencies and install cert-manager
+        # The chart's internal mTLS issues its certificates through cert-manager and
+        # takes its helpers from the library subchart, so both are in place before
+        # helm install, as the release repo's own install test does.
+        run: |
+          sneakers-release/scripts/build-deps.sh
+          sneakers-release/test/kind/install-cert-manager.sh
       - name: Rehearse
         env:
           CHARTS: ${{ github.workspace }}/sneakers-release
@@ -102,6 +109,13 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Create the cluster
         run: kind create cluster --name "$KIND_CLUSTER" --image "$KIND_NODE_IMAGE" --wait 180s
+      - name: Build the chart dependencies and install cert-manager
+        # The chart's internal mTLS issues its certificates through cert-manager and
+        # takes its helpers from the library subchart, so both are in place before
+        # helm install, as the release repo's own install test does.
+        run: |
+          sneakers-release/scripts/build-deps.sh
+          sneakers-release/test/kind/install-cert-manager.sh
       - name: Build the service images
         run: sneakers-release/test/kind/build-images.sh
       - name: Rehearse
