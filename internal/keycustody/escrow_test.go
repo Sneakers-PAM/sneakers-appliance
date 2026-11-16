@@ -122,3 +122,30 @@ func TestEscrowRecipientRules(t *testing.T) {
 		}
 	}
 }
+
+// Retire deletes one sealed item by name and nothing else (#502): the item
+// can't be read back, the others stay, an item that isn't there is a no-op
+// so a retry after a crash is safe, and a bad name is refused.
+func TestRetireDeletesOneSealedItem(t *testing.T) {
+	kc := keyfileCustody(t)
+	for _, n := range []string{"staging-key", "other-key"} {
+		if err := kc.Seal(n, []byte("v-"+n)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := kc.Retire("staging-key"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kc.Unseal("staging-key"); !codes.Is(err, codes.KeyCustodyNotFound) {
+		t.Fatalf("a retired item still reads: %v", err)
+	}
+	if got, err := kc.Unseal("other-key"); err != nil || string(got) != "v-other-key" {
+		t.Fatalf("the other item changed: %q %v", got, err)
+	}
+	if err := kc.Retire("staging-key"); err != nil {
+		t.Fatalf("retiring an item that is already gone must be a no-op: %v", err)
+	}
+	if err := kc.Retire("../escape"); !codes.Is(err, codes.KeyCustodyInvalid) {
+		t.Fatalf("got %v", err)
+	}
+}

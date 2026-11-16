@@ -166,3 +166,25 @@ func (c *Custody) Escrow(recipients []string) ([]byte, error) {
 	}
 	return out.Bytes(), nil
 }
+
+// Retire deletes a sealed item by name; an item that isn't there is left
+// alone, so a retry after a crash is safe. The directory is synced after the
+// removal, so a power cut leaves the item or no item, never half of one.
+func (c *Custody) Retire(name string) error {
+	if !itemNameRE.MatchString(name) {
+		return codes.New(codes.KeyCustodyInvalid, "sealed item name %q", name)
+	}
+	dir := c.sealedDir()
+	if err := os.Remove(filepath.Join(dir, name)); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+	d, err := os.Open(dir) // #nosec G304 -- the sealed items' directory
+	if err != nil {
+		return err
+	}
+	defer func() { _ = d.Close() }()
+	return syncFile(d)
+}
