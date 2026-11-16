@@ -204,16 +204,15 @@ box's check.
 `helm template` runs of sneakers-release's `charts/sneakers` (its own `scripts/build-deps.sh`
 resolves the dependencies), over `charts/sneakers/examples/values-small-box.yaml` with
 `build/product/sneakers/values.yaml`, the MCP switch off and then on
-(`values-mcp-on.yaml`). The database the services run on, helm-postgres-ha, is not in either render: the box renders it from
-the chart the bundle carries when it stages the bundle (the `resources` section above), from values
-`render_test.sh` holds to the umbrella's own (`build/product/sneakers/values-postgres-ha.yaml` over its
-defaults), and sneakers-release's `scripts/check-chart-digest.sh` holds the chart to the digest
-`release.yaml` pins. `build/tools/stack` turns the renders into the stacks:
+(`values-mcp-on.yaml`). The database the services run on, helm-postgres-ha, is a dependency of the
+umbrella, in both renders: `build/product/sneakers/values-postgres-ha.yaml` turns it on beside the old
+cluster, and sneakers-release's `scripts/check-chart-digest.sh` holds the chart to the digest
+`release.yaml` pins. `build/tools/stack` turns them into the stacks:
 
 | Stack | Holds |
 |---|---|
 | `sneakers` | always on: the `sneakers` namespace and everything of the product that isn't a workload (Services, ConfigMaps, NetworkPolicies, RBAC, Ingresses) |
-| `sneakers-data` | the data phase: the old PostgreSQL, which stays as the way back from the [data move](data-move.md), and Valkey, with the new PostgreSQL the box renders into this stack when it stages the bundle |
+| `sneakers-data` | the data phase: the old PostgreSQL, which stays as the way back from the [data move](data-move.md), the new one, and Valkey |
 | `sneakers-identity` | the identity phase: Kratos, the identity service and the vault |
 | `sneakers-services` | the services phase: workflow, audit, notify, connector and the SSH broker |
 | `sneakers-front` | the front phase: the gateway and the two web apps |
