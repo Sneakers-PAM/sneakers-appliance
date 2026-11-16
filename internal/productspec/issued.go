@@ -25,7 +25,7 @@ func (s IssuedSecret) SecretName() string { _, n, _ := strings.Cut(s.Secret, "/"
 
 // IssuedSecretsMinBase is the first base release that reads a product.yaml's
 // issued_secrets section; an older base refuses the whole product.yaml.
-const IssuedSecretsMinBase = "0.1.0-rc.8"
+const IssuedSecretsMinBase = "0.1.0-rc.8" // #nosec G101 -- a release version, not a credential
 
 func (s Spec) checkIssuedSecrets() error {
 	box := map[string]bool{}
