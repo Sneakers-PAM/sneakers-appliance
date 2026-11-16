@@ -37,6 +37,11 @@ service KeyCustodyService {
   // brings nothing new is refused. The escrow is a secret: it is neither
   // logged nor written anywhere but sealed.
   rpc ImportEscrow(ImportEscrowRequest) returns (ImportEscrowResponse);
+  // Retire deletes one sealed item by name, once the item that replaces it
+  // is sealed and checked: the end of a root-key rotation. An item that is
+  // not there is not an error, so a retry after a restart is safe. Only the
+  // name is logged.
+  rpc Retire(RetireRequest) returns (RetireResponse);
 }
 
 // CustodyMode is where the state key is kept.
@@ -94,6 +99,12 @@ message SealRequest {
 }
 
 message SealResponse {}
+
+message RetireRequest {
+  string name = 1;
+}
+
+message RetireResponse {}
 
 message UnsealRequest {
   string name = 1;
