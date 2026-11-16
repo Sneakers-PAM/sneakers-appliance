@@ -276,6 +276,11 @@ type EscrowKey struct {
 	Secret string `yaml:"secret"`
 	// Key is the key in the Secret's data.
 	Key string `yaml:"key"`
+	// Previous is the key in the same Secret the product's chart reads as
+	// the key being replaced while the box moves this one to a new value
+	// (docs/key-custody.md#rotating-the-vault-root-key); empty when the
+	// product can't rotate it.
+	Previous string `yaml:"previous"`
 }
 
 // Namespace is the Secret's namespace.
@@ -286,6 +291,7 @@ func (e EscrowKey) SecretName() string { _, n, _ := strings.Cut(e.Secret, "/"); 
 
 func (s Spec) checkEscrow() error {
 	seen := map[string]bool{}
+	previous := map[string]bool{}
 	for i, e := range s.Escrow {
 		ns, name, ok := strings.Cut(e.Secret, "/")
 		switch {
@@ -295,6 +301,11 @@ func (s Spec) checkEscrow() error {
 			return bad("escrow[%d]: the secret %q isn't <namespace>/<name>", i, e.Secret)
 		case !keyRE.MatchString(e.Key):
 			return bad("escrow[%d]: the key %q isn't a Secret data key", i, e.Key)
+		case e.Previous != "" && (!keyRE.MatchString(e.Previous) || e.Previous == e.Key || previous[e.Secret+"/"+e.Previous]):
+			return bad("escrow[%d]: previous %q isn't a Secret data key of its own, or is named twice", i, e.Previous)
+		}
+		if e.Previous != "" {
+			previous[e.Secret+"/"+e.Previous] = true
 		}
 		seen[e.Name] = true
 	}

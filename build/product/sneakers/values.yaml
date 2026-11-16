@@ -73,6 +73,10 @@ vault:
   secretEnv:
     VAULT_ROOT_KEK:
       secretName: sneakers-box
+    # Present in the Secret only while the box rotates the root key; the
+    # chart makes a key that isn't required an optional reference.
+    VAULT_ROOT_KEK_PREVIOUS:
+      secretName: sneakers-box
 gateway:
   env:
     MCP_HEALTH_URL: ''

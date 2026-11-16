@@ -420,6 +420,35 @@ func TestTheEscrowKeysParseAndReachTheRBAC(t *testing.T) {
 	}
 }
 
+// An escrow key names, under previous, the Secret key the product's chart reads
+// while the box moves the key to a new value (#502). A bundle that has one needs
+// a base that rotates, and a bad one is refused.
+func TestAnEscrowKeyNamesTheKeyItReadsWhileItRotates(t *testing.T) {
+	doc := good + `escrow:
+  - {name: vault-root-key, secret: sneakers/sneakers-box, key: VAULT_ROOT_KEK, previous: VAULT_ROOT_KEK_PREVIOUS}
+  - {name: totp-key, secret: sneakers/sneakers-box, key: TOTP_ENC_KEY}
+`
+	s, err := productspec.Parse([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Escrow[0].Previous != "VAULT_ROOT_KEK_PREVIOUS" || s.Escrow[1].Previous != "" {
+		t.Fatalf("%+v", s.Escrow)
+	}
+	if floor, why := s.BaseFloor(); floor != productspec.RotationMinBase || !strings.Contains(why, "rotat") {
+		t.Fatalf("the floor: %q %q", floor, why)
+	}
+	for name, bad := range map[string]string{
+		"a bad key":      good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: \"K K\"}\n",
+		"the key itself": good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: K}\n",
+		"twice":          good + "escrow:\n  - {name: a, secret: sneakers/s, key: K, previous: P}\n  - {name: b, secret: sneakers/s, key: L, previous: P}\n",
+	} {
+		if _, err := productspec.Parse([]byte(bad)); !codes.Is(err, codes.KitBundleMismatch) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 func TestTheSneakersBundleEscrowsItsVaultAndTOTPKeys(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join("..", "..", "build", "product", "sneakers", "product.yaml"))
 	if err != nil {
@@ -435,6 +464,11 @@ func TestTheSneakersBundleEscrowsItsVaultAndTOTPKeys(t *testing.T) {
 	}
 	if !names["vault-root-key"] || !names["totp-key"] {
 		t.Fatalf("escrow %+v", s.Escrow)
+	}
+	for _, e := range s.Escrow {
+		if e.Name == "vault-root-key" && e.Previous != "VAULT_ROOT_KEK_PREVIOUS" {
+			t.Errorf("the vault root key doesn't name the key the vault reads while it moves: %+v", e)
+		}
 	}
 }
 

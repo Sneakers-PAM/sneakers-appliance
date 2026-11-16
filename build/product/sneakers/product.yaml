@@ -92,6 +92,9 @@ escrow:
   - name: vault-root-key
     secret: sneakers/sneakers-box
     key: VAULT_ROOT_KEK
+    # What the vault reads as the key being replaced while the box rotates
+    # the root key; the box fills it only during a rotation.
+    previous: VAULT_ROOT_KEK_PREVIOUS
   - name: totp-key
     secret: sneakers/sneakers-box
     key: TOTP_ENC_KEY
