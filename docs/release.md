@@ -443,7 +443,16 @@ escrow:
   - name: vault-root-key            # sealed as product-<product>-vault-root-key
     secret: sneakers/sneakers-box
     key: VAULT_ROOT_KEK
+    previous: VAULT_ROOT_KEK_PREVIOUS   # what the chart reads as the key being replaced
+    restart: [sneakers/deployment/sneakers-vault]   # the workloads that read the key
 ```
+
+`previous` and `restart` go together and make the key rotatable
+([key-custody.md](key-custody.md#rotating-the-vault-root-key)): while the box rotates it, it adds the
+old value to the Secret under `previous` and restarts the `restart` workloads, and reads the move's
+status from the first. The chart must read `previous` as an optional reference to the same Secret,
+and the key is never declared as a box secret key. A bundle that names them needs `0.1.0-rc.8` or newer
+and refuses an older base.
 
 The appliance's Role may `get` those Secrets too. The box refuses a name that isn't a lower-case
 word or is named twice, a secret that isn't `<namespace>/<name>` and a key that isn't a Secret data
@@ -606,6 +615,7 @@ result says to update the base first. Nothing is applied, and the product keeps 
 | `telemetry` | `0.1.0-rc.7` |
 | `resources` | `0.1.0-rc.8` |
 | `issued_secrets` | `0.1.0-rc.8` |
+| `escrow` with `previous` | `0.1.0-rc.8` |
 
 Lab bundles aren't checked: a lab base's version doesn't sort against a release's. A release packs
 its product for its own version and newer, which is always at or above the table.

@@ -315,3 +315,17 @@ func (r *Runner) wait(ctx context.Context, notBefore time.Time, want string) err
 		}
 	}
 }
+
+// Progress is where a rotation that hasn't finished stands: the step it
+// will carry on from, and why it stopped, if it did. active is false when no
+// rotation is begun.
+func (r *Runner) Progress() (step, why string, active bool, err error) {
+	st, err := r.load()
+	if err != nil {
+		return "", "", false, err
+	}
+	if !r.Active() {
+		return "", "", false, nil
+	}
+	return st.Step, st.Failed, true, nil
+}

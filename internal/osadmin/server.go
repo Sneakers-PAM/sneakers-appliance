@@ -182,6 +182,15 @@ type Options struct {
 	// (boxsecrets.Store on the box) at each product apply and revert,
 	// before the product restarts; nil makes none.
 	BoxSecrets BoxSecrets
+	// RootKeys and RootKeyStatus rotate the installed product's vault root
+	// key (boxsecrets.Store on the box, and a reader of the vault's status);
+	// the workloads restart through TelemetryWorkloads. Any nil leaves the
+	// rotation unavailable. RootRotatePoll and RootRotateBound are how often
+	// and how long a wait of the rotation asks; zero takes the defaults.
+	RootKeys        RootKeyStore
+	RootKeyStatus   RootKeyStatus
+	RootRotatePoll  time.Duration
+	RootRotateBound time.Duration
 	// Email keeps the product's mail relay (boxsettings.Store on the box);
 	// nil leaves the Email page with nothing to set.
 	Email EmailSettings
@@ -229,20 +238,23 @@ type Options struct {
 
 // Server is the appliance admin.
 type Server struct {
-	o         Options
-	sessions  *weblogin.Sessions
-	codes     *onetime.Codes
-	creds     credentialFlows
-	certMu    sync.Mutex
-	resets    resets
-	upgrades  upgrades
-	telemetry telemetryState
-	mirror    mirrorCheck
-	emailTest emailProof
-	github    githubState
-	checks    checks
-	progress  progress
-	ready     readiness
+	o Options
+	// rootRotating is true while a vault root key rotation runs; rootRotateDone
+	// says the last one finished since the box started.
+	rootRotating, rootRotateDone atomic.Bool
+	sessions                     *weblogin.Sessions
+	codes                        *onetime.Codes
+	creds                        credentialFlows
+	certMu                       sync.Mutex
+	resets                       resets
+	upgrades                     upgrades
+	telemetry                    telemetryState
+	mirror                       mirrorCheck
+	emailTest                    emailProof
+	github                       githubState
+	checks                       checks
+	progress                     progress
+	ready                        readiness
 	// resetting: a product reset runs in this process; resetFinishing: the
 	// box is finishing a cut-off one by itself, from before it starts.
 	resetting      atomic.Bool
@@ -329,6 +341,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle(osadminv1connect.NewMcpServiceHandler(&mcpSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewEmailServiceHandler(&emailSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewTelemetryServiceHandler(&telemetrySvc{s: s}, opts))
+	mux.Handle(osadminv1connect.NewRootKeyServiceHandler(&rootKeySvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewResourcesServiceHandler(&resourcesSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewImportServiceHandler(&importSvc{s: s}, opts))
 	mux.Handle(osadminv1connect.NewBackupServiceHandler(osadminv1connect.UnimplementedBackupServiceHandler{}, opts))

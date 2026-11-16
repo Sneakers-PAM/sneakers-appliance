@@ -97,6 +97,14 @@ why). `PinEmailCertificate` checks the relay presents the certificate given and 
 settings with `pin_sha256` set and verification on; `SetEmail` saves the pin
 ([product-email.md](product-email.md#pinning-the-relays-certificate)).
 
+`RootKeyService` rotates the installed product's vault root key
+([key-custody.md](key-custody.md#rotating-the-vault-root-key)). `GetRootKeyRotation` answers whether
+the product can (`available`), and `state`: `none`, `running`, `stopped` (with the `step` it will
+carry on from and `why`, never a key) or `done`. `RotateRootKey` begins the rotation or, after a stop,
+carries it on, under the same maintenance gate as a product update, and answers once it has begun.
+While a rotation is unfinished, anything else that applies the product is refused with
+`ROOTKEY_UNFINISHED`; a product whose bundle names no previous key is `ROOTKEY_UNAVAILABLE`.
+
 `TelemetryService` is the product's Telemetry page ([product-telemetry.md](product-telemetry.md)):
 `GetTelemetry` answers `state` (`not installed`, `not in this product`, `off` or `on`), the settings
 (with `ca_pem`, the collector's CA, when one is set),
@@ -234,6 +242,8 @@ same.
 | `TelemetryService.GetTelemetry` | admin | no | |
 | `TelemetryService.SetTelemetry` | admin | yes | `product.telemetry.set` |
 | `TelemetryService.RetryTelemetryRestart` | admin | yes | `product.telemetry.restart` |
+| `RootKeyService.GetRootKeyRotation` | owner | no | |
+| `RootKeyService.RotateRootKey` | owner | yes | `product.rootkey.rotate` |
 | `McpService.GetMcp` | admin | no | |
 | `McpService.SetMcp` | admin | yes | `mcp.set` |
 | `EmailService.GetEmail` | admin | no | |

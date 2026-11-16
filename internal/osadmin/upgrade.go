@@ -223,6 +223,10 @@ func (s *Server) beginMaintenance(ctx context.Context, what, kind string, by osa
 		s.o.Logger.Info("osadmin: refused; a cut-off product reset holds the product", log.F("what", what), log.F("by", by.Actor))
 		return "", codes.New(codes.ProductReset, "%s", note)
 	}
+	if kind == edgefall.KindProductApply && what != rootRotateWhat && s.rotationUnfinished() {
+		s.o.Logger.Info("osadmin: refused; a vault root key rotation is unfinished", log.F("what", what), log.F("by", by.Actor))
+		return "", codes.New(codes.RootRotationUnfinished, "a vault root key rotation is unfinished; rotate again to finish it before the %s", what)
+	}
 	s.upgrades.mu.Lock()
 	if s.upgrades.applying {
 		s.upgrades.mu.Unlock()

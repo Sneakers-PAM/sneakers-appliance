@@ -51,6 +51,8 @@ Init serves `KeyCustodyService` on `init.sock` (root peers only, checked with `S
 | `Protection` | `full` or `reduced` with the reason (`no-secure-boot-firmware`, `secure-boot-off`, `no-tpm`); the :8443 Status page shows it |
 | `Seal`, `Unseal` | the sealed items below; an item never sealed is `NotFound` (`KEYCUSTODY_NOT_FOUND`) |
 | `Escrow` | the escrow bundle for one to three recovery keys |
+| `ImportEscrow` | seals an escrow's items on a new box ([below](#importing-an-escrow-on-new-hardware)) |
+| `Retire` | deletes one sealed item by name; an item that isn't there is not an error |
 
 `Initialize` and `SetSecureBoot` answer `Unimplemented`: init fixes the custody at its own
 protection step, and the :8443 Secure Boot setting comes later. accessd seals the SSH user CA
@@ -113,6 +115,34 @@ Don't edit the product's Secrets with `kubectl`: the box writes `sneakers-box` f
 already made its own product keys keeps them; restore onto a box whose product isn't installed
 yet. Without the vault's root key no stored secret opens; without the TOTP key every second factor
 has to be enrolled again.
+
+## Rotating the vault root key
+
+The vault's root key wraps the vault's working keys, so moving to a new one re-wraps those keys and
+re-encrypts no stored secret. An owner starts it from the box (`RootKeyService.RotateRootKey`,
+step-up, audited); the product's bundle must name the previous key its chart reads, under `escrow`
+([release.md](release.md#productyaml)). **Nothing is deleted before the vault has verified the move**,
+and every step can run again, so a failure or a restart carries on and never leaves the box without a
+key that something still needs:
+
+1. The box makes the new key and keeps the old one as the previous key, in one write to its secrets
+   store, and seals the new key as the staging item `product-<product>-<name>-next`. It writes an
+   escrow that carries both keys.
+2. It applies the box secrets with the new key and the previous key, and restarts the vault.
+3. The vault re-wraps its working keys under the new key and reads each back under the new key alone,
+   and reports `verified` at its health check. The box asks only a vault pod started after the
+   restart. A report of `failed`, or no `verified` in time, stops the rotation here: both keys, the
+   old sealed copy and the staging item stay, and a new request tries again.
+4. Only after `verified` does the box drop the previous key, apply again and restart the vault, which
+   now runs on the new key alone and reports `none`.
+5. The box replaces the canonical sealed item (`product-<product>-<name>`) with the new key, retires
+   the staging item by name (the audit names the items, never a value) and writes a final escrow
+   that carries only the new keys.
+
+While a rotation is unfinished the sealed copy of the old key is not replaced from the live Secret,
+and anything else that applies the product is refused. **Every escrow file written before step 5 holds
+the old key and no longer opens the vault: destroy the older escrow files and keep the new one.** The
+SSH root key and the TOTP key are not rotated here.
 
 ## Importing an escrow on new hardware
 
