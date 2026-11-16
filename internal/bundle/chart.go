@@ -132,7 +132,7 @@ func chartYAML(tgz []byte) (name, version string, err error) {
 	if err != nil {
 		return "", "", errors.New("isn't a gzip archive")
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }() // reading from memory: nothing to flush or lose
 	tr := tar.NewReader(io.LimitReader(gz, maxChartFile))
 	for {
 		h, err := tr.Next()
