@@ -34,6 +34,9 @@ func TestTheRealBundleMovesTheDatabase(t *testing.T) {
 	if p := canaryProblems(base); len(p) > 0 {
 		t.Fatalf("the rows weren't written: %v", p)
 	}
+	// The product's own first records go into the audit trail the move's
+	// check reads: one carries no attributes (stored as JSON null).
+	b.productAdmin()
 	on := func(version, when string) {
 		t.Helper()
 		l := lastLine(b.vm.Console(), "realci: database running version="+version+" ")
