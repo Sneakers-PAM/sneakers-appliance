@@ -88,6 +88,10 @@ type UpgradeOptions struct {
 	ReleaseAPIURL string
 	ReleaseRepo   string
 	RedirectHosts []string
+	// ReleaseHistory is how many releases of the box's channel the GitHub
+	// source reads the index of, the newest finished one first; 0 is
+	// DefaultReleaseHistory.
+	ReleaseHistory int
 	// BuildVersion is the running build's version, for the default
 	// release channel; empty is release.Version.
 	BuildVersion string

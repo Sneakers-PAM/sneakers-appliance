@@ -57,6 +57,28 @@ type githubState struct {
 	url    string
 	tag    string
 	tagSet bool
+	// tags is the release each file of the merged index is fetched from:
+	// the newest release that lists it. A file not in it comes from tag.
+	tags map[string]string
+}
+
+// releaseTagOf is the release a file of the merged index is fetched from,
+// "" when the source isn't the release source or the file isn't listed.
+func (s *Server) releaseTagOf(file string) string {
+	s.github.mu.Lock()
+	defer s.github.mu.Unlock()
+	return s.github.tags[file]
+}
+
+// DefaultReleaseHistory is how many releases of the box's channel the
+// GitHub source reads the index of, the newest finished one first.
+const DefaultReleaseHistory = 3
+
+func (s *Server) releaseHistory() int {
+	if n := s.o.Upgrade.ReleaseHistory; n > 0 {
+		return n
+	}
+	return DefaultReleaseHistory
 }
 
 // releaseURLs is the GitHub source for policy p: the repository, its
@@ -121,7 +143,7 @@ func (s *Server) githubLister(api string) (*ghrelease.Lister, error) {
 		return nil, err
 	}
 	s.github.lister = &ghrelease.Lister{HTTP: hc, URL: api, Now: s.o.Clock.Now}
-	s.github.url, s.github.tag, s.github.tagSet = api, "", false
+	s.github.url, s.github.tag, s.github.tagSet, s.github.tags = api, "", false, nil
 	return s.github.lister, nil
 }
 
@@ -129,7 +151,7 @@ func (s *Server) githubLister(api string) (*ghrelease.Lister, error) {
 func (s *Server) forgetGitHub() {
 	s.github.mu.Lock()
 	defer s.github.mu.Unlock()
-	s.github.lister, s.github.url, s.github.tag, s.github.tagSet = nil, "", "", false
+	s.github.lister, s.github.url, s.github.tag, s.github.tagSet, s.github.tags = nil, "", "", false, nil
 }
 
 // resolveDirectIndex finds the newest release on the box's channel that's
@@ -167,28 +189,60 @@ func (s *Server) resolveDirectIndex(ctx context.Context, idxSrc source, force bo
 	}
 	var (
 		lastErr error
-		skipped []string
+		skipped []string // newer than the first release used
+		later   []string // older than it, or after the history was filled
+		merged  updatepkg.Index
+		tags    = map[string]string{}
+		used    []string
 	)
-	for _, r := range candidates {
-		idx, why, ferr := s.readRelease(ctx, idxSrc, r)
+	history := s.releaseHistory()
+	for i, r := range candidates {
+		if len(used) >= history || i >= history+maxSkippedReleases {
+			break
+		}
+		ridx, why, ferr := s.readRelease(ctx, idxSrc, r)
 		if ferr != nil {
 			s.o.Logger.Info("osadmin: the GitHub release isn't usable; trying the next one on the channel", log.F("tag", r.TagName), log.F("why", why), log.F("error", ferr.Error()))
 			lastErr = ferr
-			skipped = append(skipped, r.TagName+why)
+			if len(used) == 0 {
+				skipped = append(skipped, r.TagName+why)
+			} else {
+				later = append(later, r.TagName+why)
+			}
 			continue
 		}
-		s.github.mu.Lock()
-		s.github.tag, s.github.tagSet = r.TagName, true
-		s.github.mu.Unlock()
-		s.o.Logger.Info("osadmin: GitHub release picked", append(fields, log.F("tag", r.TagName))...)
-		if len(skipped) > 0 {
-			note = strings.Join(skipped, "; ") + "; showing " + r.TagName
-			s.o.Logger.Info("osadmin: newer GitHub releases were skipped", log.F("skipped", strings.Join(skipped, "; ")), log.F("showing", r.TagName))
+		for _, f := range ridx.Files() {
+			if _, ok := tags[f]; !ok {
+				tags[f] = r.TagName
+			}
 		}
-		return idx, note, nil
+		merged = merged.Merge(ridx)
+		used = append(used, r.TagName)
 	}
-	return updatepkg.Index{}, "", lastErr
+	if len(used) == 0 {
+		return updatepkg.Index{}, "", lastErr
+	}
+	s.github.mu.Lock()
+	s.github.tag, s.github.tagSet, s.github.tags = used[0], true, tags
+	s.github.mu.Unlock()
+	s.o.Logger.Info("osadmin: GitHub releases picked", append(fields, log.F("tag", used[0]), log.F("read", strings.Join(used, ",")))...)
+	if len(skipped) > 0 {
+		note = strings.Join(skipped, "; ") + "; showing " + used[0]
+		s.o.Logger.Info("osadmin: newer GitHub releases were skipped", log.F("skipped", strings.Join(skipped, "; ")), log.F("showing", used[0]))
+	}
+	if len(later) > 0 {
+		if note != "" {
+			note += "; "
+		}
+		note += strings.Join(later, "; ")
+		s.o.Logger.Info("osadmin: earlier GitHub releases were skipped", log.F("skipped", strings.Join(later, "; ")))
+	}
+	return merged, note, nil
 }
+
+// maxSkippedReleases is how many releases past the history the walk may
+// pass over as unusable before it gives up.
+const maxSkippedReleases = 5
 
 // readRelease reads r's index when r is finished: its four signed files
 // are there, the index and SHA256SUMS verify, and every file the index
@@ -235,7 +289,7 @@ func (s *Server) resolveDirectLatest(ctx context.Context, idxSrc source) (update
 		return updatepkg.Index{}, "", err
 	}
 	s.github.mu.Lock()
-	s.github.tag, s.github.tagSet = "", true
+	s.github.tag, s.github.tagSet, s.github.tags = "", true, nil
 	s.github.mu.Unlock()
 	return idx, "", nil
 }
@@ -316,6 +370,12 @@ func (s *Server) resolve(ctx context.Context, src source, force bool) (source, e
 	if err != nil {
 		return src, err
 	}
+	// A file an earlier release published comes from that release.
+	s.github.mu.Lock()
+	if t, ok := s.github.tags[src.file]; ok {
+		tag = t
+	}
+	s.github.mu.Unlock()
 	if tag == "" {
 		src.url = src.base + "/latest/download/" + src.file
 	} else {

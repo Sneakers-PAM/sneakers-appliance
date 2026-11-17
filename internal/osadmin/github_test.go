@@ -223,8 +223,8 @@ func TestTheGitHubSourcePicksTheChannelsRelease(t *testing.T) {
 	}
 
 	builtin(t, alice, proto.String("rc"))
-	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0-rc.1" {
-		t.Fatalf("an rc box: %v %v", c, err)
+	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0-rc.1,0.1.1" {
+		t.Fatalf("an rc box (the stable release before it is offered too): %v %v", c, err)
 	}
 	if st := mirrorStatus(t, alice); st.GetReleaseChannel() != "rc" || st.GetReleaseChannelDefault() || st.GetReleaseTag() != "v0.2.0-rc.1" {
 		t.Fatalf("status %v", st)
@@ -244,7 +244,7 @@ func TestTheGitHubSourcePicksTheChannelsRelease(t *testing.T) {
 	// An rc box takes a newer stable release too.
 	g.release("v0.2.0", false, false)
 	g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
-	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0" {
+	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0,0.2.0-rc.1,0.1.1" {
 		t.Fatalf("an rc box and a newer stable: %v %v", c, err)
 	}
 }
@@ -435,7 +435,7 @@ func TestUpdateCheckSkipsANewestReleaseWithNoFilesYet(t *testing.T) {
 
 	// Once its files are signed and uploaded the next check picks it up.
 	g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
-	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0" || c.GetPublishingNote() != "" {
+	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0,0.1.1" || c.GetPublishingNote() != "" {
 		t.Fatalf("once it's published: %v %v", c, err)
 	}
 
@@ -529,7 +529,7 @@ func TestUpdateCheckSkipsAReleaseStillUploadingItsFiles(t *testing.T) {
 	}
 
 	g.publish(t, "v0.2.0", b.sign, newest)
-	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0" || c.GetPublishingNote() != "" {
+	if c, err = checkNow(alice); err != nil || strings.Join(productNames(c), ",") != "0.2.0,0.1.1" || c.GetPublishingNote() != "" {
 		t.Fatalf("once it's all there: %v %v", c, err)
 	}
 }

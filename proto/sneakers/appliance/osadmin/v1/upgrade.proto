@@ -490,6 +490,21 @@ message UnitOffer {
   // the box serves after the reboot unless the installed one is newer;
   // empty for a release from before the rule.
   string includes_base_web = 13;
+  // release_tag is the GitHub release the file is fetched from, when the
+  // source is the release source (an earlier release's file names it);
+  // empty from a mirror.
+  string release_tag = 14;
+}
+
+// UnfitProduct is a product newer than the installed one that doesn't fit
+// the running Base OS, with the Base OS it needs first.
+message UnfitProduct {
+  string version = 1;
+  string file_name = 2;
+  // release_tag is the release it is published in, when known.
+  string release_tag = 3;
+  // needs is the Base OS it needs, such as "0.1.0-rc.7 or newer".
+  string needs = 4;
 }
 
 message CheckUpdatesRequest {}
@@ -521,6 +536,9 @@ message CheckUpdatesResponse {
   // is being published; showing v0.1.0-rc.2". Empty when the newest release
   // on the box's channel verified, or the source isn't direct.
   string publishing_note = 10;
+  // unfit_product are products newer than the installed one that need
+  // another Base OS than the one running, newest first.
+  repeated UnfitProduct unfit_product = 11;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch

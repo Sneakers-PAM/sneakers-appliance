@@ -301,7 +301,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		s.o.Logger.Debug("osadmin: preferred Base OS line", log.F("base", base), log.F("version", baseOS[preferred].Version), log.F("kind", baseOS[preferred].Kind), log.F("roomForPatch", roomForPatch))
 	}
 	for i, e := range baseOS {
-		o := &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Bases: e.Bases, Commit: e.Commit,
+		o := &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Bases: e.Bases, Commit: e.Commit, ReleaseTag: s.releaseTagOf(e.File),
 			IncludesBaseWeb: e.Includes[updatepkg.UnitBaseWeb]}
 		if hasProduct && inst.HasRange() && !inst.InRange(e.Version) {
 			o.OutsideProductRange, o.ProductRange = true, inst.RangeText()
@@ -317,7 +317,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		if r, ok := e.Requires[updatepkg.UnitBaseOS]; ok {
 			need = r
 		}
-		out.BaseWeb = append(out.BaseWeb, &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Commit: e.Commit, Needs: need.Text(), Preferred: i == 0})
+		out.BaseWeb = append(out.BaseWeb, &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB, Version: e.Version, Kind: e.Kind, FileName: e.File, Size: e.Size, Commit: e.Commit, Needs: need.Text(), Preferred: i == 0, ReleaseTag: s.releaseTagOf(e.File)})
 	}
 	if e, need, ok := idx.UnfitBaseWeb(b); ok {
 		out.BaseWebWaits = "Base Web " + e.Version + " needs Base OS " + need.Text() + "."
@@ -329,7 +329,10 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		if h.HasRange() {
 			needs = h.RangeText()
 		}
-		out.Product = append(out.Product, &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, Version: e.Version, Kind: "full", FileName: e.File, Size: e.Size, Bases: e.Bases, Needs: needs, Preferred: i == 0})
+		out.Product = append(out.Product, &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, Version: e.Version, Kind: "full", FileName: e.File, Size: e.Size, Bases: e.Bases, Needs: needs, Preferred: i == 0, ReleaseTag: s.releaseTagOf(e.File)})
+	}
+	for _, e := range idx.UnfitProducts(b, installed) {
+		out.UnfitProduct = append(out.UnfitProduct, &osadminv1.UnfitProduct{Version: e.Version, FileName: e.File, ReleaseTag: s.releaseTagOf(e.File), Needs: e.NeedsBase()})
 	}
 	if e, ok := idx.ReinstallProduct(b, installed); ok {
 		out.ProductReinstall = &osadminv1.UnitOffer{Target: osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, Version: e.Version, Kind: "full", FileName: e.File, Size: e.Size, Bases: e.Bases,
