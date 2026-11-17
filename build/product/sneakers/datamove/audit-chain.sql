@@ -3,7 +3,9 @@
 -- sneakers-audit (internal/chain), in SQL: seq runs 1, 2, 3 with no gap, each
 -- prev_hash is the record before's hash, and each hash recomputes from the
 -- record's canonical form. Attribute keys sort by byte, as Go's sort.Strings
--- does, whatever the database's locale. It prints "ok", or the first bad seq,
+-- does, whatever the database's locale. A record with no attributes is stored
+-- as JSON null (sneakers-audit marshals a nil map), which hashes as no
+-- attributes, like {}. It prints "ok", or the first bad seq,
 -- which is all a failed move may show of the trail.
 WITH walked AS (
   SELECT
@@ -27,7 +29,7 @@ WITH walked AS (
       sensitive::text,
       coalesce((
         SELECT string_agg(a.key || '=' || a.value || ';', '' ORDER BY a.key COLLATE "C")
-        FROM jsonb_each_text(attributes) AS a
+        FROM jsonb_each_text(CASE WHEN jsonb_typeof(attributes) = 'object' THEN attributes ELSE '{}'::jsonb END) AS a
       ), ''),
       occurred_at,
       prev_hash

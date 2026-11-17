@@ -136,6 +136,12 @@ func chainSQL(n int) string {
 		if i%5 == 0 {
 			r.attrs = map[string]string{}
 		}
+		// The audit service stores a record with no attributes as JSON null,
+		// not {}: json.Marshal of a nil map is "null". The vault's first
+		// record of a box (vault.seed_builtins) is one.
+		if i%7 == 0 {
+			r.attrs = nil
+		}
 		sum := sha256.Sum256([]byte(canonical(r)))
 		r.hash = hex.EncodeToString(sum[:])
 		prev = r.hash
