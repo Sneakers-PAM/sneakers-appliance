@@ -481,6 +481,18 @@ unchanged.
   `Retry-After`), the box asks nothing more until the reset, and `mirror_status.rate_limited_until`
   says until when. `mirror_status.release_tag` is the release picked and `releases_checked_at`
   when the list was last read.
+- **The last releases, not only the newest.** Each release's index lists only its own files, so the
+  box reads the index of the newest finished release and of up to two earlier ones on its channel
+  (three in all; `Options.Upgrade.ReleaseHistory`) and merges them. A product or Base OS an earlier
+  release published, that fits this box, is offered too, and each offer says which release it comes
+  from (`UnitOffer.release_tag`); the file is fetched from that release, never the newest. A version
+  two releases list is offered once, from the newer one. Each index and its `SHA256SUMS` are verified
+  on their own; an earlier release that isn't finished or doesn't verify is skipped by itself and
+  named in the publishing note, and never hides the newest. A product that needs another Base OS than
+  the one running is not offered: `unfit_product` names it with the Base OS it needs first. A box that
+  runs an earlier release's code reads only the newest release's index, as before: this reaches boxes
+  from the release that carries it, and an older box uses the Base OS update, then the product, or
+  uploads the product it needs.
 - **The files.** The index is `https://github.com/Sneakers-PAM/sneakers-appliance/releases/download/<tag>/sneakers-product-index.json`
   and every `.bin` is under the same `releases/download/<tag>/`. When the API can't be read and
   no list is kept, the box takes the latest stable release's files instead
@@ -630,7 +642,7 @@ shell's product group follows the same header ([ssh-and-elevation.md](ssh-and-el
 window applies a staged product bundle first, then a staged base release. One apply or revert
 runs at a time, of the product or the base: another one while it's under way is refused
 (`UPGRADE_BUSY`), whoever asks (an owner, the window, a host name or email change), and the window
-waits for the next minute's tick. `direct` (off by
+waits for the next minute's tick. A new box's update source is `none` (upload only, the box never contacts GitHub) until an owner picks the built-in list or a mirror on the Updates page. `direct` (off by
 default) lets the box fetch from the release source when no mirror is set or the mirror fails. It's
 kept in `/var/lib/sneakers/osadmin-api/upgrade-policy.json`. **The history** of every fetch, stage, apply
 and revert, with its outcome and code, is in `/var/lib/sneakers/osadmin-api/upgrade-history.jsonl` and

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"io"
 	"slices"
+	"strings"
 
 	"golang.org/x/mod/semver"
 
@@ -356,4 +357,61 @@ func (idx Index) OfferBase(arch, channel, running string) []IndexEntry {
 	}
 	slices.SortStableFunc(out, func(a, b IndexEntry) int { return semver.Compare("v"+b.Version, "v"+a.Version) })
 	return slices.CompactFunc(out, func(a, b IndexEntry) bool { return a.Version == b.Version })
+}
+
+// Merge is idx with the entries of o it doesn't already have: an entry is
+// the same when its file is, so a version both list is the receiver's. The
+// receiver is the newer release's index, whose entries win.
+func (idx Index) Merge(o Index) Index {
+	out := Index{Format: max(idx.Format, o.Format)}
+	merge := func(a, b []IndexEntry) []IndexEntry {
+		seen := map[string]bool{}
+		var list []IndexEntry
+		for _, e := range a {
+			seen[e.File] = true
+			list = append(list, e)
+		}
+		for _, e := range b {
+			if !seen[e.File] {
+				seen[e.File] = true
+				list = append(list, e)
+			}
+		}
+		return list
+	}
+	out.Products = merge(idx.Products, o.Products)
+	out.BaseOS = merge(idx.BaseOS, o.BaseOS)
+	out.BaseWeb = merge(idx.BaseWeb, o.BaseWeb)
+	out.Base = merge(idx.Base, o.Base)
+	return out
+}
+
+// UnfitProducts is the products b would be offered, newer than installed,
+// but for the Base OS b runs not fitting them: what the Updates page names
+// with the Base OS each needs first. Newest first, one per version.
+func (idx Index) UnfitProducts(b Box, installed string) []IndexEntry {
+	var out []IndexEntry
+	for _, e := range idx.Products {
+		h := Header{Format: Format, Name: NameProduct, Version: e.Version, Arch: e.Arch, Kind: KindProduct, Bases: e.Bases, MinBase: e.MinBase, MaxBase: e.MaxBase, Channel: e.Channel}
+		switch {
+		case h.check() != nil, e.Arch != b.Arch, e.Channel != b.Channel, !NamedFor(h, e.File):
+		case h.AppliesTo(b.BaseOS) == nil:
+		case b.Channel == release.ChannelProduction && !b.Prerelease && semver.Prerelease("v"+e.Version) != "":
+		case installed != "" && semver.Compare("v"+e.Version, "v"+installed) <= 0:
+		default:
+			out = append(out, e)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b IndexEntry) int { return semver.Compare("v"+b.Version, "v"+a.Version) })
+	return slices.CompactFunc(out, func(a, b IndexEntry) bool { return a.Version == b.Version })
+}
+
+// NeedsBase is the Base OS versions an entry's bundle fits, in words: its
+// range, or the exact bases it names.
+func (e IndexEntry) NeedsBase() string {
+	h := Header{MinBase: e.MinBase, MaxBase: e.MaxBase}
+	if h.HasRange() {
+		return h.RangeText()
+	}
+	return strings.Join(e.Bases, ", ")
 }
