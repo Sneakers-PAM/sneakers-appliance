@@ -105,6 +105,7 @@ func (s *Server) setFeedTags(tags map[string]string, newest string) {
 // one whose signature doesn't verify.
 var (
 	errFeedRefused   = errors.New("refused")
+	errFeedMissing   = errors.New("the channel has no feed file yet")
 	errFeedSignature = errors.New("the signature doesn't verify with any trusted feed key")
 )
 
@@ -165,6 +166,10 @@ func (s *Server) resolveFeed(ctx context.Context, force bool, channel string) (i
 	hc = s.githubClient(hc)
 	url := base + "/" + channel + "/index.json"
 	body, etag, notModified, err := s.feedGet(ctx, hc, url, s.feed.etag, force)
+	if errors.Is(err, errFeedMissing) {
+		s.o.Logger.Info("osadmin: the update feed has no list for the channel yet", log.F("url", url), log.F("channel", channel))
+		return updatepkg.Index{}, " has no list for the " + channel + " channel yet"
+	}
 	if err != nil {
 		s.o.Logger.Info("osadmin: the update feed isn't reachable", log.F("url", base), log.F("error", err.Error()))
 		return updatepkg.Index{}, " isn't reachable"
@@ -220,6 +225,8 @@ func (s *Server) feedGet(ctx context.Context, hc *http.Client, url, etag string,
 	case http.StatusNotModified:
 		return nil, etag, true, nil
 	case http.StatusOK:
+	case http.StatusNotFound:
+		return nil, "", false, errFeedMissing
 	default:
 		return nil, "", false, fmt.Errorf("%s answered %s", url, resp.Status)
 	}
@@ -229,6 +236,11 @@ func (s *Server) feedGet(ctx context.Context, hc *http.Client, url, etag string,
 	}
 	if len(body) > maxFeedIndex {
 		return nil, "", false, fmt.Errorf("%s is over %d bytes", url, maxFeedIndex)
+	}
+	// A static host with no file at the path can answer 200 with its own HTML
+	// page; that is no list for the channel, never a list to verify.
+	if t := bytes.TrimSpace(body); len(t) > 0 && t[0] == '<' {
+		return nil, "", false, errFeedMissing
 	}
 	return body, resp.Header.Get("ETag"), false, nil
 }

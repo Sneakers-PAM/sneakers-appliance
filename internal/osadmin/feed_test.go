@@ -144,13 +144,13 @@ func TestAFeedThatIsDownShowsTheLastListTaken(t *testing.T) {
 			t.Fatalf("the note %q doesn't say %q", c.GetPublishingNote(), want)
 		}
 	}
-	// A missing feed file is the same.
+	// A missing feed file is the same, and says the channel has no list.
 	g.feedDown = false
 	g.mu.Lock()
 	delete(g.feed, "rc/index.json")
 	g.mu.Unlock()
 	c, err = checkNow(alice)
-	if err != nil || strings.Join(productNames(c), ",") != "0.2.0" || !strings.Contains(c.GetPublishingNote(), "isn't reachable") {
+	if err != nil || strings.Join(productNames(c), ",") != "0.2.0" || !strings.Contains(c.GetPublishingNote(), "no list for the rc channel yet") {
 		t.Fatalf("a missing feed: %v %v", c, err)
 	}
 	if st := mirrorStatus(t, alice); st.GetFeedState() != "stale" || st.GetFeedSequence() != 5 || st.GetFeedError() == "" || st.GetFeedTakenAt() == nil {
@@ -329,4 +329,49 @@ func githubReleases(t *testing.T, g *fakeGitHub, b *box) {
 	t.Helper()
 	g.release("v0.1.1", false, false)
 	g.publish(t, "v0.1.1", b.sign, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+}
+
+// A channel with no feed file yet is not a broken feed: the host answers 404,
+// or 200 with its HTML page, and either way the box says the channel has no
+// list, never that the feed is unreachable or its signature is wrong.
+func TestAChannelWithNoFeedYetHasNoListNotABrokenFeed(t *testing.T) {
+	for name, html := range map[string]bool{"a 404": false, "the host's HTML page": true} {
+		t.Run(name, func(t *testing.T) {
+			g := newFakeGitHub(t)
+			feedKey := testpki.ECDSA(t)
+			b, alice := feedBox(t, g, feedKey)
+			githubReleases(t, g, b)
+			g.feedHTML = html
+			builtin(t, alice, proto.String("stable"))
+			_, err := checkNow(alice)
+			if err == nil || !strings.Contains(err.Error(), "no list for the stable channel yet") || strings.Contains(err.Error(), "signature") || strings.Contains(err.Error(), "reachable") {
+				t.Fatalf("the answer: %v", err)
+			}
+			if st := mirrorStatus(t, alice); st.GetFeedState() != "none" || !strings.Contains(st.GetFeedError(), "no list for the stable channel yet") {
+				t.Fatalf("the feed's status: %v", st)
+			}
+			noGitHubIndex(t, g)
+		})
+	}
+}
+
+// An empty feed (valid, signed, no entries) is a list with nothing in it.
+func TestAnEmptySignedFeedIsAListWithNothingInIt(t *testing.T) {
+	g := newFakeGitHub(t)
+	feedKey := testpki.ECDSA(t)
+	b, alice := feedBox(t, g, feedKey)
+	idx := updatepkg.Index{Format: 2, Feed: &updatepkg.FeedMeta{Channel: "stable", Sequence: 1, GeneratedAt: boxNow.UTC().Format(time.RFC3339)}}
+	body, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.mu.Lock()
+	g.feed = map[string][]byte{"stable/index.json": body, "stable/index.json.sigstore.json": feedKey.BlobBundle(t, body)}
+	g.mu.Unlock()
+	_ = b
+	builtin(t, alice, proto.String("stable"))
+	c, err := checkNow(alice)
+	if err != nil || len(c.GetProduct()) != 0 || mirrorStatus(t, alice).GetFeedState() != "ok" {
+		t.Fatalf("the empty list: %v %v", c, err)
+	}
 }

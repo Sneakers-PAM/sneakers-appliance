@@ -40,6 +40,7 @@ type fakeGitHub struct {
 	failing  map[string]bool   // tags whose downloads answer 500
 	feed     map[string][]byte // the update feed's files, "<channel>/index.json" and its signatures
 	feedDown bool              // the feed answers 503
+	feedHTML bool              // a feed path with no file answers 200 with an HTML page, as the static host does
 	feedHits int
 	gets     []string // the downloads asked for, "<tag>/<file>"
 	api      *httptest.Server
@@ -88,6 +89,11 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 			}
 			body, ok := g.feed[strings.TrimPrefix(r.URL.Path, "/feed/")]
 			if !ok {
+				if g.feedHTML {
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte("<!doctype html>\n<html><head><title>Sneakers-PAM updates</title></head></html>\n"))
+					return
+				}
 				http.NotFound(w, r)
 				return
 			}
