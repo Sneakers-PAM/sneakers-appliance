@@ -185,8 +185,8 @@ k() {
     *"exec sneakers-postgres-0"*sneakers_hydra*) return 1 ;;
     *"exec sneakers-postgres-0"*) echo "realci_rows=1000,t=2" ;;
     *"logs sneakers-postgres-0"*) printf 'PostgreSQL init process complete\ndatabase system was shut down at x\n' ;;
-    *"get issuers.cert-manager.io"*) printf 'issuer/a\nissuer/b\n' ;;  // scrub:allow=fqdn -- a Kubernetes API group
-    *"get certificates.cert-manager.io"*) printf 'certificate/c%s\n' 1 2 3 4 5 6 7 8 9 ;;  // scrub:allow=fqdn -- a Kubernetes API group
+    *"get issuers.cert-manager.io"*) printf 'issuer/a\nissuer/b\n' ;;  # scrub:allow=fqdn -- a Kubernetes API group
+    *"get certificates.cert-manager.io"*) printf 'certificate/c%s\n' 1 2 3 4 5 6 7 8 9 ;;  # scrub:allow=fqdn -- a Kubernetes API group
     *"get secrets"*) printf 'secret/s%s-tls\nsecret/other\n' 1 2 3 4 5 6 7 8 9 ;;
     *"get pods"*) echo "p app=a order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;" ;;
   esac
