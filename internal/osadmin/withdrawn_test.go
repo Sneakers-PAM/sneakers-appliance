@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	osadminv1 "github.com/Sneakers-PAM/sneakers-appliance/gen/go/sneakers/appliance/osadmin/v1"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/testpki"
@@ -107,4 +108,87 @@ func TestAWithdrawnFileIsRefusedWithItsReason(t *testing.T) {
 	if _, err := alice.upgrade().FetchUpdate(context.Background(), connect.NewRequest(&osadminv1.FetchUpdateRequest{FileName: "sneakers-product-0.2.0-amd64.bin"})); err != nil {
 		t.Fatalf("the offered file: %v", err)
 	}
+}
+
+func stageConfirmed(br *browser, id string) (*osadminv1.StageUpdateResponse, error) {
+	r, err := br.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id, ConfirmWithdrawn: true}))
+	if err != nil {
+		return nil, err
+	}
+	return r.Msg, nil
+}
+
+// An uploaded .bin of a withdrawn release is not refused for good: staging it
+// stops with the reason and what to use, until the admin confirms it. The
+// refusal is audited, and the file stays held for the confirmation.
+func TestAnUploadOfAWithdrawnReleaseNeedsConfirmation(t *testing.T) {
+	g, b, alice := releases(t)
+	markWithdrawn(t, g, "v0.2.0", b.sign, updatepkg.Withdrawn{Kind: "product", Version: "0.1.1", Reason: "an update from 0.1.0 fails", Use: "0.2.0"})
+	if _, err := checkNow(alice); err != nil {
+		t.Fatal(err)
+	}
+	id, code := alice.upload(t, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	if code != 200 || id == "" {
+		t.Fatalf("upload %d %q", code, id)
+	}
+	err := stage(alice, id)
+	symbolIn(t, err, connect.CodeFailedPrecondition, "UPGRADE_WITHDRAWN_UPLOAD")
+	if err == nil || !strings.Contains(err.Error(), "an update from 0.1.0 fails") || !strings.Contains(err.Error(), "0.2.0") {
+		t.Fatalf("the warning doesn't say why and what to use: %v", err)
+	}
+	if e := lastEntry(t, b.log, "upgrade.stage"); e.Outcome == "ok" || e.Detail["version"] != "0.1.1" {
+		t.Fatalf("the refused stage: %+v", e)
+	}
+	// Still held: the confirmation stages the same file, with an audit entry
+	// of its own.
+	out, err := stageConfirmed(alice, id)
+	if err != nil || out.GetPackage().GetVersion() != "0.1.1" {
+		t.Fatalf("the confirmed stage: %v %v", out, err)
+	}
+	if e := lastEntry(t, b.log, "upgrade.withdrawn-confirmed"); e.Detail["version"] != "0.1.1" || e.Detail["reason"] != "an update from 0.1.0 fails" || e.Detail["use"] != "0.2.0" {
+		t.Fatalf("the confirmation's audit entry: %+v", e)
+	}
+}
+
+// A release the list does not withdraw stages as before, with no notice.
+func TestAnUploadOfAListedReleaseStagesWithoutAWarning(t *testing.T) {
+	g, b, alice := releases(t)
+	markWithdrawn(t, g, "v0.2.0", b.sign, updatepkg.Withdrawn{Kind: "product", Version: "0.1.1", Reason: "an update from 0.1.0 fails", Use: "0.2.0"})
+	if _, err := checkNow(alice); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	out, err := alice.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id}))
+	if err != nil || out.Msg.GetPackage().GetNotice() != "" {
+		t.Fatalf("the stage: %v %v", out, err)
+	}
+}
+
+// A box with no list (never checked, nothing kept) cannot tell: the upload
+// stages, and the answer says the check could not be made.
+func TestAnUploadWithNoKnownListStagesWithANotice(t *testing.T) {
+	b := newBox(t, false)
+	alice := b.browser()
+	alice.signIn("alice")
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	out, err := alice.upgrade().StageUpdate(context.Background(), connect.NewRequest(&osadminv1.StageUpdateRequest{UploadId: id}))
+	if err != nil || !strings.Contains(out.Msg.GetPackage().GetNotice(), "no update list") {
+		t.Fatalf("the stage: %v %v", out, err)
+	}
+}
+
+// The withdrawn list of the update feed warns on an upload as the release
+// index's does.
+func TestTheFeedsWithdrawnListWarnsOnAnUpload(t *testing.T) {
+	g := newFakeGitHub(t)
+	feedKey := testpki.ECDSA(t)
+	b, alice := feedBox(t, g, feedKey)
+	g.publish(t, "v0.2.0", b.sign, productBin(t, b.sign, b.enc, "0.2.0", "0.1.0"))
+	serveFeed(g, feedKey, t, feedIndex(t, b, 5, boxNow, []updatepkg.Withdrawn{{Kind: "product", Version: "0.1.1", Reason: "an update from 0.1.0 fails", Use: "0.2.0"}}, [2]string{"0.2.0", "v0.2.0"}))
+	builtin(t, alice, proto.String("rc"))
+	if _, err := checkNow(alice); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := alice.upload(t, productBin(t, b.sign, b.enc, "0.1.1", "0.1.0"))
+	symbolIn(t, stage(alice, id), connect.CodeFailedPrecondition, "UPGRADE_WITHDRAWN_UPLOAD")
 }

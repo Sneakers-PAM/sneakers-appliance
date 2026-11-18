@@ -531,8 +531,14 @@ unchanged.
   product, Base OS or Base Web version, why, and the version to use instead. The box collects the lists of
   every index it reads. A marked file is not offered and is never the preferred line; the check answers it
   in `withdrawn` (version, file, reason, use, release), the Updates page shows it apart, and `FetchUpdate`
-  of its file name is refused with `UPGRADE_WITHDRAWN`, the reason and the version to use. An owner's own
-  upload of the file is not blocked. A marker naming a version no index lists changes nothing. A box on an
+  of its file name is refused with `UPGRADE_WITHDRAWN`, the reason and the version to use. An uploaded
+  .bin of a withdrawn release is not refused for good, so a deliberate rollback stays possible: staging it
+  stops with `UPGRADE_WITHDRAWN_UPLOAD` (the reason and the version to use), the Updates page shows that
+  warning, and the file stays held until the admin confirms (`confirm_withdrawn` on `StageUpdate`); the
+  stop is in the audit log, and so is the confirmation (`upgrade.withdrawn-confirmed`, with the version,
+  reason and use). The list comes from the last check or, after a restart, the update feed's kept list;
+  a box holding none cannot tell, stages the upload and says in the stage's `notice` that withdrawn
+  releases could not be checked. A marker naming a version no index lists changes nothing. A box on an
   earlier release (0.1.0-rc.9 or older) cannot read the list: it takes it only after it updates to a release
   that has the reader, and until then only the release notes warn it.
 - **The files.** The index is `https://github.com/Sneakers-PAM/sneakers-appliance/releases/download/<tag>/sneakers-product-index.json`

@@ -279,6 +279,9 @@ message UpdatePackage {
   // includes_base_web is the Base Web a Base OS release ships with (spec 7,
   // Section 4.4); empty for a release from before the rule.
   string includes_base_web = 14;
+  // notice is a note on the stage: set when an uploaded file could not be
+  // checked against the withdrawn list because the box holds none.
+  string notice = 15;
 }
 
 // HeldUpload is a received or fetched .bin that hasn't been staged or
@@ -640,6 +643,11 @@ message StageUpdateRequest {
   // installed product bundle's base range doesn't include it; without it
   // that stage is refused with UPGRADE_PRODUCT_BASE.
   bool override_product_range = 2;
+  // confirm_withdrawn stages an uploaded .bin of a release the signed list
+  // withdraws; without it that stage stops with UPGRADE_WITHDRAWN_UPLOAD,
+  // whose message gives the reason and the version to use. The confirmation
+  // is audited.
+  bool confirm_withdrawn = 3;
 }
 
 message StageUpdateResponse {
