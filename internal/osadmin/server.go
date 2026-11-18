@@ -252,6 +252,7 @@ type Server struct {
 	mirror                       mirrorCheck
 	emailTest                    emailProof
 	github                       githubState
+	feed                         feedState
 	checks                       checks
 	progress                     progress
 	ready                        readiness

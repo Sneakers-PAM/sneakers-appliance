@@ -386,6 +386,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Logger:       lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
+			// The update feed is read once a feed key is pinned in the build
+			// (none yet: FeedKeys is empty and the feed is off).
+			FeedURL: osadmin.DefaultFeedURL,
 			// The update key is read from the running UKI on each use and
 			// never written to disk; sneakers-upgraded takes this over
 			// when it lands (the upgrades design).

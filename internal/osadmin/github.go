@@ -162,6 +162,15 @@ func (s *Server) forgetGitHub() {
 // (githubState.tag) so a later fetch of one of idx's files takes the same
 // release.
 func (s *Server) resolveDirectIndex(ctx context.Context, idxSrc source, force bool) (idx updatepkg.Index, note string, err error) {
+	// With a feed in the build the built-in source is the feed, never
+	// GitHub's releases; those are a source the admin picks.
+	if s.useFeed() {
+		return s.resolveFeedOnly(ctx, force)
+	}
+	return s.resolveReleasesIndex(ctx, idxSrc, force)
+}
+
+func (s *Server) resolveReleasesIndex(ctx context.Context, idxSrc source, force bool) (idx updatepkg.Index, note string, err error) {
 	p := s.policy()
 	repo, _, api := s.releaseURLs(p)
 	channel, _ := s.releaseChannel(p)

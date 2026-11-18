@@ -5,7 +5,7 @@
 # guard.sh passes a v tag on main's history and a lab dispatch, and refuses a
 # tag off main, a malformed tag, and a production tag without the committed
 # production key record or the pinned sneakers-release and sneakers-web
-# commits. It runs in this
+# commits, and a production tag without the update feed's public key. It runs in this
 # repository's own history: the merge base with origin/main is on main, and
 # a branch commit ahead of it isn't. Needs a full clone (fetch-depth 0).
 set -euo pipefail
@@ -17,6 +17,8 @@ main_ref="${MAIN_REF:-origin/main}"
 on_main="$(git -C "$root" rev-parse "$main_ref")"
 off_main="$(git -C "$root" rev-parse HEAD)"
 echo "PK 00" > "$work/fingerprints.txt"
+key() { printf -- '-----BEGIN PUBLIC KEY-----\nAAAA\n-----END PUBLIC KEY-----\n' > "$work/feed.pub"; }
+key
 sha_release=1111111111111111111111111111111111111111 sha_web=2222222222222222222222222222222222222222
 pins() { # release_repo release_commit web_repo web_commit
   printf 'SNEAKERS_RELEASE_REPO=%s\nSNEAKERS_RELEASE_COMMIT=%s\nSNEAKERS_WEB_REPO=%s\nSNEAKERS_WEB_COMMIT=%s\nKIT_MIN=0.0.0-0\n' "$@" > "$work/pins.env"
@@ -25,7 +27,7 @@ pins Sneakers-PAM/sneakers-release "$sha_release" Sneakers-PAM/sneakers-web "$sh
 
 guard() { # event ref sha [input]
   ( cd "$root" && EVENT="$1" REF_NAME="$2" COMMIT="$3" INPUT_VERSION="${4:-}" MAIN_REF="$main_ref" \
-    FINGERPRINTS="$work/fingerprints.txt" PINS_ENV="$work/pins.env" GITHUB_OUTPUT="$work/out" \
+    FINGERPRINTS="$work/fingerprints.txt" PINS_ENV="$work/pins.env" FEED_KEY="$work/feed.pub" GITHUB_OUTPUT="$work/out" \
     bash "$here/guard.sh" )
 }
 expect_ok() { : > "$work/out"; guard "$@" >/dev/null 2>&1 || { echo "FAIL: refused: $*" >&2; exit 1; }; }
@@ -49,6 +51,16 @@ if [ "$off_main" != "$on_main" ] && ! git -C "$root" merge-base --is-ancestor "$
 else
   echo "guard_test: HEAD is on main; the off-main case needs a branch commit (skipped)"
 fi
+# No feed key pinned: a production tag is refused (the built-in source is the
+# update feed, which a box without a key can't read); a lab dispatch isn't.
+rm "$work/feed.pub"
+expect_refused "feed.pub" push v0.1.0 "$on_main"
+: > "$work/feed.pub"
+expect_refused "feed.pub" push v0.1.0 "$on_main"
+echo "not a key" > "$work/feed.pub"
+expect_refused "feed.pub" push v0.1.0 "$on_main"
+expect_ok workflow_dispatch main "$off_main" 0.0.1
+key
 expect_refused "isn't a release tag" push v0.1 "$on_main"
 expect_refused "isn't a release tag" push release-1 "$on_main"
 expect_refused "isn't a lab version" workflow_dispatch main "$on_main" '0.0.1;x'

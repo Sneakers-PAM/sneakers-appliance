@@ -38,6 +38,9 @@ const (
 	SourceBuiltIn = "builtin"
 	SourceManual  = "manual"
 	SourceNone    = "none"
+	// SourceGitHub is GitHub's releases, picked by the admin; the built-in
+	// source of a build with an update feed is the feed.
+	SourceGitHub = "github"
 )
 
 // DefaultPatchMinFree is the free memory below which a box prefers a full
@@ -49,7 +52,7 @@ const DefaultPatchMinFree = 600 << 20
 // list, neither none.
 func effectiveSource(p Policy, directAvailable bool) string {
 	switch p.Source {
-	case SourceBuiltIn, SourceManual, SourceNone:
+	case SourceBuiltIn, SourceManual, SourceNone, SourceGitHub:
 		return p.Source
 	}
 	switch {

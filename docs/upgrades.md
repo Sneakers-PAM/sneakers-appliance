@@ -448,6 +448,39 @@ OS, so no code from a Base Web ever runs on the box; switching one changes the p
   pages the installed Base Web doesn't fit, the box serves the new root's built-in pages until a
   fitting Base Web is installed.
 
+## The update feed
+
+The built-in source of a production box is the project's update feed: signed static files on
+`https://updates.sneakers-pam.com`, `<channel>/index.json` and its signature `index.json.sigstore.json`
+(and `index.json.sigstore.2.json` during a key rotation), the channel being the one the box follows
+([the GitHub source](#the-github-source)). The index is the format a release's own index has, with a
+`feed` section (`channel`, `sequence`, `generated_at`), a `tag` on every entry (the GitHub release its
+file is downloaded from, as ever, verified when staged), a `docs` link and the `withdrawn` list. The box
+never turns to GitHub's releases for the list on its own: that is a source the admin picks (below).
+
+- **Trust.** The host is not trusted: the index must be signed by a feed key pinned in the build
+  (`UpgradeOptions.FeedKeys`, each with an optional expiry); the release key doesn't sign it. The release
+  workflow refuses a production tag without `keys/production/feed.pub`, so a shipped build has a feed key.
+  A build with no feed (a lab or development build) uses the GitHub list as its built-in source.
+- **Sequence.** The box keeps the highest `sequence` it has taken for each channel and refuses a lower
+  one (a replayed feed could undo a withdrawal) and one more than 1000 above it (a forged one could lock
+  the real feed out); `generated_at` may not be more than a day ahead of the box's clock.
+- **When it can't be taken.** The feed unreachable (no answer, an error, a missing file), a signature that
+  doesn't verify, or an index that is refused (a backwards or far-ahead sequence, a wrong channel, an
+  entry with no release): the box shows the cause and the last list it verified, labelled with its age and
+  sequence ("showing the last list taken 3 hours ago (sequence 17), which may be out of date"), so the
+  Updates page keeps working; the list kept is checked against the feed keys again each time it is shown.
+  A bad signature also gets a warning in the log and an `upgrade.feed` entry in the audit log, and never
+  replaces the list kept. With no list ever taken (a first boot with the feed host down) the check says
+  "there is no update list yet" and points at an upload or a mirror. The status (`mirror_status`: `feed_url`,
+  `feed_state` ok, stale or none, `feed_error`, `feed_sequence`, `feed_taken_at`) shows the same.
+- **Cache.** An answer is used for 5 minutes; Check now asks again at once, with the ETag.
+- **GitHub, a mirror, none.** The admin can pick `github` (GitHub's releases, as before, no feed), a
+  mirror (`manual`) or `none` (upload only) as the source; they are unchanged, and an upload is never
+  affected. The withdrawn list therefore can't be bypassed by a fallback.
+- **Older boxes.** A box on 0.1.0-rc.9 or older doesn't read the feed; it reads GitHub's newest release
+  index as before.
+
 ## The GitHub source
 
 A production box's built-in source is the project's GitHub Releases
