@@ -465,7 +465,7 @@ never turns to GitHub's releases for the list on its own: that is a source the a
 - **Sequence.** The box keeps the highest `sequence` it has taken for each channel and refuses a lower
   one (a replayed feed could undo a withdrawal) and one more than 1000 above it (a forged one could lock
   the real feed out); `generated_at` may not be more than a day ahead of the box's clock.
-- **When it can't be taken.** The feed unreachable (no answer, an error, a missing file), a signature that
+- **When it can't be taken.** The feed unreachable (no answer or an error), a channel with no feed file yet (a 404, or the static host's HTML page: the cause is "has no list for the rc channel yet", never a bad signature), a signature that
   doesn't verify, or an index that is refused (a backwards or far-ahead sequence, a wrong channel, an
   entry with no release): the box shows the cause and the last list it verified, labelled with its age and
   sequence ("showing the last list taken 3 hours ago (sequence 17), which may be out of date"), so the
