@@ -47,6 +47,17 @@ type Index struct {
 	// install, each with why and what to use instead. The index is signed,
 	// so the list is too; a box from before it ignores the field.
 	Withdrawn []Withdrawn `json:"withdrawn,omitempty"`
+	// Feed is the update feed's own metadata; a release's index has none.
+	Feed *FeedMeta `json:"feed,omitempty"`
+}
+
+// FeedMeta describes an update feed's index.
+type FeedMeta struct {
+	// Channel is the feed's channel, rc or stable.
+	Channel string `json:"channel"`
+	// Sequence only goes up: a box refuses a lower one.
+	Sequence    int64  `json:"sequence"`
+	GeneratedAt string `json:"generated_at"`
 }
 
 // Withdrawn is a release's file a box is told not to install.
@@ -114,6 +125,11 @@ type IndexEntry struct {
 	BaseRootSHA256 string `json:"base_root_sha256,omitempty"`
 	File           string `json:"file"`
 	Size           int64  `json:"size"`
+	// Tag is the release the file is published in, and Docs the page for
+	// its version, in an update feed's index; a release's own index has
+	// neither.
+	Tag  string `json:"tag,omitempty"`
+	Docs string `json:"docs,omitempty"`
 }
 
 // EntryOf is h's index entry for a sealed file of size bytes.

@@ -1,0 +1,196 @@
+name: Update Feed
+# Builds the unsigned update feed index (docs/release.md, "The update feed
+# publisher") for the rc and stable channels from the most recent published
+# releases and release/withdrawn.yaml, and proposes it to the website repo
+# as a pull request. It holds no signing key: the website repo's
+# feed-signing environment signs the index after that pull request is
+# reviewed and merged.
+#
+# Without the WEBSITE_PR_TOKEN secret nothing is proposed: the index is
+# uploaded as a workflow artifact and the job summary lists the manual steps.
+on:
+  release:
+    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - 'release/withdrawn.yaml'
+  workflow_dispatch:
+    inputs:
+      first_feed:
+        description: 'No feed is published yet for a channel: start its sequence at 1'
+        type: boolean
+        default: false
+      sequence:
+        description: 'Use this sequence instead of the published feed sequence plus one'
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: update-feed
+  cancel-in-progress: false
+env:
+  WEBSITE_REPO: Sneakers-PAM/website
+  FEED_DIR: apps/updates/feed
+jobs:
+  feed:
+    name: 📡 Build the ${{ matrix.channel }} feed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        channel: [rc, stable]
+    env:
+      CHANNEL: ${{ matrix.channel }}
+      GH_TOKEN: ${{ github.token }}
+      WEBSITE_PR_TOKEN: ${{ secrets.WEBSITE_PR_TOKEN }}
+      FIRST_FEED: ${{ inputs.first_feed }}
+      SEQUENCE_INPUT: ${{ inputs.sequence }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build sneakers-artifact
+        run: go build -o "$RUNNER_TEMP/sneakers-artifact" ./cmd/sneakers-artifact
+
+      # The most recent published releases of the channel: rc takes the rc
+      # and the stable tags, stable only the stable tags. A release in the
+      # list that lacks one of the four files stops the run: a feed built
+      # without it would drop a release boxes can install.
+      - name: Download the releases
+        run: |
+          case "$CHANNEL" in
+            rc) re='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' ;;
+            *) re='^v[0-9]+\.[0-9]+\.[0-9]+$' ;;
+          esac
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,isDraft \
+            --jq ".[] | select(.isDraft | not) | .tagName | select(test(\"$re\"))" | head -n 10 > "$RUNNER_TEMP/tags"
+          if [ ! -s "$RUNNER_TEMP/tags" ]; then
+            echo "no published $CHANNEL release yet: no $CHANNEL feed to build"
+            echo "### $CHANNEL feed: no published release yet, nothing built" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          mkdir -p "$RUNNER_TEMP/releases"
+          while read -r tag; do
+            echo "downloading $tag"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/releases/$tag" \
+              --pattern sneakers-product-index.json --pattern sneakers-product-index.json.sigstore.json \
+              --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
+            for f in sneakers-product-index.json sneakers-product-index.json.sigstore.json SHA256SUMS SHA256SUMS.sigstore.json; do
+              [ -s "$RUNNER_TEMP/releases/$tag/$f" ] || { echo "::error::release $tag has no $f; fix or complete that release first" >&2; exit 1; }
+            done
+          done < "$RUNNER_TEMP/tags"
+
+      # The sequence only goes up, so the feed published before is read, not
+      # guessed: from the website repo, or from the dispatch inputs.
+      - name: Read the published feed
+        if: env.skip != 'true'
+        run: |
+          path="$FEED_DIR/$CHANNEL/index.json"
+          if [ -n "$SEQUENCE_INPUT" ]; then
+            echo "using the sequence $SEQUENCE_INPUT given by hand"
+            echo "seqflag=--sequence $SEQUENCE_INPUT" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          token="${WEBSITE_PR_TOKEN:-$GH_TOKEN}"
+          if GH_TOKEN="$token" gh api -H 'Accept: application/vnd.github.raw+json' \
+              "repos/$WEBSITE_REPO/contents/$path" > "$RUNNER_TEMP/previous.json" 2> "$RUNNER_TEMP/previous.err"; then
+            echo "published feed read: sequence $(jq -r '.feed.sequence' "$RUNNER_TEMP/previous.json")"
+            echo "seqflag=--previous $RUNNER_TEMP/previous.json" >> "$GITHUB_ENV"
+          elif [ "$FIRST_FEED" = "true" ] && grep -q 'Not Found' "$RUNNER_TEMP/previous.err" && [ -n "$WEBSITE_PR_TOKEN" ]; then
+            echo "no $path in the website repo and first_feed is set: the sequence starts at 1"
+            echo "seqflag=--sequence 1" >> "$GITHUB_ENV"
+          else
+            cat "$RUNNER_TEMP/previous.err" >&2
+            echo "::error::the published $CHANNEL feed ($WEBSITE_REPO $path) can't be read, so its sequence is unknown. Set the WEBSITE_PR_TOKEN secret, or dispatch with the sequence input (the published sequence plus one), or with first_feed when no feed is published yet." >&2
+            exit 1
+          fi
+
+      - name: Build the feed index
+        if: env.skip != 'true'
+        run: |
+          # shellcheck disable=SC2086 # seqflag is a flag and its value
+          "$RUNNER_TEMP/sneakers-artifact" feed-index --channel "$CHANNEL" \
+            --release-key keys/production/cosign.pub --releases "$RUNNER_TEMP/releases" \
+            --withdrawn release/withdrawn.yaml $seqflag --out "$RUNNER_TEMP/index.json"
+          jq -r '.feed | "\(.channel) feed, sequence \(.sequence), \(.generated_at)"' "$RUNNER_TEMP/index.json"
+
+      - name: Compare with the published feed
+        if: env.skip != 'true'
+        run: |
+          norm='del(.feed)'
+          if [ -s "$RUNNER_TEMP/previous.json" ] && [ "$(jq -S "$norm" "$RUNNER_TEMP/previous.json")" = "$(jq -S "$norm" "$RUNNER_TEMP/index.json")" ]; then
+            echo "the $CHANNEL feed already lists these releases and this withdrawn list: nothing to propose"
+            echo "### $CHANNEL feed: unchanged, nothing proposed" >> "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write the pull request body
+        if: env.skip != 'true'
+        run: |
+          {
+            echo "The unsigned $CHANNEL update feed index, built by the Update Feed workflow of $GITHUB_REPOSITORY (run $GITHUB_RUN_ID)."
+            echo
+            echo "Releases:"
+            jq -r '[.products[], .baseOS[]?, .baseWeb[]?, .base[]?] | map(.tag) | unique | .[] | "- " + .' "$RUNNER_TEMP/index.json"
+            echo
+            echo "Withdrawn changes:"
+            old='[]'
+            [ -s "$RUNNER_TEMP/previous.json" ] && old="$(jq -c '.withdrawn // []' "$RUNNER_TEMP/previous.json")"
+            jq -r --argjson old "$old" '
+              (.withdrawn // []) as $new
+              | ([$new[] | select(. as $w | $old | index($w) | not) | "- withdrawn: \(.kind) \(.version): \(.reason)"]
+                 + [$old[] | select(. as $w | $new | index($w) | not) | "- no longer withdrawn: \(.kind) \(.version)"])
+              | if length == 0 then ["- none"] else . end | .[]' "$RUNNER_TEMP/index.json"
+            echo
+            echo "Merge this, then run the feed-signing environment in the website repo to sign it."
+          } > "$RUNNER_TEMP/body.md"
+          cat "$RUNNER_TEMP/body.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Propose the index to the website repo
+        if: env.skip != 'true' && env.WEBSITE_PR_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_PR_TOKEN }}
+        run: |
+          seq="$(jq -r '.feed.sequence' "$RUNNER_TEMP/index.json")"
+          branch="feed/$CHANNEL-$seq"
+          title="feat(updates): feed $CHANNEL sequence $seq"
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/$WEBSITE_REPO.git" "$RUNNER_TEMP/website"
+          cd "$RUNNER_TEMP/website"
+          git checkout -B "$branch"
+          mkdir -p "$FEED_DIR/$CHANNEL"
+          cp "$RUNNER_TEMP/index.json" "$FEED_DIR/$CHANNEL/index.json"
+          git add "$FEED_DIR/$CHANNEL/index.json"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -s -m "$title"
+          git push --force origin "$branch"
+          if gh pr view "$branch" --repo "$WEBSITE_REPO" --json number >/dev/null 2>&1; then
+            gh pr edit "$branch" --repo "$WEBSITE_REPO" --title "$title" --body-file "$RUNNER_TEMP/body.md"
+            echo "updated the pull request for $branch" >> "$GITHUB_STEP_SUMMARY"
+          else
+            url="$(gh pr create --repo "$WEBSITE_REPO" --base main --head "$branch" --title "$title" --body-file "$RUNNER_TEMP/body.md")"
+            echo "opened $url" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the index
+        if: env.skip != 'true' && env.WEBSITE_PR_TOKEN == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: feed-${{ matrix.channel }}
+          path: ${{ runner.temp }}/index.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Manual steps
+        if: env.skip != 'true' && env.WEBSITE_PR_TOKEN == ''
+        run: |
+          {
+            echo "### $CHANNEL feed: no WEBSITE_PR_TOKEN secret, nothing proposed"
+            echo "1. Download the \`feed-$CHANNEL\` artifact of this run."
+            echo "2. In $WEBSITE_REPO, copy it to \`$FEED_DIR/$CHANNEL/index.json\` on a branch \`feed/$CHANNEL-$(jq -r '.feed.sequence' "$RUNNER_TEMP/index.json")\`."
+            echo "3. Open a pull request titled \`feat(updates): feed $CHANNEL sequence $(jq -r '.feed.sequence' "$RUNNER_TEMP/index.json")\`, merge it, then run the feed-signing environment."
+          } >> "$GITHUB_STEP_SUMMARY"
