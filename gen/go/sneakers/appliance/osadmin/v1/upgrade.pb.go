@@ -696,8 +696,11 @@ type UpdatePackage struct {
 	// includes_base_web is the Base Web a Base OS release ships with (spec 7,
 	// Section 4.4); empty for a release from before the rule.
 	IncludesBaseWeb string `protobuf:"bytes,14,opt,name=includes_base_web,json=includesBaseWeb,proto3" json:"includes_base_web,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// notice is a note on the stage: set when an uploaded file could not be
+	// checked against the withdrawn list because the box holds none.
+	Notice        string `protobuf:"bytes,15,opt,name=notice,proto3" json:"notice,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdatePackage) Reset() {
@@ -824,6 +827,13 @@ func (x *UpdatePackage) GetSource() string {
 func (x *UpdatePackage) GetIncludesBaseWeb() string {
 	if x != nil {
 		return x.IncludesBaseWeb
+	}
+	return ""
+}
+
+func (x *UpdatePackage) GetNotice() string {
+	if x != nil {
+		return x.Notice
 	}
 	return ""
 }
@@ -2610,8 +2620,13 @@ type StageUpdateRequest struct {
 	// installed product bundle's base range doesn't include it; without it
 	// that stage is refused with UPGRADE_PRODUCT_BASE.
 	OverrideProductRange bool `protobuf:"varint,2,opt,name=override_product_range,json=overrideProductRange,proto3" json:"override_product_range,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// confirm_withdrawn stages an uploaded .bin of a release the signed list
+	// withdraws; without it that stage stops with UPGRADE_WITHDRAWN_UPLOAD,
+	// whose message gives the reason and the version to use. The confirmation
+	// is audited.
+	ConfirmWithdrawn bool `protobuf:"varint,3,opt,name=confirm_withdrawn,json=confirmWithdrawn,proto3" json:"confirm_withdrawn,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StageUpdateRequest) Reset() {
@@ -2654,6 +2669,13 @@ func (x *StageUpdateRequest) GetUploadId() string {
 func (x *StageUpdateRequest) GetOverrideProductRange() bool {
 	if x != nil {
 		return x.OverrideProductRange
+	}
+	return false
+}
+
+func (x *StageUpdateRequest) GetConfirmWithdrawn() bool {
+	if x != nil {
+		return x.ConfirmWithdrawn
 	}
 	return false
 }
@@ -3511,7 +3533,7 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\x04size\x18\x06 \x01(\x03R\x04size\x12\x16\n" +
 	"\x06source\x18\a \x01(\tR\x06source\x12\x19\n" +
 	"\bmin_base\x18\b \x01(\tR\aminBase\x12\x19\n" +
-	"\bmax_base\x18\t \x01(\tR\amaxBase\"\xa4\x03\n" +
+	"\bmax_base\x18\t \x01(\tR\amaxBase\"\xbc\x03\n" +
 	"\rUpdatePackage\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12\x12\n" +
@@ -3527,7 +3549,8 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\bmax_base\x18\v \x01(\tR\amaxBase\x12\x19\n" +
 	"\bfull_bin\x18\f \x01(\tR\afullBin\x12\x16\n" +
 	"\x06source\x18\r \x01(\tR\x06source\x12*\n" +
-	"\x11includes_base_web\x18\x0e \x01(\tR\x0fincludesBaseWeb\"\xaf\x01\n" +
+	"\x11includes_base_web\x18\x0e \x01(\tR\x0fincludesBaseWeb\x12\x16\n" +
+	"\x06notice\x18\x0f \x01(\tR\x06notice\"\xaf\x01\n" +
 	"\n" +
 	"HeldUpload\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x1b\n" +
@@ -3709,10 +3732,11 @@ const file_sneakers_appliance_osadmin_v1_upgrade_proto_rawDesc = "" +
 	"\tfile_name\x18\x01 \x01(\tR\bfileName\"J\n" +
 	"\x13FetchUpdateResponse\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x12\x16\n" +
-	"\x06source\x18\x02 \x01(\tR\x06source\"g\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\"\x94\x01\n" +
 	"\x12StageUpdateRequest\x12\x1b\n" +
 	"\tupload_id\x18\x01 \x01(\tR\buploadId\x124\n" +
-	"\x16override_product_range\x18\x02 \x01(\bR\x14overrideProductRange\"q\n" +
+	"\x16override_product_range\x18\x02 \x01(\bR\x14overrideProductRange\x12+\n" +
+	"\x11confirm_withdrawn\x18\x03 \x01(\bR\x10confirmWithdrawn\"q\n" +
 	"\x13StageUpdateResponse\x12F\n" +
 	"\apackage\x18\x01 \x01(\v2,.sneakers.appliance.osadmin.v1.UpdatePackageR\apackage\x12\x12\n" +
 	"\x04slot\x18\x02 \x01(\tR\x04slot\"h\n" +

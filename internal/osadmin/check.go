@@ -85,6 +85,9 @@ type checks struct {
 	mu    sync.Mutex
 	last  *osadminv1.CheckUpdatesResponse
 	fetch *osadminv1.FetchProgress
+	// withdrawn is the signed index's whole withdrawn list at the last check,
+	// whether or not its releases were offered.
+	withdrawn []updatepkg.Withdrawn
 }
 
 func (s *Server) lastCheck() *osadminv1.CheckUpdatesResponse {
@@ -261,6 +264,7 @@ func (h *upgradeSvc) CheckUpdates(ctx context.Context, _ *connect.Request[osadmi
 		out.Source, out.Url, out.CheckedAt, out.PublishingNote = src.name, src.base, timestamppb.New(s.o.Clock.Now()), note
 		s.checks.mu.Lock()
 		s.checks.last = proto.CloneOf(out)
+		s.checks.withdrawn = append([]updatepkg.Withdrawn(nil), idx.Withdrawn...)
 		s.checks.mu.Unlock()
 		s.o.Logger.Info("osadmin: updates checked", log.F("source", src.name), log.F("format", out.GetIndexFormat()), log.F("baseOS", len(out.GetBaseOs())), log.F("baseWeb", len(out.GetBaseWeb())), log.F("product", len(out.GetProduct())))
 		return connect.NewResponse(out), nil
@@ -407,4 +411,27 @@ func (s *Server) baseOSNote(staged, includes string) string {
 		return ""
 	}
 	return webAfterBaseOS(web, staged, includes)
+}
+
+// withdrawnKnown looks for a release in the withdrawn list this box holds:
+// the signed index of the last check, or, when none was made since the box
+// started, the update feed's list it kept. known is false when the box holds
+// no list at all, so it cannot tell.
+func (s *Server) withdrawnKnown(kind, version string) (w updatepkg.Withdrawn, withdrawn, known bool) {
+	s.checks.mu.Lock()
+	if s.checks.last != nil {
+		idx := updatepkg.Index{Withdrawn: s.checks.withdrawn}
+		s.checks.mu.Unlock()
+		w, withdrawn = idx.WithdrawnFor(kind, version)
+		return w, withdrawn, true
+	}
+	s.checks.mu.Unlock()
+	if s.useFeed() {
+		channel, _ := s.releaseChannel(s.policy())
+		if idx, _, _, _, _, ok := s.loadFeedCache(channel, s.o.Clock.Now()); ok {
+			w, withdrawn = idx.WithdrawnFor(kind, version)
+			return w, withdrawn, true
+		}
+	}
+	return updatepkg.Withdrawn{}, false, false
 }

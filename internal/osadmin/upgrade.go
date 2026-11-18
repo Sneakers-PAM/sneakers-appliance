@@ -908,7 +908,7 @@ func (h *upgradeSvc) StageUpdate(ctx context.Context, r *connect.Request[osadmin
 	if override {
 		c.noteID("uploaded file", "upload", id, "override", "product-range")
 	}
-	pkg, removed, err := h.s.stage(ctx, id, override)
+	pkg, removed, err := h.s.stage(ctx, id, override, r.Msg.GetConfirmWithdrawn())
 	version := ""
 	if pkg != nil {
 		version = pkg.GetVersion()
@@ -969,7 +969,7 @@ func (s *Server) previous(st *initv1.ImageServiceStatusResponse) (version, slot 
 // stage stages an upload and returns the older releases init removed to
 // make room for it. The upload and its unpacked layout are removed once
 // init has staged it.
-func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
+func (s *Server) stage(ctx context.Context, id string, overrideRange, confirmWithdrawn bool) (*osadminv1.UpdatePackage, []string, error) {
 	if _, err := s.uploadPath(id); err != nil {
 		return nil, nil, err
 	}
@@ -977,9 +977,9 @@ func (s *Server) stage(ctx context.Context, id string, overrideRange bool) (*osa
 		return nil, nil, err
 	}
 	defer s.endStaging()
-	pkg, removed, err := s.stageHeld(ctx, id, overrideRange)
+	pkg, removed, err := s.stageHeld(ctx, id, overrideRange, confirmWithdrawn)
 	if fb := s.patchFallback(ctx, pkg, err); fb != "" {
-		return s.stageHeld(ctx, fb, overrideRange)
+		return s.stageHeld(ctx, fb, overrideRange, confirmWithdrawn)
 	} else if code, ok := patchRefusal(err); ok && pkg.GetFullBin() != "" {
 		err = codes.New(code, "%s Upload the full release instead: %s.", strings.TrimSuffix(remoteSentence(err), "."), pkg.GetFullBin())
 	}
@@ -1027,7 +1027,7 @@ func remoteSentence(err error) string {
 }
 
 // stageHeld stages the upload id while the stage is held.
-func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (*osadminv1.UpdatePackage, []string, error) {
+func (s *Server) stageHeld(ctx context.Context, id string, overrideRange, confirmWithdrawn bool) (*osadminv1.UpdatePackage, []string, error) {
 	path, err := s.uploadPath(id)
 	if err != nil {
 		return nil, nil, err
@@ -1080,6 +1080,9 @@ func (s *Server) stageHeld(ctx context.Context, id string, overrideRange bool) (
 		pkg.FullBin = h.Target.FullBin
 	}
 	pkg.IncludesBaseWeb, _ = h.IncludesBaseWeb()
+	if err := s.checkWithdrawnUpload(ctx, pkg, h, confirmWithdrawn); err != nil {
+		return pkg, nil, err
+	}
 	s.setVersion(h.Version)
 	if h.IsProduct() {
 		pkg.Target = osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT
@@ -1664,4 +1667,41 @@ func (s *Server) productWindow(ctx context.Context, day string) {
 	s.upgrades.mu.Unlock()
 	v, _, err := s.applyProduct(ctx, osaudit.Entry{Actor: "window", Action: "upgrade.apply"}, nil)
 	s.write(osaudit.Entry{Actor: "window", Action: "upgrade.apply", Target: "product", Detail: map[string]string{"version": v, "surface": "window"}}, err)
+}
+
+// checkWithdrawnUpload is the warning on an uploaded .bin of a release the
+// signed list withdraws: staging stops with the reason and what to use, until
+// the admin confirms; a confirmation is audited. A file the box fetched itself
+// was refused at the fetch, so only an upload is judged here. When the box
+// holds no list it cannot tell, and says so in the package's notice.
+func (s *Server) checkWithdrawnUpload(ctx context.Context, pkg *osadminv1.UpdatePackage, h updatepkg.Header, confirmed bool) error {
+	if s.uploadSource(pkg.GetUploadId()) != "upload" {
+		return nil
+	}
+	kind := "baseOS"
+	switch updatepkg.UnitOf(h) {
+	case updatepkg.UnitProduct:
+		kind = "product"
+	case updatepkg.UnitBaseWeb:
+		kind = "baseWeb"
+	}
+	w, withdrawn, known := s.withdrawnKnown(kind, h.Version)
+	switch {
+	case !known:
+		pkg.Notice = "Withdrawn releases could not be checked: no update list is known on this box."
+		s.o.Logger.Info("osadmin: an upload isn't checked against the withdrawn list: none is known", log.F("version", h.Version), log.F("kind", kind))
+	case !withdrawn:
+		s.o.Logger.Debug("osadmin: an upload isn't withdrawn", log.F("version", h.Version), log.F("kind", kind))
+	case !confirmed:
+		s.o.Logger.Warn("osadmin: an upload of a withdrawn release needs confirmation", log.F("version", h.Version), log.F("kind", kind), log.F("reason", w.Reason))
+		return codes.New(codes.UpgradeWithdrawnUpload, "release %s is withdrawn: %s%s. Confirm to stage it anyway, for a deliberate rollback.", h.Version, w.Reason, useInstead(w.Use))
+	default:
+		c := callFrom(ctx)
+		e := c.by("upgrade.withdrawn-confirmed")
+		e.Target = "release " + h.Version
+		e.Detail = map[string]string{"version": h.Version, "kind": kind, "reason": w.Reason, "use": w.Use}
+		s.write(e, nil)
+		s.o.Logger.Warn("osadmin: a withdrawn release is staged on the admin's confirmation", log.F("version", h.Version), log.F("kind", kind), log.F("by", c.session.Admin))
+	}
+	return nil
 }
