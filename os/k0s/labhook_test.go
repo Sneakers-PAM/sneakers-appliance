@@ -158,7 +158,7 @@ func TestTheLabHookReportsTheRealProduct(t *testing.T) {
 		t.Fatal("the hook's pods line doesn't show the init containers")
 	}
 	var defs []string
-	for _, name := range []string{"pg_pod", "pg_in", "pg_start", "realci_rows", "realci_pods"} {
+	for _, name := range []string{"pg_pod", "pg_in", "pg_start", "realci_rows", "realci_certs", "realci_pods"} {
 		fn := regexp.MustCompile(`(?m)^` + name + `\(\) \{.*\}\n`).FindString(hook)
 		if fn == "" {
 			fn = regexp.MustCompile(`(?ms)^` + name + `\(\) \{[^\n]*\n.*?^\}\n`).FindString(hook)
@@ -185,6 +185,9 @@ k() {
     *"exec sneakers-postgres-0"*sneakers_hydra*) return 1 ;;
     *"exec sneakers-postgres-0"*) echo "realci_rows=1000,t=2" ;;
     *"logs sneakers-postgres-0"*) printf 'PostgreSQL init process complete\ndatabase system was shut down at x\n' ;;
+    *"get issuers.cert-manager.io"*) printf 'issuer/a\nissuer/b\n' ;;  // scrub:allow=fqdn -- a Kubernetes API group
+    *"get certificates.cert-manager.io"*) printf 'certificate/c%s\n' 1 2 3 4 5 6 7 8 9 ;;  // scrub:allow=fqdn -- a Kubernetes API group
+    *"get secrets"*) printf 'secret/s%s-tls\nsecret/other\n' 1 2 3 4 5 6 7 8 9 ;;
     *"get pods"*) echo "p app=a order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;" ;;
   esac
 }
@@ -197,6 +200,7 @@ k() {
 	got := string(out)
 	rows := `lab-hook: realci: rows running version=0.1.0-x start=first sneakers_identity[realci_rows=1000,t=2] sneakers_vault[realci_rows=1000,t=2] sneakers_workflow[realci_rows=1000,t=2] sneakers_audit[realci_rows=1000,t=2] sneakers_kratos[realci_rows=1000,t=2] sneakers_hydra[missing]` + "\n"
 	rows += "lab-hook: realci: database running version=0.1.0-x on=sneakers-postgres-0 move=\n"
+	rows += "lab-hook: realci: certs running version=0.1.0-x issuers=2 certificates=9 secrets=9\n"
 	pods := "lab-hook: realci: pods running version=0.1.0-x: p app=a order=1 phase=Running restarts=0 init=[wait-phase/0/Completed,] waiting= started=2026-10-12T10:00:00Z ready=True@2026-10-12T10:00:30Z;\n"
 	if got != rows+pods {
 		t.Fatalf("the hook printed\n%s\nwant\n%s%s", got, rows, pods)
