@@ -32,4 +32,23 @@ if out="$(bash "$here/check-fingerprints.sh" "$work/c" "$work/a.txt" 2>&1)"; the
   echo "FAIL: another update key passed" >&2; exit 1
 fi
 grep -q "update.pub is not the production fingerprint" <<<"$out" || { echo "FAIL: wrong message: $out" >&2; exit 1; }
+# The update feed's key: a record that lists it passes the key it was made
+# from, and refuses another key and a missing file.
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$work/feed.key" 2>/dev/null
+openssl pkey -in "$work/feed.key" -pubout -out "$work/a/feed.pub" 2>/dev/null
+cp "$work/a.txt" "$work/f.txt"
+printf 'feed-key %s\n' "$(openssl pkey -pubin -in "$work/a/feed.pub" -outform DER | sha256sum | cut -d' ' -f1)" >> "$work/f.txt"
+bash "$here/check-fingerprints.sh" "$work/a" "$work/f.txt" >/dev/null
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$work/other.key" 2>/dev/null
+cp -r "$work/a" "$work/d"
+openssl pkey -in "$work/other.key" -pubout -out "$work/d/feed.pub" 2>/dev/null
+if out="$(bash "$here/check-fingerprints.sh" "$work/d" "$work/f.txt" 2>&1)"; then
+  echo "FAIL: another feed key passed" >&2; exit 1
+fi
+grep -q "feed.pub is not the production fingerprint" <<<"$out" || { echo "FAIL: wrong message: $out" >&2; exit 1; }
+rm "$work/d/feed.pub"
+if out="$(bash "$here/check-fingerprints.sh" "$work/d" "$work/f.txt" 2>&1)"; then
+  echo "FAIL: a missing feed key passed" >&2; exit 1
+fi
+grep -q "feed.pub is missing" <<<"$out" || { echo "FAIL: wrong message: $out" >&2; exit 1; }
 echo "PASS: check-fingerprints"

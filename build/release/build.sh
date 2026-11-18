@@ -120,7 +120,8 @@ pkg=github.com/Sneakers-PAM/sneakers-appliance/internal/release
 b64() { base64 -w0 < "$1"; }
 pins="-X $pkg.Channel=production -X $pkg.Version=$VERSION \
   -X $pkg.ReleaseKey=$(b64 "$keys/cosign.pub") -X $pkg.DBCert=$(b64 "$keys/db.crt") \
-  -X $pkg.PKCert=$(b64 "$keys/PK.crt") -X $pkg.KEKCert=$(b64 "$keys/KEK.crt")"
+  -X $pkg.PKCert=$(b64 "$keys/PK.crt") -X $pkg.KEKCert=$(b64 "$keys/KEK.crt") \
+  -X $pkg.FeedKey=$(b64 "$keys/feed.pub")"
 
 echo "release: :8443 pages"
 WEB="$WEB" VERSION="$VERSION" OUT="$OUT/pages" bash "$root/build/lab/pages.sh"

@@ -46,6 +46,7 @@ index (`version`, `commit`), where the box and the :8443 pages read them. `<arch
 
 - **Sidecars** follow their file's name: `<file>.inputs` (a unit's input digest), `<file>.sha256`,
   `<file>.sigstore.json` (a cosign signature bundle by the release key) and `<file>.sig`.
+- **Feed key:** `keys/production/feed.pub` is pinned in every production build (`release.FeedKey`, stamped by build/release/build.sh next to the release key; a second key and an expiry, `FeedKey2` and `FeedKeyNotAfter`, serve a rotation). The release guard refuses a tag without it, and check-fingerprints checks it against the `feed-key` line of `fingerprints.txt`. It verifies only the update feed ([upgrades.md](upgrades.md#the-update-feed)), never a bundle.
 - **Withdrawn list:** `release/withdrawn.yaml` is written into the signed index (`WITHDRAWN` of build/lab/units.sh, `sneakers-artifact index --withdrawn`): the releases a box with the reader hides and refuses, with the reason and the version to use ([upgrades.md](upgrades.md#the-github-source)). Edit it by pull request; the next release's index carries it.
 - **Fixed names:** `sneakers-product-index.json`, `SHA256SUMS`, `release.yaml` (each with its
   `.sigstore.json`) and one `<digest hex>.sigstore.json` per pinned image.

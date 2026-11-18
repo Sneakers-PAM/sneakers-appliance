@@ -15,6 +15,7 @@
 //	  -X github.com/Sneakers-PAM/sneakers-appliance/internal/release.DBCert=$(base64 -w0 db.crt) \
 //	  -X github.com/Sneakers-PAM/sneakers-appliance/internal/release.PKCert=$(base64 -w0 PK.crt) \
 //	  -X github.com/Sneakers-PAM/sneakers-appliance/internal/release.KEKCert=$(base64 -w0 KEK.crt) \
+//	  -X github.com/Sneakers-PAM/sneakers-appliance/internal/release.FeedKey=$(base64 -w0 feed.pub) \
 //	  -X github.com/Sneakers-PAM/sneakers-appliance/internal/release.Version=0.1.0"
 package release
 
@@ -25,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"strings"
+	"time"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/codes"
 )
@@ -43,6 +45,14 @@ var (
 	// (comma-separated base URLs, walked in order), compiled into the
 	// signed root. A production build's list is its release source.
 	Mirrors string
+	// FeedKey is the update feed's public key (base64 of the PEM), pinned in
+	// a production build: the built-in update source is the feed, signed by
+	// it. FeedKey2 is a second key for a rotation, and FeedKeyNotAfter
+	// (RFC 3339) the time after which FeedKey no longer verifies the feed.
+	// A lab build has no feed and needs none.
+	FeedKey         string
+	FeedKey2        string
+	FeedKeyNotAfter string
 )
 
 // The channels a build may carry. A lab build is signed with a throwaway
@@ -59,11 +69,16 @@ type Pins struct {
 	PKCertPEM     []byte
 	KEKCertPEM    []byte
 	Channel       string
+	// FeedKeyPEM, FeedKey2PEM and FeedKeyNotAfter are the update feed's
+	// keys, mandatory in a production build.
+	FeedKeyPEM      []byte
+	FeedKey2PEM     []byte
+	FeedKeyNotAfter time.Time
 }
 
 // Fingerprints are the lowercase hex SHA-256 of each pin's DER.
 type Fingerprints struct {
-	ReleaseKey, DB, PK, KEK string
+	ReleaseKey, DB, PK, KEK, FeedKey string
 }
 
 // Load decodes the stamped pins. Any empty or undecodable pin, or a channel
@@ -91,7 +106,43 @@ func Load() (Pins, error) {
 		}
 		*f.dst = b
 	}
+	if err := loadFeedPins(&p); err != nil {
+		return Pins{}, err
+	}
 	return p, nil
+}
+
+// loadFeedPins reads the update feed's keys: mandatory in a production build,
+// optional in a lab one, and always a PKIX public key when given.
+func loadFeedPins(p *Pins) error {
+	if strings.TrimSpace(FeedKey) == "" {
+		if p.Channel == ChannelProduction {
+			return codes.New(codes.KitPinMissing, "the update feed key pin: %v", errEmpty)
+		}
+		if strings.TrimSpace(FeedKey2) != "" || strings.TrimSpace(FeedKeyNotAfter) != "" {
+			return codes.New(codes.KitPinMissing, "the update feed key pin: a second key or an expiry without the key")
+		}
+		return nil
+	}
+	b, err := decode(FeedKey, "PUBLIC KEY")
+	if err != nil {
+		return codes.New(codes.KitPinMissing, "the update feed key pin: %v", err)
+	}
+	p.FeedKeyPEM = b
+	if strings.TrimSpace(FeedKey2) != "" {
+		if b, err = decode(FeedKey2, "PUBLIC KEY"); err != nil {
+			return codes.New(codes.KitPinMissing, "the second update feed key pin: %v", err)
+		}
+		p.FeedKey2PEM = b
+	}
+	if s := strings.TrimSpace(FeedKeyNotAfter); s != "" {
+		t, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			return codes.New(codes.KitPinMissing, "the update feed key's expiry %q isn't an RFC 3339 time", s)
+		}
+		p.FeedKeyNotAfter = t
+	}
+	return nil
 }
 
 func decode(b64, pemType string) ([]byte, error) {
@@ -155,6 +206,7 @@ func (p Pins) Fingerprints() Fingerprints {
 		DB:         Fingerprint(p.DBCertPEM),
 		PK:         Fingerprint(p.PKCertPEM),
 		KEK:        Fingerprint(p.KEKCertPEM),
+		FeedKey:    Fingerprint(p.FeedKeyPEM),
 	}
 }
 
@@ -170,4 +222,18 @@ func SetForTest(channel, releaseKeyPEM, dbPEM, pkPEM, kekPEM string) (restore fu
 	}
 	Channel, ReleaseKey, DBCert, PKCert, KEKCert = channel, enc(releaseKeyPEM), enc(dbPEM), enc(pkPEM), enc(kekPEM)
 	return func() { Channel, ReleaseKey, DBCert, PKCert, KEKCert = prev[0], prev[1], prev[2], prev[3], prev[4] }
+}
+
+// SetFeedForTest stamps the update feed's pins from PEM text and an RFC 3339
+// expiry and returns a function that restores the previous values.
+func SetFeedForTest(feedPEM, feed2PEM, notAfter string) (restore func()) {
+	prev := [3]string{FeedKey, FeedKey2, FeedKeyNotAfter}
+	enc := func(s string) string {
+		if s == "" {
+			return ""
+		}
+		return base64.StdEncoding.EncodeToString([]byte(s))
+	}
+	FeedKey, FeedKey2, FeedKeyNotAfter = enc(feedPEM), enc(feed2PEM), notAfter
+	return func() { FeedKey, FeedKey2, FeedKeyNotAfter = prev[0], prev[1], prev[2] }
 }

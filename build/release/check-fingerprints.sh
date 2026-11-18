@@ -5,7 +5,7 @@
 # check-fingerprints.sh <certs-dir> <fingerprints.txt>: refuse to sign
 # unless every certificate and key the sign job is about to use (PK.crt,
 # KEK.crt, db.crt, the release cosign.pub and the update key recipient
-# update.pub in <certs-dir>) has the production fingerprint recorded in
+# update.pub, and feed.pub when the record lists a feed-key, in <certs-dir>) has the production fingerprint recorded in
 # keys/production/fingerprints.txt. A lab key set, or anything else, fails
 # with "not the production fingerprint".
 set -euo pipefail
@@ -32,6 +32,20 @@ got="$(grep -v '^#' "$dir/update.pub" | tr -d '\n' | sha256sum | cut -d' ' -f1)"
 if [ "$got" != "$(want update-recipient)" ]; then
   echo "check-fingerprints: update.pub is not the production fingerprint ($got)" >&2
   fail=1
+fi
+# The update feed's public key, when the record has one: the build pins it,
+# and the box reads the built-in update source only if it verifies with it.
+if [ -n "$(want feed-key)" ]; then
+  if [ ! -s "$dir/feed.pub" ]; then
+    echo "check-fingerprints: feed.pub is missing" >&2
+    fail=1
+  else
+    got="$(openssl pkey -pubin -in "$dir/feed.pub" -outform DER | sha256sum | cut -d' ' -f1)"
+    if [ "$got" != "$(want feed-key)" ]; then
+      echo "check-fingerprints: feed.pub is not the production fingerprint ($got)" >&2
+      fail=1
+    fi
+  fi
 fi
 [ "$fail" -eq 0 ] || exit 1
 echo "check-fingerprints: every certificate and key is the production one"
