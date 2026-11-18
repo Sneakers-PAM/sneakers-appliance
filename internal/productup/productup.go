@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -111,6 +112,14 @@ type Probe struct {
 	// Restore runs a restore of the product's database; nil can't run one.
 	// Only the process that follows the product sets it.
 	Restore Restorer
+	// Now is the clock the cluster step spaces its re-placing of a stack
+	// by; nil is time.Now.
+	Now func() time.Time
+
+	certMu sync.Mutex
+	// certTries is, per stack, how many times the cluster step put it in
+	// front of k0s again for its cert-manager objects, and when last.
+	certTries map[string]certTry
 }
 
 // Restorer is the box's restore, which holds the product while it runs.

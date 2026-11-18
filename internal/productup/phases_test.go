@@ -110,10 +110,20 @@ type fakeCluster struct {
 	// with the box's values (fqdn) in them.
 	configMaps map[string]map[string]string
 	fqdn       string
+	// certReady is whether cert-manager accepts its Issuers and
+	// Certificates (its CRDs are there and its webhook answers); until it
+	// is, apply rejects them the way k0s's applier does, keeps the stack's
+	// other objects, and doesn't try them again by itself.
+	certReady bool
+	// certCRD is whether cert-manager's CRDs are there: asking for its
+	// objects answers, empty, instead of failing.
+	certCRD bool
+	// certs are the cert-manager objects applied, per stack, "<Kind> <namespace>/<name>".
+	certs map[string]map[string]bool
 }
 
 func newCluster() *fakeCluster {
-	return &fakeCluster{applied: map[string]bool{}, workloads: map[string]*live{}, stopping: map[string]int{}, asked: map[string]int{}, scaledWhile: map[string][]string{}, configMaps: map[string]map[string]string{}}
+	return &fakeCluster{applied: map[string]bool{}, workloads: map[string]*live{}, stopping: map[string]int{}, asked: map[string]int{}, scaledWhile: map[string][]string{}, configMaps: map[string]map[string]string{}, certs: map[string]map[string]bool{}}
 }
 
 func (c *fakeCluster) add(l *live) { c.workloads[l.key()] = l }
@@ -157,6 +167,18 @@ func (c *fakeCluster) apply(t *testing.T, slot, stack string) {
 					}
 				}
 				c.configMaps[fmt.Sprint(md["namespace"])+"/"+fmt.Sprint(md["name"])] = data
+			}
+			if av, _ := d["apiVersion"].(string); strings.HasPrefix(av, "cert-manager.io/") { // scrub:allow=fqdn -- a Kubernetes API group
+				if !c.certReady {
+					continue
+				}
+				md := d["metadata"].(map[string]any)
+				if c.certs[stack] == nil {
+					c.certs[stack] = map[string]bool{}
+				}
+				c.certs[stack][kind+" "+fmt.Sprint(md["namespace"])+"/"+fmt.Sprint(md["name"])] = true
+				took = true
+				continue
 			}
 			if kind != "Deployment" && kind != "StatefulSet" {
 				took = true
@@ -250,6 +272,29 @@ func (c *fakeCluster) run(_ context.Context, _ string, args ...string) ([]byte, 
 		}
 		w.replicas = r
 		return []byte("scaled"), nil
+	case strings.HasPrefix(line, "get issuers.cert-manager.io,certificates.cert-manager.io "): // scrub:allow=fqdn -- a Kubernetes API group
+		if !c.certReady && !c.certCRD {
+			return nil, errors.New("the server doesn't have a resource type \"issuers\"")
+		}
+		var items []any
+		for st, objs := range c.certs {
+			if !strings.Contains(line, productup.StackLabel+"="+st+" ") {
+				continue
+			}
+			for o := range objs {
+				kind, ref, _ := strings.Cut(o, " ")
+				ns, name, _ := strings.Cut(ref, "/")
+				items = append(items, map[string]any{"kind": kind, "metadata": map[string]any{"namespace": ns, "name": name}})
+			}
+		}
+		b, _ := json.Marshal(map[string]any{"items": items})
+		return b, nil
+	case strings.HasPrefix(line, "apply --dry-run=server "):
+		// What the applier would be told when it applies the object.
+		if c.certReady {
+			return []byte("issuer.cert-manager.io/app configured (server dry run)"), nil // scrub:allow=fqdn -- a Kubernetes API group
+		}
+		return nil, errors.New(`Internal error occurred: failed calling webhook "webhook.cert-manager.io": the webhook isn't answering`) // scrub:allow=fqdn -- a Kubernetes API group
 	case strings.Contains(line, productup.StackLabel+"="):
 		for s, ok := range c.applied {
 			if !ok || !strings.Contains(line, productup.StackLabel+"="+s+" ") {

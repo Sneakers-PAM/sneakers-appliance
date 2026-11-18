@@ -200,6 +200,46 @@ func PlaceStack(slot, dir, manifests, stack string) error {
 	return nil
 }
 
+// RefreshStack writes the stack of slot over the files k0s already has for it,
+// with the box's values, each by a rename in the stack's own directory, so the
+// applier sees the stack change and never sees it go (k0s takes a stack's
+// objects away when its directory does). A stack that isn't in manifests yet
+// is placed whole, as PlaceStack does.
+func RefreshStack(slot, dir, manifests, stack string) error {
+	dst := filepath.Join(manifests, stack)
+	if st, err := os.Stat(dst); err != nil || !st.IsDir() {
+		return PlaceStack(slot, dir, manifests, stack)
+	}
+	files, err := filepath.Glob(filepath.Join(slot, "manifests", stack, "*.yaml"))
+	if err != nil {
+		return fmt.Errorf("productswitch: %w", err)
+	}
+	kernel, _ := os.Hostname()
+	values := boxvalues.Table(slot, boxvalues.Read(dir), kernel)
+	for _, f := range files {
+		b, err := os.ReadFile(f) // #nosec G304 -- the installed slot's own stack
+		if err != nil {
+			return fmt.Errorf("productswitch: %w", err)
+		}
+		b = boxvalues.Substitute(b, values)
+		tmp, err := os.CreateTemp(dst, ".refresh-*")
+		if err != nil {
+			return fmt.Errorf("productswitch: %w", err)
+		}
+		_, werr := tmp.Write(b)
+		cerr := tmp.Close()
+		if err := errors.Join(werr, cerr, os.Chmod(tmp.Name(), 0o644)); err != nil { // #nosec G302 -- a stack k0s reads, as PlaceStack writes it
+			_ = os.Remove(tmp.Name())
+			return fmt.Errorf("productswitch: %w", err)
+		}
+		if err := os.Rename(tmp.Name(), filepath.Join(dst, filepath.Base(f))); err != nil {
+			_ = os.Remove(tmp.Name())
+			return fmt.Errorf("productswitch: %w", err)
+		}
+	}
+	return nil
+}
+
 func writeState(dir string, st map[string]bool) error {
 	names := make([]string, 0, len(st))
 	for n := range st {
