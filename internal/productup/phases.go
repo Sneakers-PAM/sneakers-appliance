@@ -178,6 +178,9 @@ func (p *Probe) checkPhased(ctx context.Context, spec productspec.Spec) (Result,
 	if waiting := rolloutWith(alwaysWant, live, cluster); waiting != "" {
 		return Result{Step: StepCluster, Detail: waiting}, nil
 	}
+	if r, done, err := p.certificates(ctx, always); err != nil || !done {
+		return r, err
+	}
 	importOpen := false
 	if st, ok := spec.ImportStack(); ok && spec.Import.After != "" {
 		importOpen = slices.Contains(on, st)

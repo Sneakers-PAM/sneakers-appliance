@@ -7,6 +7,7 @@ package k0s_test
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,11 +38,37 @@ func TestTheRealBundleMovesTheDatabase(t *testing.T) {
 	// The product's own first records go into the audit trail the move's
 	// check reads: one carries no attributes (stored as JSON null).
 	b.productAdmin()
+	// The MCP is on, as it is on a box that has been using it: its own
+	// stack and Certificate come with the update too.
+	b.mcpOn()
 	on := func(version, when string) {
 		t.Helper()
 		l := lastLine(b.vm.Console(), "realci: database running version="+version+" ")
 		if !strings.Contains(l, "on=sneakers-pgha-0") || !strings.Contains(l, "move=done") {
 			t.Fatalf("%s: the box isn't settled on the new cluster: %q", when, l)
+		}
+	}
+	// The update brings cert-manager and the services' certificates to a box
+	// that had none: every one of them has to be there when it is up, however
+	// the applier's first pass went (#642).
+	certs := func(version, when string) {
+		t.Helper()
+		l := lastLine(b.vm.Console(), "realci: certs running version="+version+" ")
+		var issuers, certificates, secrets int
+		for _, f := range strings.Fields(l) {
+			k, v, ok := strings.Cut(f, "=")
+			n, _ := strconv.Atoi(v)
+			switch {
+			case ok && k == "issuers":
+				issuers = n
+			case ok && k == "certificates":
+				certificates = n
+			case ok && k == "secrets":
+				secrets = n
+			}
+		}
+		if issuers < 2 || certificates < 9 || secrets < 9 {
+			t.Fatalf("%s: the product's certificates aren't all there (want at least 2 issuers, 9 certificates, 9 tls secrets): %q", when, l)
 		}
 	}
 	if l := lastLine(b.vm.Console(), "realci: database running version="+vOld+" "); !strings.Contains(l, "on=sneakers-postgres-0") {
@@ -54,7 +81,10 @@ func TestTheRealBundleMovesTheDatabase(t *testing.T) {
 	t.Logf("the update with its move took %s", time.Since(start).Round(time.Second))
 	on(vNext, "the move")
 
+	certs(vNext, "the move")
+
 	b.powerLoss()
 	b.mustRun(vNext, "after a power loss", base, true, false)
 	on(vNext, "after a power loss")
+	certs(vNext, "after a power loss")
 }
