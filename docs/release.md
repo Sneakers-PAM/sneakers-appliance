@@ -659,6 +659,37 @@ key and TOTP key (`sneakers-box`) and the setup token it exposes. Its data path 
 `backups` declares how the box backs up and restores the product's database, with `escrow` to tie a
 set to the box that holds its keys ([backups.md](backups.md)).
 
+## The update feed publisher
+
+The built-in update source is a feed per channel, `rc` and `stable`, at
+`https://updates.sneakers-pam.com/<channel>/index.json` with its `.sigstore.json` bundle. The
+`Update Feed` workflow (`.github/workflows/feed.yml`) builds the index of that feed. It runs when a
+release is published, when `release/withdrawn.yaml` changes on `main`, and by hand.
+
+What it builds: it downloads the index, `SHA256SUMS` and their `.sigstore.json` files of the ten
+most recent published releases of the channel (rc takes the rc and the stable tags, stable only the
+stable ones) and runs `sneakers-artifact feed-index`. That checks each release's index and
+`SHA256SUMS` against the production release key (`keys/production/cosign.pub`) and refuses the whole
+run, naming the release, when one does not verify, when a listed file has no line in `SHA256SUMS`, or
+when an entry has no size. It then merges the entries newest release first (a version two releases
+list keeps the newer release's entry), adds each entry's `tag` and `docs` page, the withdrawn list
+and `feed` (`channel`, `sequence`, `generated_at`), and writes indented JSON in a fixed order, so the
+same inputs give the same bytes. The sequence is the published feed's plus one; the workflow reads
+the published index from the website repo and stops with a message when it cannot (a dispatch can
+give `sequence`, or `first_feed` for a channel with no feed yet).
+
+The index is unsigned and the workflow holds no key. With the `WEBSITE_PR_TOKEN` secret it opens (or
+updates) a pull request in the website repo that writes `apps/updates/feed/<channel>/index.json` on
+the branch `feed/<channel>-<sequence>`, its body listing the releases and what changed in the
+withdrawn list. Without the secret it uploads the index as a workflow artifact and the job summary
+lists the manual steps. The index is signed with the release key in the website repo's
+`feed-signing` environment, after that pull request is reviewed and merged.
+
+To withdraw a release (or to take a withdrawal back), edit `release/withdrawn.yaml` by pull request:
+a `kind`, the `version`, a one-sentence `reason` and the `use` version. When it merges, the workflow
+proposes a new feed with the change. `sneakers-artifact feed-index` refuses a list that does not
+validate, the same check `index --withdrawn` makes.
+
 ## Lab and production keys
 
 The release key (which signs the artifact and the `.bin` header) and the update key (which the
