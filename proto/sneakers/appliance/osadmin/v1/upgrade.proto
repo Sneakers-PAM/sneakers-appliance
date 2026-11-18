@@ -610,6 +610,15 @@ message MirrorStatus {
   google.protobuf.Timestamp releases_checked_at = 22;
   google.protobuf.Timestamp rate_limited_until = 23;
   bool release_repo_override_allowed = 24;
+  // The update feed, when the box's built-in source is one: its address,
+  // whether the list shown is ok (taken now), stale (the last list taken,
+  // because the feed couldn't be) or none (no list yet), why the last ask
+  // failed, and the sequence and time of the list shown.
+  string feed_url = 30;
+  string feed_state = 31;
+  string feed_error = 32;
+  int64 feed_sequence = 33;
+  google.protobuf.Timestamp feed_taken_at = 34;
 }
 
 message FetchUpdateRequest {

@@ -316,6 +316,7 @@ func (s *Server) mirrorStatus(p Policy) *osadminv1.MirrorStatus {
 	_, web, _ := s.releaseURLs(p)
 	out := &osadminv1.MirrorStatus{Scheme: "https", Source: effectiveSource(p, web != ""), Url: base, BuiltinUrls: s.builtinList()}
 	s.githubStatus(p, out)
+	s.feedStatus(out)
 	if strings.HasPrefix(base, "http://") {
 		out.Scheme, out.Note = "http", httpNote
 	}

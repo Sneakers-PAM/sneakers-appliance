@@ -60,6 +60,13 @@ var (
 	windowRE   = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
 )
 
+// FeedKey is a public key that may sign the update feed, with the time after
+// which it no longer does (zero is no expiry).
+type FeedKey struct {
+	PEM      []byte
+	NotAfter time.Time
+}
+
 // UpgradeOptions are what the update flows need beyond the daemons.
 type UpgradeOptions struct {
 	// Channel and ReleaseKeyPEM are the running build's pins: a .bin must be
@@ -88,6 +95,11 @@ type UpgradeOptions struct {
 	ReleaseAPIURL string
 	ReleaseRepo   string
 	RedirectHosts []string
+	// FeedURL is the update feed's base address ("https://.../"), whose
+	// <channel>/index.json the box reads first; empty is no feed. FeedKeys
+	// are the keys that may sign it, pinned in the build.
+	FeedURL  string
+	FeedKeys []FeedKey
 	// ReleaseHistory is how many releases of the box's channel the GitHub
 	// source reads the index of, the newest finished one first; 0 is
 	// DefaultReleaseHistory.
@@ -770,13 +782,13 @@ func (h *upgradeSvc) SetUpgradePolicy(ctx context.Context, r *connect.Request[os
 		return nil, err
 	}
 	switch p.Source {
-	case "", SourceBuiltIn, SourceNone:
+	case "", SourceBuiltIn, SourceNone, SourceGitHub:
 	case SourceManual:
 		if p.MirrorURL == "" {
 			return nil, codes.New(codes.AccessConfirm, "the manual source needs a mirror URL")
 		}
 	default:
-		return nil, codes.New(codes.AccessConfirm, "the source is builtin, manual or none")
+		return nil, codes.New(codes.AccessConfirm, "the source is builtin, github, manual or none")
 	}
 	if p.Mode != "automatic" && p.Mode != "manual" {
 		return nil, codes.New(codes.AccessConfirm, "the mode is automatic or manual")

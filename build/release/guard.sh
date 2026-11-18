@@ -13,6 +13,7 @@
 #   MAIN_REF       main's ref (default origin/main)
 #   FINGERPRINTS   the production key record (default keys/production/fingerprints.txt)
 #   PINS_ENV       the release pins (default build/release/pins.env)
+#   FEED_KEY       the update feed's public key (default keys/production/feed.pub)
 #   GITHUB_OUTPUT  where version= and channel= are written, and for a
 #                  production tag the pinned sources: release_repo=,
 #                  release_commit=, web_repo= and web_commit=
@@ -21,6 +22,7 @@ set -euo pipefail
 main_ref="${MAIN_REF:-origin/main}"
 fingerprints="${FINGERPRINTS:-keys/production/fingerprints.txt}"
 pins="${PINS_ENV:-build/release/pins.env}"
+feed_key="${FEED_KEY:-keys/production/feed.pub}"
 sources=()
 semver='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$'
 
@@ -36,6 +38,11 @@ case "$EVENT" in
     fi
     if [ ! -s "$fingerprints" ]; then
       echo "guard: $fingerprints is missing; the owner commits the production public keys first (docs/runbooks/production-keys.md)" >&2; exit 1
+    fi
+    # The built-in update source is the feed, signed by the feed key: a
+    # build that doesn't pin one can't read it, so no tag is made without it.
+    if [ ! -s "$feed_key" ] || ! grep -q -- '-----BEGIN PUBLIC KEY-----' "$feed_key"; then
+      echo "guard: $feed_key is missing or isn't a public key; the owner commits the update feed's public key first (docs/runbooks/production-keys.md)" >&2; exit 1
     fi
     # The release.yaml and the :8443 pages come from these repositories at
     # these full commits (git content, so no other repository has to tag).

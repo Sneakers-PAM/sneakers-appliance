@@ -75,6 +75,11 @@ func (s *Server) sources(file string) []source {
 			out = append(out, direct)
 		}
 		return out
+	case SourceGitHub:
+		if web != "" {
+			out = append(out, direct)
+		}
+		return out
 	case SourceManual:
 		if p.MirrorURL != "" {
 			out = append(out, source{name: "mirror", url: p.MirrorURL + "/" + file, base: p.MirrorURL})

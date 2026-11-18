@@ -36,9 +36,12 @@ type fakeGitHub struct {
 	apiHits  int
 	notMod   int
 	limited  bool
-	redirect string          // the asset host's URL
-	failing  map[string]bool // tags whose downloads answer 500
-	gets     []string        // the downloads asked for, "<tag>/<file>"
+	redirect string            // the asset host's URL
+	failing  map[string]bool   // tags whose downloads answer 500
+	feed     map[string][]byte // the update feed's files, "<channel>/index.json" and its signatures
+	feedDown bool              // the feed answers 503
+	feedHits int
+	gets     []string // the downloads asked for, "<tag>/<file>"
 	api      *httptest.Server
 	asset    *httptest.Server
 }
@@ -77,6 +80,18 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 			}
 			w.Header().Set("ETag", g.etag)
 			_ = json.NewEncoder(w).Encode(g.listed())
+		case strings.HasPrefix(r.URL.Path, "/feed/"):
+			g.feedHits++
+			if g.feedDown {
+				http.Error(w, "down", http.StatusServiceUnavailable)
+				return
+			}
+			body, ok := g.feed[strings.TrimPrefix(r.URL.Path, "/feed/")]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write(body)
 		case strings.HasPrefix(r.URL.Path, "/o/r/releases/latest/download/"):
 			http.Redirect(w, r, g.redirect+"/latest/"+strings.TrimPrefix(r.URL.Path, "/o/r/releases/latest/download/"), http.StatusFound)
 		case strings.HasPrefix(r.URL.Path, "/o/r/releases/download/"):
