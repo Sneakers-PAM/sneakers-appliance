@@ -4,14 +4,18 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/brand"
 	"github.com/Sneakers-PAM/sneakers-appliance/internal/bundle"
@@ -95,7 +99,7 @@ func productCheckCmd() *cobra.Command {
 // one its header gives (updatepkg.NamedFor). It reads only their headers:
 // the box verifies each .bin when it's staged.
 func productIndexCmd() *cobra.Command {
-	var out string
+	var out, withdrawn string
 	var bridges []string
 	cmd := &cobra.Command{
 		Use:     "product-index <file.bin>...",
@@ -123,6 +127,13 @@ func productIndexCmd() *cobra.Command {
 				}
 				idx.AddBridge(h, size)
 			}
+			if withdrawn != "" {
+				w, err := readWithdrawn(withdrawn)
+				if err != nil {
+					return err
+				}
+				idx.Withdrawn = w
+			}
 			b, err := json.MarshalIndent(idx, "", "  ")
 			if err != nil {
 				return err
@@ -136,8 +147,28 @@ func productIndexCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&out, "out", "", "the index file to write")
 	cmd.Flags().StringSliceVar(&bridges, "bridge", nil, "a Base OS full .bin to list in the legacy base section too (repeatable)")
+	cmd.Flags().StringVar(&withdrawn, "withdrawn", "", "a YAML list of releases to mark withdrawn in the index (release/withdrawn.yaml)")
 	_ = cmd.MarkFlagRequired("out")
 	return cmd
+}
+
+// readWithdrawn reads and checks the withdrawn list a release's index is
+// signed with.
+func readWithdrawn(path string) ([]updatepkg.Withdrawn, error) {
+	b, err := os.ReadFile(path) // #nosec G304 -- the repository's own list
+	if err != nil {
+		return nil, err
+	}
+	var list []updatepkg.Withdrawn
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	if err := dec.Decode(&list); err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("%s doesn't parse: %w", path, err)
+	}
+	if err := (updatepkg.Index{Withdrawn: list}).ValidateWithdrawn(); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return list, nil
 }
 
 // binNameCmd prints the name a .bin is published under, read from its

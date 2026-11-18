@@ -820,6 +820,11 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	if !updatepkg.ValidFileName(name) {
 		return nil, codes.New(codes.UpgradeUpload, "%q isn't a sneakers-appliance or sneakers-product .bin name", name)
 	}
+	if w := h.s.withdrawnFile(name); w != nil {
+		err := codes.New(codes.UpgradeWithdrawn, "%s is withdrawn: %s%s", name, w.GetReason(), useInstead(w.GetUse()))
+		h.s.history("fetch", "", c.session.Admin, err, name)
+		return nil, err
+	}
 	if err := h.s.reserveReceive(); err != nil {
 		return nil, err
 	}
@@ -847,6 +852,14 @@ func (h *upgradeSvc) FetchUpdate(ctx context.Context, r *connect.Request[osadmin
 	}
 	c.note(name, "upload", id, "bytes", strconv.FormatInt(n, 10), "source", from)
 	return connect.NewResponse(&osadminv1.FetchUpdateResponse{UploadId: id, Source: from}), nil
+}
+
+// useInstead is the end of a withdrawn refusal: the version to take.
+func useInstead(use string) string {
+	if use == "" {
+		return ""
+	}
+	return "; use " + use + " instead"
 }
 
 // fetch downloads a .bin from src into a new upload. It isn't trusted

@@ -493,6 +493,15 @@ unchanged.
   runs an earlier release's code reads only the newest release's index, as before: this reaches boxes
   from the release that carries it, and an older box uses the Base OS update, then the product, or
   uploads the product it needs.
+- **Withdrawn releases.** A release's signed index can carry a `withdrawn` list (release/withdrawn.yaml in
+  the repository, written into the index by `sneakers-artifact index --withdrawn`): each entry names a
+  product, Base OS or Base Web version, why, and the version to use instead. The box collects the lists of
+  every index it reads. A marked file is not offered and is never the preferred line; the check answers it
+  in `withdrawn` (version, file, reason, use, release), the Updates page shows it apart, and `FetchUpdate`
+  of its file name is refused with `UPGRADE_WITHDRAWN`, the reason and the version to use. An owner's own
+  upload of the file is not blocked. A marker naming a version no index lists changes nothing. A box on an
+  earlier release (0.1.0-rc.9 or older) cannot read the list: it takes it only after it updates to a release
+  that has the reader, and until then only the release notes warn it.
 - **The files.** The index is `https://github.com/Sneakers-PAM/sneakers-appliance/releases/download/<tag>/sneakers-product-index.json`
   and every `.bin` is under the same `releases/download/<tag>/`. When the API can't be read and
   no list is kept, the box takes the latest stable release's files instead

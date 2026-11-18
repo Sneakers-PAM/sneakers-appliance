@@ -5,6 +5,7 @@ package updatepkg
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -42,6 +43,51 @@ type Index struct {
 	// Base is the legacy section: base releases under the names a box from
 	// before the units fetches.
 	Base []IndexEntry `json:"base,omitempty"`
+	// Withdrawn marks releases published earlier that a box shouldn't
+	// install, each with why and what to use instead. The index is signed,
+	// so the list is too; a box from before it ignores the field.
+	Withdrawn []Withdrawn `json:"withdrawn,omitempty"`
+}
+
+// Withdrawn is a release's file a box is told not to install.
+type Withdrawn struct {
+	// Kind is the section the file is listed in: product, baseOS or baseWeb.
+	Kind    string `json:"kind"`
+	Version string `json:"version"`
+	// Reason is why, in a sentence for the Updates page.
+	Reason string `json:"reason"`
+	// Use is the version to take instead, when there is one.
+	Use string `json:"use,omitempty"`
+}
+
+// WithdrawnFor is the marker for the kind's version, when the index has one.
+func (idx Index) WithdrawnFor(kind, version string) (Withdrawn, bool) {
+	for _, w := range idx.Withdrawn {
+		if w.Kind == kind && w.Version == version {
+			return w, true
+		}
+	}
+	return Withdrawn{}, false
+}
+
+// ValidateWithdrawn checks the withdrawn list a release is signed with: a
+// known kind, a version, a reason, and a use that is another version.
+func (idx Index) ValidateWithdrawn() error {
+	for i, w := range idx.Withdrawn {
+		switch {
+		case w.Kind != "product" && w.Kind != "baseOS" && w.Kind != "baseWeb":
+			return fmt.Errorf("withdrawn[%d]: the kind %q is not product, baseOS or baseWeb", i, w.Kind)
+		case !semver.IsValid("v" + w.Version):
+			return fmt.Errorf("withdrawn[%d]: %q is not a version", i, w.Version)
+		case strings.TrimSpace(w.Reason) == "":
+			return fmt.Errorf("withdrawn[%d]: %s %s has no reason", i, w.Kind, w.Version)
+		case w.Use != "" && !semver.IsValid("v"+w.Use):
+			return fmt.Errorf("withdrawn[%d]: use %q is not a version", i, w.Use)
+		case w.Use == w.Version:
+			return fmt.Errorf("withdrawn[%d]: %s %s is told to use itself", i, w.Kind, w.Version)
+		}
+	}
+	return nil
 }
 
 // IndexEntry is one bundle, copied from its header.
@@ -383,6 +429,12 @@ func (idx Index) Merge(o Index) Index {
 	out.BaseOS = merge(idx.BaseOS, o.BaseOS)
 	out.BaseWeb = merge(idx.BaseWeb, o.BaseWeb)
 	out.Base = merge(idx.Base, o.Base)
+	out.Withdrawn = slices.Clone(idx.Withdrawn)
+	for _, w := range o.Withdrawn {
+		if _, ok := out.WithdrawnFor(w.Kind, w.Version); !ok {
+			out.Withdrawn = append(out.Withdrawn, w)
+		}
+	}
 	return out
 }
 

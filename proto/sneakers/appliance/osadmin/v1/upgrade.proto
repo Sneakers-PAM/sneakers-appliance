@@ -507,6 +507,20 @@ message UnfitProduct {
   string needs = 4;
 }
 
+// WithdrawnOffer is a release's file the signed index marks as one not to
+// install. It isn't offered; FetchUpdate refuses it with the reason.
+message WithdrawnOffer {
+  UpdateTarget target = 1;
+  string version = 2;
+  string file_name = 3;
+  // reason is why, in a sentence.
+  string reason = 4;
+  // use is the version to take instead; empty when the index names none.
+  string use = 5;
+  // release_tag is the release the file is published in, when known.
+  string release_tag = 6;
+}
+
 message CheckUpdatesRequest {}
 
 message CheckUpdatesResponse {
@@ -539,6 +553,9 @@ message CheckUpdatesResponse {
   // unfit_product are products newer than the installed one that need
   // another Base OS than the one running, newest first.
   repeated UnfitProduct unfit_product = 11;
+  // withdrawn are the files in the indexes read that the newest signed
+  // index marks as not to install, none of them in the offers above.
+  repeated WithdrawnOffer withdrawn = 12;
 }
 
 // MirrorStatus is how the box reaches the mirror and how its last fetch
