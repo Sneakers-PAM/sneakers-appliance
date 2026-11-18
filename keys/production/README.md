@@ -16,7 +16,8 @@ public:
 | `PK.auth`, `KEK.auth`, `db.auth`, `dbx.auth` | the signed variables a box enrols |
 | `cosign.pub` | the release key's public half |
 | `update.pub` | the update key's age recipient, with its label line |
-| `fingerprints.txt` | the SHA-256 record of the certificates, `cosign.pub` and `update.pub` |
+| `feed.pub` | the update feed's public key (ECDSA P-256, PEM): the build pins it, the release guard refuses a tag without it, and the feed's signed indexes verify with it (never the release key). The private key lives only in the website repository's `feed-signing` environment and the owner's password manager |
+| `fingerprints.txt` | the SHA-256 record of the certificates, `cosign.pub`, `update.pub` and `feed.pub` (the `feed-key` line) |
 
 The matching secrets in the `production` environment are `SB_DB_KEY`, `RELEASE_COSIGN_KEY`,
 `RELEASE_COSIGN_PASSWORD` and `UPDATE_AGE_KEY`. The PK and KEK private keys are kept offline only.

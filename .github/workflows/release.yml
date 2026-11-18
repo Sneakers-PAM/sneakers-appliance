@@ -446,7 +446,7 @@ jobs:
           cp "$work/sneakers-$VERSION.efi" "$rel/work/"
           cp -r "$in/pages" "$rel/work/osadmin"
           cp "$in/release.yaml" "$rel/work/release.yaml"
-          cp keys/production/cosign.pub keys/production/update.pub "$keys/"
+          cp keys/production/cosign.pub keys/production/update.pub keys/production/feed.pub "$keys/"
           umask 077
           printf '%s\n' "$RELEASE_COSIGN_KEY" > "$keys/cosign.key"
           printf '%s\n' "$UPDATE_AGE_KEY" > "$keys/update.key"

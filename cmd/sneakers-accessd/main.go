@@ -386,9 +386,9 @@ func run(ctx context.Context, c config, lg log.Logger) error {
 		Logger:       lg,
 		Upgrade: osadmin.UpgradeOptions{
 			Channel: pins.Channel, ReleaseKeyPEM: pins.ReleaseKeyPEM,
-			// The update feed is read once a feed key is pinned in the build
-			// (none yet: FeedKeys is empty and the feed is off).
-			FeedURL: osadmin.DefaultFeedURL,
+			// The update feed is the built-in source of a production build,
+			// which pins the keys that sign it; a lab build pins none.
+			FeedURL: osadmin.DefaultFeedURL, FeedKeys: feedKeys(pins),
 			// The update key is read from the running UKI on each use and
 			// never written to disk; sneakers-upgraded takes this over
 			// when it lands (the upgrades design).
@@ -770,4 +770,17 @@ func listen(path string, d *accessd.Server, lg log.Logger) (*http.Server, error)
 		}
 	}()
 	return hs, nil
+}
+
+// feedKeys are the update feed's keys the build pins: the first with its
+// expiry, and a second for a rotation. A lab build pins none and has no feed.
+func feedKeys(p release.Pins) []osadmin.FeedKey {
+	if len(p.FeedKeyPEM) == 0 {
+		return nil
+	}
+	keys := []osadmin.FeedKey{{PEM: p.FeedKeyPEM, NotAfter: p.FeedKeyNotAfter}}
+	if len(p.FeedKey2PEM) > 0 {
+		keys = append(keys, osadmin.FeedKey{PEM: p.FeedKey2PEM})
+	}
+	return keys
 }
