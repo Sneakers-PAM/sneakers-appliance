@@ -212,6 +212,14 @@ realci_rows() { # version when
   done
   say "realci: rows $2 version=$1 start=$(pg_start)$line"
   say "realci: database $2 version=$1 on=$(pg_pod) move=$(sed -n 's/.*"state": *"\([a-z]*\)".*/\1/p' /var/lib/sneakers/platform/data-move.json 2>/dev/null | head -1)"
+  realci_certs "$1" "$2"
+}
+# realci_certs: how many of cert-manager's objects and of the services'
+# certificate Secrets the product has, so an update whose stack lost its
+# Issuer and Certificates to a cert-manager that wasn't ready shows as
+# fewer of them, not as a pod waiting on a missing Secret.
+realci_certs() { # version when
+  say "realci: certs $2 version=$1 issuers=$(k -n sneakers get issuers.cert-manager.io -o name 2>/dev/null | wc -l | tr -d ' ') certificates=$(k -n sneakers get certificates.cert-manager.io -o name 2>/dev/null | wc -l | tr -d ' ') secrets=$(k -n sneakers get secrets -o name 2>/dev/null | grep -c -- '-tls$' | tr -d ' ')"  # scrub:allow=fqdn -- a Kubernetes API group
 }
 realci_pods() { # version when
   say "realci: pods $2 version=$1: $(k -n sneakers get pods -o jsonpath='{range .items[*]}{.metadata.name} app={.metadata.labels.app\.kubernetes\.io/name} order={.metadata.labels.sneakers-appliance/phase-order} phase={.status.phase} restarts={.status.containerStatuses[*].restartCount} init=[{range .status.initContainerStatuses[*]}{.name}/{.restartCount}/{.state.terminated.reason}{.state.waiting.reason},{end}] waiting={.status.containerStatuses[*].state.waiting.reason} started={.status.startTime} ready={.status.conditions[?(@.type=="Ready")].status}@{.status.conditions[?(@.type=="Ready")].lastTransitionTime};{end}')"
