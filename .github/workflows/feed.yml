@@ -68,8 +68,11 @@ jobs:
             rc) re='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$' ;;
             *) re='^v[0-9]+\.[0-9]+\.[0-9]+$' ;;
           esac
-          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,isDraft \
-            --jq ".[] | select(.isDraft | not) | .tagName | select(test(\"$re\"))" | head -n 10 > "$RUNNER_TEMP/tags"
+          # Two commands, not a pipe, so a failed listing or a bad filter stops
+          # the job instead of reading as "no release yet".
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,isDraft > "$RUNNER_TEMP/releases.json"
+          jq -r --arg re "$re" '.[] | select(.isDraft | not) | .tagName | select(test($re))' "$RUNNER_TEMP/releases.json" > "$RUNNER_TEMP/all-tags"
+          head -n 10 "$RUNNER_TEMP/all-tags" > "$RUNNER_TEMP/tags"
           if [ ! -s "$RUNNER_TEMP/tags" ]; then
             echo "no published $CHANNEL release yet: no $CHANNEL feed to build"
             echo "### $CHANNEL feed: no published release yet, nothing built" >> "$GITHUB_STEP_SUMMARY"
