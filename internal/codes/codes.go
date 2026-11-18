@@ -76,6 +76,8 @@ const (
 	// other upgrade codes can follow 2514.
 	UpgradeMirrorUntrusted = 2520
 	UpgradeMirrorPin       = 2521
+	// UpgradeWithdrawn: the signed index marks that release as not to install.
+	UpgradeWithdrawn = 2522
 	// The three update units' refusals (spec 7).
 	UpgradeCompat      = 2530
 	UpgradeEpoch       = 2531
@@ -176,6 +178,7 @@ var Entries = []apperr.Entry{
 	{Code: ProductValueUnavailable, Symbol: "PRODUCT_VALUE_UNAVAILABLE", Title: "upgrade", Cause: "the product exposes that value, but it can't be read yet: the product or k0s isn't up, or its Secret isn't there"},
 	{Code: UpgradeMirrorUntrusted, Symbol: "UPGRADE_MIRROR_UNTRUSTED", Title: "upgrade", Cause: "the HTTPS mirror's certificate doesn't chain to the system roots or the update trust's CA, or doesn't name the mirror's host"},
 	{Code: UpgradeMirrorPin, Symbol: "UPGRADE_MIRROR_PIN", Title: "upgrade", Cause: "the HTTPS mirror's certificate isn't the one the update trust pins"},
+	{Code: UpgradeWithdrawn, Symbol: "UPGRADE_WITHDRAWN", Title: "upgrade", Cause: "the signed update index marks that release as not to install; the refusal says why and which version to use instead"},
 	{Code: UpgradeCompat, Symbol: "UPGRADE_COMPAT", Title: "upgrade", Cause: "an update unit doesn't fit the other units this box runs, such as a Base Web built for another Base OS"},
 	{Code: UpgradeEpoch, Symbol: "UPGRADE_EPOCH", Title: "upgrade", Cause: "the update is for another signing-key epoch than this box's"},
 	{Code: UpgradeWebLoad, Symbol: "UPGRADE_WEB_LOAD", Title: "upgrade", Cause: "a Base Web slot failed its load checks (signature, file hashes, or a file that isn't listed); the pages it would replace keep serving"},

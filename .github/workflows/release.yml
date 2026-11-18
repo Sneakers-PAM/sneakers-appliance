@@ -467,7 +467,7 @@ jobs:
           chmod +x "$in/sneakers-kit"
           CHANNEL=production COMMIT="$GITHUB_SHA" BASEOS_INPUTS="$(cat "$in/inputs-baseOS")" STACKS="$in/stacks" \
             PATCH_FROM="$patch_from" UPDATE_KEY="$keys/update.key" KIT="$in/sneakers-kit" \
-            OUT="$rel" KEYS="$keys" UNITS="$RUNNER_TEMP/signed/units" bash build/lab/units.sh
+            OUT="$rel" KEYS="$keys" UNITS="$RUNNER_TEMP/signed/units" WITHDRAWN=release/withdrawn.yaml bash build/lab/units.sh
           units="$RUNNER_TEMP/signed/units"
           for f in sneakers-product-index.json SHA256SUMS; do
             cosign sign-blob --yes --key "$keys/cosign.key" --bundle "$units/$f.sigstore.json" \

@@ -46,6 +46,7 @@ index (`version`, `commit`), where the box and the :8443 pages read them. `<arch
 
 - **Sidecars** follow their file's name: `<file>.inputs` (a unit's input digest), `<file>.sha256`,
   `<file>.sigstore.json` (a cosign signature bundle by the release key) and `<file>.sig`.
+- **Withdrawn list:** `release/withdrawn.yaml` is written into the signed index (`WITHDRAWN` of build/lab/units.sh, `sneakers-artifact index --withdrawn`): the releases a box with the reader hides and refuses, with the reason and the version to use ([upgrades.md](upgrades.md#the-github-source)). Edit it by pull request; the next release's index carries it.
 - **Fixed names:** `sneakers-product-index.json`, `SHA256SUMS`, `release.yaml` (each with its
   `.sigstore.json`) and one `<digest hex>.sigstore.json` per pinned image.
 - **Every produced image** gets its `.sha256`, a line in `SHA256SUMS` and its `.sigstore.json`. The

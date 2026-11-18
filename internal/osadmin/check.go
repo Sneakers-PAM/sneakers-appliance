@@ -296,6 +296,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 	web, hasWeb := s.webSlots().Header("current")
 	roomForPatch := s.memAvailable() < 0 || s.memAvailable() >= s.patchMinFree()
 	baseOS := idx.OfferBaseOS(b)
+	baseOS = s.withdrawnOut(out, idx, "baseOS", osadminv1.UpdateTarget_UPDATE_TARGET_BASE, baseOS)
 	preferred := preferredBaseOS(baseOS, base, roomForPatch)
 	if preferred >= 0 {
 		s.o.Logger.Debug("osadmin: preferred Base OS line", log.F("base", base), log.F("version", baseOS[preferred].Version), log.F("kind", baseOS[preferred].Kind), log.F("roomForPatch", roomForPatch))
@@ -312,7 +313,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		o.Preferred = i == preferred
 		out.BaseOs = append(out.BaseOs, o)
 	}
-	for i, e := range idx.OfferBaseWeb(b) {
+	for i, e := range s.withdrawnOut(out, idx, "baseWeb", osadminv1.UpdateTarget_UPDATE_TARGET_BASE_WEB, idx.OfferBaseWeb(b)) {
 		need := updatepkg.DefaultRange(e.Version, e.Channel)
 		if r, ok := e.Requires[updatepkg.UnitBaseOS]; ok {
 			need = r
@@ -323,7 +324,7 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 		out.BaseWebWaits = "Base Web " + e.Version + " needs Base OS " + need.Text() + "."
 	}
 	installed := s.slots().Status().Installed
-	for i, e := range idx.OfferProducts(b, installed) {
+	for i, e := range s.withdrawnOut(out, idx, "product", osadminv1.UpdateTarget_UPDATE_TARGET_PRODUCT, idx.OfferProducts(b, installed)) {
 		h := updatepkg.Header{MinBase: e.MinBase, MaxBase: e.MaxBase}
 		needs := ""
 		if h.HasRange() {
@@ -339,6 +340,41 @@ func (s *Server) offers(idx updatepkg.Index, base string) *osadminv1.CheckUpdate
 			Note: "The installed version: a reinstall keeps the data and runs the same apply as an update."}
 	}
 	return out
+}
+
+// withdrawnOut takes the entries the signed index marks as withdrawn out of
+// offers, which stay newest first, and lists them in out.Withdrawn with the
+// reason and the version to use, so none of them is offered or preferred.
+func (s *Server) withdrawnOut(out *osadminv1.CheckUpdatesResponse, idx updatepkg.Index, kind string, target osadminv1.UpdateTarget, offers []updatepkg.IndexEntry) []updatepkg.IndexEntry {
+	if len(idx.Withdrawn) == 0 {
+		return offers
+	}
+	kept := make([]updatepkg.IndexEntry, 0, len(offers))
+	for _, e := range offers {
+		w, ok := idx.WithdrawnFor(kind, e.Version)
+		if !ok {
+			kept = append(kept, e)
+			continue
+		}
+		out.Withdrawn = append(out.Withdrawn, &osadminv1.WithdrawnOffer{Target: target, Version: e.Version, FileName: e.File, Reason: w.Reason, Use: w.Use, ReleaseTag: s.releaseTagOf(e.File)})
+		s.o.Logger.Info("osadmin: a withdrawn release isn't offered", log.F("kind", kind), log.F("version", e.Version), log.F("use", w.Use))
+	}
+	return kept
+}
+
+// withdrawnFile is the entry of the last check's withdrawn list for the file
+// name, when it has one.
+func (s *Server) withdrawnFile(name string) *osadminv1.WithdrawnOffer {
+	last := s.lastCheck()
+	if last == nil {
+		return nil
+	}
+	for _, w := range last.GetWithdrawn() {
+		if w.GetFileName() == name {
+			return w
+		}
+	}
+	return nil
 }
 
 // webAfterBaseOS says what :8443 serves after a Base OS update to version,

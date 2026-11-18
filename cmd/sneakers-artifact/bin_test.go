@@ -498,3 +498,38 @@ func TestBinPackRefusesAProductBelowItsBaseFloor(t *testing.T) {
 		t.Fatalf("a range from telemetry's base: %v", err)
 	}
 }
+
+// --withdrawn writes the list into the index, checked; without it the index
+// has none, and the repository's own list is one the writer accepts.
+func TestTheIndexCarriesTheWithdrawnList(t *testing.T) {
+	tmp := t.TempDir()
+	bin := sealUnit(t, tmp, nil, "--unit", "baseOS", "--version", "0.3.2", "--commit", "1a2b3c4")
+	plain := filepath.Join(tmp, "plain.json")
+	if _, err := runCmd(t, "index", "--out", plain, bin); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(plain); strings.Contains(string(b), "withdrawn") { // #nosec G304 -- the test's own output
+		t.Fatalf("an index with no list has one:\n%s", b)
+	}
+	list := filepath.Join(tmp, "withdrawn.yaml")
+	if err := os.WriteFile(list, []byte("- kind: product\n  version: 0.3.0\n  reason: it fails\n  use: 0.3.2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	marked := filepath.Join(tmp, "marked.json")
+	if _, err := runCmd(t, "index", "--out", marked, "--withdrawn", list, bin); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(marked) // #nosec G304 -- the test's own output
+	if !strings.Contains(string(b), `"withdrawn": [`) || !strings.Contains(string(b), `"reason": "it fails"`) || !strings.Contains(string(b), `"use": "0.3.2"`) {
+		t.Fatalf("index:\n%s", b)
+	}
+	if err := os.WriteFile(list, []byte("- kind: firmware\n  version: 0.3.0\n  reason: r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runCmd(t, "index", "--out", filepath.Join(tmp, "bad.json"), "--withdrawn", list, bin); err == nil {
+		t.Fatal("a withdrawn list with a kind that isn't one was written")
+	}
+	if _, err := runCmd(t, "index", "--out", filepath.Join(tmp, "repo.json"), "--withdrawn", "../../release/withdrawn.yaml", bin); err != nil {
+		t.Fatalf("the repository's release/withdrawn.yaml: %v", err)
+	}
+}

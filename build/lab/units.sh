@@ -77,6 +77,8 @@
 #              job passes the kit from the unsigned build)
 #   CHECK_FROM outputs to make a patch from that is built and checked but not
 #              published: it goes to $UNITS/checked-only, out of the index
+#   WITHDRAWN    the releases the index marks as withdrawn (a YAML list,
+#                release/withdrawn.yaml on a release; optional)
 #   INDEX_ALSO directories whose .bin files the index lists too (an earlier
 #              release's units on the same mirror)
 #   KERNEL, VERITYSETUP, OPENSSH, BUSYBOX, STATIC
@@ -304,6 +306,10 @@ for d in "$units" ${INDEX_ALSO:-}; do
     esac
   done
 done
-"$tool" index --out "$units/sneakers-product-index.json" "${bridges[@]}" "${bins[@]}" >/dev/null
+# WITHDRAWN names the list of releases the signed index marks as not to
+# install (release/withdrawn.yaml on a release).
+withdrawn=()
+[ -z "${WITHDRAWN:-}" ] || withdrawn=(--withdrawn "$WITHDRAWN")
+"$tool" index --out "$units/sneakers-product-index.json" "${withdrawn[@]}" "${bridges[@]}" "${bins[@]}" >/dev/null
 ( cd "$units" && sha256sum -- *.bin > SHA256SUMS )
 echo "units: index of ${#bins[@]} files and $(( ${#bridges[@]} / 2 )) bridge copies: $units/sneakers-product-index.json"
